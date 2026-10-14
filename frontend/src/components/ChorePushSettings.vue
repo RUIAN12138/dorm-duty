@@ -1,0 +1,193 @@
+<script setup lang="ts">
+import { ref, watch } from "vue";
+import { showToast } from "vant";
+import ElasticSheet from "./ElasticSheet.vue";
+import { pushCapability } from "../api/push";
+import {
+  getMemberPushConfig,
+  enableMemberPush,
+  disableMemberPush,
+  testMemberPush,
+  syncMemberPush,
+  type MemberPushConfig,
+} from "../api/memberPush";
+const props = defineProps<{
+  modelValue: boolean;
+  token: string;
+  nickname: string;
+}>();
+const emit = defineEmits<{
+  "update:modelValue": [value: boolean];
+  closed: [];
+}>();
+const config = ref<MemberPushConfig | null>(null),
+  enabled = ref(false),
+  busy = ref(false),
+  loading = ref(false),
+  error = ref("");
+const cap = ref(pushCapability());
+watch(
+  () => props.modelValue,
+  async (open) => {
+    if (!open) return;
+    cap.value = pushCapability();
+    error.value = "";
+    loading.value = true;
+    try {
+      config.value = await getMemberPushConfig(props.token);
+      enabled.value = await syncMemberPush(props.token);
+    } catch (e) {
+      error.value = (e as Error).message;
+    } finally {
+      loading.value = false;
+    }
+  },
+);
+async function enable() {
+  if (busy.value || !config.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await enableMemberPush(props.token, config.value);
+    enabled.value = true;
+    showToast("这台设备已开启通知");
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
+async function disable() {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await disableMemberPush(props.token);
+    enabled.value = false;
+    showToast("这台设备已关闭通知");
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
+async function test() {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await testMemberPush(props.token);
+    showToast("测试已提交，请查看系统通知");
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+<template>
+  <ElasticSheet
+    :model-value="modelValue"
+    title="系统通知"
+    @update:model-value="emit('update:modelValue', $event)"
+    @closed="emit('closed')"
+  >
+    <div class="push-settings" data-testid="push-settings">
+      <p class="push-status">
+        {{
+          enabled
+            ? "这台设备已开启"
+            : !cap.native && !cap.supported && !cap.ios
+              ? "此浏览器无法后台通知"
+              : "接收室友提醒"
+        }}
+      </p>
+      <p class="push-description">
+        {{
+          enabled
+            ? `${nickname}的室友提醒已绑定这台设备。`
+            : cap.native || cap.supported || cap.ios
+              ? "开启后，室友提醒会出现在系统通知中。"
+              : "站内提醒仍会直接弹出；关闭网页后，需要支持推送的浏览器或安装版。"
+        }}
+      </p>
+      <template v-if="!cap.native && cap.ios && !cap.standalone">
+        <p class="push-instruction">① Safari 分享 → 添加到主屏幕</p>
+        <p class="push-instruction">② 从桌面图标打开，开启通知</p>
+      </template>
+      <p v-else-if="!cap.native && !cap.supported" class="push-instruction">
+        安卓、鸿蒙安装版正在接入系统推送。也可换用支持 Web Push
+        的浏览器后重新开启。
+      </p>
+      <template v-else>
+        <button
+          v-if="!enabled"
+          class="guest-primary"
+          data-testid="push-enable"
+          :disabled="busy || loading || !config?.available"
+          @click="enable"
+        >
+          {{ loading ? "正在检查…" : busy ? "正在开启…" : "开启系统通知" }}
+        </button>
+        <template v-else>
+          <button
+            class="guest-primary"
+            data-testid="push-test"
+            :disabled="busy || loading"
+            @click="test"
+          >
+            发一条测试通知
+          </button>
+          <button
+            class="push-disable"
+            data-testid="push-disable"
+            :disabled="busy || loading"
+            @click="disable"
+          >
+            关闭这台设备的通知
+          </button>
+        </template>
+      </template>
+      <p v-if="config && !config.available" class="push-instruction">
+        {{
+          cap.native
+            ? "安装版推送尚未配置，站内提醒仍可查看。"
+            : "服务器通知暂不可用，站内提醒仍可查看。"
+        }}
+      </p>
+      <p v-if="error" class="push-error" role="alert">{{ error }}</p>
+    </div>
+  </ElasticSheet>
+</template>
+<style scoped>
+.push-status {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0 0 16px;
+}
+.push-description,
+.push-instruction,
+.push-error {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  color: #555;
+}
+.push-settings .guest-primary {
+  margin-top: 28px;
+}
+.push-disable {
+  width: 100%;
+  border: 0;
+  background: none;
+  font-size: 16px;
+  min-height: 48px;
+  color: #555;
+  margin-top: 12px;
+}
+.push-error {
+  margin-top: 20px;
+  color: #111;
+}
+</style>

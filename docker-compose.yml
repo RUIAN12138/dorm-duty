@@ -1,0 +1,46 @@
+services:
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend-env
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/dorm.db}
+      JWT_SECRET: ${JWT_SECRET:?请提供至少32字符JWT_SECRET}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+    volumes: ["dorm-data:/data"]
+  api:
+    build: ./backend
+    environment: *backend-env
+    volumes: ["dorm-data:/data"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.scheduler"]
+    environment: *backend-env
+    volumes: ["dorm-data:/data"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+  web:
+    build: ./frontend
+    # Only the HTTPS edge should accept public traffic. This port is for local checks.
+    ports: ["127.0.0.1:${WEB_PORT:-8080}:80"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+volumes:
+  dorm-data:

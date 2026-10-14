@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up dorm duty database
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3.11 /opt/dorm-duty/backup-database.py
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/dorm-duty/backups
+

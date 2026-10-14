@@ -1,0 +1,1660 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { showToast } from "vant";
+import { ApiError } from "../api";
+import {
+  choreRequest,
+  getChoreBoard,
+  type ChoreBoardData,
+  type ChoreMember,
+  type ChoreReminder,
+  type ChoreTask,
+} from "../api/chores";
+import WaterNudge from "./WaterNudge.vue";
+import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
+import ChoreCalendar from "./ChoreCalendar.vue";
+import ChoreSettings from "./ChoreSettings.vue";
+import ChorePushSettings from "./ChorePushSettings.vue";
+import { syncMemberPush } from "../api/memberPush";
+import ElasticSheet from "./ElasticSheet.vue";
+import MemberMark from "./MemberMark.vue";
+import MarkerPicker from "./MarkerPicker.vue";
+const props = defineProps<{
+  invite: string;
+  dormName: string;
+  memberId: number;
+  token: string;
+  demo: boolean;
+  section: "duty" | "water" | "calendar";
+}>();
+const emit = defineEmits<{
+  expired: [];
+  member: [value: ChoreMember];
+  "switch-member": [];
+  "join-dorm": [];
+  "create-dorm": [];
+}>();
+const board = ref<ChoreBoardData | null>(null),
+  loading = ref(false),
+  error = ref(""),
+  actionError = ref(""),
+  busy = ref("");
+const month = ref(
+  new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Asia/Shanghai",
+  })
+    .format(new Date())
+    .replace("/", "-"),
+);
+// Format YYYY-MM explicitly; some browsers format en-CA month/year in another order.
+const initialParts = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  timeZone: "Asia/Shanghai",
+}).formatToParts(new Date());
+month.value = `${initialParts.find((part) => part.type === "year")?.value}-${initialParts.find((part) => part.type === "month")?.value}`;
+const messagesOpen = ref(false),
+  settingsOpen = ref(false),
+  reminderOpen = ref(false),
+  markerOpen = ref(false),
+  markerDraft = ref("");
+const toolsOpen = ref(false);
+const roundOpen = ref(false);
+const pushOpen = ref(false);
+let queuedTool: (() => void) | null = null;
+function fromTools(action: () => void) {
+  queuedTool = action;
+  toolsOpen.value = false;
+}
+function runQueuedTool() {
+  const action = queuedTool;
+  queuedTool = null;
+  action?.();
+}
+const selectedTaskId = ref<number | null>(null);
+const detailTask = ref<ChoreTask | null>(null);
+const detailOrigin = ref<DOMRect | null>(null);
+const direction = ref(1);
+const sectionOrder = ["duty", "water", "calendar"];
+watch(
+  () => props.section,
+  (next, previous) => {
+    direction.value =
+      sectionOrder.indexOf(next) >= sectionOrder.indexOf(previous) ? 1 : -1;
+  },
+);
+function openTask(task: ChoreTask, event: MouseEvent) {
+  detailOrigin.value =
+    task.key === "water"
+      ? null
+      : (event.currentTarget as HTMLElement).getBoundingClientRect();
+  detailTask.value = task;
+}
+function hideLeaving(element: Element) {
+  element.setAttribute("aria-hidden", "true");
+  element.setAttribute("inert", "");
+}
+const targetId = ref<number | null>(null),
+  targetTaskId = ref<number | null>(null),
+  targetTasks = ref<ChoreTask[]>([]),
+  targetLoading = ref(false),
+  targetError = ref("");
+let controller: AbortController | null = null,
+  targetController: AbortController | null = null,
+  requestId = 0;
+let poll: ReturnType<typeof setInterval> | null = null,
+  midnight: ReturnType<typeof setTimeout> | null = null;
+const personalToday = computed(
+  () => board.value?.today_tasks.filter((task) => task.key !== "water") || [],
+);
+const personalNext = computed(
+  () =>
+    board.value?.next_tasks
+      .filter((task) => task.key !== "water")
+      .sort((a, b) => a.duty_date.localeCompare(b.duty_date)) || [],
+);
+const personalTasks = computed(() =>
+  personalToday.value.length ? personalToday.value : personalNext.value,
+);
+const activeDutyTask = computed(
+  () =>
+    personalTasks.value.find((task) => task.id === selectedTaskId.value) ||
+    personalTasks.value.find((task) => task.status !== "completed") ||
+    personalTasks.value[0] ||
+    null,
+);
+const activeRound = computed(
+  () =>
+    board.value?.rounds?.find(
+      (round) => round.key === activeDutyTask.value?.key,
+    ) || null,
+);
+const dutyCaption = computed(() =>
+  activeRound.value
+    ? activeDutyTask.value?.status === "completed"
+      ? "本轮已完成"
+      : "这轮你可以做："
+    : todayComplete.value
+      ? "今天的任务已完成"
+      : hasToday.value
+        ? "你今天的任务是："
+        : hasUpcoming.value
+          ? "你下次的任务是："
+          : "当前没有任务",
+);
+const water = computed(() =>
+  board.value?.categories.find((category) => category.key === "water")?.enabled
+    ? board.value?.water_task || null
+    : null,
+);
+const nudgeStatus = ref("");
+const nudgeSentAt = ref<string | null>(null);
+const nudgeNow = ref(Date.now());
+let nudgeClock: ReturnType<typeof setInterval> | null = null;
+function updateNudgeClock() {
+  nudgeNow.value = Date.now();
+}
+onMounted(() => {
+  nudgeClock = setInterval(updateNudgeClock, 15000);
+  document.addEventListener("visibilitychange", updateNudgeClock);
+});
+onUnmounted(() => {
+  if (nudgeClock) clearInterval(nudgeClock);
+  document.removeEventListener("visibilitychange", updateNudgeClock);
+});
+const nudgeCaption = computed(() => {
+  const status = nudgeStatus.value;
+  if (!status || status === "已提醒" || status === "刚刚已提醒") {
+    if (nudgeSentAt.value)
+      return waterNudgeTime(nudgeSentAt.value, new Date(nudgeNow.value));
+  }
+  return status || "点名字，催他抬水";
+});
+let nudgeController: AbortController | null = null;
+watch(
+  [() => props.invite, () => props.memberId, () => water.value?.id],
+  () => {
+    nudgeController?.abort();
+    nudgeStatus.value = "";
+    nudgeSentAt.value =
+      !props.demo && water.value
+        ? lastWaterNudge(`${props.invite}:${props.memberId}:${water.value.id}`)
+        : null;
+  },
+  { immediate: true },
+);
+onUnmounted(() => nudgeController?.abort());
+const nextWaterPerson = computed(() => {
+  const order = board.value?.water_order || [];
+  const index = order.indexOf(water.value?.assignee_id || 0);
+  const id = order[(index + 1) % order.length];
+  return id === undefined ? null : currentMember(id);
+});
+const hasToday = computed(() => personalToday.value.length > 0);
+const hasUpcoming = computed(() => personalNext.value.length > 0);
+const todayComplete = computed(
+  () =>
+    personalToday.value.length > 0 &&
+    personalToday.value.every((task) => task.status === "completed"),
+);
+const unread = computed(
+  () => board.value?.reminders.filter((note) => !note.read_at) || [],
+);
+const reminderSeenKey = `dorm-reminder-presented-v1:${props.invite}:${props.memberId}`;
+const presentedReminders = new Set<number>();
+try {
+  const saved = JSON.parse(sessionStorage.getItem(reminderSeenKey) || "[]");
+  if (Array.isArray(saved))
+    for (const id of saved)
+      if (Number.isSafeInteger(id)) presentedReminders.add(id);
+} catch {
+  /* Presentation still works when browser storage is unavailable. */
+}
+function rememberPresentedReminders() {
+  for (const note of unread.value) presentedReminders.add(note.id);
+  try {
+    sessionStorage.setItem(
+      reminderSeenKey,
+      JSON.stringify([...presentedReminders].slice(-200)),
+    );
+  } catch {
+    /* Keep the in-memory deduplication for this visit. */
+  }
+}
+function presentNewReminders() {
+  if (
+    props.demo ||
+    document.visibilityState !== "visible" ||
+    !unread.value.length
+  )
+    return;
+  if (messagesOpen.value) {
+    rememberPresentedReminders();
+    return;
+  }
+  if (
+    busy.value ||
+    settingsOpen.value ||
+    reminderOpen.value ||
+    markerOpen.value ||
+    toolsOpen.value ||
+    roundOpen.value ||
+    pushOpen.value ||
+    detailTask.value ||
+    document.querySelector(".sheet-layer")
+  )
+    return;
+  if (unread.value.some((note) => !presentedReminders.has(note.id))) {
+    messagesOpen.value = true;
+    rememberPresentedReminders();
+  }
+}
+watch(
+  [
+    unread,
+    busy,
+    settingsOpen,
+    reminderOpen,
+    markerOpen,
+    toolsOpen,
+    roundOpen,
+    pushOpen,
+    detailTask,
+    messagesOpen,
+  ],
+  presentNewReminders,
+  { flush: "post" },
+);
+const occupied = computed(
+  () =>
+    board.value?.members
+      .filter((person) => person.user_id !== props.memberId)
+      .map((person) => person.marker_id) || [],
+);
+function dateText(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(`${value}T12:00:00+08:00`));
+}
+function clock(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(value));
+}
+function currentMember(id: number) {
+  return board.value?.members.find((person) => person.user_id === id);
+}
+function statusText(task: ChoreTask) {
+  return task.status === "completed"
+    ? "已完成"
+    : task.mode === "self_round"
+      ? "本轮待完成"
+      : task.key === "water"
+        ? "轮到抬水"
+        : task.duty_date > (board.value?.today || "")
+          ? "待开始"
+          : new Date(task.deadline_at).getTime() <
+              new Date(board.value?.server_time || Date.now()).getTime()
+            ? "已过截止时间"
+            : "待完成";
+}
+function demoNotice() {
+  showToast("游客模式仅供体验，请创建或加入正式宿舍。");
+}
+function scheduleMidnight(serverTime: string) {
+  if (midnight) clearTimeout(midnight);
+  const now = new Date(serverTime).getTime();
+  if (!Number.isFinite(now)) return;
+  const local = new Date(now + 8 * 3600000);
+  const next =
+    Date.UTC(
+      local.getUTCFullYear(),
+      local.getUTCMonth(),
+      local.getUTCDate() + 1,
+    ) -
+    8 * 3600000;
+  midnight = setTimeout(() => void load(), Math.max(1000, next - now + 1500));
+}
+async function load() {
+  controller?.abort();
+  controller = new AbortController();
+  const id = ++requestId;
+  loading.value = true;
+  error.value = "";
+  try {
+    const result = await getChoreBoard(
+      props.invite,
+      props.memberId,
+      month.value,
+      props.demo ? "" : props.token,
+      controller.signal,
+    );
+    if (id !== requestId || controller.signal.aborted) return;
+    if (result.member.user_id !== props.memberId)
+      throw new Error("任务身份已变化，请重新选择室友。");
+    board.value = result;
+    if (!props.demo) void syncMemberPush(props.token).catch(() => {});
+    emit("member", result.member);
+    scheduleMidnight(result.server_time);
+  } catch (e) {
+    if (id !== requestId || controller.signal.aborted) return;
+    if (e instanceof ApiError && e.status === 401) {
+      emit("expired");
+      return;
+    }
+    error.value = (e as Error).message;
+  } finally {
+    if (id === requestId) loading.value = false;
+  }
+}
+async function complete(task: ChoreTask) {
+  if (props.demo) {
+    demoNotice();
+    return;
+  }
+  if (busy.value || !task.can_complete || task.status === "completed") return;
+  if (task.key !== "water") selectedTaskId.value = task.id;
+  busy.value = `complete-${task.id}`;
+  actionError.value = "";
+  try {
+    await choreRequest(`/chores/tasks/${task.id}/complete`, props.token, {
+      method: "PATCH",
+      body: "{}",
+    });
+    showToast(
+      task.key === "water"
+        ? "抬水已记录，轮到下一位了。"
+        : "值日已完成，标记已留在日历上。",
+    );
+    await load();
+  } catch (e) {
+    actionError.value = (e as Error).message;
+  } finally {
+    busy.value = "";
+  }
+}
+async function nudgeWater() {
+  const task = water.value;
+  if (!task || task.assignee_id === props.memberId || busy.value) return;
+  if (props.demo) {
+    nudgeStatus.value = "游客体验 · 未发送提醒";
+    return;
+  }
+  const key = `${props.invite}:${props.memberId}:${task.id}`;
+  try {
+    nudgeStatus.value = "正在提醒…";
+    const status = await waterNudge(key, async () => {
+      nudgeController = new AbortController();
+      return choreRequest<ChoreReminder>("/chores/remind", props.token, {
+        method: "POST",
+        signal: nudgeController.signal,
+        body: JSON.stringify({
+          target_member_id: task.assignee_id,
+          task_id: task.id,
+        }),
+      });
+    });
+    if (water.value?.id === task.id) {
+      updateNudgeClock();
+      nudgeSentAt.value = lastWaterNudge(key);
+      nudgeStatus.value =
+        status === "sending"
+          ? "正在提醒…"
+          : status === "recent"
+            ? "刚刚已提醒"
+            : "已提醒";
+    }
+  } catch (error) {
+    if (water.value?.id !== task.id || nudgeController?.signal.aborted) return;
+    nudgeStatus.value =
+      error instanceof ApiError && error.status === 429
+        ? "刚刚已提醒"
+        : (error as Error).message;
+    if (error instanceof ApiError && error.status === 409) void load();
+  }
+}
+function openReminder() {
+  if (props.demo) {
+    demoNotice();
+    return;
+  }
+  targetId.value = null;
+  targetTaskId.value = null;
+  targetTasks.value = [];
+  targetError.value = "";
+  reminderOpen.value = true;
+}
+async function chooseTarget(person: ChoreMember) {
+  targetController?.abort();
+  targetController = new AbortController();
+  const signal = targetController.signal;
+  targetId.value = person.user_id;
+  targetTaskId.value = null;
+  targetTasks.value = [];
+  targetLoading.value = true;
+  targetError.value = "";
+  try {
+    const result = await getChoreBoard(
+      props.invite,
+      person.user_id,
+      month.value,
+      props.token,
+      signal,
+    );
+    if (signal.aborted) return;
+    const tasks = [
+      ...result.today_tasks,
+      ...result.next_tasks,
+      ...(result.water_task?.assignee_id === person.user_id
+        ? [result.water_task]
+        : []),
+    ].filter((task) => task.status === "pending");
+    targetTasks.value = [
+      ...new Map(tasks.map((task) => [task.id, task])).values(),
+    ];
+    targetTaskId.value = targetTasks.value[0]?.id || null;
+  } catch (e) {
+    if (!signal.aborted) targetError.value = (e as Error).message;
+  } finally {
+    if (!signal.aborted) targetLoading.value = false;
+  }
+}
+async function sendReminder() {
+  if (busy.value || !targetId.value || !targetTaskId.value) return;
+  busy.value = "reminder";
+  targetError.value = "";
+  try {
+    await choreRequest("/chores/remind", props.token, {
+      method: "POST",
+      body: JSON.stringify({
+        target_member_id: targetId.value,
+        task_id: targetTaskId.value,
+      }),
+    });
+    reminderOpen.value = false;
+    showToast("提醒已发送");
+    await load();
+  } catch (e) {
+    targetError.value = (e as Error).message;
+  } finally {
+    busy.value = "";
+  }
+}
+async function markRead(id: number) {
+  if (busy.value) return;
+  busy.value = `read-${id}`;
+  try {
+    await choreRequest(`/chores/reminders/${id}/read`, props.token, {
+      method: "PATCH",
+      body: "{}",
+    });
+    await load();
+  } catch (e) {
+    actionError.value = (e as Error).message;
+  } finally {
+    busy.value = "";
+  }
+}
+function openMarker() {
+  if (props.demo) {
+    demoNotice();
+    return;
+  }
+  markerDraft.value = board.value?.member.marker_id || "";
+  actionError.value = "";
+  markerOpen.value = true;
+}
+async function saveMarker() {
+  if (busy.value || !markerDraft.value) return;
+  busy.value = "marker";
+  actionError.value = "";
+  try {
+    await choreRequest("/chores/marker", props.token, {
+      method: "PATCH",
+      body: JSON.stringify({ marker_id: markerDraft.value }),
+    });
+    markerOpen.value = false;
+    await load();
+  } catch (e) {
+    actionError.value = (e as Error).message;
+  } finally {
+    busy.value = "";
+  }
+}
+function visibleRefresh() {
+  presentNewReminders();
+  if (
+    document.visibilityState === "visible" &&
+    !busy.value &&
+    !settingsOpen.value &&
+    !reminderOpen.value &&
+    !markerOpen.value &&
+    !toolsOpen.value &&
+    !roundOpen.value &&
+    !pushOpen.value &&
+    !detailTask.value &&
+    (!document.querySelector(".sheet-layer") || messagesOpen.value)
+  )
+    void load();
+}
+watch(month, () => void load());
+onMounted(() => {
+  void load();
+  poll = setInterval(visibleRefresh, 10000);
+  document.addEventListener("visibilitychange", visibleRefresh);
+  window.addEventListener("focus", visibleRefresh);
+  window.addEventListener("online", visibleRefresh);
+});
+onUnmounted(() => {
+  ++requestId;
+  controller?.abort();
+  targetController?.abort();
+  if (poll) clearInterval(poll);
+  if (midnight) clearTimeout(midnight);
+  document.removeEventListener("visibilitychange", visibleRefresh);
+  window.removeEventListener("focus", visibleRefresh);
+  window.removeEventListener("online", visibleRefresh);
+});
+</script>
+<template>
+  <div class="chore-board" data-testid="chore-board">
+    <div
+      v-if="loading && !board"
+      class="board-loading"
+      role="status"
+      aria-label="正在加载任务"
+    >
+      <span></span><span></span><span></span>
+    </div>
+    <div v-if="error" class="chore-inline-error" role="alert">
+      {{ error }}<button :disabled="loading" @click="load">重新加载</button>
+    </div>
+    <template v-if="board">
+      <div class="board-identity">
+        <span class="identity-name">{{ board.member.nickname }}</span>
+        <button
+          class="tools-button"
+          :aria-label="
+            unread.length ? `更多操作，${unread.length} 条未读消息` : '更多操作'
+          "
+          data-testid="open-tools"
+          @click="toolsOpen = true"
+        >
+          <van-icon name="ellipsis" aria-hidden="true" />
+          <span v-if="unread.length" class="tools-unread" aria-hidden="true">{{
+            unread.length > 9 ? "9+" : unread.length
+          }}</span>
+        </button>
+      </div>
+      <div class="board-focus">
+        <Transition
+          :name="direction > 0 ? 'focus-next' : 'focus-prev'"
+          @before-leave="hideLeaving"
+        >
+          <div :key="section" class="focus-pane">
+            <section
+              v-if="section === 'calendar'"
+              class="calendar-pane"
+              data-testid="pane-calendar"
+            >
+              <ChoreCalendar
+                :month="month"
+                :today="board.today"
+                :records="board.calendar"
+                :members="board.members"
+                :loading="loading"
+                @change="month = $event"
+                @closed="presentNewReminders"
+              />
+            </section>
+            <section
+              v-if="section === 'duty'"
+              class="chore-personal"
+              aria-labelledby="personal-title"
+              data-testid="pane-duty"
+            >
+              <h1 id="personal-title" class="hero-caption">
+                {{ dutyCaption }}
+              </h1>
+              <div
+                v-if="personalTasks.length > 1"
+                class="task-selector"
+                aria-label="选择值日任务"
+              >
+                <button
+                  v-for="task in personalTasks"
+                  :key="task.id"
+                  :aria-pressed="activeDutyTask?.id === task.id"
+                  @click="selectedTaskId = task.id"
+                >
+                  {{ task.name
+                  }}<van-icon
+                    v-if="task.status === 'completed'"
+                    name="success"
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+              <Transition name="hero-task" mode="out-in">
+                <article
+                  v-if="activeDutyTask"
+                  :key="activeDutyTask.id"
+                  class="chore-task focus-hero"
+                  :class="{
+                    'task-is-completed': activeDutyTask.status === 'completed',
+                  }"
+                  :data-testid="`chore-task-${activeDutyTask.key}-${activeDutyTask.id}`"
+                >
+                  <h2>
+                    <button
+                      class="task-title-button"
+                      :aria-label="`查看${activeDutyTask.name}详情`"
+                      @click="openTask(activeDutyTask, $event)"
+                    >
+                      {{ activeDutyTask.name }}
+                    </button>
+                  </h2>
+                  <p v-if="!hasToday && !activeRound" class="hero-date">
+                    {{ dateText(activeDutyTask.duty_date) }}
+                  </p>
+                  <p v-if="activeDutyTask.completed_at" class="chore-completed">
+                    <van-icon name="success" aria-hidden="true" />{{
+                      activeRound ? "本轮已完成" : "已完成"
+                    }}
+                  </p>
+                  <button
+                    v-else-if="activeDutyTask.can_complete || demo"
+                    :data-testid="`complete-${activeDutyTask.key}-${activeDutyTask.id}`"
+                    class="chore-complete-button"
+                    :disabled="
+                      !!busy ||
+                      (!demo && activeDutyTask.duty_date > board.today)
+                    "
+                    @click="complete(activeDutyTask)"
+                  >
+                    {{
+                      busy === `complete-${activeDutyTask.id}`
+                        ? "正在记录…"
+                        : "我已完成"
+                    }}
+                  </button>
+                  <button
+                    v-if="activeRound"
+                    class="round-progress"
+                    data-testid="round-progress"
+                    @click="roundOpen = true"
+                  >
+                    第 {{ activeRound.sequence }} 轮 · 已完成
+                    {{ activeRound.completed }}/{{ activeRound.total }}
+                    <van-icon name="arrow" aria-hidden="true" />
+                  </button>
+                </article>
+                <div v-else class="focus-hero"><h2>休息</h2></div>
+              </Transition>
+            </section>
+            <section
+              v-if="section === 'water'"
+              class="water-pane"
+              data-testid="pane-water"
+            >
+              <template v-if="water">
+                <h1 class="hero-caption">
+                  {{
+                    water.assignee_id === memberId
+                      ? "没水时轮到你："
+                      : "抬水轮到："
+                  }}
+                </h1>
+                <section
+                  class="chore-water focus-hero"
+                  aria-labelledby="water-title"
+                  data-testid="water-task"
+                >
+                  <Transition name="hero-task" mode="out-in">
+                    <h2
+                      :key="water.assignee_id"
+                      id="water-title"
+                      :style="
+                        water.assignee_id !== memberId &&
+                        water.assignee_name.length > 8
+                          ? { fontSize: 'clamp(30px, 9vw, 40px)' }
+                          : undefined
+                      "
+                    >
+                      <WaterNudge
+                        v-if="water.assignee_id !== memberId"
+                        :key="water.id"
+                        :name="water.assignee_name"
+                        @tap="nudgeWater"
+                      />
+                      <button
+                        v-else
+                        class="task-title-button"
+                        :aria-label="`查看${water.name}详情`"
+                        @click="openTask(water, $event)"
+                      >
+                        {{ water.name }}
+                      </button>
+                    </h2>
+                  </Transition>
+                  <button
+                    v-if="
+                      water.can_complete ||
+                      (demo && water.assignee_id === memberId)
+                    "
+                    class="chore-complete-button"
+                    :data-testid="`complete-water-${water.id}`"
+                    :disabled="!!busy"
+                    @click="complete(water)"
+                  >
+                    {{
+                      busy === `complete-${water.id}` ? "正在记录…" : "我已抬水"
+                    }}
+                  </button>
+                  <div
+                    v-else-if="water.assignee_id !== memberId"
+                    class="water-nudge-actions"
+                  >
+                    <p class="hero-date" role="status">
+                      {{ nudgeCaption }}
+                    </p>
+                    <button
+                      class="water-remind"
+                      @click="openTask(water, $event)"
+                    >
+                      查看任务
+                    </button>
+                  </div>
+                  <p v-else class="hero-date">
+                    {{ dateText(water.duty_date) }} 开始
+                  </p>
+                </section>
+              </template>
+              <div v-else class="water-empty" data-testid="water-empty">
+                <h1 class="hero-caption">抬水已暂停</h1>
+                <h2>休息</h2>
+              </div>
+            </section>
+          </div>
+        </Transition>
+      </div>
+      <p
+        v-if="actionError && !markerOpen"
+        class="chore-inline-error"
+        role="alert"
+      >
+        {{ actionError }}
+      </p>
+      <ElasticSheet
+        v-model="toolsOpen"
+        :title="dormName || '宿舍操作'"
+        @closed="runQueuedTool"
+      >
+        <div class="board-tools">
+          <button
+            data-testid="guest-change-member"
+            @click="fromTools(() => emit('switch-member'))"
+          >
+            切换室友<van-icon name="arrow" aria-hidden="true" />
+          </button>
+          <button
+            data-testid="guest-change-dorm"
+            @click="fromTools(() => emit('join-dorm'))"
+          >
+            加入其他宿舍<van-icon name="arrow" aria-hidden="true" />
+          </button>
+          <button
+            data-testid="guest-create-dorm"
+            @click="fromTools(() => emit('create-dorm'))"
+          >
+            创建宿舍<van-icon name="arrow" aria-hidden="true" />
+          </button>
+          <button data-testid="open-marker" @click="fromTools(openMarker)">
+            更换标记<van-icon name="arrow" aria-hidden="true" />
+          </button>
+          <button data-testid="open-reminder" @click="fromTools(openReminder)">
+            提醒室友<van-icon name="arrow" aria-hidden="true" /></button
+          ><button
+            v-if="board.is_creator && !demo"
+            data-testid="open-chore-settings"
+            @click="fromTools(() => (settingsOpen = true))"
+          >
+            任务设置<van-icon name="setting-o" aria-hidden="true" /></button
+          ><button
+            v-if="!demo"
+            data-testid="open-system-notifications"
+            @click="fromTools(() => (pushOpen = true))"
+          >
+            系统通知<van-icon name="bell" aria-hidden="true" /></button
+          ><button
+            data-testid="open-messages"
+            @click="fromTools(() => (messagesOpen = true))"
+          >
+            室友消息<span v-if="unread.length" class="message-count">{{
+              unread.length
+            }}</span></button
+          ><button
+            :disabled="loading || !!busy"
+            data-testid="chore-refresh"
+            aria-label="刷新安排"
+            @click="fromTools(() => void load())"
+          >
+            刷新安排<van-icon
+              name="replay"
+              :class="{ 'refresh-spinning': loading }"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <details v-if="section === 'water' && water" class="water-order">
+          <summary>
+            <span>轮换顺序</span
+            ><strong v-if="nextWaterPerson"
+              >下一位 · {{ nextWaterPerson.nickname }}</strong
+            ><van-icon name="arrow-down" aria-hidden="true" />
+          </summary>
+          <div>
+            <span
+              v-for="personId in board.water_order"
+              :key="personId"
+              :class="{ current: personId === water.assignee_id }"
+              ><MemberMark
+                :id="currentMember(personId)?.marker_id"
+                :size="18"
+              /><span>{{ currentMember(personId)?.nickname }}</span></span
+            >
+          </div>
+        </details>
+      </ElasticSheet>
+      <ElasticSheet
+        :model-value="!!detailTask"
+        :title="detailTask?.name || '任务详情'"
+        :origin="detailOrigin"
+        @update:model-value="detailTask = $event ? detailTask : null"
+      >
+        <template v-if="detailTask"
+          ><p class="task-full-content">{{ detailTask.content }}</p>
+          <div class="task-detail-meta">
+            <span>{{ statusText(detailTask) }}</span>
+            <span>{{ detailTask.assignee_name }}</span
+            ><span v-if="detailTask.mode === 'scheduled'"
+              >{{ dateText(detailTask.duty_date) }} ·
+              {{ clock(detailTask.deadline_at) }} 前</span
+            >
+          </div>
+          <p v-if="detailTask.completed_at" class="chore-completed">
+            {{ clock(detailTask.completed_at) }} 已完成
+          </p></template
+        >
+      </ElasticSheet>
+      <ElasticSheet
+        v-model="roundOpen"
+        :title="`${activeDutyTask?.name || '值日'} · 第 ${activeRound?.sequence || 1} 轮`"
+        @closed="presentNewReminders"
+      >
+        <div
+          v-if="activeRound"
+          class="round-members"
+          data-testid="round-members"
+        >
+          <p class="round-summary">
+            已完成 {{ activeRound.completed }}/{{ activeRound.total }}
+          </p>
+          <div
+            v-for="person in activeRound.members"
+            :key="person.user_id"
+            class="round-member"
+          >
+            <MemberMark :id="person.marker_id" :size="24" /><strong>{{
+              person.nickname
+            }}</strong>
+            <span>{{ person.completed ? "已完成" : "还没做" }}</span>
+          </div>
+        </div>
+      </ElasticSheet>
+      <ElasticSheet
+        v-model="messagesOpen"
+        title="室友消息"
+        @closed="presentNewReminders"
+      >
+        <div class="chore-reminders" data-testid="chore-reminders">
+          <div class="messages-heading">
+            <p>
+              {{
+                unread.length ? `还有 ${unread.length} 条未读提醒` : "全部已读"
+              }}
+            </p>
+            <button data-testid="messages-close" @click="messagesOpen = false">
+              关闭消息
+            </button>
+          </div>
+          <p v-if="!board.reminders.length" class="messages-empty">
+            还没有室友提醒。
+          </p>
+          <article
+            v-for="note in board.reminders"
+            :key="note.id"
+            :data-testid="`reminder-${note.id}`"
+          >
+            <p class="reminder-sender">
+              {{ note.sender_name || "室友" }}提醒你
+            </p>
+            <h3 class="reminder-task-name">
+              {{ note.task_name || "完成宿舍任务" }}
+            </h3>
+            <p
+              class="reminder-content"
+              v-if="note.body && note.body !== note.task_name"
+            >
+              {{ note.body }}
+            </p>
+            <div>
+              <time :datetime="note.created_at">{{
+                clock(note.created_at)
+              }}</time
+              ><button
+                v-if="!note.read_at"
+                :disabled="!!busy"
+                :data-testid="`reminder-read-${note.id}`"
+                @click="markRead(note.id)"
+              >
+                知道了</button
+              ><span v-else class="message-read">已读</span>
+            </div>
+          </article>
+        </div>
+      </ElasticSheet>
+      <ChorePushSettings
+        v-model="pushOpen"
+        :token="token"
+        :nickname="board.member.nickname"
+        @closed="presentNewReminders"
+      />
+      <ChoreSettings
+        v-model="settingsOpen"
+        :categories="board.categories"
+        :members="board.members"
+        :version="board.version"
+        :token="token"
+        :initial-category="
+          section === 'water' ? 'water' : activeDutyTask?.key || 'floor'
+        "
+        @saved="load"
+        @closed="presentNewReminders"
+      />
+      <ElasticSheet v-model="reminderOpen" title="提醒一位室友"
+        ><div class="reminder-form">
+          <p class="guest-muted">
+            选一位室友和一项任务。提醒会显示在对方的网页里。
+          </p>
+          <div class="reminder-people">
+            <button
+              v-for="person in board.members.filter(
+                (person) => person.user_id !== memberId,
+              )"
+              :key="person.user_id"
+              :class="{ selected: targetId === person.user_id }"
+              :data-testid="`reminder-member-${person.user_id}`"
+              @click="chooseTarget(person)"
+            >
+              <MemberMark :id="person.marker_id" :size="22" />{{
+                person.nickname
+              }}
+            </button>
+          </div>
+          <div v-if="targetLoading" class="board-loading" role="status">
+            正在查看这位室友的任务…
+          </div>
+          <div v-else-if="targetId" class="reminder-task-list">
+            <p v-if="!targetTasks.length" class="guest-muted">
+              这位室友当前没有待完成任务。
+            </p>
+            <button
+              v-for="task in targetTasks"
+              :key="task.id"
+              :class="{ selected: targetTaskId === task.id }"
+              :data-testid="`reminder-task-${task.id}`"
+              @click="targetTaskId = task.id"
+            >
+              <span>{{ task.name }}</span
+              ><small>{{
+                task.key === "water"
+                  ? "轮到抬水"
+                  : task.mode === "self_round"
+                    ? "本轮待完成"
+                    : dateText(task.duty_date)
+              }}</small>
+            </button>
+          </div>
+          <p v-if="targetError" class="chore-inline-error" role="alert">
+            {{ targetError }}
+          </p>
+          <button
+            class="guest-primary"
+            data-testid="reminder-submit"
+            :disabled="!!busy || targetLoading || !targetTaskId"
+            @click="sendReminder"
+          >
+            {{ busy === "reminder" ? "发送中…" : "发送提醒" }}
+          </button>
+        </div></ElasticSheet
+      >
+      <ElasticSheet v-model="markerOpen" title="你的日历标记"
+        ><MarkerPicker
+          v-model="markerDraft"
+          :occupied="occupied"
+          :disabled="!!busy"
+        />
+        <p v-if="actionError" class="chore-inline-error" role="alert">
+          {{ actionError }}
+        </p>
+        <button
+          class="guest-primary"
+          :disabled="!!busy || !markerDraft"
+          data-testid="marker-save"
+          @click="saveMarker"
+        >
+          {{ busy === "marker" ? "正在保存…" : "保存标记" }}
+        </button></ElasticSheet
+      >
+    </template>
+  </div>
+</template>
+<style scoped>
+.round-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  color: #555;
+  padding: 10px 4px;
+  min-height: 44px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.round-summary {
+  font-size: 24px;
+  margin: 0 0 24px;
+}
+.round-member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  border-bottom: 1px solid #eee;
+}
+.round-member strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.round-member > span {
+  color: #555;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+/* One shared left edge and type scale across the three mobile pages. */
+.chore-board {
+  min-width: 0;
+  color: #111;
+}
+.board-identity {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.identity-name {
+  font-size: 22px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tools-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  background: none;
+  border: 0;
+  font-size: 24px;
+  color: #111;
+}
+.tools-unread {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #111;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+}
+.board-focus {
+  position: relative;
+}
+.focus-pane {
+  width: 100%;
+  min-width: 0;
+}
+.chore-personal,
+.water-pane {
+  min-height: calc(100dvh - 220px - env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 16px 0 36px;
+}
+.chore-personal h1.hero-caption,
+.water-pane h1.hero-caption {
+  font-size: clamp(19px, 5.8vw, 24px);
+  line-height: 1.4;
+  font-weight: 450;
+  letter-spacing: 0;
+  margin: 0;
+  text-align: center;
+}
+.focus-hero {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+}
+.focus-hero h2,
+.water-empty h2 {
+  margin: 0;
+  font-size: clamp(48px, 17vw, 72px);
+  font-weight: 650;
+  letter-spacing: -2px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-align: center;
+  max-width: 100%;
+}
+.chore-water h2 {
+  width: 100%;
+}
+.water-nudge-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 300px);
+}
+.water-nudge-actions .water-remind {
+  background: transparent;
+  color: #555;
+  border: 0;
+  min-height: 44px;
+  width: auto;
+  font-size: 15px;
+  padding: 6px 20px;
+}
+.task-title-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #111;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.chore-complete-button,
+.water-remind {
+  display: block;
+  width: min(100%, 300px);
+  min-height: 54px;
+  background: #111;
+  color: #fff;
+  border: 1px solid #111;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 550;
+  padding: 12px 18px;
+}
+.chore-complete-button:disabled {
+  opacity: 0.4;
+}
+.chore-completed {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: #111;
+  font-size: 20px;
+  line-height: 1.5;
+  margin: 0;
+}
+.chore-completed .van-icon {
+  font-size: 24px;
+}
+.hero-date {
+  font-size: 17px;
+  color: #555;
+  margin: 0;
+  text-align: center;
+}
+.task-selector {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.task-selector button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  min-height: 44px;
+  padding: 8px 18px;
+  font-size: 16px;
+  color: #666;
+  background: #fff;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+.task-selector button[aria-pressed="true"] {
+  color: #111;
+  background: #f0f0f0;
+}
+.water-empty {
+  text-align: center;
+}
+.water-empty h2 {
+  margin-top: 28px;
+}
+.water-order {
+  border-top: 1px solid #e5e5e5;
+  margin-top: 20px;
+}
+.water-order summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  font-size: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.water-order summary::-webkit-details-marker {
+  display: none;
+}
+.water-order summary strong {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.water-order summary > span {
+  flex-shrink: 0;
+}
+.water-order summary .van-icon {
+  flex-shrink: 0;
+  transition: transform 200ms ease;
+}
+.water-order[open] summary .van-icon {
+  transform: rotate(180deg);
+}
+.water-order > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 10px;
+  padding: 8px 0 16px;
+}
+.water-order > div > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #666;
+  font-size: 15px;
+  min-width: 0;
+}
+.water-order > div > span.current {
+  color: #111;
+  font-weight: 600;
+}
+.board-tools {
+  display: grid;
+}
+.board-tools button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 10px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  color: #111;
+  font-size: 18px;
+  text-align: left;
+}
+.message-count {
+  display: grid;
+  place-items: center;
+  background: #111;
+  color: #fff;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+.messages-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.messages-heading p,
+.messages-empty {
+  font-size: 16px;
+  color: #555;
+  line-height: 1.6;
+}
+.messages-heading button {
+  border: 0;
+  background: none;
+  color: #555;
+  min-height: 44px;
+  font-size: 15px;
+  padding: 8px 0;
+}
+.message-read {
+  font-size: 14px;
+  color: #666;
+  padding: 12px 0;
+}
+.chore-inline-error {
+  border-left: 2px solid #111;
+  padding: 10px 12px;
+  color: #555;
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.chore-inline-error button {
+  display: block;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: #111;
+  font-size: 15px;
+  padding: 8px 0;
+}
+.task-full-content {
+  font-size: 18px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  font-size: 15px;
+  color: #555;
+}
+.board-loading {
+  padding-top: 16px;
+}
+.board-loading span {
+  display: block;
+  border-radius: 8px;
+  background: #f0f0f0;
+  height: 92px;
+  margin: 18px 0;
+}
+.board-loading span:first-child {
+  height: 28px;
+  width: 55%;
+}
+@media (max-height: 650px) {
+  .chore-personal,
+  .water-pane {
+    gap: 22px;
+    padding-bottom: 24px;
+    min-height: calc(100dvh - 220px - env(safe-area-inset-bottom));
+  }
+  .focus-hero {
+    gap: 24px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .focus-next-enter-active,
+  .focus-prev-enter-active {
+    transition:
+      opacity 260ms ease,
+      transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .focus-next-leave-active,
+  .focus-prev-leave-active {
+    position: absolute;
+    top: 0;
+    pointer-events: none;
+    transition:
+      opacity 100ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .focus-next-enter-from,
+  .focus-prev-leave-to {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  .focus-prev-enter-from,
+  .focus-next-leave-to {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  .chore-complete-button,
+  .water-remind {
+    transition:
+      transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 160ms ease;
+  }
+  .chore-complete-button:active:not(:disabled),
+  .water-remind:active:not(:disabled) {
+    transform: scale(0.96);
+    box-shadow: inset 0 3px 9px #0006;
+    transition-duration: 80ms;
+  }
+  .chore-completed {
+    animation: task-arrive 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .hero-task-enter-active {
+    transition:
+      opacity 180ms ease,
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .hero-task-leave-active {
+    transition:
+      opacity 90ms ease,
+      transform 120ms ease;
+  }
+  .hero-task-enter-from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  .hero-task-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  .board-loading {
+    animation: skeleton-pulse 1.2s ease-in-out infinite alternate;
+  }
+  .refresh-spinning {
+    animation: refresh-spin 0.7s linear infinite;
+  }
+  @keyframes task-arrive {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes skeleton-pulse {
+    from {
+      opacity: 0.45;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes refresh-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+.chore-reminders {
+  border-top: 1px solid #111;
+  margin-top: 0;
+  padding-top: 16px;
+}
+.chore-reminders header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.chore-reminders h2 {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 0;
+}
+.chore-reminders header span {
+  font-size: 10px;
+  color: #777;
+}
+.chore-reminders article {
+  border-bottom: 1px solid #eee;
+  padding: 12px 0;
+}
+.chore-reminders article p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.chore-reminders .reminder-sender {
+  color: #555;
+}
+.chore-reminders .reminder-task-name {
+  font-size: 32px;
+  letter-spacing: -0.8px;
+  line-height: 1.25;
+  margin: 8px 0 12px;
+  overflow-wrap: anywhere;
+}
+.chore-reminders .reminder-content {
+  margin-bottom: 12px;
+}
+.chore-reminders article div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.chore-reminders time {
+  font-size: 10px;
+  color: #777;
+}
+.chore-reminders article button {
+  background: none;
+  border: 0;
+  min-height: 40px;
+  color: #555;
+  font-size: 11px;
+  padding: 7px 0;
+}
+.reminder-form {
+  color: #111;
+}
+.reminder-people {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 20px 0;
+}
+.reminder-people button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+  color: #111;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.reminder-people button.selected,
+.reminder-task-list button.selected {
+  border-color: #111;
+  background: #f7f7f7;
+}
+.reminder-task-list button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 12px;
+  color: #111;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.reminder-task-list small {
+  font-size: 10px;
+  color: #777;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chore-complete-button {
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+  .chore-complete-button:active:not(:disabled) {
+    transform: scale(0.97);
+    box-shadow: inset 0 2px 5px #0005;
+  }
+}
+</style>

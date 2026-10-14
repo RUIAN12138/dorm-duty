@@ -1,0 +1,23 @@
+{
+  "name": "lundao-cloudflare-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "validate": "node scripts/validate-artifact.mjs",
+    "db:generate": "drizzle-kit generate",
+    "cloud:check": "node scripts/cloudflare.mjs check",
+    "cloud:dry-run": "node scripts/cloudflare.mjs dry-run",
+    "cloud:deploy": "node scripts/cloudflare.mjs deploy --public",
+    "pages:build": "node scripts/build-pages.mjs",
+    "pages:deploy": "CLOUDFLARE_ACCOUNT_ID=5ad4b29192bc769db8a2095bc16be389 npx --yes wrangler@4.149.0 pages deploy --cwd .wrangler/pages-release --project-name lundao-dorm-duty-2968530971 --branch main"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "drizzle-orm": "0.45.2",
+    "esbuild": "0.25.12"
+  },
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}

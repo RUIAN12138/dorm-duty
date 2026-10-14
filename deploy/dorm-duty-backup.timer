@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily dorm duty database backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=dorm-duty-backup.service
+
+[Install]
+WantedBy=timers.target

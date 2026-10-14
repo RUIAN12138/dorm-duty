@@ -1,0 +1,90 @@
+# 地板、厕所与抬水
+
+2026-10-14 当前正式入口：[轮到](https://8.148.190.114/dorm-duty/)。Node 22 + 文件 SQLite 在服务器持久运行，业务时区 Asia/Shanghai。
+
+## 页面与身份
+
+先创建宿舍或凭邀请码加入，再选择自己。无需账号密码，创建者的管理令牌保存在当前设备；其他人选到创建者名字也只有成员权限。每人有独立像素标记，历史保留打卡时的姓名、内容与图案。熟人选名属于信任式入口，不能描述为强身份验证。游客六人示例只读。
+
+| 页面 | 主要信息 |
+| --- | --- |
+| 值日 `/` | 选择地板或厕所，查看本轮个人任务、打卡按钮和「已完成 X/Y」 |
+| 抬水 `/water` | 当前轮到谁；本人看到「没水时轮到你」和「我已抬水」 |
+| 日历 `/calendar` | 按实际完成日期显示人员标记与类型；可切换只含人、任务、时间的列表 |
+
+点轮次进度可查看每位室友是否做过。细节、设置、提醒放入抽屉，保持首页简洁。刷新、真实路由切换和有效设备身份保持；新版本通过「更新页面」激活，不清除网站数据。
+
+## 独立自由轮次
+
+地板、厕所默认 `self_round`，分别计数。各自一轮内每位有效成员均可主动做并完成自己的任务，没有每日截止、固定执行顺序或每日重置。做过的人显示本轮已完成，不能重复提交同一任务。
+
+最后一位成员打卡时，在同一事务内记录完成时间并为该项所有成员生成下一轮。另一类别的轮次不变。新加入的成员进入当前轮次；离开的成员不再占当前进度，已有完成记录保留。页面以服务器轮次为准，前端不自行重置。
+
+创建者可以修改具体内容和启用状态，改内容只更新未完成任务；暂停时禁止打卡和提醒，重新启用保留本轮进度。
+
+## 可选按日排班
+
+创建者在任务设置中可以单独把地板或厕所改为 `scheduled`，配置截止时间、开始日期、值日星期、连续负责天数及完整成员顺序。后台生成未来 30 天，普通规则调整从明天起生效，保留今天和已完成记录。未选星期不消耗轮换名额。
+
+**切换值日方式**会取消该项所有未完成任务并生成对应新任务，完成历史不变。重新切回自由轮次会开始一个新轮次，不将旧日排班记录重复计入新轮进度。设置带版本号，冲突返回 409，刷新后重新编辑。
+
+## 抬水按需轮换
+
+抬水固定 `completion`。实际没水时，当前轮到的人抬水，然后点击「我已抬水」；后台记录服务器时间并交给下一位。不会因为到了新一天而自动记录完成或推进顺序，同一天可以按实际抬水次数继续轮换。
+
+当前最多一个待完成抬水任务。修改内容更新当前任务；调整顺序从下一次交接采用，不抢走当前人的任务。设置页面只显示内容、启用与顺序，不显示每日截止、星期或连续天数。旧 API 开始日期配置保持兼容，若明确配置未来开始日期，仍拒绝提前完成。
+
+## 打卡、记录与提醒
+
+只能完成成员令牌绑定的本人任务，不能代打卡；任务必须启用且未完成。完成时间由服务器生成，客户端时间不能代替。重复提交被拒绝。并发完成同一任务只有一次成功；不同成员完成轮次任务时可重试版本冲突，最终只生成一个新轮次。
+
+完成记录按上海时区实际日期入日历。每个标记同时显示人员像素图案及抬水 / 值日类型；一天有两种类型时格内各保留一种。点日期查看完整记录；列表按实际完成时间倒序，显示姓名、具体任务、日期时间。
+
+所有正式成员可提醒同宿舍其他成员的启用未完成任务，60 秒内同发送人 / 接收人 / 任务限一次。新未读消息在前台页面直接弹出，当前标签页展示过的不反复打断；只有接收者可读或标为已读。前台约每 10 秒刷新，回到页面和恢复联网也会刷新。站内提醒同时为已开启的设备排入加密 Web Push 队列；正式成员通过「… → 系统通知」管理当前设备。iPhone 用户已确认收到系统通知，其他平台按浏览器能力自动检测、实际接收仍待验收。详见 [系统推送](evidence/system-push/README.md)。
+
+## API
+
+服务器地址统一加 `/dorm-duty` 前缀。全部业务响应 `no-store`；写操作需要完整创建者或绑定成员 Bearer 令牌。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| POST | `/chores/claim` | 邀请码及成员 ID 领取限定成员身份 |
+| GET | `/chores/board` | `invite_code`、`member_id`、可选 `month`，任务、进度、日历及自己的提醒 |
+| PATCH | `/chores/settings` | `version` 和 `categories`，仅创建者 |
+| PATCH | `/chores/tasks/{id}/complete` | 本人完成任务，返回服务器时间、新版本、下一抬水任务 |
+| POST | `/chores/remind` | `target_member_id`、`task_id` |
+| PATCH | `/chores/reminders/{id}/read` | 接收者标记已读 |
+| PATCH | `/chores/marker` | 更改本人当前像素图案 |
+
+`categories[].mode` 为 `self_round`、`scheduled` 或 `completion`。地板 / 厕所仅允许前两种，抬水只允许最后一种。`rounds[]` 含 `key`、`sequence`、`completed`、`total` 和带完成状态的 `members`。兼容旧字段 `today_tasks`：自由轮次时返回本人**当前轮次**任务，并非当天限定；`next_tasks` 只含按日排班的未来任务。任务增加 `mode`，默认自由轮次及抬水的 `deadline_at` 为空字符串，界面不得按它计算每日逾期。
+
+其余字段 `today`、`server_time`、`version`、`is_creator`、`member`、`members`、`water_task`、`water_order`、`calendar`、`reminders` 保留。`can_complete` 由服务器权限、状态、启用及开始日期计算，读别人的任务不获得完成权限。
+
+## 本次迁移与验证
+
+新增 `0002_unknown_galactus.sql`，给 `chore_categories` 添加模式，不修改已应用的 0000 / 0001。旧未完成地板 / 厕所日排班取消，默认从自由第 1 轮开始；所有已完成 `chore_tasks` 和原 `duty_tasks` 保留，抬水人和序号不变。发布前已在线备份，既有 21 条完成记录逐条哈希校验未变。
+
+最新 [自由轮次证据](evidence/voluntary-rounds/README.md)：隔离 8 组 / 178 项、原三类 12 组 / 751 项、原接口 16 组 / 1,017 项通过；实际服务器 Node 22 重跑新轮次和三类回归通过。真实公网 142 项、应用重启后 102 项、最终 11 个主要资源字节验证通过。桌面浏览器手机尺寸与正式网页可视验收通过，本轮新规则实体 iPhone 使用仍待验收。
+
+## 历史检查记录（2026-10-12）
+
+项目根目录执行，全部使用隔离测试数据：
+
+```bash
+node site/scripts/check-chores.mjs
+node site/scripts/check-cloud-backend.mjs
+node site/scripts/check-worker.mjs
+node scripts/verify-chores.mjs
+node scripts/verify-local-persistence.mjs
+```
+
+- [三类任务后端](evidence/chores/backend.json)：12 组 / 677 项断言，0 失败。
+- [原接口回归](evidence/guest-change/cloud-backend.json)：16 组 / 1,017 项断言，0 失败；最新嵌入 Worker 677 项检查通过，128 个资源 / 626,690 字节与三页前端正式构建一致。
+- [三页导航、手机尺寸与临时重启](evidence/chores/pages/mobile.json)：11 组通过，两个独立 Chrome 上下文，各页 320 / 390 / 430 像素无溢出；Tab、返回 / 前进及水 / 日历深链接刷新保持身份；日历详情滚动后仍可到达、不被底部导航遮挡；业务及重启继续通过。
+- [三页持久化与身份恢复](evidence/chores/pages/local-persistence.json)：7 组通过，3 次启动 / 2 次重启，真实 HTTP 与临时 SQLite，已加载并绑定身份的同一 SPA 暂时停服恢复；不代表首次离线初始化。
+- [此前单页版手机尺寸及临时重启](evidence/chores/mobile.json)：7 组通过；[此前持久化与身份恢复](evidence/chores/local-persistence.json)：7 组通过，3 次启动 / 2 次重启。这些历史记录保留，不作为当前三页路由通过证据。
+- [三页正式本地运行](evidence/chores/pages/local-runtime.json)：回环 / 局域网健康、三个路径与构建字节一致、重启前后 13 张业务表逐行摘要不变、两条迁移保留；自动化未写入正式宿舍。此前 [三类迁移记录](evidence/chores/local-runtime.json)保留为历史。
+
+当前三页截图可查看 [值日](evidence/chores/pages/final-duty-390.jpg)、[抬水](evidence/chores/pages/final-water-390.jpg)、[日历](evidence/chores/pages/final-calendar-390.jpg)、[三类自定义](evidence/chores/pages/custom-settings-390.jpg)、[站内提醒](evidence/chores/pages/received-reminder-390.jpg)。此前单页截图仍保留在 `evidence/chores/`，作为历史记录。
+
+这些结果验证 Node / SQLite 和 Chrome 手机尺寸模拟；真实 Cloudflare Worker / D1、两台实体手机、iPhone Safari、安全区 / 键盘、HTTPS 主屏幕与锁屏通知仍按 [MOBILE_ACCEPTANCE](MOBILE_ACCEPTANCE.md) 和 [完整验收矩阵](ACCEPTANCE.md) 执行，不能由桌面构建结果替代。

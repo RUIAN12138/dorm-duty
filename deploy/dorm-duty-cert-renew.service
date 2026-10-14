@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew dorm duty IP TLS certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dorm-duty/certbot-venv/bin/certbot renew --quiet --config-dir /opt/dorm-duty/letsencrypt --work-dir /opt/dorm-duty/acme-work --logs-dir /opt/dorm-duty/acme-logs --deploy-hook "/usr/bin/nginx -t && /usr/bin/nginx -s reload"
+UMask=0077
+PrivateTmp=yes
+
