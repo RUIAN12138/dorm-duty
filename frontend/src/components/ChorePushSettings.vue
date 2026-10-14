@@ -156,6 +156,14 @@ async function test() {
         }}
       </p>
       <p v-if="error" class="push-error" role="alert">{{ error }}</p>
+      <details v-if="!cap.native && cap.ios" class="push-preview-help">
+        <summary>通知没有正文？</summary>
+        <p>
+          iPhone 设置 → 通知 → 轮到 → 显示预览 →
+          始终。勾选「通知中心」，再发一条测试通知。
+        </p>
+        <p>若选择「解锁时」，先解锁手机；长按通知可展开内容。</p>
+      </details>
     </div>
   </ElasticSheet>
 </template>
@@ -173,6 +181,21 @@ async function test() {
   line-height: 1.6;
   margin: 0 0 20px;
   color: #555;
+}
+.push-preview-help {
+  margin-top: 20px;
+  color: #555;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.push-preview-help summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: list-item;
+  padding: 10px 0;
+}
+.push-preview-help p {
+  margin: 8px 0 16px;
 }
 .push-settings .guest-primary {
   margin-top: 28px;

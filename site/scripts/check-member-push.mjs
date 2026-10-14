@@ -230,46 +230,132 @@ test("real web-push encryption decrypts with receiver keys and VAPID signature v
   await remind(h, r);
   const vapid = webpush.generateVAPIDKeys();
   let received;
-  const delivery = newDelivery(h, async (sub, payload, options) => {
-    const details = webpush.generateRequestDetails(sub, payload, {
-      ...options,
-      vapidDetails: { ...vapid, subject: "https://8.148.190.114/dorm-duty/" },
-    });
-    ok(
-      !details.body.includes(Buffer.from(payload)),
-      "plaintext must not be transmitted",
-    );
-    equal(decrypt(details, d), payload);
-    const jwt = details.headers.Authorization.match(/t=([^, ]+)/)[1],
-      parts = jwt.split("."),
-      p = Buffer.from(vapid.publicKey, "base64url");
-    const key = createPublicKey({
-      key: {
-        kty: "EC",
-        crv: "P-256",
-        x: p.subarray(1, 33).toString("base64url"),
-        y: p.subarray(33).toString("base64url"),
-      },
-      format: "jwk",
-    });
-    ok(
-      verify(
-        "sha256",
-        Buffer.from(parts[0] + "." + parts[1]),
-        { key, dsaEncoding: "ieee-p1363" },
-        Buffer.from(parts[2], "base64url"),
-      ),
-    );
-    const claims = JSON.parse(Buffer.from(parts[1], "base64url"));
-    equal(claims.aud, "https://web.push.apple.com");
-    received = JSON.parse(payload);
-    return { statusCode: 201 };
-  });
+  const delivery = newDelivery(
+    h,
+    async (sub, payload, options) => {
+      const details = webpush.generateRequestDetails(sub, payload, {
+        ...options,
+        vapidDetails: { ...vapid, subject: "https://8.148.190.114/dorm-duty/" },
+      });
+      ok(
+        !details.body.includes(Buffer.from(payload)),
+        "plaintext must not be transmitted",
+      );
+      equal(decrypt(details, d), payload);
+      const jwt = details.headers.Authorization.match(/t=([^, ]+)/)[1],
+        parts = jwt.split("."),
+        p = Buffer.from(vapid.publicKey, "base64url");
+      const key = createPublicKey({
+        key: {
+          kty: "EC",
+          crv: "P-256",
+          x: p.subarray(1, 33).toString("base64url"),
+          y: p.subarray(33).toString("base64url"),
+        },
+        format: "jwk",
+      });
+      ok(
+        verify(
+          "sha256",
+          Buffer.from(parts[0] + "." + parts[1]),
+          { key, dsaEncoding: "ieee-p1363" },
+          Buffer.from(parts[2], "base64url"),
+        ),
+      );
+      const claims = JSON.parse(Buffer.from(parts[1], "base64url"));
+      equal(claims.aud, "https://web.push.apple.com");
+      received = JSON.parse(payload);
+      return { statusCode: 201 };
+    },
+    { publicOrigin: "https://8.148.190.114" },
+  );
   await delivery.drain();
   await delivery.close();
   equal(jobs(h)[0].status, "accepted");
   equal(received.title, "小林 提醒你地板");
+  ok(received.body.startsWith("待办：地板。"));
+  ok(received.body.includes("地板"), "encrypted body includes the actual task");
   equal(received.url, "/dorm-duty/");
+  equal(received.web_push, 8030);
+  equal(received.notification, {
+    title: received.title,
+    body: received.body,
+    tag: received.tag,
+    lang: "zh-CN",
+    navigate: "https://8.148.190.114/dorm-duty/",
+  });
+});
+test("notification center body preserves custom content and has a useful empty-content fallback", async (h) => {
+  const r = await fixture(h);
+  await subscribe(h, r.member, device("body"));
+  const note = await remind(h, r);
+  const received = [];
+  const worker = newDelivery(h, async (_, p) => {
+    received.push(JSON.parse(p));
+    return { statusCode: 201 };
+  });
+  for (const [content, expected] of [
+    ["扫地后拖地，清理床底。", "待办：地板。扫地后拖地，清理床底。"],
+    ["   ", "待办：地板。完成后记得打卡。"],
+    ["长".repeat(500), "待办：地板。" + "长".repeat(154)],
+  ]) {
+    h.db.sqlite
+      .prepare("UPDATE chore_reminders SET task_content_snapshot=? WHERE id=?")
+      .run(content, note.id);
+    h.db.sqlite.exec(
+      "UPDATE chore_push_jobs SET status='pending',attempts=0,lease=NULL,lease_until=NULL,next_attempt_at='2000-01-01T00:00:00Z'",
+    );
+    await worker.drain();
+    equal(received.at(-1).body, expected);
+    equal(received.at(-1).title, "小林 提醒你地板");
+    ok(received.at(-1).body.length <= 160);
+    ok(
+      !("web_push" in received.at(-1)),
+      "no declarative format without an explicit HTTPS origin",
+    );
+  }
+  await worker.close();
+});
+test("declarative water reminder uses a trusted prefixed HTTPS destination", async (h) => {
+  for (const publicOrigin of [
+    "http://8.148.190.114",
+    "https://user:pass@example.test",
+    "https://example.test/path",
+    "https://example.test/",
+  ]) {
+    assertions++;
+    assert.throws(() => newDelivery(h, () => {}, { publicOrigin }));
+  }
+  assertions++;
+  assert.throws(() => newDelivery(h, () => {}, { base: "//other.test/" }));
+  const r = await fixture(h);
+  await subscribe(h, r.owner, device("water-content"));
+  const b = await r.board(r.owner);
+  await api(h, "/chores/remind", {
+    method: "POST",
+    status: 201,
+    token: r.member.token,
+    data: { target_member_id: r.owner.id, task_id: b.water_task.id },
+  });
+  let received;
+  const worker = newDelivery(
+    h,
+    async (_, p) => {
+      received = JSON.parse(p);
+      return { statusCode: 201 };
+    },
+    { publicOrigin: "https://8.148.190.114" },
+  );
+  await worker.drain();
+  await worker.close();
+  equal(
+    received.notification.navigate,
+    "https://8.148.190.114/dorm-duty/water",
+  );
+  equal(received.notification.title, "小陈 提醒你抬水");
+  equal(received.notification.body, received.body);
+  ok(received.body.startsWith("待办：抬水。"));
+  equal(jobs(h)[0].status, "accepted");
 });
 test("expired subscriptions deactivate; provider failures retry with persistent backoff", async (h) => {
   const r = await fixture(h),
@@ -381,6 +467,10 @@ test("test notifications are bound to the current device and rate limited", asyn
   await worker.drain();
   await worker.close();
   equal(payload.title, "轮到 · 测试通知");
+  equal(
+    payload.body,
+    "小陈，这是一条测试提醒。示例：室友提醒你抬水，抬完后记得打卡。",
+  );
   equal(jobs(h)[0].status, "accepted");
 });
 test("expired lease recovers after process interruption; parallel senders claim once", async (h) => {

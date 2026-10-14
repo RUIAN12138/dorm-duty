@@ -7495,7 +7495,14 @@ function validPushEndpoint(value) {
 }
 
 // ../scripts/push-runtime.mjs
-function createPushDelivery(db, send, { base = "/dorm-duty/", now = () => /* @__PURE__ */ new Date() } = {}) {
+function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = null, now = () => /* @__PURE__ */ new Date() } = {}) {
+  if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base))
+    throw new Error("\u901A\u77E5\u5165\u53E3\u8DEF\u5F84\u65E0\u6548");
+  if (publicOrigin !== null) {
+    const origin = new URL(publicOrigin);
+    if (origin.protocol !== "https:" || origin.origin !== publicOrigin)
+      throw new Error("\u901A\u77E5\u5165\u53E3\u5FC5\u987B\u662F HTTPS origin");
+  }
   let stopped = false, running = null;
   const run = async () => {
     const time = now().toISOString();
@@ -7512,7 +7519,7 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", now = () => /* @__
       const job = db.sqlite.prepare(
         `SELECT j.*,s.endpoint,s.p256dh,s.auth,s.provider,s.platform,s.is_active,s.revision,s.dorm_id AS device_dorm,s.user_id AS device_user,
         r.sender_name_snapshot,r.task_name_snapshot,r.task_content_snapshot,r.target_member_id,r.dorm_id AS reminder_dorm,r.read_at,r.created_at AS reminder_created,t.status AS task_status,t.key AS task_key,t.assignee_id,c.enabled AS category_enabled,
-        m.is_active AS member_active,u.current_dorm_id FROM chore_push_jobs j JOIN chore_push_subscriptions s ON s.id=j.subscription_id
+        m.is_active AS member_active,u.current_dorm_id,u.nickname AS recipient_name FROM chore_push_jobs j JOIN chore_push_subscriptions s ON s.id=j.subscription_id
         LEFT JOIN chore_reminders r ON r.id=j.reminder_id LEFT JOIN chore_tasks t ON t.id=r.task_id LEFT JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
         LEFT JOIN dorm_members m ON m.dorm_id=j.dorm_id AND m.user_id=j.user_id LEFT JOIN users u ON u.id=j.user_id WHERE j.id=? AND j.lease=?`
       ).get(id, lease);
@@ -7528,12 +7535,26 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", now = () => /* @__
         continue;
       }
       const route = job.kind === "reminder" && job.task_key === "water" ? "water" : "";
-      const payload = JSON.stringify({
+      const message = {
         title: job.kind === "test" ? "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u901A\u77E5" : `${job.sender_name_snapshot} \u63D0\u9192\u4F60${job.task_name_snapshot}`,
-        body: job.kind === "test" ? "\u7CFB\u7EDF\u901A\u77E5\u5DF2\u63A5\u901A\u3002\u5BA4\u53CB\u63D0\u9192\u4E5F\u4F1A\u51FA\u73B0\u5728\u8FD9\u91CC\u3002" : String(job.task_content_snapshot || "\u6253\u5F00\u8F6E\u5230\u67E5\u770B\u4EFB\u52A1").slice(0, 160),
+        body: job.kind === "test" ? `${job.recipient_name}\uFF0C\u8FD9\u662F\u4E00\u6761\u6D4B\u8BD5\u63D0\u9192\u3002\u793A\u4F8B\uFF1A\u5BA4\u53CB\u63D0\u9192\u4F60\u62AC\u6C34\uFF0C\u62AC\u5B8C\u540E\u8BB0\u5F97\u6253\u5361\u3002` : `\u5F85\u529E\uFF1A${job.task_name_snapshot}\u3002${String(job.task_content_snapshot || "").trim() || "\u5B8C\u6210\u540E\u8BB0\u5F97\u6253\u5361\u3002"}`.slice(
+          0,
+          160
+        ),
         tag: job.kind === "test" ? `dorm-test-${id}` : `dorm-reminder-${job.reminder_id}`,
         url: base + route
-      });
+      };
+      if (job.provider === "web" && publicOrigin) {
+        message.web_push = 8030;
+        message.notification = {
+          title: message.title,
+          body: message.body,
+          tag: message.tag,
+          lang: "zh-CN",
+          navigate: new URL(message.url, publicOrigin).href
+        };
+      }
+      const payload = JSON.stringify(message);
       try {
         const response = await send(
           {
@@ -7597,7 +7618,8 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", now = () => /* @__
 async function createPushRuntime(db, directory, {
   enabled = false,
   base = "/dorm-duty/",
-  subject = "https://8.148.190.114/dorm-duty/"
+  subject = "https://8.148.190.114/dorm-duty/",
+  publicOrigin = "https://8.148.190.114"
 } = {}) {
   if (!enabled)
     return {
@@ -7634,7 +7656,7 @@ async function createPushRuntime(db, directory, {
       payload,
       options
     ),
-    { base }
+    { base, publicOrigin }
   );
   const timer = setInterval(delivery.kick, 2e3);
   timer.unref();

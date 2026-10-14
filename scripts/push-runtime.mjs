@@ -11,8 +11,15 @@ import { validPushEndpoint } from "../site/shared/push-endpoint.mjs";
 export function createPushDelivery(
   db,
   send,
-  { base = "/dorm-duty/", now = () => new Date() } = {},
+  { base = "/dorm-duty/", publicOrigin = null, now = () => new Date() } = {},
 ) {
+  if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base))
+    throw new Error("通知入口路径无效");
+  if (publicOrigin !== null) {
+    const origin = new URL(publicOrigin);
+    if (origin.protocol !== "https:" || origin.origin !== publicOrigin)
+      throw new Error("通知入口必须是 HTTPS origin");
+  }
   let stopped = false,
     running = null;
   const run = async () => {
@@ -37,7 +44,7 @@ export function createPushDelivery(
         .prepare(
           `SELECT j.*,s.endpoint,s.p256dh,s.auth,s.provider,s.platform,s.is_active,s.revision,s.dorm_id AS device_dorm,s.user_id AS device_user,
         r.sender_name_snapshot,r.task_name_snapshot,r.task_content_snapshot,r.target_member_id,r.dorm_id AS reminder_dorm,r.read_at,r.created_at AS reminder_created,t.status AS task_status,t.key AS task_key,t.assignee_id,c.enabled AS category_enabled,
-        m.is_active AS member_active,u.current_dorm_id FROM chore_push_jobs j JOIN chore_push_subscriptions s ON s.id=j.subscription_id
+        m.is_active AS member_active,u.current_dorm_id,u.nickname AS recipient_name FROM chore_push_jobs j JOIN chore_push_subscriptions s ON s.id=j.subscription_id
         LEFT JOIN chore_reminders r ON r.id=j.reminder_id LEFT JOIN chore_tasks t ON t.id=r.task_id LEFT JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
         LEFT JOIN dorm_members m ON m.dorm_id=j.dorm_id AND m.user_id=j.user_id LEFT JOIN users u ON u.id=j.user_id WHERE j.id=? AND j.lease=?`,
         )
@@ -78,21 +85,37 @@ export function createPushDelivery(
       }
       const route =
         job.kind === "reminder" && job.task_key === "water" ? "water" : "";
-      const payload = JSON.stringify({
+      const message = {
         title:
           job.kind === "test"
             ? "轮到 · 测试通知"
             : `${job.sender_name_snapshot} 提醒你${job.task_name_snapshot}`,
         body:
           job.kind === "test"
-            ? "系统通知已接通。室友提醒也会出现在这里。"
-            : String(job.task_content_snapshot || "打开轮到查看任务").slice(0, 160),
+            ? `${job.recipient_name}，这是一条测试提醒。示例：室友提醒你抬水，抬完后记得打卡。`
+            : `待办：${job.task_name_snapshot}。${String(job.task_content_snapshot || "").trim() || "完成后记得打卡。"}`.slice(
+                0,
+                160,
+              ),
         tag:
           job.kind === "test"
             ? `dorm-test-${id}`
             : `dorm-reminder-${job.reminder_id}`,
         url: base + route,
-      });
+      };
+      // Keep flat fields for installed older workers and native clients. Safari
+      // can display this same content even if its optional worker fails to run.
+      if (job.provider === "web" && publicOrigin) {
+        message.web_push = 8030;
+        message.notification = {
+          title: message.title,
+          body: message.body,
+          tag: message.tag,
+          lang: "zh-CN",
+          navigate: new URL(message.url, publicOrigin).href,
+        };
+      }
+      const payload = JSON.stringify(message);
       try {
         const response = await send(
           {
@@ -169,6 +192,7 @@ export async function createPushRuntime(
     enabled = false,
     base = "/dorm-duty/",
     subject = "https://8.148.190.114/dorm-duty/",
+    publicOrigin = "https://8.148.190.114",
   } = {},
 ) {
   if (!enabled)
@@ -209,7 +233,7 @@ export async function createPushRuntime(
             payload,
             options,
           ),
-    { base },
+    { base, publicOrigin },
   );
   const timer = setInterval(delivery.kick, 2000);
   timer.unref();
