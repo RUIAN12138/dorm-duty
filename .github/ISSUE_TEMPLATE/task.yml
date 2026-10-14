@@ -1,0 +1,43 @@
+name: 开发任务 / 功能需求
+description: 约定负责人、改动范围和可验证的完成标准。
+title: "[任务] "
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 要解决什么问题？
+      placeholder: 写出用户在什么场景下，需要获得什么结果。
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 主要范围
+      options:
+        - 网页与手机交互
+        - 值日 / 抬水 / 权限接口
+        - iOS PWA 与 Web Push
+        - Android 安装版
+        - 鸿蒙安装版
+        - 协作 / 文档 / 部署
+        - 多个模块（在范围说明中列出）
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 修改范围与配合事项
+      description: 提前说明接口、数据库或共同编辑的文件；创建后用 Assignees 指定负责人。
+      placeholder: 涉及哪些目录或文件？另一人需要做什么？哪些内容保持不变？
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      placeholder: |
+        - [ ] 可观察的用户行为
+        - [ ] 异常或取消场景
+        - [ ] 需要在哪些设备上验证
+    validations:
+      required: true
