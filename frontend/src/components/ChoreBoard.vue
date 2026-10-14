@@ -17,6 +17,7 @@ import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import ChoreCalendar from "./ChoreCalendar.vue";
 import ChoreSettings from "./ChoreSettings.vue";
 import ChorePushSettings from "./ChorePushSettings.vue";
+import CreatorRecovery from "./CreatorRecovery.vue";
 import { syncMemberPush } from "../api/memberPush";
 import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   "switch-member": [];
   "join-dorm": [];
   "create-dorm": [];
+  "recover-owner": [];
 }>();
 const board = ref<ChoreBoardData | null>(null),
   loading = ref(false),
@@ -66,6 +68,7 @@ const messagesOpen = ref(false),
 const toolsOpen = ref(false);
 const roundOpen = ref(false);
 const pushOpen = ref(false);
+const recoveryOpen = ref(false);
 let queuedTool: (() => void) | null = null;
 function fromTools(action: () => void) {
   queuedTool = action;
@@ -249,6 +252,7 @@ function presentNewReminders() {
     toolsOpen.value ||
     roundOpen.value ||
     pushOpen.value ||
+    recoveryOpen.value ||
     detailTask.value ||
     document.querySelector(".sheet-layer")
   )
@@ -268,6 +272,7 @@ watch(
     toolsOpen,
     roundOpen,
     pushOpen,
+    recoveryOpen,
     detailTask,
     messagesOpen,
   ],
@@ -593,6 +598,7 @@ function visibleRefresh() {
     !toolsOpen.value &&
     !roundOpen.value &&
     !pushOpen.value &&
+    !recoveryOpen.value &&
     !detailTask.value &&
     (!document.querySelector(".sheet-layer") || messagesOpen.value)
   )
@@ -888,6 +894,19 @@ onUnmounted(() => {
           <button data-testid="open-reminder" @click="fromTools(openReminder)">
             提醒室友<van-icon name="arrow" aria-hidden="true" /></button
           ><button
+            v-if="!demo"
+            data-testid="open-creator-recovery"
+            @click="
+              fromTools(() =>
+                board?.is_creator
+                  ? (recoveryOpen = true)
+                  : emit('recover-owner'),
+              )
+            "
+          >
+            {{ board.is_creator ? "管理恢复码" : "恢复管理权限"
+            }}<van-icon name="arrow" aria-hidden="true" /></button
+          ><button
             v-if="board.is_creator && !demo"
             data-testid="open-chore-settings"
             @click="fromTools(() => (settingsOpen = true))"
@@ -1042,6 +1061,12 @@ onUnmounted(() => {
         v-model="pushOpen"
         :token="token"
         :nickname="board.member.nickname"
+        @closed="presentNewReminders"
+      />
+      <CreatorRecovery
+        v-model="recoveryOpen"
+        mode="manage"
+        :token="token"
         @closed="presentNewReminders"
       />
       <ChoreSettings

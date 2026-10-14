@@ -747,6 +747,105 @@ async function guestCreate(request, db, now) {
     201,
   );
 }
+
+async function recoveryStatus(db, room, user) {
+  const row = await first(
+    db,
+    "SELECT owner_user_id,revision,updated_at FROM creator_recovery WHERE dorm_id=?",
+    [room.id],
+  );
+  return {
+    configured: Boolean(row && row.owner_user_id === user.id),
+    version: row?.revision || 0,
+    updated_at: row?.owner_user_id === user.id ? row.updated_at : null,
+  };
+}
+async function configureRecovery(request, db, user, now) {
+  const room = await currentDorm(db, user, true);
+  if (room.is_demo) fail(403, "demo_read_only", "游客模式不能设置恢复码");
+  const input = await body(request, ["expected_version"], ["expected_version"]);
+  const version = integer(input.expected_version, 0),
+    code = random(),
+    hash = await digest(code),
+    at = now.toISOString();
+  const result = await stmt(
+    db,
+    `INSERT INTO creator_recovery(dorm_id,owner_user_id,code_hash,revision,updated_at)
+    SELECT ?,?,?,1,? WHERE COALESCE((SELECT revision FROM creator_recovery WHERE dorm_id=?),0)=?
+    AND EXISTS(SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id JOIN dorm_members m ON m.user_id=u.id AND m.dorm_id=u.current_dorm_id JOIN dormitories d ON d.id=m.dorm_id
+      WHERE s.token_hash=? AND s.expires_at>? AND u.id=? AND d.id=? AND d.is_demo=0 AND d.admin_user_id=u.id AND m.role='admin' AND m.is_active=1)
+    ON CONFLICT(dorm_id) DO UPDATE SET owner_user_id=excluded.owner_user_id,code_hash=excluded.code_hash,revision=creator_recovery.revision+1,updated_at=excluded.updated_at
+    WHERE creator_recovery.revision=?`,
+    [
+      room.id,
+      user.id,
+      hash,
+      at,
+      room.id,
+      version,
+      user.session_hash,
+      at,
+      user.id,
+      room.id,
+      version,
+    ],
+  ).run();
+  if (changes(result) !== 1)
+    fail(409, "recovery_changed", "管理权限或恢复码已变化，请重新打开后再试");
+  return json({
+    configured: true,
+    version: version + 1,
+    updated_at: at,
+    recovery_code: code,
+  });
+}
+async function recoverCreator(request, db, now) {
+  const input = await body(
+    request,
+    ["invite_code", "recovery_code"],
+    ["invite_code", "recovery_code"],
+  );
+  const invite = str(input.invite_code, 6, 16).toUpperCase(),
+    code = str(input.recovery_code, 1, 128).replace(/[\s-]/g, "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(code)) invalid("请粘贴完整恢复码");
+  const hash = await digest(code),
+    token = random(),
+    tokenHash = await digest(token),
+    at = now.toISOString();
+  // The current owner, membership and code are checked in the same SQL write.
+  // A rotated code or a departed former owner cannot issue an administrator session.
+  const result = await stmt(
+    db,
+    `INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind)
+    SELECT ?,u.id,?,?,'device' FROM creator_recovery r JOIN dormitories d ON d.id=r.dorm_id
+    JOIN users u ON u.id=r.owner_user_id JOIN dorm_members m ON m.dorm_id=d.id AND m.user_id=u.id
+    WHERE r.code_hash=? AND d.invite_code=? AND d.is_demo=0 AND d.admin_user_id=u.id AND u.current_dorm_id=d.id AND m.is_active=1 AND m.role='admin'`,
+    [
+      tokenHash,
+      at,
+      new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString(),
+      hash,
+      invite,
+    ],
+  ).run();
+  if (changes(result) !== 1)
+    fail(403, "recovery_denied", "邀请码或恢复码不正确，或创建者权限已变更");
+  const room = await first(
+    db,
+    `SELECT d.* FROM sessions s JOIN users u ON u.id=s.user_id JOIN dormitories d ON d.id=u.current_dorm_id
+    JOIN dorm_members m ON m.dorm_id=d.id AND m.user_id=u.id
+    WHERE s.token_hash=? AND d.invite_code=? AND d.is_demo=0 AND d.admin_user_id=u.id AND m.is_active=1 AND m.role='admin'`,
+    [tokenHash, invite],
+  );
+  if (!room)
+    fail(403, "recovery_denied", "邀请码或恢复码不正确，或创建者权限已变更");
+  return json({
+    access_token: token,
+    invite_code: room.invite_code,
+    member_id: room.admin_user_id,
+    dorm: await guestView(db, room),
+  });
+}
 async function createRoom(request, db, user, now) {
   const input = await body(request, ["name"], ["name"]),
     name = str(input.name, 1, 64);
@@ -1382,6 +1481,8 @@ async function dispatch(request, env, ctx) {
   if (/^\/chores(\/|$)/.test(path)) return handleChores(request, env, now);
   if (path === "/guest/create" && method === "POST")
     return guestCreate(request, db, now);
+  if (path === "/guest/recover" && method === "POST")
+    return recoverCreator(request, db, now);
   if ((path === "/guest/dorm" || path === "/guest/tasks") && method === "GET") {
     const room = await guestRoom(db, env, url);
     if (path === "/guest/dorm") return json(await guestView(db, room));
@@ -1469,6 +1570,13 @@ async function dispatch(request, env, ctx) {
   const known = /^\/(auth|dorms|duties|notifications|push)(\/|$)/.test(path);
   if (!known) fail(404, "not_found", "接口不存在");
   const user = await currentUser(request, db, now);
+  if (path === "/dorms/recovery" && method === "GET") {
+    const room = await currentDorm(db, user, true);
+    if (room.is_demo) fail(403, "demo_read_only", "游客模式不能设置恢复码");
+    return json(await recoveryStatus(db, room, user));
+  }
+  if (path === "/dorms/recovery" && method === "POST")
+    return configureRecovery(request, db, user, now);
   if (path === "/auth/me" && method === "GET") {
     if (user.session_kind === "device")
       await stmt(

@@ -14,6 +14,22 @@ const created = () =>
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
 
+export const creatorRecovery = sqliteTable(
+  "creator_recovery",
+  {
+    dormId: integer("dorm_id")
+      .primaryKey()
+      .references(() => dormitories.id),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    codeHash: text("code_hash").notNull(),
+    revision: integer("revision").notNull().default(1),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("creator_recovery_hash_unique").on(table.codeHash)],
+);
+
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull().unique(),

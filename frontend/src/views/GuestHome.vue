@@ -11,6 +11,7 @@ import ChoreBoard from "../components/ChoreBoard.vue";
 import MarkerPicker from "../components/MarkerPicker.vue";
 import MemberMark from "../components/MemberMark.vue";
 import ChoreBottomNav from "../components/ChoreBottomNav.vue";
+import CreatorRecovery from "../components/CreatorRecovery.vue";
 import { showToast } from "vant";
 import { useSession } from "../stores/session";
 import {
@@ -18,6 +19,7 @@ import {
   createGuestDorm,
   type GuestDorm,
   type GuestMember,
+  type GuestCreation,
 } from "../api/guest";
 
 const storageKey = "dorm-guest-view-v1";
@@ -43,6 +45,7 @@ const creatingRoom = ref(false),
   createNickname = ref(""),
   createMembers = ref("");
 const createdInvite = ref("");
+const recoveryOpen = ref(false);
 const section = computed(() =>
   route.path === "/water"
     ? "water"
@@ -365,6 +368,50 @@ async function copyInvite() {
     showToast("可以长按邀请码复制");
   }
 }
+async function acceptRecovered(result: GuestCreation) {
+  recoveryOpen.value = false;
+  const { id, signal } = startRequest();
+  try {
+    await session.init();
+    if (!isCurrent(id, signal)) return;
+    sessionStorage.setItem("dorm-token", result.access_token);
+    try {
+      localStorage.setItem("dorm-owner-token", result.access_token);
+    } catch {
+      /* Current visit remains usable. */
+    }
+    saveChoreToken(result.invite_code, result.member_id, result.access_token);
+    await session.refresh().catch(() => {
+      /* A fresh owner token can retry after reconnecting. */
+    });
+    if (!isCurrent(id, signal)) return;
+    creatingRoom.value = false;
+    changingDorm.value = false;
+    pendingPerson.value = null;
+    choosingMember.value = false;
+    createdInvite.value = "";
+    inviteCode.value = result.invite_code;
+    viewMode.value = "dorm";
+    dorm.value = result.dorm;
+    member.value =
+      result.dorm.members.find(
+        (person) => person.user_id === result.member_id,
+      ) || null;
+    choreToken.value = result.access_token;
+    remember();
+    const synced = await loadDorm(
+      result.invite_code,
+      result.member_id,
+      result.access_token,
+    );
+    await router.replace({ path: route.path });
+    showToast(synced ? "管理权限已恢复" : "权限已恢复，请联网刷新");
+  } catch (e) {
+    if (isCurrent(id, signal)) error.value = (e as Error).message;
+  } finally {
+    if (isCurrent(id, signal)) loading.value = false;
+  }
+}
 async function switchDorm(useDefault = false) {
   if (loading.value) return;
   const code = useDefault ? "" : normalizeCode(draftCode.value);
@@ -586,6 +633,13 @@ onUnmounted(() => {
         >
           游客体验<van-icon name="arrow" aria-hidden="true" />
         </button>
+        <button
+          class="guest-demo-link"
+          data-testid="guest-recover-owner"
+          @click="recoveryOpen = true"
+        >
+          恢复管理权限
+        </button>
       </section>
       <template v-else-if="dorm && (!loading || pendingPerson)">
         <aside
@@ -696,6 +750,7 @@ onUnmounted(() => {
             @switch-member="changeMember"
             @join-dorm="openDormChange"
             @create-dorm="openCreate"
+            @recover-owner="recoveryOpen = true"
           />
         </section>
       </template>
@@ -711,6 +766,12 @@ onUnmounted(() => {
       <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
     </footer>
     <ChoreBottomNav v-if="navVisible" :section="section" />
+    <CreatorRecovery
+      v-model="recoveryOpen"
+      mode="restore"
+      :invite="inviteCode"
+      @restored="acceptRecovered"
+    />
   </main>
 </template>
 
