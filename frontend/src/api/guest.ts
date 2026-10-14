@@ -11,6 +11,7 @@ export interface GuestMember {
 export interface GuestDorm {
   id: number;
   name: string;
+  is_demo: boolean;
   members: GuestMember[];
 }
 export interface GuestTasks {

@@ -139,16 +139,24 @@ try {
     check(creation.status === 201, "免账号创建路由");
     const created = await creation.json();
     harness.env.DEFAULT_DORM_INVITE_CODE = created.invite_code;
+    check(
+      (await call("/guest/dorm", undefined, harness.env)).status === 400,
+      "未提供邀请码时默认正式宿舍不能暴露成员",
+    );
     const room = await (
-      await call("/guest/dorm", undefined, harness.env)
+      await call(
+        `/guest/dorm?invite_code=${created.invite_code}`,
+        undefined,
+        harness.env,
+      )
     ).json();
     check(
       room.id === created.dorm.id && room.members.length === 2,
-      "访客默认房间在 D1 内查询",
+      "提供邀请码后在 D1 内查询对应宿舍",
     );
     const own = await (
       await call(
-        `/guest/tasks?member_id=${created.member_id}`,
+        `/guest/tasks?invite_code=${created.invite_code}&member_id=${created.member_id}`,
         undefined,
         harness.env,
       )

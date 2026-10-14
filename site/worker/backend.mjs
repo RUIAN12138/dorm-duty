@@ -614,11 +614,13 @@ async function guestRoom(db, env, url) {
   if (code) {
     const row = await first(
       db,
-      "SELECT * FROM dormitories WHERE invite_code=?",
+      explicit === null
+        ? "SELECT * FROM dormitories WHERE invite_code=? AND is_demo=1"
+        : "SELECT * FROM dormitories WHERE invite_code=?",
       [code.trim().toUpperCase()],
     );
-    if (!row) fail(404, "invalid_invite", "邀请码无效或已更新");
-    return normalizeDorm(row);
+    if (row) return normalizeDorm(row);
+    if (explicit !== null) fail(404, "invalid_invite", "邀请码无效或已更新");
   }
   const demos = await all(
     db,
@@ -631,6 +633,7 @@ async function guestView(db, room) {
   return {
     id: room.id,
     name: room.name,
+    is_demo: Boolean(room.is_demo),
     members: await choreGuestMemberMarks(db, room.id),
   };
 }

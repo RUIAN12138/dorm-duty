@@ -727,12 +727,16 @@ export async function runBackendChecks() {
     const missing = await api(h, "/guest/dorm", { status: 400 });
     equal(missing.detail.code, "invite_required");
     h.env.DEFAULT_DORM_INVITE_CODE = dorm.invite_code;
-    equal((await api(h, "/guest/dorm")).id, dorm.id);
+    equal(
+      (await api(h, "/guest/dorm", { status: 400 })).detail.code,
+      "invite_required",
+    );
     const viewed = await api(
       h,
       `/guest/dorm?invite_code=${dorm.invite_code.toLowerCase()}`,
     );
-    equal(Object.keys(viewed).sort(), ["id", "members", "name"]);
+    equal(Object.keys(viewed).sort(), ["id", "is_demo", "members", "name"]);
+    equal(viewed.is_demo, false);
     equal(
       viewed.members.map(({ user_id, nickname }) => ({ user_id, nickname })),
       [
@@ -806,6 +810,44 @@ export async function runBackendChecks() {
       (await api(h, `/guest/dorm?invite_code=${rotated.invite_code}`)).id,
       dorm.id,
     );
+  });
+
+  test("Empty invites never expose a configured real dorm and demo lookup stays separate", async (h) => {
+    const { a, dorm } = await room(h);
+    h.env.DEFAULT_DORM_INVITE_CODE = dorm.invite_code;
+    await api(h, "/guest/dorm", { status: 400 });
+    await api(h, `/guest/tasks?member_id=${a.id}`, { status: 400 });
+    await api(h, `/chores/board?member_id=${a.id}`, { status: 400 });
+    for (const invite of ["", "   ", "NOTREAL1"]) {
+      await api(h, `/guest/dorm?invite_code=${encodeURIComponent(invite)}`, {
+        status: invite.trim() ? 404 : 422,
+      });
+      await api(h, "/chores/claim", {
+        method: "POST",
+        data: { invite_code: invite, member_id: a.id },
+        status: invite.trim() ? 404 : invite ? 422 : 400,
+      });
+    }
+    const { ensureLocalDemo } = await import("../local/database.mjs");
+    const demoInvite = ensureLocalDemo(h.db);
+    const demo = await api(h, "/guest/dorm");
+    equal(demo.is_demo, true);
+    ok(demo.id !== dorm.id);
+    ok(!demo.members.some((m) => m.user_id === a.id));
+    const explicitDemo = await api(h, `/guest/dorm?invite_code=${demoInvite}`);
+    equal(explicitDemo.id, demo.id);
+    equal(explicitDemo.is_demo, true);
+    await api(h, `/chores/board?member_id=${a.id}`, { status: 404 });
+    await api(h, "/chores/claim", {
+      method: "POST",
+      data: { invite_code: "", member_id: a.id },
+      status: 403,
+    });
+    const formal = await api(h, `/guest/dorm?invite_code=${dorm.invite_code}`);
+    equal(formal.id, dorm.id);
+    equal(formal.is_demo, false);
+    h.env.DEFAULT_DORM_INVITE_CODE = demoInvite;
+    equal((await api(h, "/guest/dorm")).id, demo.id);
   });
 
   test("Anonymous creation grants a real owner session while invited members stay read-only", async (h) => {

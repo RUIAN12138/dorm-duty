@@ -165,6 +165,7 @@ async function loadDorm(
       { invite_code: code || undefined },
       signal,
     );
+    if (!code && result.is_demo !== true) throw new Error("请先输入宿舍邀请码");
     const restored =
       result.members.find((m) => m.user_id === restoreId) || null;
     const token =
@@ -176,8 +177,8 @@ async function loadDorm(
     if (!isCurrent(id, signal)) return false;
     // Commit only after the room is valid. Opening/cancelling a switch never logs out.
     dorm.value = result;
-    inviteCode.value = code;
-    viewMode.value = code ? "dorm" : "demo";
+    inviteCode.value = result.is_demo ? "" : code;
+    viewMode.value = result.is_demo ? "demo" : "dorm";
     member.value = restored;
     choreToken.value = token;
     choosingMember.value = false;
@@ -348,7 +349,6 @@ async function submitCreate() {
     remember();
     await router.replace({
       path: route.path,
-      query: { invite_code: result.invite_code },
     });
     await loadDorm(result.invite_code, result.member_id, result.access_token);
   } catch (e) {
@@ -381,7 +381,6 @@ async function switchDorm(useDefault = false) {
   creatingRoom.value = false;
   await router.replace({
     path: route.path,
-    query: code ? { invite_code: code } : {},
   });
 }
 function visibleRefresh() {
@@ -406,36 +405,28 @@ watch(
     }
   },
 );
-watch(
-  () => route.query.invite_code,
-  (value) => {
-    const code = normalizeCode(Array.isArray(value) ? value[0] : value);
-    // Notification URLs and back/forward navigation may omit the invite query.
-    // Absence is not a request to leave the saved room.
-    if (code && code !== inviteCode.value) {
-      const saved = storedChoice();
-      void loadDorm(
-        code,
-        code === saved.invite_code ? saved.member_id : undefined,
-      );
-    }
-  },
-);
+function removeSharedInvite() {
+  if (route.query.invite_code === undefined) return;
+  const query = { ...route.query };
+  delete query.invite_code;
+  void router.replace({ path: route.path, query, hash: route.hash });
+}
+watch(() => route.query.invite_code, removeSharedInvite);
 
 onMounted(() => {
   const saved = storedChoice();
-  const queryCode = route.query.invite_code;
-  const code =
-    queryCode !== undefined
-      ? normalizeCode(Array.isArray(queryCode) ? queryCode[0] : queryCode) ||
-        saved.invite_code
-      : saved.invite_code;
+  const sharedLink = route.query.invite_code !== undefined;
+  // Only manual join/create or a previous room choice grants the UI entry.
+  // A copied address never reveals a new room or replaces this device's room.
+  const code = saved.invite_code;
+  removeSharedInvite();
   inviteCode.value = code;
   if (code || saved.guest_mode === "demo")
     void loadDorm(
       code,
       code === saved.invite_code ? saved.member_id : undefined,
     );
+  else if (sharedLink) openDormChange();
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
@@ -719,7 +710,7 @@ onUnmounted(() => {
       </button>
       <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
     </footer>
-    <ChoreBottomNav v-if="navVisible" :section="section" :invite="inviteCode" />
+    <ChoreBottomNav v-if="navVisible" :section="section" />
   </main>
 </template>
 

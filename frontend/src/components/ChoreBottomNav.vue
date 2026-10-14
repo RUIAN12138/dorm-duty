@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 const props = defineProps<{
   section: "duty" | "water" | "calendar";
-  invite: string;
 }>();
 const items = [
   { section: "duty", path: "/", label: "值日" },
@@ -71,7 +70,6 @@ function finish(event: PointerEvent, cancelled = false) {
   void router
     .push({
       path: item.path,
-      query: props.invite ? { invite_code: props.invite } : {},
     })
     .finally(() => {
       dragging.value = false;
@@ -105,7 +103,7 @@ function click(event: MouseEvent) {
     <router-link
       v-for="item in items"
       :key="item.section"
-      :to="{ path: item.path, query: invite ? { invite_code: invite } : {} }"
+      :to="{ path: item.path }"
       :class="{ active: section === item.section }"
       :aria-current="section === item.section ? 'page' : undefined"
       :data-testid="`nav-${item.section}`"
