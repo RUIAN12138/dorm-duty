@@ -44,6 +44,7 @@ jobs:
           node site/scripts/check-water-nudge.mjs
           node site/scripts/check-completion.mjs
           node site/scripts/check-native-back.mjs
+          node site/scripts/check-creator-recovery.mjs
       - name: Build server website
         env:
           DORM_WEB_BASE: /dorm-duty/

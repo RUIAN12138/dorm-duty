@@ -1,6 +1,6 @@
 # 协作开发
 
-两人共用 `lihao505/dorm-duty` 仓库，各自使用自己的 GitHub 账号和任务分支，通过 PR 互相审查。开始修改前，在 Issues 里选择「问题反馈」或「开发任务 / 功能需求」，指定负责人，约定验收标准。
+项目使用 `lihao505/dorm-duty` 仓库和任务分支，通过 PR 与自动检查合入。当前按单人模式开发，由开发者自审；两人协作时，各自使用自己的 GitHub 账号并互相审查。开始修改前，在 Issues 里选择「问题反馈」或「开发任务 / 功能需求」，约定验收标准。
 
 ## 第一次加入
 
@@ -63,9 +63,9 @@ git commit -m "改进日历完成记录展示"
 git push -u origin codex/calendar-polish
 ```
 
-如果修改了其他目录，也要检查并暂存相关文件。GitHub 创建 PR 时，base 选择 main，填写自动出现的 PR 模板；用 `Closes #编号` 关联任务。另一位开发者检查差异和本地运行结果，问题解决后批准，使用 Squash and merge 合并。
+如果修改了其他目录，也要检查并暂存相关文件。GitHub 创建 PR 时，base 选择 main，填写自动出现的 PR 模板；用 `Closes #编号` 关联任务。单人模式完成自审和检查后使用 Squash and merge 合并；多人协作时由另一位开发者检查差异和本地运行结果，问题解决后批准。
 
-`main` 的协作目标是：必须经 PR、至少一位其他开发者批准、`web-and-business` 与 `android` 检查通过、解决审查讨论、禁止强推和删除。自动检查通过不能替代人工审查。仓库所有者也应遵守这些规则；刚加入协作前只有一个账号时，需要先邀请第二位开发者才能满足互相批准。
+当前 `main` 的单人保护规则是：必须经 PR、`web-and-business` 与 `android` 检查通过、解决审查讨论、禁止强推和删除，仓库所有者也遵守规则；不要求第二人批准。加入另一位开发者后，可以重新启用至少一人批准以及新提交重新审查。自动检查不能替代对差异与实际行为的审查。
 
 每次 push 到 main、打开或更新 PR，GitHub Actions 自动运行前端构建、业务与通知检查以及安卓调试包构建 / lint。工作流不发布网站，不使用生产凭据，不构建未配置签名的鸿蒙分发包。
 
@@ -83,6 +83,7 @@ node site/scripts/check-native-push.mjs
 node site/scripts/check-water-nudge.mjs
 node site/scripts/check-completion.mjs
 node site/scripts/check-native-back.mjs
+node site/scripts/check-creator-recovery.mjs
 ```
 
 完整业务回归另运行 `node site/scripts/check-cloud-backend.mjs` 和 `node site/scripts/check-chores.mjs`。安卓 / 鸿蒙工程与构建条件见 [native/README.md](native/README.md)。
