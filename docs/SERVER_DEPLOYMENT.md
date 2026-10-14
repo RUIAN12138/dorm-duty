@@ -12,7 +12,7 @@
 
 ## 当前进度
 
-2026-10-14 最新版本为 `20261014-sync-back-v14`，bundle SHA-256 `572473a9e5e2a23fd10df4a067056039666d2deafa4bfb5db990f18582f64002`。打卡成功先采用服务器结果，再同步其他信息；同步失败显示成功已记录，重试与自动恢复不重复打卡。安卓返回桥优先关闭最上层抽屉。隔离浏览器故障注入验证完成，17 项打卡同步与 9 项返回处理检查、安卓构建 / lint 通过；安卓真机返回仍待验收。12 个公网资源与发布构建一致，39 条既有完成记录逐条校验保留。证据见 `evidence/sync-back/README.md`。此前导航验收见 `evidence/mobile-navigation/README.md`。
+2026-10-14 最新版本为 `20261014-bottom-sheet-v15`，bundle SHA-256 `b22686b50f572d431c51d03e5d0c5e97b66b0b3d80028449ca6829ac895dec07`。抬水详情独立使用底部垂直转场，遮罩分开淡入淡出，关闭完成才清空任务内容；轻拖平滑回正、下拉关闭。浏览器捕获的进出帧无缩放，退出时高度与内容保持一致；真机触摸手感尚待验收。12 个公网资源与发布构建一致，39 条既有完成记录逐条校验保留。证据见 `evidence/bottom-sheet/README.md`。此前打卡同步与导航验收见 `evidence/sync-back/README.md`、`evidence/mobile-navigation/README.md`。
 
 - 顶部名字不可点击，右上角只有一个「…」；从菜单明确选择加入其他宿舍才打开邀请码，取消或刷新仍保留原成员。
 - 抬水页点名字催促：按压回弹、波纹和浮字；实际提醒合并为同一发送者/任务 60 秒一次。游客动画不发送消息。
@@ -30,7 +30,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261014-sync-back-v14`，`/opt/dorm-duty/current` 指向当前版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261014-bottom-sheet-v15`，`/opt/dorm-duty/current` 指向当前版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 

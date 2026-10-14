@@ -78,6 +78,8 @@ function runQueuedTool() {
 }
 const selectedTaskId = ref<number | null>(null);
 const detailTask = ref<ChoreTask | null>(null);
+const detailOpen = ref(false);
+const detailMotion = ref<"shared" | "bottom">("shared");
 const detailOrigin = ref<DOMRect | null>(null);
 const direction = ref(1);
 const sectionOrder = ["duty", "water", "calendar"];
@@ -89,11 +91,13 @@ watch(
   },
 );
 function openTask(task: ChoreTask, event: MouseEvent) {
+  detailMotion.value = task.key === "water" ? "bottom" : "shared";
   detailOrigin.value =
     task.key === "water"
       ? null
       : (event.currentTarget as HTMLElement).getBoundingClientRect();
   detailTask.value = task;
+  detailOpen.value = true;
 }
 function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
@@ -936,10 +940,11 @@ onUnmounted(() => {
         </details>
       </ElasticSheet>
       <ElasticSheet
-        :model-value="!!detailTask"
+        v-model="detailOpen"
         :title="detailTask?.name || '任务详情'"
         :origin="detailOrigin"
-        @update:model-value="detailTask = $event ? detailTask : null"
+        :motion="detailMotion"
+        @closed="detailTask = null"
       >
         <template v-if="detailTask"
           ><p class="task-full-content">{{ detailTask.content }}</p>

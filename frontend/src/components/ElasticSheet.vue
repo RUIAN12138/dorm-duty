@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onUnmounted } from "vue";
+import { computed, ref, watch, nextTick, onUnmounted } from "vue";
 import { registerNativeBack } from "../interactions/nativeBack";
 let removeNativeBack: (() => void) | undefined;
 const props = defineProps<{
   modelValue: boolean;
   title: string;
   origin?: DOMRect | null;
+  motion?: "shared" | "bottom";
 }>();
+const bottomOnly = computed(() => props.motion === "bottom");
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   closed: [];
@@ -19,8 +21,12 @@ let lastFocus: HTMLElement | null = null,
   lastY = 0,
   lastTime = 0,
   speed = 0,
+  dragBaseline = 0,
   offset = 0;
 let animation: Animation | undefined;
+let scrimAnimation: Animation | undefined;
+let settleEnter: (() => void) | undefined;
+let locked = false;
 const reduce = () =>
   matchMedia("(prefers-reduced-motion: reduce)").matches ||
   document.documentElement.dataset.interaction === "keyboard";
@@ -29,7 +35,7 @@ let closing = false,
 async function close() {
   if (closing) return;
   closing = true;
-  if (panel.value && props.origin && !reduce()) {
+  if (panel.value && !bottomOnly.value && props.origin && !reduce()) {
     animation?.cancel();
     exitAnimating = true;
     const to = props.origin,
@@ -48,16 +54,21 @@ async function close() {
     await animation.finished.catch(() => {});
   }
   emit("update:modelValue", false);
-  closing = false;
 }
 function down(e: PointerEvent) {
-  if (!panel.value || dragging || !e.isPrimary) return;
+  if (!panel.value || closing || dragging || !e.isPrimary || e.button !== 0)
+    return;
+  dragBaseline = bottomOnly.value
+    ? new DOMMatrixReadOnly(getComputedStyle(panel.value).transform).m42
+    : 0;
+  settleEnter?.();
   animation?.cancel();
+  panel.value.style.transform = `translateY(${dragBaseline}px)`;
   dragging = true;
   startY = lastY = e.clientY;
   lastTime = performance.now();
   speed = 0;
-  offset = 0;
+  offset = dragBaseline;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
 function move(e: PointerEvent) {
@@ -66,13 +77,14 @@ function move(e: PointerEvent) {
   speed = (e.clientY - lastY) / Math.max(now - lastTime, 1);
   lastY = e.clientY;
   lastTime = now;
-  const delta = e.clientY - startY;
+  const delta = dragBaseline + e.clientY - startY;
   offset = delta < 0 ? -Math.abs(delta) / (1 + Math.abs(delta) / 70) : delta;
   panel.value.style.transform = `translateY(${offset}px)`;
 }
 function up(cancelled = false) {
   if (!dragging || !panel.value) return;
   dragging = false;
+  if (performance.now() - lastTime > 80) speed = 0;
   if (!cancelled && (offset > 130 || (offset > 35 && speed > 0.6))) {
     close();
     return;
@@ -81,13 +93,76 @@ function up(cancelled = false) {
     animation = panel.value.animate(
       [
         { transform: `translateY(${offset}px)` },
-        { transform: "translateY(-4px)", offset: 0.65 },
         { transform: "translateY(0)" },
       ],
       { duration: 280, easing: "cubic-bezier(.22,1,.36,1)" },
     );
   panel.value.style.transform = "";
   offset = 0;
+}
+function bottomTransition(
+  element: Element,
+  done: () => void,
+  entering: boolean,
+) {
+  const sheet = element.querySelector<HTMLElement>(".elastic-sheet");
+  const scrim = element.querySelector<HTMLElement>(".sheet-scrim");
+  if (!sheet || reduce()) {
+    done();
+    return;
+  }
+  const from = entering
+    ? "translate3d(0,100%,0)"
+    : getComputedStyle(sheet).transform;
+  const scrimFrom = entering
+    ? 0
+    : Number(scrim ? getComputedStyle(scrim).opacity : 1);
+  settleEnter?.();
+  animation?.cancel();
+  scrimAnimation?.cancel();
+  animation = sheet.animate(
+    [
+      { transform: from },
+      { transform: entering ? "translate3d(0,0,0)" : "translate3d(0,100%,0)" },
+    ],
+    {
+      duration: entering ? 300 : 220,
+      easing: entering ? "cubic-bezier(.32,.72,0,1)" : "cubic-bezier(.4,0,1,1)",
+      fill: "both",
+    },
+  );
+  scrimAnimation = scrim?.animate(
+    [{ opacity: scrimFrom }, { opacity: entering ? 1 : 0 }],
+    { duration: entering ? 240 : 220, easing: "ease-out", fill: "both" },
+  );
+  const finish = () => {
+    if (entering) settleEnter = undefined;
+    done();
+  };
+  if (entering) settleEnter = finish;
+  animation.finished.then(finish).catch(() => {});
+}
+function enterBottom(element: Element, done: () => void) {
+  bottomTransition(element, done, true);
+}
+function leaveBottom(element: Element, done: () => void) {
+  bottomTransition(element, done, false);
+}
+function afterEnter() {
+  if (!bottomOnly.value || !props.modelValue) return;
+  animation?.cancel();
+  scrimAnimation?.cancel();
+  if (panel.value) panel.value.style.transform = "";
+}
+function afterLeave() {
+  animation?.cancel();
+  scrimAnimation?.cancel();
+  exitAnimating = false;
+  closing = false;
+  removeNativeBack?.();
+  removeNativeBack = undefined;
+  restore();
+  emit("closed");
 }
 function key(e: KeyboardEvent) {
   if (!props.modelValue) return;
@@ -119,6 +194,8 @@ function key(e: KeyboardEvent) {
   }
 }
 function restore() {
+  if (!locked) return;
+  locked = false;
   document.body.style.overflow = previousOverflow;
   window.removeEventListener("keydown", key);
   lastFocus?.focus({ preventScroll: true });
@@ -127,22 +204,20 @@ watch(
   () => props.modelValue,
   async (open) => {
     if (!open) {
-      removeNativeBack?.();
-      removeNativeBack = undefined;
-      if (!exitAnimating) animation?.cancel();
+      if (!bottomOnly.value && !exitAnimating) animation?.cancel();
       dragging = false;
-      restore();
       return;
     }
     lastFocus = document.activeElement as HTMLElement;
     removeNativeBack = registerNativeBack(() => void close());
     previousOverflow = document.body.style.overflow;
+    locked = true;
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", key);
     await nextTick();
     if (!panel.value) return;
     panel.value.style.transform = "";
-    if (!reduce() && props.origin) {
+    if (!reduce() && !bottomOnly.value && props.origin) {
       const from = props.origin,
         to = panel.value.getBoundingClientRect();
       const x = from.left - to.left,
@@ -171,20 +246,25 @@ watch(
 onUnmounted(() => {
   removeNativeBack?.();
   animation?.cancel();
-  if (props.modelValue) restore();
+  scrimAnimation?.cancel();
+  restore();
 });
 </script>
 <template>
   <Teleport to="body">
     <Transition
       name="sheet"
-      @after-leave="
-        animation?.cancel();
-        exitAnimating = false;
-        emit('closed');
-      "
+      :css="!bottomOnly"
+      :on-enter="bottomOnly ? enterBottom : undefined"
+      :on-leave="bottomOnly ? leaveBottom : undefined"
+      @after-enter="afterEnter"
+      @after-leave="afterLeave"
     >
-      <div v-if="modelValue" class="sheet-layer">
+      <div
+        v-if="modelValue"
+        class="sheet-layer"
+        :data-motion="bottomOnly ? 'bottom' : 'shared'"
+      >
         <div class="sheet-scrim" @click="close" aria-hidden="true"></div>
         <section
           ref="panel"
