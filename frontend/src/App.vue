@@ -4,6 +4,8 @@ import { useRoute, useRouter } from "vue-router";
 import { registerSW } from "virtual:pwa-register";
 import { useSession } from "./stores/session";
 import { networkState } from "./api/network";
+import { installNativeBack } from "./interactions/nativeBack";
+let removeNativeBack: (() => void) | undefined;
 const route = useRoute(),
   router = useRouter(),
   session = useSession();
@@ -40,6 +42,7 @@ function expired() {
     router.replace({ path: "/admin/login", query: { next: route.fullPath } });
 }
 onMounted(() => {
+  removeNativeBack = installNativeBack();
   window.addEventListener("online", network);
   window.addEventListener("offline", network);
   window.addEventListener("auth-expired", expired);
@@ -47,6 +50,7 @@ onMounted(() => {
   window.addEventListener("pointerdown", pointerMode);
 });
 onUnmounted(() => {
+  removeNativeBack?.();
   window.removeEventListener("online", network);
   window.removeEventListener("offline", network);
   window.removeEventListener("auth-expired", expired);

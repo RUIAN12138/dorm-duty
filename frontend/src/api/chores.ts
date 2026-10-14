@@ -45,6 +45,11 @@ export interface ChoreRecord {
   completed_at: string;
   completed_date: string;
 }
+export interface ChoreCompletion {
+  task: ChoreTask;
+  next_water: ChoreTask | null;
+  version: number;
+}
 export interface ChoreReminder {
   id: number;
   title?: string;

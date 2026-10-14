@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onUnmounted } from "vue";
+import { registerNativeBack } from "../interactions/nativeBack";
+let removeNativeBack: (() => void) | undefined;
 const props = defineProps<{
   modelValue: boolean;
   title: string;
@@ -125,12 +127,15 @@ watch(
   () => props.modelValue,
   async (open) => {
     if (!open) {
+      removeNativeBack?.();
+      removeNativeBack = undefined;
       if (!exitAnimating) animation?.cancel();
       dragging = false;
       restore();
       return;
     }
     lastFocus = document.activeElement as HTMLElement;
+    removeNativeBack = registerNativeBack(() => void close());
     previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", key);
@@ -164,6 +169,7 @@ watch(
   },
 );
 onUnmounted(() => {
+  removeNativeBack?.();
   animation?.cancel();
   if (props.modelValue) restore();
 });

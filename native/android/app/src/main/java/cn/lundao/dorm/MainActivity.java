@@ -23,6 +23,7 @@ public final class MainActivity extends Activity {
   private final ExecutorService io=Executors.newSingleThreadExecutor();
   private JSONObject pendingPermission;
   private JavaScriptReplyProxy pendingReply;
+  private boolean handlingBack;
   static boolean trusted(String value) {
     Uri uri=Uri.parse(value==null?"":value);
     return "https".equals(uri.getScheme()) && "8.148.190.114".equals(uri.getHost()) && (uri.getPort()==-1||uri.getPort()==443) && uri.getUserInfo()==null && uri.getPath()!=null && uri.getPath().startsWith("/dorm-duty/");
@@ -106,7 +107,18 @@ public final class MainActivity extends Activity {
     try {String value=new JSONObject().put("id",request.optString("id")).put("ok",ok).put("message",message).put("enabled",enabled).put("platform","android").put("configured",BuildConfig.JPUSH_APPKEY.matches("[a-fA-F0-9]{24}")).toString();runOnUiThread(()->{if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);});}catch(JSONException ignored){}
   }
   @Override protected void onSaveInstanceState(Bundle out){web.saveState(out);super.onSaveInstanceState(out);}
-  @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
+  @Override public void onBackPressed(){
+    if(handlingBack || web==null)return;
+    if(!trusted(web.getUrl())){navigateBack();return;}
+    handlingBack=true;
+    String page=web.getUrl();
+    web.evaluateJavascript("typeof window.DormNativeBack === 'function' && window.DormNativeBack()",result->{
+      handlingBack=false;
+      if(isFinishing()||isDestroyed()||!Objects.equals(page,web.getUrl()))return;
+      if(!"true".equals(result))navigateBack();
+    });
+  }
+  private void navigateBack(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String url=intent.getStringExtra("route");if(trusted(url))web.loadUrl(url);}
   @Override protected void onDestroy(){io.shutdownNow();web.destroy();super.onDestroy();}
 }

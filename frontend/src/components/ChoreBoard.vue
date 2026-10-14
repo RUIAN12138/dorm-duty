@@ -2,12 +2,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { showToast } from "vant";
 import { ApiError } from "../api";
+import { completeChore } from "../api/completion";
 import {
   choreRequest,
   getChoreBoard,
   type ChoreBoardData,
   type ChoreMember,
   type ChoreReminder,
+  type ChoreCompletion,
   type ChoreTask,
 } from "../api/chores";
 import WaterNudge from "./WaterNudge.vue";
@@ -39,6 +41,7 @@ const board = ref<ChoreBoardData | null>(null),
   error = ref(""),
   actionError = ref(""),
   busy = ref("");
+const completionSyncPending = ref(false);
 const month = ref(
   new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -323,9 +326,10 @@ function scheduleMidnight(serverTime: string) {
     8 * 3600000;
   midnight = setTimeout(() => void load(), Math.max(1000, next - now + 1500));
 }
-async function load() {
+async function load(): Promise<boolean> {
   controller?.abort();
-  controller = new AbortController();
+  const requestController = new AbortController();
+  controller = requestController;
   const id = ++requestId;
   loading.value = true;
   error.value = "";
@@ -335,46 +339,90 @@ async function load() {
       props.memberId,
       month.value,
       props.demo ? "" : props.token,
-      controller.signal,
+      requestController.signal,
     );
-    if (id !== requestId || controller.signal.aborted) return;
+    if (id !== requestId || requestController.signal.aborted) return false;
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
     board.value = result;
+    completionSyncPending.value = false;
     if (!props.demo) void syncMemberPush(props.token).catch(() => {});
     emit("member", result.member);
     scheduleMidnight(result.server_time);
+    return true;
   } catch (e) {
-    if (id !== requestId || controller.signal.aborted) return;
+    if (id !== requestId || requestController.signal.aborted) return false;
     if (e instanceof ApiError && e.status === 401) {
       emit("expired");
-      return;
+      return false;
     }
     error.value = (e as Error).message;
+    return false;
   } finally {
     if (id === requestId) loading.value = false;
   }
+}
+function acceptCompletion(receipt: ChoreCompletion) {
+  if (!board.value) return;
+  const finished = receipt.task;
+  const existed = board.value.today_tasks.find(
+    (task) => task.id === finished.id,
+  );
+  board.value.today_tasks = board.value.today_tasks.map((task) =>
+    task.id === finished.id ? finished : task,
+  );
+  board.value.next_tasks = board.value.next_tasks.map((task) =>
+    task.id === finished.id ? finished : task,
+  );
+  if (finished.key === "water") board.value.water_task = receipt.next_water;
+  if (detailTask.value?.id === finished.id) detailTask.value = finished;
+  const round = board.value.rounds.find(
+    (item) => item.key === finished.key && item.sequence === finished.sequence,
+  );
+  if (round && existed?.status !== "completed") {
+    const member = round.members.find(
+      (person) => person.user_id === finished.assignee_id,
+    );
+    if (member && !member.completed) {
+      member.completed = true;
+      round.completed = round.members.filter(
+        (person) => person.completed,
+      ).length;
+    }
+  }
+  board.value.version = Math.max(board.value.version, receipt.version);
+  completionSyncPending.value = true;
 }
 async function complete(task: ChoreTask) {
   if (props.demo) {
     demoNotice();
     return;
   }
-  if (busy.value || !task.can_complete || task.status === "completed") return;
+  if (
+    busy.value ||
+    completionSyncPending.value ||
+    !task.can_complete ||
+    task.status === "completed"
+  )
+    return;
   if (task.key !== "water") selectedTaskId.value = task.id;
   busy.value = `complete-${task.id}`;
   actionError.value = "";
   try {
-    await choreRequest(`/chores/tasks/${task.id}/complete`, props.token, {
-      method: "PATCH",
-      body: "{}",
-    });
-    showToast(
-      task.key === "water"
-        ? "抬水已记录，轮到下一位了。"
-        : "值日已完成，标记已留在日历上。",
+    const syncStatus = await completeChore(
+      task.id,
+      props.token,
+      (receipt) => {
+        acceptCompletion(receipt);
+        showToast(
+          task.key === "water"
+            ? "抬水已记录，轮到下一位了。"
+            : "值日已完成，标记已留在日历上。",
+        );
+      },
+      load,
     );
-    await load();
+    if (syncStatus === "pending") error.value = "";
   } catch (e) {
     actionError.value = (e as Error).message;
   } finally {
@@ -533,6 +581,7 @@ function visibleRefresh() {
   presentNewReminders();
   if (
     document.visibilityState === "visible" &&
+    !loading.value &&
     !busy.value &&
     !settingsOpen.value &&
     !reminderOpen.value &&
@@ -574,7 +623,18 @@ onUnmounted(() => {
     >
       <span></span><span></span><span></span>
     </div>
-    <div v-if="error" class="chore-inline-error" role="alert">
+    <div
+      v-if="completionSyncPending"
+      class="chore-sync-status"
+      role="status"
+      data-testid="completion-sync-pending"
+    >
+      <span>打卡已记录，{{ loading ? "正在同步…" : "等待同步" }}</span>
+      <button :disabled="loading" @click="load">
+        {{ loading ? "同步中" : "重试同步" }}
+      </button>
+    </div>
+    <div v-else-if="error" class="chore-inline-error" role="alert">
       {{ error }}<button :disabled="loading" @click="load">重新加载</button>
     </div>
     <template v-if="board">
@@ -676,6 +736,7 @@ onUnmounted(() => {
                     class="chore-complete-button"
                     :disabled="
                       !!busy ||
+                      completionSyncPending ||
                       (!demo && activeDutyTask.duty_date > board.today)
                     "
                     @click="complete(activeDutyTask)"
@@ -752,7 +813,7 @@ onUnmounted(() => {
                     "
                     class="chore-complete-button"
                     :data-testid="`complete-water-${water.id}`"
-                    :disabled="!!busy"
+                    :disabled="!!busy || completionSyncPending"
                     @click="complete(water)"
                   >
                     {{
@@ -1108,6 +1169,24 @@ onUnmounted(() => {
 .chore-board {
   min-width: 0;
   color: #111;
+}
+.chore-sync-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0 16px;
+  color: #555;
+  font-size: 14px;
+}
+.chore-sync-status button {
+  flex-shrink: 0;
+  padding: 8px 0 8px 12px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: #111;
+  font: inherit;
 }
 .board-identity {
   display: flex;
