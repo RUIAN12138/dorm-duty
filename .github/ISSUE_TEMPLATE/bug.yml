@@ -1,0 +1,36 @@
+name: 问题反馈
+description: 记录可复现的问题，便于两位开发者定位和验收。
+title: "[问题] "
+body:
+  - type: markdown
+    attributes:
+      value: 这是公开仓库。截图请遮住真实邀请码、设备订阅信息和个人数据。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 发生了什么，预期应该怎样？
+      placeholder: 例如：从通知打开后需要重新选人，预期保留自己的身份。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开哪个页面
+        2. 点击或滑动哪里
+        3. 出现什么结果
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 手机、系统和浏览器 / 安装版
+      placeholder: 例如：iPhone、iOS 版本、桌面 PWA；或安卓手机、系统版本、浏览器名称。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图、错误信息或发生时间（选填）
+      description: 可以粘贴截图；不要提交密码、真实邀请码、推送 endpoint 或密钥。

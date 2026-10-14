@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 协作开发与本地启动
+    url: https://github.com/lihao505/dorm-duty/blob/main/CONTRIBUTING.md
+    about: 第一次参与项目时，先查看运行方式、PR 流程与验收要求。

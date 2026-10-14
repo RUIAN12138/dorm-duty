@@ -2,7 +2,7 @@
 
 **GitHub 进度快照（2026-10-14）：** 最新部署为 `20261014-invite-gate-v17`。网站、持久化后台和 iOS PWA 通知已交付；安卓与鸿蒙安装版工程已有，原生推送应用配置、厂商通道、鸿蒙签名及真机通知验收仍待完成。完整状态见 [当前进度](docs/PROGRESS.md)。下方包含此前迭代记录，涉及旧部署的描述请以当前进度为准。
 
-协作开发请先阅读 [CONTRIBUTING](CONTRIBUTING.md)。GitHub Actions 在 main 提交和 PR 上自动构建网页、检查业务 / 通知规则及安卓安装版；任务成功保存与后续同步分别处理，安卓返回键优先关闭弹层。
+两人协作请先阅读 [CONTRIBUTING](CONTRIBUTING.md)，在 [Issues](https://github.com/lihao505/dorm-duty/issues/new/choose) 选择问题或开发任务模板，各自使用任务分支，通过 PR 互相审查。PR 自动提供验收与发布交接模板。GitHub Actions 在 main 提交和 PR 上自动构建网页、检查业务 / 通知规则及安卓安装版；合并后由发布负责人单独验收与发布。
 
 **正式公网入口已迁到现有服务器：** [打开轮到](https://8.148.190.114/dorm-duty/)。前端、业务接口和 SQLite 数据库全部在 `8.148.190.114` 运行，不依赖本地 Mac、临时隧道或 Cloudflare 免费域名。无需账号密码，先创建宿舍或凭邀请码加入，再选择成员；默认六人宿舍只在主动选择游客体验后出现。
 
