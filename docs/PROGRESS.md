@@ -5,7 +5,7 @@
 ## 正式运行版本
 
 - 网站：https://8.148.190.114/dorm-duty/
-- 发布版本：`20261014-mobile-navigation-v13b`。
+- 发布版本：`20261014-sync-back-v14`。
 - 服务器：Node.js 22 + SQLite，systemd 管理服务；HTTPS 证书续期与数据库备份已配置。
 - 前端：Vue 3、TypeScript、Vite、Vant，黑白手机界面与 PWA。
 - 默认本地入口：`./scripts/local.sh`，端口 8081；数据写入忽略的 `data/` 目录。

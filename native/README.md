@@ -7,6 +7,7 @@
 - Android：Java + Android WebView + AndroidX WebKit，最低 Android 6。页面使用正式 HTTPS 地址；保存宿舍和室友选择；系统权限由原生申请。JPush 5.6.0 / JCore 5.5.7 固定版本。
 - HarmonyOS：ArkTS + ArkWeb + `@jg/push` 1.4.2，最低 HarmonyOS 5。HarmonyOS 4 系列可另验收 Android APK；HarmonyOS 5 及以上使用 HAP。
 - SDK 仅在主动开启通知后初始化；不开启通知仍可使用宿舍功能。鸿蒙不启用分群推送/数据洞察。当前 AppKey 为空，UI 明确显示未配置，不模拟系统通知成功。
+- 安卓返回键通过受信任页面的 `DormNativeBack` 先关闭最上层抽屉，无弹层时再处理网页历史 / 退出；新版调试包构建和 lint 已通过，真机返回体验尚待验收。
 - 原生桥只允许正式 HTTPS 站点的主文档，安卓使用 origin 限制的 WebMessageListener；鸿蒙将专用 MessagePort 交给主文档。客户端不包含 Master Secret，不忽略证书错误。
 
 ## 需要你完成的外部配置

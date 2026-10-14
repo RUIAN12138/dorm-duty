@@ -8,7 +8,7 @@ backend/.pytest_cache/
 .env
 .env.*
 !.env.example
-data/
+/data/
 docs/evidence/*.png
 docs/evidence/
 .DS_Store
