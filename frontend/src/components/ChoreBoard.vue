@@ -72,6 +72,12 @@ const board = ref<ChoreBoardData | null>(null),
   actionError = ref(""),
   busy = ref("");
 const completionReceipt = ref<ChoreTask | null>(null);
+const completionMorphId = ref<number | null>(null);
+let completionMorphTimer: ReturnType<typeof setTimeout> | undefined;
+function settleCompletion(id: number) {
+  if (completionMorphId.value === id) completionMorphId.value = null;
+}
+onUnmounted(() => clearTimeout(completionMorphTimer));
 const waterReceipt = ref<ChoreTask | null>(null);
 const waterActionTask = computed(
   () =>
@@ -650,6 +656,11 @@ function acceptCompletion(receipt: ChoreCompletion) {
   if (!board.value) return;
   const finished = receipt.task;
   completionReceipt.value = finished;
+  if (motionAllowed()) {
+    completionMorphId.value = finished.id;
+    clearTimeout(completionMorphTimer);
+    completionMorphTimer = setTimeout(() => settleCompletion(finished.id), 800);
+  }
   if (finished.key === "water") waterReceipt.value = finished;
   const existed = board.value.today_tasks.find(
     (task) => task.id === finished.id,
@@ -1153,11 +1164,16 @@ onUnmounted(() => {
                   "
                   :demo="demo"
                   :receipt="completionReceipt"
+                  @settled="settleCompletion"
                   @complete="complete"
                   @undo="undo($event.id)"
                 />
                 <CompletionAction
-                  v-if="recentUndo && recentUndo.id !== activeDutyTask.id"
+                  v-if="
+                    recentUndo &&
+                    recentUndo.id !== activeDutyTask.id &&
+                    recentUndo.id !== completionMorphId
+                  "
                   :task="recentUndo"
                   :busy="!!busy"
                   :disabled="completionSyncPending"
@@ -1235,6 +1251,7 @@ onUnmounted(() => {
                     v-if="waterActionTask"
                     :task="waterActionTask"
                     :receipt="completionReceipt"
+                    @settled="settleCompletion"
                     :busy="!!busy"
                     :disabled="completionSyncPending"
                     :demo="demo"

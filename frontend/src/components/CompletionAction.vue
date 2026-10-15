@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   complete: [task: ChoreTask];
   undo: [task: ChoreTask];
+  settled: [id: number];
 }>();
 const round = ref(false),
   confirmed = ref<ChoreTask | null>(null);
@@ -23,6 +24,7 @@ const visualTask = computed(() =>
   round.value && confirmed.value ? confirmed.value : props.task,
 );
 function reset() {
+  if (confirmed.value) emit("settled", confirmed.value.id);
   clearTimeout(timer);
   round.value = false;
   confirmed.value = null;
