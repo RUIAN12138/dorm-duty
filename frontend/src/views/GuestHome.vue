@@ -961,13 +961,14 @@ onUnmounted(() => {
   color: #aaa;
 }
 .guest-switch-form input:focus {
-  outline: 2px solid #111;
-  outline-offset: 3px;
+  outline: none;
+  border-color: #222;
+  box-shadow: 0 0 0 3px #0000000b;
 }
 .guest-entry .guest-primary,
 .guest-entry .guest-secondary,
 .guest-switch-form .guest-primary {
-  position: static;
+  position: relative;
   min-height: 58px;
   border-radius: 20px;
   font-size: 18px;

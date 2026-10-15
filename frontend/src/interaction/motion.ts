@@ -7,7 +7,15 @@ import {
   useVelocity,
 } from "motion-v";
 
+export const navigationScrubbing = ref(false);
+export const navigationOrigin = ref<{
+  x: number;
+  y: number;
+  time: number;
+} | null>(null);
+
 export const motionTokens = {
+  press: { scaleX: 1.025, scaleY: 0.94 },
   selection: {
     type: "spring" as const,
     stiffness: 620,

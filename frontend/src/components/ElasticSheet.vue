@@ -10,6 +10,7 @@ import {
 } from "reka-ui";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { motionAllowed, motionTokens } from "../interaction/motion";
+import { createVelocityTracker, rubberBand } from "../interaction/gestures";
 
 const props = withDefaults(
   defineProps<{
@@ -66,9 +67,7 @@ let gesture: {
   element: HTMLElement;
   start: number;
   baseline: number;
-  last: number;
-  time: number;
-  speed: number;
+  velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 function setPanel(value: unknown) {
   const candidate =
@@ -200,26 +199,25 @@ function down(event: PointerEvent) {
     element,
     start: event.clientY,
     baseline: pose.y,
-    last: event.clientY,
-    time: performance.now(),
-    speed: 0,
+    velocity: createVelocityTracker(event.clientY, performance.now()),
   };
   element.setPointerCapture(event.pointerId);
   phase.value = "dragging";
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
-  const now = performance.now();
-  gesture.speed =
-    (event.clientY - gesture.last) / Math.max(1, now - gesture.time);
-  gesture.last = event.clientY;
-  gesture.time = now;
+  gesture.velocity.add(event.clientY, performance.now());
   const delta = gesture.baseline + event.clientY - gesture.start;
-  paint({ ...pose, y: delta < 0 ? delta / (1 + Math.abs(delta) / 64) : delta });
+  paint({ ...pose, y: delta < 0 ? rubberBand(delta) : delta });
 }
 function up(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
-  const speed = performance.now() - gesture.time > 80 ? 0 : gesture.speed;
+  if (
+    event.type === "lostpointercapture" &&
+    gesture.element.hasPointerCapture(event.pointerId)
+  )
+    return;
+  const speed = gesture.velocity.read(performance.now());
   resetGesture();
   if (!cancelled && (pose.y > 130 || (pose.y > 35 && speed > 0.6))) close();
   else {
@@ -370,6 +368,6 @@ onBeforeUnmount(() => {
   max-height: min(55dvh, 460px);
   width: calc(100% - 24px);
   margin-bottom: calc(74px + env(safe-area-inset-bottom));
-  border-radius: 24px;
+  border-radius: var(--ui-panel-radius);
 }
 </style>

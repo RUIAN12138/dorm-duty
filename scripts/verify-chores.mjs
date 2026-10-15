@@ -181,7 +181,7 @@ async function identity(page) {
 async function openMenu(page) {
   diagnosticPage = page;
   await page.getByTestId("open-tools").click();
-  await page.locator(".elastic-sheet").waitFor();
+  await page.getByTestId("open-reminder").waitFor();
   assert.equal(
     await page
       .locator(".app-shell")
@@ -299,11 +299,40 @@ async function pane(page, key) {
   );
   await closeMenu(page);
 }
+const checkedReveal = new WeakSet();
 async function navigate(page, key) {
   expectedPane = key;
   navigationStep = `tap-navigation:${key}`;
+  const inspectReveal =
+    !checkedReveal.has(page) &&
+    (await page.evaluate(() => location.pathname)) !== panes[key].path;
+  if (inspectReveal)
+    await page.evaluate(() => {
+      window.__revealSeen = false;
+      const start = performance.now();
+      function sample() {
+        window.__revealSeen ||= document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.effect?.target?.classList?.contains("focus-pane") &&
+              a.effect
+                .getKeyframes()
+                .some((k) => String(k.clipPath).startsWith("circle(")),
+          );
+        if (performance.now() - start < 600) requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
   await page.getByTestId(`nav-${key}`).tap();
   await pane(page, key);
+  if (inspectReveal) {
+    await page.waitForFunction(() => window.__revealSeen);
+    checkedReveal.add(page);
+    checks.push(
+      "tapping a page tab reveals its new page from a circular clip at the touch origin",
+    );
+  }
 }
 async function swipeSection(page, deltaX) {
   navigationStep = `heading-swipe:${deltaX}`;
@@ -325,6 +354,25 @@ async function dragBottomNav(page, from, to) {
   const y = source.y + source.height / 2;
   await page.mouse.move(source.x + source.width / 2, y);
   await page.mouse.down();
+  await page.evaluate(() => {
+    window.__scrubAnimated = false;
+    const start = performance.now();
+    function sample() {
+      if (
+        document.querySelector(".chore-bottom-nav.is-dragging") ||
+        document.querySelector('[data-testid="chore-bottom-nav"].is-dragging')
+      )
+        window.__scrubAnimated ||= document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.effect?.target?.classList?.contains("focus-pane") &&
+              a.effect?.getTiming().duration === 180,
+          );
+      if (performance.now() - start < 700) requestAnimationFrame(sample);
+    }
+    requestAnimationFrame(sample);
+  });
   await page.mouse.move(destination.x + destination.width / 2, y, {
     steps: 8,
   });
@@ -336,6 +384,17 @@ async function dragBottomNav(page, from, to) {
     null,
     { timeout: 3000 },
   );
+  await page.waitForFunction(
+    (path) => location.pathname === path,
+    panes[to].path,
+  );
+  await page.locator(panes[to].selector).waitFor();
+  assert.equal(
+    await page.evaluate(() => window.__scrubAnimated),
+    true,
+    "held navigation animates the page, not only the tab indicator",
+  );
+  checks.push(`bottom navigation shows ${to} while the pointer is still held`);
   await page.mouse.up();
 }
 async function stableIdentity(page, before) {
@@ -382,7 +441,7 @@ async function navigationMotion(page) {
   });
   await page.mouse.move(target.x + target.width / 2, source.y - 80);
   await page.mouse.up();
-  await pane(page, "water");
+  await pane(page, "calendar");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await navigate(page, "calendar");
   assert.equal(
@@ -496,6 +555,7 @@ async function join(page, code, userId, mark) {
   return result.access_token;
 }
 let checkedCompletionPress = false;
+let checkedWaterPress = false;
 async function complete(page, task) {
   const card = page.getByTestId(`chore-task-${task.key}-${task.id}`);
   if (!(await card.count()) && task.key !== "water") {
@@ -516,7 +576,7 @@ async function complete(page, task) {
       (error) => ({ error }),
     );
   const completeButton = page.getByTestId(`complete-${task.key}-${task.id}`);
-  if (!checkedCompletionPress) {
+  if (!checkedCompletionPress || (task.key === "water" && !checkedWaterPress)) {
     await page.waitForFunction((id) => {
       const b = document.querySelector(`[data-testid="complete-${id}"]`);
       return b && !b.disabled;
@@ -527,17 +587,37 @@ async function complete(page, task) {
       before.x + before.width / 2,
       before.y + before.height / 2,
     );
+    await page.evaluate(() => {
+      window.__completionFrames = [];
+      const start = performance.now();
+      const sample = () => {
+        const header = document.querySelector(".board-identity"),
+          title = document.querySelector(
+            ".task-title-stage, .water-title-stage",
+          );
+        window.__completionFrames.push({
+          header: header?.getBoundingClientRect().top,
+          title: title?.getBoundingClientRect().top,
+          scroll: scrollY,
+        });
+        if (performance.now() - start < 1200) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
     await page.mouse.down();
     await page.waitForTimeout(120);
     const pressed = await completeButton.boundingBox();
     assert(
-      pressed.height < before.height - 1 && pressed.width > before.width + 0.5,
-      "completion button compresses vertically and gently expands horizontally while held",
+      pressed.height < before.height - 0.2 &&
+        pressed.width < before.width - 0.5 &&
+        pressed.width > before.width * 0.98,
+      "completion button uses a subtle one-percent press without elastic expansion",
     );
     await page.mouse.up();
     checkedCompletionPress = true;
+    if (task.key === "water") checkedWaterPress = true;
     checks.push(
-      "completion button has real press deformation and returns on release",
+      "completion button has restrained press feedback and returns on release",
     );
   } else await completeButton.click();
   const result = await response;
@@ -546,6 +626,27 @@ async function complete(page, task) {
   assert.equal(actual.status(), 200);
   const body = await actual.json();
   assert.equal(body.task.status, "completed");
+  if (await page.evaluate(() => !!window.__completionFrames)) {
+    await page.waitForTimeout(1250);
+    const span = await page.evaluate(() => {
+      const frames = window.__completionFrames;
+      delete window.__completionFrames;
+      return Object.fromEntries(
+        ["header", "title", "scroll"].map((key) => {
+          const values = frames.map((f) => f[key]).filter(Number.isFinite);
+          return [key, Math.max(...values) - Math.min(...values)];
+        }),
+      );
+    });
+    assert(
+      span.header < 1.5 && span.title < 1.5 && span.scroll < 1.5,
+      "completion must not move header, title, or scroll position: " +
+        JSON.stringify(span),
+    );
+    checks.push(
+      "completion keeps header, task title and scroll position stable throughout request and sync",
+    );
+  }
   return body;
 }
 const result = {
@@ -791,7 +892,8 @@ try {
   await a.page.getByTestId("open-water-order").click();
   await a.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   await snapshot(a.page, "independent-water-order-390");
-  await a.page.getByTestId(`order-down-water-${ownerId}`).click();
+  await a.page.getByTestId(`order-down-water-${ownerId}`).focus();
+  await a.page.keyboard.press("Enter");
   await a.page.getByTestId("water-order-save").click();
   await a.page
     .getByRole("dialog", { name: "抬水轮序", exact: true })
@@ -801,7 +903,8 @@ try {
     ownerId,
   );
   await a.page.getByTestId("open-water-order").click();
-  await a.page.getByTestId(`order-up-water-${ownerId}`).click();
+  await a.page.getByTestId(`order-up-water-${ownerId}`).focus();
+  await a.page.keyboard.press("Enter");
   await a.page.getByTestId("water-order-save").click();
   await a.page
     .getByRole("dialog", { name: "抬水轮序", exact: true })
@@ -811,17 +914,14 @@ try {
   );
   await a.page.getByTestId("round-progress").click();
   await a.page.getByTestId("round-members").waitFor();
-  await a.page.getByRole("button", { name: "调整排列", exact: true }).click();
+  await a.page.getByTestId("edit-round-order").click();
   await a.page.getByRole("dialog", { name: "调整排列", exact: true }).waitFor();
-  await a.page.getByRole("button", { name: "知道了", exact: true }).click();
-  await a.page
-    .getByRole("dialog", { name: "调整排列", exact: true })
-    .waitFor({ state: "hidden" });
   assert.equal(await a.page.getByTestId("round-members").isVisible(), true);
   const initialRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",
   );
-  await a.page.getByTestId(`order-down-floor-${ownerId}`).click();
+  await a.page.getByTestId(`order-down-floor-${ownerId}`).focus();
+  await a.page.keyboard.press("Enter");
   await a.page.waitForTimeout(600);
   await snapshot(a.page, "round-order-390");
   await a.page.getByTestId("round-order-save").click();
@@ -1068,7 +1168,8 @@ try {
   await a.page
     .getByTestId("settings-content-water")
     .fill("抬水：从一楼运一桶饮用水");
-  await a.page.getByTestId(`order-up-water-${otherId}`).click();
+  await a.page.getByTestId(`order-up-water-${otherId}`).focus();
+  await a.page.keyboard.press("Enter");
   const draftOrder = await a.page
     .locator(".sort-list .sort-person")
     .allTextContents();

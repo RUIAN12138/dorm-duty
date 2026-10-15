@@ -24,9 +24,11 @@ import {
 } from "../api/chores";
 import HintPopover from "./HintPopover.vue";
 import SortableMembers from "./SortableMembers.vue";
+import RoundProgress from "./RoundProgress.vue";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
 import CompletionAction from "./CompletionAction.vue";
+import GalaxySpinner from "./GalaxySpinner.vue";
 import ActionItem from "./ActionItem.vue";
 import { tilt as vTilt } from "../interactions/tilt";
 import WaterNudge from "./WaterNudge.vue";
@@ -41,6 +43,12 @@ import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
 import { createTaskSwipe } from "../interaction/taskSwipe";
+import {
+  navigationScrubbing,
+  navigationOrigin,
+  motionAllowed,
+} from "../interaction/motion";
+import { completionFeedback } from "../interaction/completionFeedback";
 const props = defineProps<{
   invite: string;
   dormName: string;
@@ -63,8 +71,35 @@ const board = ref<ChoreBoardData | null>(null),
   error = ref(""),
   actionError = ref(""),
   busy = ref("");
+const completionReceipt = ref<ChoreTask | null>(null);
+const completionMorphId = ref<number | null>(null);
+let completionMorphTimer: ReturnType<typeof setTimeout> | undefined;
+function settleCompletion(id: number) {
+  if (completionMorphId.value === id) completionMorphId.value = null;
+}
+onUnmounted(() => clearTimeout(completionMorphTimer));
+const waterReceipt = ref<ChoreTask | null>(null);
+const waterActionTask = computed(
+  () =>
+    waterReceipt.value ||
+    (water.value?.can_complete ||
+    (props.demo && water.value?.assignee_id === props.memberId)
+      ? water.value
+      : null),
+);
 const completionSyncPending = ref(false),
   syncAction = ref("打卡");
+const showSyncStatus = ref(false);
+let syncStatusTimer: ReturnType<typeof setTimeout> | undefined;
+watch(completionSyncPending, (pending) => {
+  clearTimeout(syncStatusTimer);
+  showSyncStatus.value = false;
+  if (pending)
+    syncStatusTimer = setTimeout(() => {
+      showSyncStatus.value = true;
+    }, 700);
+});
+onUnmounted(() => clearTimeout(syncStatusTimer));
 const month = ref(
   new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -94,6 +129,14 @@ const roundOpen = ref(false);
 const pushOpen = ref(false);
 const recoveryOpen = ref(false);
 let queuedTool: (() => void) | null = null;
+function openTools() {
+  if (detailTask.value) {
+    queuedTool = () => {
+      toolsOpen.value = true;
+    };
+    detailOpen.value = false;
+  } else toolsOpen.value = true;
+}
 function fromTools(action: () => void) {
   queuedTool = action;
   toolsOpen.value = false;
@@ -209,6 +252,7 @@ watch(
   () => props.section,
   (next, previous) => {
     taskSwipe.cancel();
+    detailOpen.value = false;
     direction.value =
       sectionOrder.indexOf(next) >= sectionOrder.indexOf(previous) ? 1 : -1;
   },
@@ -223,9 +267,46 @@ function openTask(task: ChoreTask, event: MouseEvent) {
   detailTask.value = task;
   detailOpen.value = true;
 }
+let scrubAnimation: Animation | undefined;
 function showEntered(element: Element) {
   element.removeAttribute("aria-hidden");
   element.removeAttribute("inert");
+}
+function animateEntered(element: Element) {
+  scrubAnimation?.cancel();
+  if (!motionAllowed()) {
+    navigationOrigin.value = null;
+    return;
+  }
+  const origin = navigationOrigin.value;
+  navigationOrigin.value = null;
+  if (origin && performance.now() - origin.time < 600) {
+    const bounds = element.getBoundingClientRect();
+    const x = Math.max(0, Math.min(bounds.width, origin.x - bounds.left)),
+      y = Math.max(0, Math.min(bounds.height, origin.y - bounds.top));
+    const radius = Math.hypot(
+      Math.max(x, bounds.width - x),
+      Math.max(y, bounds.height - y),
+    );
+    scrubAnimation = element.animate(
+      [
+        { clipPath: `circle(0px at ${x}px ${y}px)` },
+        { clipPath: `circle(${radius}px at ${x}px ${y}px)` },
+      ],
+      { duration: 280, easing: "cubic-bezier(.22,1,.36,1)" },
+    );
+  } else if (navigationScrubbing.value) {
+    scrubAnimation = element.animate(
+      [
+        {
+          transform: `translate3d(${direction.value * 18}px,0,0)`,
+          opacity: 0.65,
+        },
+        { transform: "translate3d(0,0,0)", opacity: 1 },
+      ],
+      { duration: 180, easing: "cubic-bezier(.22,1,.36,1)" },
+    );
+  }
 }
 function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
@@ -266,12 +347,28 @@ const activeRound = computed(
       (round) => round.key === activeDutyTask.value?.key,
     ) || null,
 );
+const roundEditing = ref(false);
+const completedRoundReceipt = ref<ChoreBoardData["rounds"][number] | null>(
+  null,
+);
+const displayRound = computed(() => {
+  const last = completedRoundReceipt.value;
+  const current = activeRound.value;
+  return last &&
+    current?.key === last.key &&
+    current.sequence === last.sequence + 1 &&
+    current.completed === 0
+    ? last
+    : current;
+});
 const roundOrder = ref<number[]>([]),
   roundSaving = ref(false),
   roundError = ref("");
 let roundVersion = 0,
   roundCategory: ChoreCategory | undefined;
 watch(roundOpen, (open) => {
+  roundEditing.value = false;
+  if (!open) completedRoundReceipt.value = null;
   if (!open || !board.value || !activeRound.value) return;
   const category = board.value.categories.find(
     (c) => c.key === activeRound.value?.key,
@@ -313,55 +410,7 @@ async function saveRoundOrder() {
     if (alive) roundSaving.value = false;
   }
 }
-const roundProgressCircumference = 2 * Math.PI * 50;
-const roundAnimatedProgress = ref(0);
-const roundAnimatedCompleted = ref(0);
-let roundProgressFrame = 0;
-let roundProgressAnimation = 0;
-watch(
-  () => ({
-    open: roundOpen.value,
-    completed: activeRound.value?.completed ?? 0,
-    total: activeRound.value?.total ?? 0,
-  }),
-  ({ open, completed, total }) => {
-    if (roundProgressFrame) cancelAnimationFrame(roundProgressFrame);
-    roundProgressFrame = 0;
-    const animationId = ++roundProgressAnimation;
-    const boundedTotal = Math.max(0, total);
-    const boundedCompleted = Math.min(boundedTotal, Math.max(0, completed));
-    const targetProgress = boundedTotal ? boundedCompleted / boundedTotal : 0;
-    if (!open) return;
-    if (
-      matchMedia("(prefers-reduced-motion: reduce)").matches ||
-      document.documentElement.dataset.interaction === "keyboard"
-    ) {
-      roundAnimatedProgress.value = targetProgress;
-      roundAnimatedCompleted.value = boundedCompleted;
-      return;
-    }
-    const startProgress = roundAnimatedProgress.value,
-      startCompleted = roundAnimatedCompleted.value;
-    const startedAt = performance.now();
-    const animate = (now: number) => {
-      if (animationId !== roundProgressAnimation) return;
-      const progress = Math.min(1, (now - startedAt) / 280);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      roundAnimatedProgress.value =
-        startProgress + (targetProgress - startProgress) * eased;
-      roundAnimatedCompleted.value = Math.round(
-        startCompleted + (boundedCompleted - startCompleted) * eased,
-      );
-      if (progress < 1) roundProgressFrame = requestAnimationFrame(animate);
-      else roundProgressFrame = 0;
-    };
-    roundProgressFrame = requestAnimationFrame(animate);
-  },
-  { flush: "sync" },
-);
-onUnmounted(() => {
-  if (roundProgressFrame) cancelAnimationFrame(roundProgressFrame);
-});
+onUnmounted(() => scrubAnimation?.cancel());
 
 const dutyCaption = computed(() =>
   activeRound.value
@@ -581,6 +630,11 @@ async function load(): Promise<boolean> {
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
     board.value = result;
+    if (
+      waterReceipt.value &&
+      !result.undo_tasks.some((t) => t.id === waterReceipt.value?.id)
+    )
+      waterReceipt.value = null;
     completionSyncPending.value = false;
     if (!props.demo) void syncMemberPush(props.token).catch(() => {});
     emit("member", result.member);
@@ -601,6 +655,13 @@ async function load(): Promise<boolean> {
 function acceptCompletion(receipt: ChoreCompletion) {
   if (!board.value) return;
   const finished = receipt.task;
+  completionReceipt.value = finished;
+  if (motionAllowed()) {
+    completionMorphId.value = finished.id;
+    clearTimeout(completionMorphTimer);
+    completionMorphTimer = setTimeout(() => settleCompletion(finished.id), 800);
+  }
+  if (finished.key === "water") waterReceipt.value = finished;
   const existed = board.value.today_tasks.find(
     (task) => task.id === finished.id,
   );
@@ -621,9 +682,19 @@ function acceptCompletion(receipt: ChoreCompletion) {
     );
     if (member && !member.completed) {
       member.completed = true;
+      round.completions ||= [];
+      round.completions.push({
+        user_id: finished.assignee_id,
+        nickname: finished.assignee_name,
+        marker_id: finished.marker_id,
+        id: finished.id,
+        completed_at: finished.completed_at!,
+      });
       round.completed = round.members.filter(
         (person) => person.completed,
       ).length;
+      if (round.completed === round.total)
+        completedRoundReceipt.value = JSON.parse(JSON.stringify(round));
     }
   }
   board.value.version = Math.max(board.value.version, receipt.version);
@@ -645,6 +716,10 @@ async function complete(task: ChoreTask) {
   syncAction.value = "打卡";
   busy.value = `complete-${task.id}`;
   actionError.value = "";
+  const feedbackBounds = document
+    .querySelector(`[data-testid="complete-${task.key}-${task.id}"]`)
+    ?.getBoundingClientRect();
+  const feedbackSection = props.section;
   try {
     const syncStatus = await completeChore(
       task.id,
@@ -652,6 +727,8 @@ async function complete(task: ChoreTask) {
       (receipt) => {
         if (!alive) return;
         acceptCompletion(receipt);
+        if (props.section === feedbackSection)
+          completionFeedback(feedbackBounds);
       },
       () => (alive ? load() : Promise.resolve(false)),
     );
@@ -689,6 +766,7 @@ async function undo(id: number) {
       { method: "PATCH", body: "{}" },
     );
     if (!alive || !board.value) return;
+    if (receipt.task.key === "water") waterReceipt.value = null;
     board.value.today_tasks = board.value.today_tasks.map((t) =>
       t.id === id ? receipt.task : t,
     );
@@ -908,10 +986,10 @@ onUnmounted(() => {
       role="status"
       aria-label="正在加载任务"
     >
-      <span></span><span></span><span></span>
+      <GalaxySpinner class="board-spinner" />
     </div>
     <div
-      v-if="completionSyncPending"
+      v-if="completionSyncPending && showSyncStatus"
       class="chore-sync-status"
       role="status"
       data-testid="completion-sync-pending"
@@ -928,7 +1006,7 @@ onUnmounted(() => {
     </div>
     <template v-if="board">
       <div class="board-identity">
-        <span class="identity-name">{{ board.member.nickname }}</span>
+        <span class="identity-name">{{ dormName }}</span>
         <div class="identity-actions">
           <button
             class="order-trigger"
@@ -948,7 +1026,7 @@ onUnmounted(() => {
                 : '更多操作'
             "
             data-testid="open-tools"
-            @click="toolsOpen = true"
+            @click="openTools"
           >
             <van-icon name="ellipsis" aria-hidden="true" />
             <span
@@ -971,9 +1049,11 @@ onUnmounted(() => {
         @lostpointercapture="sectionSwipeCancel"
       >
         <Transition
+          :css="!navigationScrubbing && !navigationOrigin"
           :name="direction > 0 ? 'focus-next' : 'focus-prev'"
           @before-leave="hideLeaving"
           @before-enter="showEntered"
+          @enter="animateEntered"
         >
           <div :key="section" class="focus-pane">
             <section
@@ -985,6 +1065,7 @@ onUnmounted(() => {
                 :month="month"
                 :today="board.today"
                 :records="board.calendar"
+                :neighbors="board.calendar_neighbors"
                 :members="board.members"
                 :member-id="memberId"
                 :busy="!!busy || completionSyncPending"
@@ -998,6 +1079,9 @@ onUnmounted(() => {
             <section
               v-if="section === 'duty'"
               class="chore-personal"
+              :class="{
+                'completion-linked': activeDutyTask?.status === 'completed',
+              }"
               aria-labelledby="personal-title"
               data-testid="pane-duty"
             >
@@ -1079,11 +1163,17 @@ onUnmounted(() => {
                     (!demo && activeDutyTask.duty_date > board.today)
                   "
                   :demo="demo"
+                  :receipt="completionReceipt"
+                  @settled="settleCompletion"
                   @complete="complete"
                   @undo="undo($event.id)"
                 />
                 <CompletionAction
-                  v-if="recentUndo && recentUndo.id !== activeDutyTask.id"
+                  v-if="
+                    recentUndo &&
+                    recentUndo.id !== activeDutyTask.id &&
+                    recentUndo.id !== completionMorphId
+                  "
                   :task="recentUndo"
                   :busy="!!busy"
                   :disabled="completionSyncPending"
@@ -1096,8 +1186,13 @@ onUnmounted(() => {
                   data-testid="round-progress"
                   @click="roundOpen = true"
                 >
-                  第 {{ activeRound.sequence }} 轮 · 已完成
-                  {{ activeRound.completed }}/{{ activeRound.total }}
+                  <RoundProgress
+                    v-if="displayRound"
+                    :round="displayRound"
+                    :active="true"
+                    compact
+                  />
+                  第 {{ displayRound?.sequence }} 轮
                   <van-icon name="arrow" aria-hidden="true" />
                 </button>
               </article>
@@ -1153,11 +1248,10 @@ onUnmounted(() => {
                     </TaskTitle>
                   </div>
                   <CompletionAction
-                    v-if="
-                      water.can_complete ||
-                      (demo && water.assignee_id === memberId)
-                    "
-                    :task="water"
+                    v-if="waterActionTask"
+                    :task="waterActionTask"
+                    :receipt="completionReceipt"
+                    @settled="settleCompletion"
                     :busy="!!busy"
                     :disabled="completionSyncPending"
                     :demo="demo"
@@ -1165,7 +1259,7 @@ onUnmounted(() => {
                     @undo="undo($event.id)"
                   />
                   <div
-                    v-else-if="water.assignee_id !== memberId"
+                    v-if="water.assignee_id !== memberId"
                     class="water-nudge-actions"
                   >
                     <p class="hero-date" role="status">
@@ -1178,11 +1272,11 @@ onUnmounted(() => {
                       查看任务
                     </button>
                   </div>
-                  <p v-else class="hero-date">
+                  <p v-else-if="!waterActionTask" class="hero-date">
                     {{ dateText(water.duty_date) }} 开始
                   </p>
                   <CompletionAction
-                    v-if="recentUndo"
+                    v-if="recentUndo && recentUndo.id !== waterActionTask?.id"
                     :task="recentUndo"
                     :busy="!!busy"
                     :disabled="completionSyncPending"
@@ -1333,10 +1427,18 @@ onUnmounted(() => {
         :category="board.categories.find((c) => c.key === 'water')!"
         :current-id="water?.assignee_id"
         :creator="board.is_creator && !demo"
+        :categories="board.categories"
+        @recover="
+          queuedTool = () => emit('recover-owner');
+          orderOpen = false;
+        "
         :version="board.version"
         :token="token"
         @saved="load"
-        @closed="presentNewReminders"
+        @closed="
+          runQueuedTool();
+          presentNewReminders();
+        "
       />
       <ElasticSheet
         v-model="detailOpen"
@@ -1344,7 +1446,10 @@ onUnmounted(() => {
         :origin="detailOrigin"
         :motion="detailMotion"
         :modal="detailMotion !== 'bottom'"
-        @closed="detailTask = null"
+        @closed="
+          detailTask = null;
+          runQueuedTool();
+        "
       >
         <div v-if="detailTask" v-tilt class="task-detail-card">
           <p class="task-full-content">{{ detailTask.content }}</p>
@@ -1363,7 +1468,11 @@ onUnmounted(() => {
       </ElasticSheet>
       <ElasticSheet
         v-model="roundOpen"
-        :title="`${activeDutyTask?.name || '值日'} · 第 ${activeRound?.sequence || 1} 轮`"
+        :title="
+          roundEditing
+            ? '调整排列'
+            : `${activeDutyTask?.name || '值日'} · 第 ${displayRound?.sequence || 1} 轮`
+        "
         @closed="presentNewReminders"
       >
         <div
@@ -1371,41 +1480,23 @@ onUnmounted(() => {
           class="round-members"
           data-testid="round-members"
         >
-          <div
-            class="round-progress-display"
-            aria-hidden="true"
-            data-testid="round-progress-ring"
-          >
-            <svg viewBox="0 0 120 120">
-              <circle class="round-progress-track" cx="60" cy="60" r="50" />
-              <circle
-                class="round-progress-value"
-                cx="60"
-                cy="60"
-                r="50"
-                :stroke-dasharray="roundProgressCircumference"
-                :stroke-dashoffset="
-                  roundProgressCircumference * (1 - roundAnimatedProgress)
-                "
-              />
-            </svg>
-            <div class="round-progress-center">
-              <strong>{{ roundAnimatedCompleted }}</strong>
-              <span>人已完成</span>
-            </div>
-          </div>
-          <div class="round-summary-line">
-            <p class="round-summary">
-              已完成 {{ activeRound.completed }}/{{ activeRound.total }} · 还差
-              {{ Math.max(0, activeRound.total - activeRound.completed) }} 人
-            </p>
-            <HintPopover
+          <template v-if="!roundEditing && displayRound">
+            <RoundProgress :round="displayRound" :active="roundOpen" />
+            <button
               v-if="board.is_creator && !demo"
-              title="调整排列"
-              text="按住室友拖动，松手后点保存排列。自由轮次仍可随时打卡，排列不会改变已有完成记录。"
+              class="round-edit-entry"
+              data-testid="edit-round-order"
+              @click="roundEditing = true"
+            >
+              <van-icon name="sort" />调整排列<van-icon name="arrow" />
+            </button>
+            <HintPopover
+              v-else
+              title="调整轮序"
+              text="仅宿舍创建者可以更改排列。若你是创建者，请在更多操作中恢复创建者管理身份。"
             />
-          </div>
-          <template v-if="board.is_creator && !demo">
+          </template>
+          <template v-if="roundEditing && board.is_creator && !demo">
             <SortableMembers
               v-model="roundOrder"
               :members="activeRound.members"
@@ -1430,17 +1521,6 @@ onUnmounted(() => {
               {{ roundSaving ? "正在保存…" : "保存排列" }}
             </button>
           </template>
-          <div
-            v-else
-            v-for="person in activeRound.members"
-            :key="person.user_id"
-            class="round-member"
-          >
-            <MemberMark :id="person.marker_id" :size="24" /><strong>{{
-              person.nickname
-            }}</strong>
-            <span>{{ person.completed ? "已完成" : "还没做" }}</span>
-          </div>
         </div>
       </ElasticSheet>
       <ElasticSheet
@@ -1510,6 +1590,10 @@ onUnmounted(() => {
       <ChoreSettings
         v-model="settingsOpen"
         :categories="board.categories"
+        @recover="
+          queuedTool = () => emit('recover-owner');
+          orderOpen = false;
+        "
         :members="board.members"
         :version="board.version"
         :token="token"
@@ -1714,86 +1798,27 @@ onUnmounted(() => {
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
-.round-progress-display {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 148px;
-  aspect-ratio: 1;
-  margin: 0 auto 14px;
-}
-.round-progress-display svg {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-.round-progress-display circle {
-  fill: none;
-  stroke-width: 6;
-}
-.round-progress-track {
-  stroke: #eee;
-}
-.round-progress-value {
-  stroke: #111;
-  stroke-linecap: round;
-}
-.round-progress-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-}
-.round-progress-center strong {
-  font-size: 42px;
-  line-height: 1;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-.round-progress-center span {
-  color: #666;
-  font-size: 13px;
-}
-.round-summary {
-  margin: 0 0 24px;
-  color: #555;
-  font-size: 15px;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-.round-member {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 60px;
-  border-bottom: 1px solid #eee;
-}
-.round-member strong {
-  flex: 1;
-  min-width: 0;
-  font-size: 17px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.round-member > span {
-  color: #555;
-  font-size: 15px;
-  flex-shrink: 0;
-}
 /* One shared left edge and type scale across the three mobile pages. */
 .chore-board {
   min-width: 0;
   color: #111;
 }
 .chore-sync-status {
+  position: fixed;
+  z-index: 105;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  width: min(calc(100% - 40px), 480px);
+  border: 1px solid #eee;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 18px #0000000a;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0 16px;
+  padding: 8px 16px;
   color: #555;
   font-size: 14px;
 }
@@ -2162,14 +2187,14 @@ onUnmounted(() => {
 .board-loading {
   padding-top: 16px;
 }
-.board-loading span {
+.board-loading span:not(.galaxy-spinner) {
   display: block;
   border-radius: 8px;
   background: #f0f0f0;
   height: 92px;
   margin: 18px 0;
 }
-.board-loading span:first-child {
+.board-loading span:first-child:not(.galaxy-spinner) {
   height: 28px;
   width: 55%;
 }
@@ -2377,6 +2402,9 @@ onUnmounted(() => {
 <style scoped>
 .water-title-stage {
   width: min(100%, 300px);
+  min-height: clamp(55.2px, 19.55vw, 82.8px);
+  display: grid;
+  place-items: center;
 }
 .water-title-stage h2 {
   width: 100%;
@@ -2413,6 +2441,20 @@ onUnmounted(() => {
   .water-remind:active,
   .round-progress:active {
     transform: none;
+  }
+}
+</style>
+
+<style scoped>
+/* Keep the caption and name anchored when completing water reveals the next
+   roommate and the previous turn's completed button. Only the action area grows. */
+.water-pane {
+  justify-content: flex-start;
+  padding-top: clamp(72px, 15dvh, 130px);
+}
+@media (max-height: 730px) {
+  .water-pane {
+    padding-top: 48px;
   }
 }
 </style>
@@ -2470,5 +2512,58 @@ onUnmounted(() => {
 }
 .round-summary-line .round-summary {
   margin: 0;
+}
+</style>
+
+<style scoped>
+.board-loading {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+}
+.board-loading :deep(.board-spinner) {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border-width: 2px;
+}
+</style>
+<style scoped>
+.round-edit-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 18px;
+  background: #f6f6f6;
+  font: inherit;
+  font-size: 16px;
+  margin-top: 18px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: transform 160ms ease;
+}
+.round-edit-entry .van-icon:last-child {
+  margin-left: auto;
+  color: #999;
+}
+.round-edit-entry:active {
+  transform: scale(0.98);
+}
+</style>
+<style scoped>
+.chore-personal {
+  border-radius: 30px;
+  transition: background-color 280ms ease;
+}
+.chore-personal.completion-linked {
+  background-color: #f6f6f5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chore-personal {
+    transition: none;
+  }
 }
 </style>

@@ -1,0 +1,48 @@
+/* Uiverse Galaxy MIT adaptations. Sources and creators: docs/UIVERSE_COMPONENTS.md.
+ * cssbuttons-io calm-tiger-42: contained circular fill; no size/layout animation. */
+.galaxy-fill,
+.guest-page .guest-primary {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.galaxy-fill::before,
+.guest-page .guest-primary::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: #ffffff1a;
+  transform: translateY(105%);
+  pointer-events: none;
+}
+/* JayRamoliya loud-rattlesnake-53: focus ring without changing field geometry. */
+.guest-page .guest-dorm-form input:focus-visible,
+.guest-page .guest-dorm-form textarea:focus-visible {
+  outline: none;
+  border-color: #222;
+  box-shadow: 0 0 0 3px #0000000b;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .galaxy-fill::before,
+  .guest-page .guest-primary::before {
+    transition: transform 200ms var(--ui-ease-out);
+  }
+  .galaxy-fill:active::before,
+  .guest-page .guest-primary:active:not(:disabled)::before {
+    transform: translateY(0);
+  }
+  .guest-page .guest-dorm-form input,
+  .guest-page .guest-dorm-form textarea {
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .galaxy-fill:hover::before,
+  .guest-page .guest-primary:hover:not(:disabled)::before {
+    transform: translateY(0);
+  }
+}

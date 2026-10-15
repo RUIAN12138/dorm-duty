@@ -6,11 +6,14 @@ import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 import ElasticSegments from "./ElasticSegments.vue";
-import ChoreRecordRow from "./ChoreRecordRow.vue";
+import RecordTimeline from "./RecordTimeline.vue";
+import { motionAllowed } from "../interaction/motion";
+import { useMonthCarousel, shiftMonth } from "../interaction/monthCarousel";
 const props = defineProps<{
   month: string;
   today: string;
   records: ChoreRecord[];
+  neighbors?: Record<string, ChoreRecord[]>;
   members: ChoreMember[];
   loading?: boolean;
   memberId?: number;
@@ -23,6 +26,37 @@ const emit = defineEmits<{
   undo: [id: number];
 }>();
 const selected = ref("");
+const monthViewport = ref<HTMLElement>(),
+  monthTrack = ref<HTMLElement>();
+const carousel = useMonthCarousel(
+  () => props.month,
+  () => !!props.loading,
+  (value) => emit("change", value),
+  monthViewport,
+  monthTrack,
+);
+const expandedPast = ref(new Set<string>());
+const collapsedToday = ref("");
+const isExpanded = (date: string) =>
+  date === props.today
+    ? collapsedToday.value !== date
+    : expandedPast.value.has(date);
+function toggleGroup(date: string) {
+  if (date === props.today) collapsedToday.value = isExpanded(date) ? date : "";
+  else {
+    const next = new Set(expandedPast.value);
+    if (next.has(date)) next.delete(date);
+    else next.add(date);
+    expandedPast.value = next;
+  }
+}
+watch(
+  () => props.today,
+  (next, previous) => {
+    expandedPast.value.delete(previous);
+    collapsedToday.value = "";
+  },
+);
 const view = ref<"calendar" | "list">("calendar");
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
@@ -63,55 +97,69 @@ const dateLabel = (date: string) =>
   date === props.today
     ? "今天"
     : `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
-const monthDirection = ref(1);
+
 const weekNames = ["一", "二", "三", "四", "五", "六", "日"];
 const monthText = computed(
   () =>
     `${Number(props.month.slice(0, 4))}年 ${Number(props.month.slice(5))}月`,
 );
-const cells = computed(() => {
-  const [year = 2026, month = 1] = props.month.split("-").map(Number);
-  const first = new Date(Date.UTC(year, month - 1, 1));
-  const before = (first.getUTCDay() + 6) % 7;
-  const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const total = Math.ceil((before + count) / 7) * 7;
-  return Array.from({ length: total }, (_, index) => {
-    const day = index - before + 1;
-    if (day < 1 || day > count) return null;
-    const date = `${props.month}-${String(day).padStart(2, "0")}`;
-    const records = props.records.filter(
-      (record) => record.completed_date === date,
-    );
-    const marks = [
-      ...new Map(
-        records.map((record) => {
-          const type =
-            record.key === "water" ? ("water" as const) : ("duty" as const);
-          return [`${record.assignee_id}:${type}`, { ...record, type }];
-        }),
-      ).values(),
-    ];
-    const duty = marks.find((mark) => mark.type === "duty");
-    const water = marks.find((mark) => mark.type === "water");
-    const visibleMarks = duty && water ? [duty, water] : marks.slice(0, 2);
-    return { day, date, records, marks, visibleMarks };
-  });
+const recordsByDate = computed(() => {
+  const dates = new Map<string, ChoreRecord[]>();
+  for (const record of [...props.records].sort(
+    (a, b) => b.completed_at.localeCompare(a.completed_at) || b.id - a.id,
+  )) {
+    const records = dates.get(record.completed_date) || [];
+    records.push(record);
+    dates.set(record.completed_date, records);
+  }
+  return dates;
 });
-const selectedRecords = computed(() =>
-  props.records.filter((record) => record.completed_date === selected.value),
+const months = computed(() =>
+  [-1, 0, 1].map((delta) => {
+    const key = shiftMonth(props.month, delta);
+    const [year = 2026, month = 1] = key.split("-").map(Number);
+    const records = delta === 0 ? props.records : props.neighbors?.[key] || [];
+    const byDate = new Map<string, ChoreRecord[]>();
+    for (const record of records) {
+      const list = byDate.get(record.completed_date) || [];
+      list.push(record);
+      byDate.set(record.completed_date, list);
+    }
+    const first = new Date(Date.UTC(year, month - 1, 1));
+    const before = (first.getUTCDay() + 6) % 7;
+    const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const total = 42; // Six stable rows prevent month changes from moving the page.
+    const cells = Array.from({ length: total }, (_, index) => {
+      const day = index - before + 1;
+      if (day < 1 || day > count) return null;
+      const date = `${key}-${String(day).padStart(2, "0")}`;
+      const records = byDate.get(date) || [];
+      const marks = [
+        ...new Map(
+          records.map((record) => {
+            const type =
+              record.key === "water" ? ("water" as const) : ("duty" as const);
+            return [`${record.assignee_id}:${type}`, { ...record, type }];
+          }),
+        ).values(),
+      ];
+      const duty = marks.find((mark) => mark.type === "duty");
+      const water = marks.find((mark) => mark.type === "water");
+      const visibleMarks = duty && water ? [duty, water] : marks.slice(0, 2);
+      return { day, date, records, marks, visibleMarks };
+    });
+    return { key, delta, cells };
+  }),
+);
+const selectedRecords = computed(
+  () => recordsByDate.value.get(selected.value) || [],
 );
 function step(amount: number) {
-  const [year = 2026, month = 1] = props.month.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1 + amount, 1));
-  emit(
-    "change",
-    `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`,
-  );
+  carousel.step(amount);
 }
 watch(
   () => props.month,
-  (next, previous) => {
-    monthDirection.value = next > previous ? 1 : -1;
+  () => {
     selected.value = "";
   },
 );
@@ -164,21 +212,38 @@ watch(
       />
       <TabsContent value="calendar" as-child>
         <div class="calendar-mode">
-          <div class="calendar-surface">
+          <div
+            class="calendar-surface"
+            @pointerdown="carousel.down"
+            @pointermove="carousel.move"
+            @pointerup="carousel.up"
+            @pointercancel="carousel.cancel"
+            @lostpointercapture="carousel.lost"
+            @click.capture="carousel.click"
+            @dragstart.prevent
+          >
             <div class="chore-weekdays" aria-hidden="true">
               <span v-for="name in weekNames" :key="name">{{ name }}</span>
             </div>
-            <div class="month-stage">
-              <Transition
-                :name="monthDirection > 0 ? 'month-next' : 'month-prev'"
+            <div ref="monthViewport" class="month-viewport">
+              <div
+                ref="monthTrack"
+                class="month-stage"
+                :style="{
+                  transform: `translate3d(calc(-100% + ${carousel.offset.value}px),0,0)`,
+                }"
               >
                 <div
-                  :key="month"
+                  v-for="page in months"
+                  :key="page.key"
                   class="chore-calendar-grid"
+                  :data-month="page.key"
+                  :aria-hidden="page.delta !== 0 ? true : undefined"
+                  :inert="page.delta !== 0 ? true : undefined"
                   :aria-busy="loading"
                 >
                   <template
-                    v-for="(cell, index) in cells"
+                    v-for="(cell, index) in page.cells"
                     :key="cell?.date || `blank-${index}`"
                   >
                     <button
@@ -190,7 +255,11 @@ watch(
                       }"
                       :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
                       :aria-pressed="cell.date === selected"
-                      :data-testid="`calendar-day-${cell.date}`"
+                      :data-testid="
+                        page.delta === 0
+                          ? `calendar-day-${cell.date}`
+                          : undefined
+                      "
                       @click="
                         selected = selected === cell.date ? '' : cell.date
                       "
@@ -222,7 +291,7 @@ watch(
                     ></span>
                   </template>
                 </div>
-              </Transition>
+              </div>
             </div>
           </div>
           <div class="calendar-type-legend" aria-label="任务标记图例">
@@ -245,19 +314,43 @@ watch(
             v-else
             :key="group.date"
             class="record-group"
+            :class="{
+              'is-stacked': !isExpanded(group.date) && group.records.length > 1,
+            }"
           >
-            <div class="records-heading">
+            <button
+              class="records-heading"
+              :aria-expanded="isExpanded(group.date)"
+              :aria-controls="`records-${group.date}`"
+              :data-testid="`record-group-${group.date}`"
+              @click="toggleGroup(group.date)"
+            >
               <h2>{{ dateLabel(group.date) }}</h2>
+              <span
+                >{{ group.records.length }}<van-icon name="arrow-down"
+              /></span>
+            </button>
+            <div
+              :id="`records-${group.date}`"
+              class="record-group-body"
+              :class="{
+                'is-expanded': isExpanded(group.date),
+                'quiet-motion': !motionAllowed(),
+              }"
+              :inert="!isExpanded(group.date) ? true : undefined"
+              :aria-hidden="!isExpanded(group.date)"
+            >
+              <div class="record-group-clip">
+                <RecordTimeline
+                  :records="group.records"
+                  :member-id="memberId"
+                  :busy="busy"
+                  :expanded="isExpanded(group.date)"
+                  list
+                  @undo="emit('undo', $event)"
+                />
+              </div>
             </div>
-            <ChoreRecordRow
-              v-for="record in group.records"
-              :key="record.id"
-              :record="record"
-              :own="record.assignee_id === memberId"
-              :busy="busy"
-              :test-id="`calendar-list-record-${record.id}`"
-              @toggle="emit('undo', $event)"
-            />
           </section>
         </div>
       </TabsContent>
@@ -277,19 +370,12 @@ watch(
             {{ undoError }}
           </p>
           <p v-if="!selectedRecords.length">暂无完成记录</p>
-          <ChoreRecordRow
-            v-for="record in selectedRecords"
-            :key="record.id"
-            class="calendar-record"
-            :record="record"
-            :own="record.assignee_id === memberId"
+          <RecordTimeline
+            v-if="selectedRecords.length"
+            :records="selectedRecords"
+            :member-id="memberId"
             :busy="busy"
-            :test-id="
-              record.assignee_id === memberId
-                ? `calendar-undo-${record.id}`
-                : undefined
-            "
-            @toggle="emit('undo', $event)"
+            @undo="emit('undo', $event)"
           />
         </div>
       </ElasticSheet>
@@ -328,7 +414,7 @@ h1 {
   align-items: baseline;
   gap: 10px;
   margin: 0;
-  color: #111;
+  color: var(--ui-ink);
   line-height: 1.1;
   font-weight: 600;
   letter-spacing: -1.5px;
@@ -362,7 +448,10 @@ h1 > span {
   padding: 16px 8px 10px;
   border: 1px solid #ededed;
   border-radius: 26px;
-  background: #fff;
+  background: var(--ui-surface);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .chore-weekdays,
 .chore-calendar-grid {
@@ -377,6 +466,7 @@ h1 > span {
   padding-bottom: 15px;
 }
 .chore-calendar-grid button {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -393,16 +483,15 @@ h1 > span {
 }
 .chore-calendar-grid button.has-records {
   background: #f6f6f6;
-  color: #111;
+  color: var(--ui-ink);
 }
 .chore-calendar-grid button.is-selected {
-  border-color: #111;
+  border-color: var(--ui-ink);
   background: #f5f5f5;
 }
 .calendar-day-number {
   display: grid;
   place-items: center;
-  position: relative;
   min-width: 28px;
   height: 28px;
   font-size: 16px;
@@ -417,10 +506,10 @@ h1 > span {
 }
 .calendar-more {
   position: absolute;
-  top: -2px;
-  left: calc(100% - 1px);
+  top: 2px;
+  right: 2px;
   color: #888;
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1;
 }
 .calendar-cell-marks {
@@ -434,7 +523,7 @@ h1 > span {
 }
 .calendar-task-mark {
   position: relative;
-  width: 18px;
+  width: 16px;
   height: 22px;
   flex-shrink: 0;
 }
@@ -443,7 +532,7 @@ h1 > span {
   right: -1px;
   bottom: 0;
   font-size: 10px;
-  background: #fff;
+  background: var(--ui-surface);
   border-radius: 3px;
 }
 .calendar-type-legend {
@@ -461,11 +550,18 @@ h1 > span {
   font-size: 12px;
 }
 .records-heading {
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 22px 0 6px;
+  padding: 20px 0;
+  border-bottom: 1px solid #eee;
 }
 .records-heading h2 {
   margin: 0;
@@ -475,13 +571,94 @@ h1 > span {
   letter-spacing: -0.5px;
 }
 .records-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: #999;
   font-size: 12px;
   white-space: nowrap;
 }
-.record-group {
-  margin-top: 2px;
+.records-heading[aria-expanded="true"] .van-icon {
+  transform: rotate(180deg);
 }
+.records-heading .van-icon {
+  transition: transform 200ms ease;
+}
+.record-group-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.record-group-body.is-expanded {
+  grid-template-rows: 1fr;
+}
+.record-group-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.record-stagger {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.985);
+  transition:
+    opacity 130ms ease,
+    transform 180ms ease;
+}
+.is-expanded .record-stagger {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 190ms ease var(--record-delay),
+    transform 320ms cubic-bezier(0.22, 1.3, 0.36, 1) var(--record-delay);
+}
+.quiet-motion,
+.quiet-motion .record-stagger {
+  transition: none !important;
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .record-group-body,
+  .record-stagger,
+  .records-heading .van-icon {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+.record-group {
+  position: relative;
+  isolation: isolate;
+  margin-top: 10px;
+  margin-bottom: 16px;
+}
+.record-group::before,
+.record-group::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  z-index: -1;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0) scale(1);
+  transition:
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+.record-group.is-stacked::before {
+  transform: translateY(5px) scale(0.98);
+  opacity: 1;
+}
+.record-group.is-stacked::after {
+  transform: translateY(10px) scale(0.95);
+  opacity: 1;
+}
+.record-group.is-stacked .records-heading {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  padding: 18px 16px;
+}
+
 .calendar-list-empty {
   display: grid;
   place-items: center;
@@ -534,17 +711,31 @@ h1 > span {
 .calendar-legend > div > span > span {
   overflow-wrap: anywhere;
 }
+.month-viewport {
+  overflow: hidden;
+  width: 100%;
+}
 .month-stage {
+  display: flex;
   position: relative;
+  width: 100%;
+  will-change: transform;
+}
+.month-stage > .chore-calendar-grid {
+  grid-auto-rows: minmax(62px, auto);
+  flex: 0 0 100%;
+  min-width: 0;
 }
 .chore-calendar-grid {
   width: 100%;
 }
 .calendar-nav button:active {
-  transform: scaleX(1.03) scaleY(0.92);
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 .chore-calendar-grid button:active {
-  transform: scale(0.94);
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 @media (max-width: 350px) {
   .calendar-surface {
@@ -562,6 +753,9 @@ h1 > span {
   }
 }
 @media (max-height: 650px) {
+  .month-stage > .chore-calendar-grid {
+    grid-auto-rows: minmax(48px, auto);
+  }
   header {
     padding-bottom: 16px;
   }
@@ -583,34 +777,9 @@ h1 > span {
   .calendar-nav button,
   .chore-calendar-grid button {
     transition:
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform var(--ui-release-time) var(--ui-ease-out),
       background-color 160ms ease,
       border-color 160ms ease;
-  }
-  .month-next-enter-active,
-  .month-prev-enter-active {
-    transition:
-      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-      opacity 160ms ease;
-  }
-  .month-next-leave-active,
-  .month-prev-leave-active {
-    position: absolute;
-    top: 0;
-    pointer-events: none;
-    transition:
-      opacity 100ms ease,
-      transform 160ms ease;
-  }
-  .month-next-enter-from,
-  .month-prev-leave-to {
-    opacity: 0;
-    transform: translateX(12px);
-  }
-  .month-prev-enter-from,
-  .month-next-leave-to {
-    opacity: 0;
-    transform: translateX(-12px);
   }
 }
 @media (prefers-reduced-motion: reduce) {

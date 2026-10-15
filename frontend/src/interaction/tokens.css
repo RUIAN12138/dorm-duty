@@ -1,0 +1,13 @@
+:root {
+  --ui-ink: #111;
+  --ui-surface: #fff;
+  --ui-surface-muted: #f3f3f3;
+  --ui-border: #eee;
+  --ui-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ui-press-time: 80ms;
+  --ui-release-time: 160ms;
+  --ui-control-radius: 14px;
+  --ui-panel-radius: 24px;
+  --ui-press-small: scale(0.96);
+  --ui-press-action: scaleX(1.025) scaleY(0.94);
+}
