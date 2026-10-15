@@ -1,6 +1,6 @@
 # 可用性与交互改进
 
-2026-10-15。针对任务文字迟缓、抽屉拖沓、换宿舍丢入口、菜单过杂、找不到轮序及误触无法撤销。本轮保留黑白大字、三页导航，不增加前端依赖。发布状态以 [当前进度](PROGRESS.md) 为准。
+2026-10-15。针对任务文字迟缓、抽屉拖沓、换宿舍丢入口、菜单过杂、找不到轮序及误触无法撤销。本轮保留黑白大字、三页导航，不增加前端依赖。已随 PR #18 发布为 `20261015-usability-v21`；发布详情见 [当前进度](PROGRESS.md)。
 
 ## 可直接验收的入口
 
@@ -45,5 +45,7 @@
 - `node scripts/check-interaction-foundation.mjs`：41 项真实 Chromium DOM / 指针 / CDP 触摸检查，覆盖快速连点、抽屉中断、拖拽回位、默认模态、非模态背景点击、焦点、嵌套确认、排序与减少动态效果。
 - `node scripts/verify-chores.mjs`：两个独立浏览器身份与临时持久化 SQLite，覆盖两真实宿舍切换 / 刷新回访、独立轮序保存、12 次快速标题切换、误触撤销 / 再完成、抬水回退、日历 / 列表、慢响应 / 409 草稿及重启恢复；320 / 390 / 430px 无横向溢出，浏览器异常为 0。
 - `node site/scripts/check-reminder-runtime.mjs`：18 项真实进程 / HTTP / 文件 SQLite / 定时器与两次重启检查通过。
+
+公网发布验收：28 个资源字节一致，9 组 / 386 项独立宿舍 API 检查通过；切换前后 48 条既有完成记录摘要一致。
 
 本地截图与报告位于被 Git 忽略的 `docs/evidence/ui-focus/regression/`、`docs/evidence/interaction-foundation/`。这不是实体 iPhone Safari、Android WebView、HarmonyOS ArkWeb 的触摸手感、帧率或推送送达验收。原生端推送平台配置、签名和真机分发待办仍见 [安装版说明](../native/README.md)。
