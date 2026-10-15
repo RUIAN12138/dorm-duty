@@ -2,7 +2,17 @@
 
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
-## 最新发布（2026-10-15，v20）
+## 最新发布（2026-10-15，v21）
+
+正式版本为 `20261015-usability-v21`，对应 PR #18。新增已加入宿舍卡片、本人打卡撤销、顶部独立轮序、分组菜单；任务标题立即更新，抬水只读详情为非模态底部面板。Worker SHA-256：`5b6e779f4e3b9f96ef66c55f4ef9e7a9def9e565ecb4c158ed20c8725a514166`。
+
+发布前在线备份 `dorm-20261015T100524Z.sqlite` 并核对完整性 / 外键；原子切换后 48 条既有完成记录逐条摘要一致。未改变数据库结构、通知凭据或 Nginx，旧版本 v20 目录保留。
+
+公网 28 个页面 / JS / CSS / Manifest / SW 与正式构建字节一致，9 组 / 386 项独立宿舍 API 检查通过，包含本人撤销、越权 / 匿名拒绝、再完成重开、抬水回退与后续完成保护。正式浏览器更新后确认独立轮序与新菜单显示。证据：`docs/evidence/ui-focus/deployment-v21.json`、`public-assets-v21.json`，API 报告在 `docs/evidence/server/2026-10-15T10-06-14-283Z_mv9divwr_83961918/api.json`。本地与真机验证边界见 [可用性改进](USABILITY_POLISH.md)。
+
+回退到 v20 会失去撤销接口和新查询规则；若已使用跨轮次撤销，旧程序对 cancelled 后续轮次的统计语义不同。应优先修复前进；确需回退时先暂停写入、备份当前最新数据库并核对轮次，不能用旧备份覆盖新记录。
+
+## 历史发布（2026-10-15，v20）
 
 正式版本为 `20261015-interaction-foundation-v20`。本轮升级 Motion / Reka 交互基础，保持原黑白大字 UI。Worker SHA-256：`03220355316151b9e3088bfea77beabb0f216fb38a75a40fa5269bf5a2047d6f`。
 
@@ -39,7 +49,6 @@
 - 服务器 Python 默认是 3.6.8，部署、在线备份及记录验证必须显式使用 `/usr/bin/python3.11`。备份服务已经使用该版本。
 - 原 iPhone Web Push 验收和历史版本说明保留在下方。
 
-
 - Node 22 与持久化 SQLite 后台已经安装在独立目录；systemd 管理 `dorm-duty.service`，监听 `127.0.0.1:8086`。
 - D1 已导出私有备份，并通过表结构、完整性、外键检查后迁入服务器。切换前、切换后再次导出，均与初始备份字节一致。原 D1 保留，正式写入统一到服务器 SQLite。
 - 前端已构建为 `/dorm-duty/` 前缀，路由、API、图标、Manifest 和 Service Worker 使用同一前缀。
@@ -48,7 +57,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261015-interaction-foundation-v20`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261015-usability-v21`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 

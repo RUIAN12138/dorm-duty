@@ -97,7 +97,7 @@ Vant 组件包括 Badge、Button、Cell、CellGroup、Checkbox、Field、Form、
 | A04  | 底栏选中背景            | Motion spring：刚度 620 / 阻尼 42 / 质量 0.8；拖动直接跟手；速度驱动横向形变最大 3.5%，纵向轻压缩；后台或减少动态立即到目标                                      | `ChoreBottomNav.vue`、`interaction/motion.ts`                      |
 | A05  | 底栏图文按压            | 0.96 倍，180ms 恢复；图标不再独立跳动                                                                                                                            | `ChoreBottomNav.vue`                                               |
 | A06  | 任务大标题切换          | 跟手位移乘 0.18，限制 ±20px，回位 180ms；稳定 h2 同步换字，140ms / 3px 轻位移，透明度始终至少 0.72；打断不串行等待退出                                           | `TaskTitle.vue`、`interaction/taskSwipe.ts`                        |
-| A07  | 按钮按压                | 入口主按钮 / 标记 0.96，按下 80ms、恢复 260ms；完成按钮最终覆盖为 0.97 / 150ms 与内阴影；提醒按钮保留 0.96 的 260ms 弹性恢复                                     | `focus.css`、`ChoreBoard.vue`                                      |
+| A07  | 按钮按压                | 入口主按钮 / 标记 0.96，按下 80ms、恢复 260ms；完成按钮 / 菜单卡片由 Motion 按压至 0.97；提醒按钮保留 0.96 的 260ms 弹性恢复                                     | `focus.css`、`ChoreBoard.vue`                                      |
 | A08  | 普通抽屉                | Motion 完整 transform 进入 240ms / 退出 180ms；打断采样当前姿态后反向；Reka Dialog 管理焦点、滚动锁和嵌套                                                        | `ElasticSheet.vue`                                                 |
 | A09  | 值日共享元素详情        | 从触发矩形进入 240ms，关闭缩回 180ms；中断从当前位置反向；完整 transform 走元素动画，不逐帧组合六个值                                                            | `ElasticSheet.vue`                                                 |
 | A10  | 抬水底部详情            | 非模态悬浮面板，从屏幕底边进入 240ms、单向下退出 180ms；无背景变暗、无退出超调，底层仍可点                                                                       | `ElasticSheet.vue` 的 bottom 模式                                  |
@@ -148,7 +148,7 @@ Vant 组件包括 Badge、Button、Cell、CellGroup、Checkbox、Field、Form、
 
 1. A04 与 A14 已统一；后续可在真机调节共用参数，不再分别堆叠补间。
 2. A08 / A09 / A10 已统一控制，去除退出回弹；仍需三端实体设备检查键盘、手势与帧时间。
-3. A07：完成按钮的后置 CSS 覆盖较早定义，实际是 0.97 / 150ms；其余按钮有 0.96、0.97、0.94 三种按压比例。
+3. A07：完成与菜单按压归 Motion 管理；其余按钮仍有 0.96、0.97、0.94 三种比例，可结合触摸面积在真机调节。
 4. A02 / A06：整页与任务标题分别使用水平和垂直过渡，手势方向与视觉方向可统一审查。
 5. I25 / I26：设置面板、排序、保存是最复杂的一组交互，修改时要保留取消与版本冲突处理。
 
