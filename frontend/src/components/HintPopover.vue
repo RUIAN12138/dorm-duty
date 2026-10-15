@@ -43,7 +43,7 @@ onBeforeUnmount(() => removeBack?.());
     <PopoverPortal>
       <PopoverContent
         class="hint-popover"
-        side="bottom"
+        side="top"
         align="end"
         :side-offset="10"
         :collision-padding="20"
@@ -143,7 +143,7 @@ onBeforeUnmount(() => removeBack?.());
   @keyframes hint-arrive {
     from {
       opacity: 0;
-      transform: translateY(-3px) scale(0.97);
+      transform: translateY(3px) scale(0.97);
     }
     to {
       opacity: 1;

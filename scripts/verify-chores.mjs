@@ -612,6 +612,16 @@ try {
     await entry.page
       .getByRole("dialog", { name: "邀请码帮助", exact: true })
       .waitFor();
+    const helpBounds = await entry.page
+      .getByRole("dialog", { name: "邀请码帮助", exact: true })
+      .boundingBox();
+    const joinBounds = await entry.page
+      .getByTestId("guest-join-submit")
+      .boundingBox();
+    assert(
+      helpBounds.y + helpBounds.height <= joinBounds.y,
+      "context help stays above the join action",
+    );
     await snapshot(entry.page, `invite-help-${width}`);
     await entry.page
       .getByRole("button", { name: "关闭提示", exact: true })
