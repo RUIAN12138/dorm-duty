@@ -185,7 +185,10 @@ watch(
     roundProgressFrame = 0;
     const animationId = ++roundProgressAnimation;
     const boundedTotal = Math.max(0, total);
-    const boundedCompleted = Math.min(boundedTotal, Math.max(0, completed));
+    const boundedCompleted = Math.min(
+      boundedTotal,
+      Math.max(0, completed),
+    );
     const targetProgress = boundedTotal
       ? boundedCompleted / boundedTotal
       : 0;
@@ -1095,9 +1098,18 @@ onUnmounted(() => {
           class="round-members"
           data-testid="round-members"
         >
-          <div class="round-progress-display" aria-hidden="true" data-testid="round-progress-ring">
+          <div
+            class="round-progress-display"
+            aria-hidden="true"
+            data-testid="round-progress-ring"
+          >
             <svg viewBox="0 0 120 120">
-              <circle class="round-progress-track" cx="60" cy="60" r="50" />
+              <circle
+                class="round-progress-track"
+                cx="60"
+                cy="60"
+                r="50"
+              />
               <circle
                 class="round-progress-value"
                 cx="60"
