@@ -28,6 +28,8 @@
 
 Android 需要 JDK 17 或兼容版本、Android SDK 35、Gradle Wrapper 8.11：在 `android` 执行 `./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug`。默认生成调试签名 APK，可安装验收界面，未配置推送应用。输出在 `app/build/outputs/apk/debug/app-debug.apk`；本机本轮用 Android Studio 的 JDK 21 构建，GitHub CI 用 JDK 17。GitHub Actions 成功后保留 `lundao-android-preview` APK 附件 14 天；这是调试体验包，不含发布签名。
 
+GitHub 临时 runner 的调试签名可能随构建变化，这些附件不作为连续覆盖升级的正式分发渠道。给室友长期使用前，应配置本项目固定的发布签名；版本升级需保持同一签名。APK / HAP 当前连接正式 HTTPS 站点，新网页修复在正式服务器发布前只可在本地验证。
+
 HarmonyOS 需要 DevEco Studio 与 SDK 6.1.1：在 `harmony` 执行 `ohpm install --all`，再执行 `hvigorw --mode module -p product=default -p buildMode=debug assembleHap --no-daemon`。当前未配置签名，生成 `entry-default-unsigned.hap`，不能直接安装真机。DevEco 会负责配置签名，不通过代码生成假 Profile。
 
 ## 1.2.0 设备验收
