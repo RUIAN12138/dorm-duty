@@ -45,6 +45,12 @@ try {
     });
     b = await board();
     const before = b.rounds.find((r) => r.key === key);
+    eq(before.completions.length, 1);
+    eq(before.completions[0].user_id, owner.id);
+    eq(
+      before.completions[0].completed_at,
+      b.calendar.find((t) => t.id === task.id).completed_at,
+    );
     const history = b.calendar;
     const tasks = h.db.sqlite
       .prepare(
@@ -80,6 +86,7 @@ try {
     );
     eq(after.sequence, before.sequence);
     eq(after.completed, before.completed);
+    eq(after.completions, before.completions);
     eq(after.members.find((m) => m.user_id === owner.id).completed, true);
     eq(b.calendar, history);
     eq(
@@ -101,6 +108,24 @@ try {
       order,
     );
   }
+  // Month previews must carry the real completion markers over a month boundary.
+  const current = await board();
+  const done = current.calendar[0];
+  const nextMonth = new Date(done.completed_at);
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  const preview = await api(
+    `/chores/board?invite_code=${r.invite_code}&member_id=${owner.id}&month=${nextMonth.toISOString().slice(0, 7)}`,
+    { token: owner.token },
+  );
+  eq(preview.calendar, []);
+  eq(
+    preview.calendar_neighbors[done.completed_date.slice(0, 7)],
+    current.calendar,
+  );
+  eq(
+    preview.rounds.find((r) => r.key === "floor").completions,
+    current.rounds.find((r) => r.key === "floor").completions,
+  );
   eq(h.db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   console.log(
     JSON.stringify(

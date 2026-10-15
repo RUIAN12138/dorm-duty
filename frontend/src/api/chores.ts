@@ -73,6 +73,7 @@ export interface ChoreBoardData {
     completed: number;
     total: number;
     members: (ChoreMember & { completed: boolean })[];
+    completions: (ChoreMember & { id: number; completed_at: string })[];
   }[];
   today_tasks: ChoreTask[];
   next_tasks: ChoreTask[];
@@ -80,6 +81,7 @@ export interface ChoreBoardData {
   undo_tasks: ChoreTask[];
   water_order: number[];
   calendar: ChoreRecord[];
+  calendar_neighbors?: Record<string, ChoreRecord[]>;
   reminders: ChoreReminder[];
 }
 export interface ChoreClaim {

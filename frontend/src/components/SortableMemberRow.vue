@@ -113,6 +113,14 @@ function down(event: PointerEvent) {
     controls.start(pointer);
   }, 240);
 }
+function interruptHold() {
+  end(true, true);
+}
+function hidden() {
+  if (document.hidden) interruptHold();
+}
+window.addEventListener("blur", interruptHold);
+document.addEventListener("visibilitychange", hidden);
 function suppress(event: MouseEvent) {
   if (event.detail > 0 && performance.now() < suppressUntil) {
     event.preventDefault();
@@ -131,6 +139,8 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(finishFrame);
   release();
   row?.removeEventListener("touchmove", touch);
+  window.removeEventListener("blur", interruptHold);
+  document.removeEventListener("visibilitychange", hidden);
 });
 </script>
 <template>

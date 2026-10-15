@@ -7,6 +7,7 @@ import {
   type ChoreMember,
 } from "../api/chores";
 import ElasticSheet from "./ElasticSheet.vue";
+import TimeWheel from "./TimeWheel.vue";
 import MemberMark from "./MemberMark.vue";
 import SortableMembers from "./SortableMembers.vue";
 const props = defineProps<{
@@ -176,12 +177,10 @@ async function save() {
         <div v-if="category.mode === 'scheduled'" class="settings-two-columns">
           <div>
             <label :for="`time-${category.key}`">截止时间</label
-            ><input
+            ><TimeWheel
               :id="`time-${category.key}`"
               v-model="category.deadline_time"
-              :data-testid="`settings-time-${category.key}`"
-              type="time"
-              required
+              :test-id="`settings-time-${category.key}`"
             />
           </div>
           <div>

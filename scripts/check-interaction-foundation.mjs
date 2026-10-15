@@ -45,10 +45,10 @@ const route=useRoute();const section=computed(()=>route.path==='/water'?'water':
 const view=ref('calendar'),open=ref(false),nested=ref(false),mode=ref<'bottom'|'shared'>('bottom'),origin=ref<DOMRect|null>(null),closed=ref(0),draft=ref('保留输入');
 const make=(n:number)=>Array.from({length:n},(_,i)=>({user_id:i+1,nickname:'室友'+(i+1),marker_id:'pixel-01',role:'member',rotation_order:i}));
 const members=ref(make(6)),order=ref([1,2,3,4,5,6]),disabled=ref(false),active=ref(true),mounted=ref(true);
-const feedbackFixture=ref(false),feedbackBusy=ref(false);const feedbackTask=ref({id:999,key:'floor',name:'地板',status:'pending'});function feedbackSubmit(){feedbackBusy.value=true;const bounds=document.querySelector('[data-testid=complete-floor-999]')?.getBoundingClientRect();setTimeout(()=>{feedbackTask.value.status='completed';feedbackBusy.value=false;completionFeedback(bounds);},100);};const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);const calendarFixture=ref(false),calendarMonth=ref('2026-10'),calendarLoading=ref(false);const calendarRecords=make(6).map((m,i)=>({id:i+1,key:i===5?'water':'floor',name:i===5?'抬水':'地板',assignee_id:m.user_id,assignee_name:m.nickname,marker_id:m.marker_id,completed_at:'2026-10-15T'+String(i+8).padStart(2,'0')+':00:00Z',completed_date:'2026-10-15'}));
+const feedbackFixture=ref(false),feedbackBusy=ref(false),feedbackFailure=ref(false);const feedbackTask=ref({id:999,key:'floor',name:'地板',status:'pending'});function feedbackSubmit(){feedbackBusy.value=true;const bounds=document.querySelector('[data-testid=complete-floor-999]')?.getBoundingClientRect();setTimeout(()=>{if(feedbackFailure.value){feedbackBusy.value=false;return;}feedbackTask.value.status='completed';feedbackBusy.value=false;completionFeedback(bounds);},100);};const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);const calendarFixture=ref(false),calendarMonth=ref('2026-10'),calendarLoading=ref(false);const calendarRecords=make(6).map((m,i)=>({id:i+1,key:i===5?'water':'floor',name:i===5?'抬水':'地板',assignee_id:m.user_id,assignee_name:m.nickname,marker_id:m.marker_id,completed_at:'2026-10-15T'+String(i+8).padStart(2,'0')+':00:00Z',completed_date:'2026-10-15'}));
 function show(event:MouseEvent){origin.value=(event.currentTarget as HTMLElement).getBoundingClientRect();open.value=true;}
 async function confirm(){try{await confirmInSheet({title:'确认操作',message:'确认后仍保留抽屉'});confirmed.value++;}catch{}}
-(window as any).qa={feedback:()=>{calendarFixture.value=false;feedbackFixture.value=true;feedbackTask.value.status='pending';},calendar:()=>calendarFixture.value=true,calendarMonth:()=>calendarMonth.value,calendarLoading:(value:boolean)=>calendarLoading.value=value,preview:()=>previewOpen.value=true,backgroundClicks:()=>backgroundClicks.value,tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
+(window as any).qa={failFeedback:()=>feedbackFailure.value=true,feedback:()=>{calendarFixture.value=false;feedbackFixture.value=true;feedbackTask.value.status='pending';},calendar:()=>calendarFixture.value=true,calendarMonth:()=>calendarMonth.value,calendarLoading:(value:boolean)=>calendarLoading.value=value,preview:()=>previewOpen.value=true,backgroundClicks:()=>backgroundClicks.value,tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
 </script>
 <template><main style="padding:24px;min-height:1600px"><Completion v-if="feedbackFixture" :task="feedbackTask" :busy="feedbackBusy" :disabled="false" :demo="false" @complete="feedbackSubmit"/><Calendar v-if="calendarFixture" :month="calendarMonth" today="2026-10-15" :members="members" :records="calendarRecords" :loading="calendarLoading" @change="calendarMonth=$event"/><h1>交互验证</h1><button data-testid="background-action" @click="backgroundClicks++">底层操作</button><p data-testid="identity">室友一 · 身份保留</p><button data-testid="open" @click="show">打开面板</button><TabsRoot v-model="view"><Segments v-model="view" group-label="完成记录显示方式" :options="[{value:'calendar',label:'日历',testId:'segment-calendar'},{value:'list',label:'列表',testId:'segment-list'}]"/><TabsContent value="calendar">月历</TabsContent><TabsContent value="list">完成列表</TabsContent></TabsRoot>
 <Nav :section="section"/><Sheet v-model="open" title="排序设置" :motion="mode" :origin="origin" @closed="closed++"><label>内容<input data-testid="input" v-model="draft"/></label><Sort v-if="mounted" v-model="order" :members="members" :active="open && active" :disabled="disabled"/><button data-testid="nested" @click="nested=true">打开嵌套</button><button data-testid="confirm" @click="confirm">确认操作</button><Sheet v-model="nested" title="嵌套面板"><button data-testid="inner-button">内部操作</button></Sheet></Sheet><Sheet v-model="previewOpen" title="任务说明" motion="bottom" :modal="false"><p>可以继续操作底层页面</p></Sheet></main></template>`,
@@ -642,7 +642,7 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   await page.getByTestId("calendar-prev").click();
   await page.getByTestId("calendar-prev").click();
   eq(
-    await page.locator(".chore-calendar-grid").count(),
+    await page.locator(".chore-calendar-grid:not([inert])").count(),
     1,
     "rapid month reversals keep one interactive grid",
   );
@@ -809,6 +809,8 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
     scrollTo(0, 0);
   });
   await page.getByTestId("complete-floor-999").click();
+  eq(await page.locator('.completion-surface.is-round').count(),1,'completion immediately starts the circle morph without moving its hit area');
+
   await page.getByTestId("undo-999").waitFor();
   eq(
     await page.locator(".completion-particles i").count(),
@@ -841,6 +843,13 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
     "reduced motion keeps completion state without particles",
   );
 
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.evaluate(() => {window.qa.feedback();window.qa.failFeedback();});
+  await page.getByTestId("complete-floor-999").click();
+  await page.waitForTimeout(220);
+  eq(await page.locator('.completion-surface.is-round').count(),0,'failed request restores the capsule');
+  eq(await page.locator('.completion-particles').count(),0,'failed request never draws success particles');
+  eq(await page.getByTestId("complete-floor-999").isEnabled(),true,'failed request leaves completion retryable');
   await page.screenshot({ path: path.join(evidence, "rest.png") });
   eq(errors, [], "no browser runtime exceptions");
   await fs.writeFile(
