@@ -83,7 +83,7 @@
 | C23  | `WaterOrderSheet.vue`              | 顶部独立抬水轮序、只读或创建者编辑                             | 当前主入口         |
 | C24  | `TaskTitle.vue`                    | 任务文字立即更新、轻量可打断过渡                               | 当前主入口         |
 | C25  | `ChoreRecordRow.vue`               | 日历详情与列表共用对齐记录行，整行恢复本人打卡                 | 当前主入口         |
-| C26  | `HintPopover.vue`                  | 按需小提示，点击外侧 / Esc / 原生返回关闭                      | 当前主入口         |
+| C26  | `HintPopover.vue`                  | 居中小提示与玻璃蒙版，点蒙版 / 确认 / Esc / 原生返回关闭       | 当前主入口         |
 
 组件位于 `frontend/src/components/`；`useLoad.ts` 是加载逻辑辅助，不是 Vue 组件。
 

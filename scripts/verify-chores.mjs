@@ -607,28 +607,44 @@ try {
     );
     await snapshot(entry.page, `join-centered-${width}`);
     await entry.page
-      .getByRole("button", { name: "邀请码帮助", exact: true })
+      .getByRole("button", { name: "邀请码在哪里？", exact: true })
       .click();
     await entry.page
-      .getByRole("dialog", { name: "邀请码帮助", exact: true })
+      .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
       .waitFor();
     const helpBounds = await entry.page
-      .getByRole("dialog", { name: "邀请码帮助", exact: true })
-      .boundingBox();
-    const joinBounds = await entry.page
-      .getByTestId("guest-join-submit")
+      .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
       .boundingBox();
     assert(
-      helpBounds.y + helpBounds.height <= joinBounds.y,
-      "context help stays above the join action",
+      helpBounds.x >= 19 && helpBounds.x + helpBounds.width <= width - 19,
+      "hint dialog keeps equal side margins",
+    );
+    assert(
+      helpBounds.y > 0 && helpBounds.y + helpBounds.height < 844,
+      "hint dialog stays inside viewport",
+    );
+    assert.notEqual(
+      await entry.page
+        .getByTestId("hint-glass")
+        .evaluate((el) => getComputedStyle(el).backdropFilter),
+      "none",
+      "help has a glass backdrop",
     );
     await snapshot(entry.page, `invite-help-${width}`);
     await entry.page
       .getByRole("button", { name: "关闭提示", exact: true })
       .click();
     await entry.page
-      .getByRole("dialog", { name: "邀请码帮助", exact: true })
+      .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
       .waitFor({ state: "hidden" });
+    await entry.page
+      .getByRole("button", { name: "邀请码帮助", exact: true })
+      .click();
+    await entry.page.getByTestId("hint-glass").waitFor();
+    await entry.page
+      .getByTestId("hint-glass")
+      .click({ position: { x: 8, y: 8 } });
+    await entry.page.getByTestId("hint-glass").waitFor({ state: "hidden" });
     await noNavigation(entry.page);
     await entry.context.close();
   }

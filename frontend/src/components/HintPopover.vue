@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
 import {
-  PopoverRoot,
-  PopoverTrigger,
-  PopoverPortal,
-  PopoverContent,
-  PopoverClose,
+  DialogRoot,
+  DialogTrigger,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
 } from "reka-ui";
 import { registerNativeBack } from "../interactions/nativeBack";
 defineProps<{ title: string; text: string; label?: string }>();
@@ -20,8 +23,8 @@ watch(open, (value) => {
 onBeforeUnmount(() => removeBack?.());
 </script>
 <template>
-  <PopoverRoot v-model:open="open">
-    <PopoverTrigger as-child>
+  <DialogRoot v-model:open="open">
+    <DialogTrigger as-child>
       <button class="hint-trigger" type="button" :aria-label="label || title">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle
@@ -39,27 +42,32 @@ onBeforeUnmount(() => removeBack?.());
           />
         </svg>
       </button>
-    </PopoverTrigger>
-    <PopoverPortal>
-      <PopoverContent
-        class="hint-popover"
-        side="top"
-        align="end"
-        :side-offset="10"
-        :collision-padding="20"
-        role="dialog"
-        :aria-label="title"
-      >
+    </DialogTrigger>
+    <DialogPortal>
+      <DialogOverlay
+        class="hint-glass"
+        data-testid="hint-glass"
+        @pointerdown.self.stop="open = false"
+      />
+      <DialogContent class="hint-popover" @escape-key-down.stop>
         <div class="hint-heading">
-          <strong>{{ title }}</strong
-          ><PopoverClose class="hint-close" aria-label="关闭提示"
-            >×</PopoverClose
-          >
+          <DialogTitle>{{ title }}</DialogTitle>
+          <DialogClose class="hint-close" aria-label="关闭提示"
+            ><svg viewBox="0 0 20 20" aria-hidden="true">
+              <path
+                d="m6 6 8 8M14 6l-8 8"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              /></svg
+          ></DialogClose>
         </div>
-        <p>{{ text }}</p>
-      </PopoverContent>
-    </PopoverPortal>
-  </PopoverRoot>
+        <DialogDescription>{{ text }}</DialogDescription>
+        <DialogClose class="hint-confirm">知道了</DialogClose>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 <style>
 .hint-trigger {
@@ -83,77 +91,163 @@ onBeforeUnmount(() => removeBack?.());
   transform: scale(0.92);
   background: #f3f3f3;
 }
+.hint-glass {
+  position: fixed;
+  inset: 0;
+  z-index: 3999;
+  background: rgb(235 235 235 / 35%);
+  backdrop-filter: blur(8px) saturate(0.85);
+  -webkit-backdrop-filter: blur(8px) saturate(0.85);
+  pointer-events: auto;
+}
 .hint-popover {
+  position: fixed;
   z-index: 4000;
-  width: min(280px, calc(100vw - 40px));
-  padding: 16px 18px 18px;
-  border: 1px solid #e8e8e8;
-  border-radius: 22px;
-  background: #fff;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, calc(100vw - 40px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid rgb(255 255 255 / 90%);
+  border-radius: 28px;
+  background: rgb(255 255 255 / 97%);
   color: #222;
   box-shadow:
-    0 12px 40px #00000012,
-    0 2px 6px #00000006;
+    0 20px 70px #00000014,
+    0 2px 8px #00000005;
   outline: none;
-  transform-origin: var(--reka-popover-content-transform-origin);
 }
 .hint-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
-.hint-heading strong {
-  font-size: 16px;
+.hint-heading h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.35;
   font-weight: 600;
+  letter-spacing: -0.4px;
 }
 .hint-close {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin: -7px -7px -7px 0;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  color: #777;
-  background: #f5f5f5;
-  font-size: 22px;
+  color: #888;
+  background: transparent;
   cursor: pointer;
 }
-.hint-popover p {
-  margin: 12px 0 0;
-  font-size: 15px;
+.hint-close svg {
+  width: 22px;
+  height: 22px;
+}
+.hint-popover > p {
+  margin: 0;
+  font-size: 16px;
   line-height: 1.65;
   color: #666;
 }
+.hint-confirm {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 16px;
+  margin-top: 24px;
+  border: 0;
+  border-radius: 16px;
+  color: #fff;
+  background: #111;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
 .hint-trigger:focus-visible,
-.hint-close:focus-visible {
+.hint-close:focus-visible,
+.hint-confirm:focus-visible {
   outline: 2px solid #111;
   outline-offset: 3px;
 }
+.hint-confirm:active {
+  transform: scaleX(1.02) scaleY(0.94);
+}
 @media (prefers-reduced-motion: no-preference) {
-  .hint-trigger {
+  .hint-trigger,
+  .hint-confirm {
     transition:
       transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
       background-color 140ms ease;
   }
+  .hint-glass[data-state="open"] {
+    animation: hint-glass-in 160ms ease-out;
+  }
+  .hint-glass[data-state="closed"] {
+    animation: hint-glass-out 120ms ease-out;
+  }
   .hint-popover[data-state="open"] {
-    animation: hint-arrive 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: hint-arrive 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .hint-popover[data-state="closed"] {
+    animation: hint-depart 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes hint-glass-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes hint-glass-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
   }
   @keyframes hint-arrive {
     from {
       opacity: 0;
-      transform: translateY(3px) scale(0.97);
+      transform: translate(-50%, calc(-50% + 6px)) scale(0.97);
     }
     to {
       opacity: 1;
-      transform: none;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+  @keyframes hint-depart {
+    from {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% + 4px)) scale(0.98);
     }
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hint-trigger:active {
+  .hint-trigger:active,
+  .hint-confirm:active {
     transform: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .hint-glass {
+    background: #eee;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 </style>
