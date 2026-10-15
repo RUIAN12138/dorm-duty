@@ -2,7 +2,7 @@
 import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { motion } from "motion-v";
-import { useSelectionMotion } from "../interaction/motion";
+import { useSelectionMotion, navigationScrubbing } from "../interaction/motion";
 import { horizontalIntent } from "../interaction/gestures";
 const router = useRouter();
 const props = defineProps<{
@@ -21,16 +21,40 @@ const pressedIndex = ref(-1);
 const selection = useSelectionMotion(currentIndex.value, () => items.length);
 watch(currentIndex, (next) => {
   if (!dragging.value) selection.move(next);
+  requestedIndex = next;
 });
 onUnmounted(() => {
   gesture = null;
+  navigationScrubbing.value = false;
   window.removeEventListener("blur", cancelGesture);
   document.removeEventListener("visibilitychange", cancelWhenHidden);
 });
-let gesture: { id: number; x: number; y: number; nav: HTMLElement } | null =
-  null;
+let gesture: {
+  id: number;
+  x: number;
+  y: number;
+  nav: HTMLElement;
+  navigated: boolean;
+} | null = null;
 let suppressClickUntil = 0;
 let navigationRequest = 0;
+let requestedIndex = currentIndex.value;
+function navigate(index: number, replace = false) {
+  if (
+    requestedIndex === index &&
+    router.currentRoute.value.path === items[index]!.path
+  )
+    return;
+  requestedIndex = index;
+  const request = ++navigationRequest;
+  // A scrub is one navigation in history, even if it passes several pages.
+  void router[replace ? "replace" : "push"]({
+    path: items[index]!.path,
+  }).finally(() => {
+    if (request === navigationRequest && !gesture)
+      selection.move(currentIndex.value);
+  });
+}
 function position(x: number, nav: HTMLElement) {
   const rect = nav.getBoundingClientRect();
   const width = Math.max(1, rect.width - 32);
@@ -44,7 +68,14 @@ function down(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || gesture) return;
   if (!(event.target instanceof Element) || !event.target.closest("a")) return;
   const nav = event.currentTarget as HTMLElement;
-  gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, nav };
+  gesture = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    nav,
+    navigated: false,
+  };
+  requestedIndex = currentIndex.value;
   pressedIndex.value = position(event.clientX, nav).index;
   suppressClickUntil = 0;
   nav.setPointerCapture(event.pointerId);
@@ -60,14 +91,21 @@ function move(event: PointerEvent) {
     if (intent !== "horizontal") return;
   }
   dragging.value = true;
+  navigationScrubbing.value = true;
   pressedIndex.value = -1;
-  selection.track(position(event.clientX, gesture.nav).progress);
+  const point = position(event.clientX, gesture.nav);
+  selection.track(point.progress);
+  if (point.index !== requestedIndex) {
+    navigate(point.index, gesture.navigated);
+    gesture.navigated = true;
+  }
 }
 function cancelGesture() {
   if (!gesture) return;
   const { nav, id } = gesture;
   gesture = null;
   dragging.value = false;
+  navigationScrubbing.value = false;
   pressedIndex.value = -1;
   suppressClickUntil = performance.now() + 500;
   if (nav.hasPointerCapture(id)) nav.releasePointerCapture(id);
@@ -89,6 +127,7 @@ function finish(event: PointerEvent, cancelled = false) {
   gesture = null;
   pressedIndex.value = -1;
   dragging.value = false;
+  navigationScrubbing.value = false;
   if (nav.hasPointerCapture(event.pointerId))
     nav.releasePointerCapture(event.pointerId);
   suppressClickUntil = performance.now() + 500;
@@ -103,16 +142,7 @@ function finish(event: PointerEvent, cancelled = false) {
   }
   const index = position(event.clientX, nav).index;
   selection.move(index);
-  const item = items[index]!;
-  const request = ++navigationRequest;
-  void router
-    .push({
-      path: item.path,
-    })
-    .finally(() => {
-      if (request === navigationRequest && !gesture)
-        selection.move(currentIndex.value);
-    });
+  navigate(index);
 }
 function click(event: MouseEvent) {
   if (event.detail > 0 && performance.now() < suppressClickUntil) {

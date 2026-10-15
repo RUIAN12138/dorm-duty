@@ -7,6 +7,8 @@ import {
   useVelocity,
 } from "motion-v";
 
+export const navigationScrubbing = ref(false);
+
 export const motionTokens = {
   press: { scaleX: 1.025, scaleY: 0.94 },
   selection: {

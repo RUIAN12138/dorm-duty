@@ -54,7 +54,7 @@ onBeforeUnmount(() => removeBack?.());
           <DialogTitle>{{ title }}</DialogTitle>
         </div>
         <DialogDescription>{{ text }}</DialogDescription>
-        <DialogClose class="hint-confirm">知道了</DialogClose>
+        <DialogClose class="hint-confirm galaxy-fill">知道了</DialogClose>
       </DialogContent>
     </DialogPortal>
   </DialogRoot>

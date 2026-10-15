@@ -7,6 +7,7 @@ import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 import ElasticSegments from "./ElasticSegments.vue";
 import ChoreRecordRow from "./ChoreRecordRow.vue";
+import { motionAllowed } from "../interaction/motion";
 import { createTaskSwipe } from "../interaction/taskSwipe";
 const props = defineProps<{
   month: string;
@@ -24,6 +25,10 @@ const emit = defineEmits<{
   undo: [id: number];
 }>();
 const selected = ref("");
+const monthGrid = ref<HTMLElement>();
+const monthLabel = ref<HTMLElement>();
+let monthAnimations: Animation[] = [];
+
 const swipeOffset = ref(0);
 const swiping = ref(false);
 const monthSwipe = createTaskSwipe(
@@ -51,6 +56,7 @@ window.addEventListener("blur", monthSwipe.cancel);
 document.addEventListener("visibilitychange", cancelWhenHidden);
 onBeforeUnmount(() => {
   monthSwipe.cancel();
+  monthAnimations.forEach((animation) => animation.cancel());
   window.removeEventListener("blur", monthSwipe.cancel);
   document.removeEventListener("visibilitychange", cancelWhenHidden);
 });
@@ -116,7 +122,7 @@ const cells = computed(() => {
   const first = new Date(Date.UTC(year, month - 1, 1));
   const before = (first.getUTCDay() + 6) % 7;
   const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const total = Math.ceil((before + count) / 7) * 7;
+  const total = 42; // Six stable rows prevent month changes from moving the page.
   return Array.from({ length: total }, (_, index) => {
     const day = index - before + 1;
     if (day < 1 || day > count) return null;
@@ -154,7 +160,35 @@ watch(
     monthDirection.value = next > previous ? 1 : -1;
     selected.value = "";
     monthSwipe.cancel();
+    const elements = [monthGrid.value, monthLabel.value].filter(
+      (el): el is HTMLElement => !!el,
+    );
+    const starts = elements.map((el) => {
+      const style = getComputedStyle(el);
+      return { transform: style.transform, opacity: style.opacity };
+    });
+    const interrupted = monthAnimations.some(
+      (animation) => animation.playState === "running",
+    );
+    monthAnimations.forEach((animation) => animation.cancel());
+    monthAnimations = [];
+    if (!motionAllowed() || document.hidden) return;
+    monthAnimations = elements.map((el, index) =>
+      el.animate(
+        [
+          {
+            transform: interrupted
+              ? starts[index]!.transform
+              : `translate3d(${monthDirection.value * (index ? 5 : 18)}px,0,0)`,
+            opacity: interrupted ? starts[index]!.opacity : 0.72,
+          },
+          { transform: "translate3d(0,0,0)", opacity: 1 },
+        ],
+        { duration: 220, easing: "cubic-bezier(.22,1,.36,1)" },
+      ),
+    );
   },
+  { flush: "post" },
 );
 </script>
 <template>
@@ -177,7 +211,7 @@ watch(
             data-testid="page-swipe-title"
           >
             <small>{{ month.slice(0, 4) }}年</small
-            ><span>{{ Number(month.slice(5)) }}月</span>
+            ><span ref="monthLabel">{{ Number(month.slice(5)) }}月</span>
           </h1>
         </div>
         <div class="calendar-nav">
@@ -223,60 +257,54 @@ watch(
               :class="{ 'is-swiping': swiping }"
               :style="{ transform: `translate3d(${swipeOffset}px,0,0)` }"
             >
-              <Transition
-                :name="monthDirection > 0 ? 'month-next' : 'month-prev'"
+              <div
+                ref="monthGrid"
+                class="chore-calendar-grid"
+                :aria-busy="loading"
               >
-                <div
-                  :key="month"
-                  class="chore-calendar-grid"
-                  :aria-busy="loading"
+                <template
+                  v-for="(cell, index) in cells"
+                  :key="cell?.date || `blank-${index}`"
                 >
-                  <template
-                    v-for="(cell, index) in cells"
-                    :key="cell?.date || `blank-${index}`"
+                  <button
+                    v-if="cell"
+                    :class="{
+                      'is-today': cell.date === today,
+                      'has-records': !!cell.records.length,
+                      'is-selected': cell.date === selected,
+                    }"
+                    :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
+                    :aria-pressed="cell.date === selected"
+                    :data-testid="`calendar-day-${cell.date}`"
+                    @click="selected = selected === cell.date ? '' : cell.date"
                   >
-                    <button
-                      v-if="cell"
-                      :class="{
-                        'is-today': cell.date === today,
-                        'has-records': !!cell.records.length,
-                        'is-selected': cell.date === selected,
-                      }"
-                      :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
-                      :aria-pressed="cell.date === selected"
-                      :data-testid="`calendar-day-${cell.date}`"
-                      @click="
-                        selected = selected === cell.date ? '' : cell.date
-                      "
-                    >
-                      <span class="calendar-day-number"
-                        >{{ cell.day
-                        }}<small
-                          v-if="cell.marks.length > 2"
-                          class="calendar-more"
-                          >+{{ cell.marks.length - 2 }}</small
-                        ></span
-                      ><span class="calendar-cell-marks"
-                        ><span
-                          v-for="mark in cell.visibleMarks"
-                          :key="`${mark.assignee_id}:${mark.type}`"
-                          class="calendar-task-mark"
-                          :data-task-type="mark.type"
-                          :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
-                          aria-hidden="true"
-                          ><MemberMark
-                            :id="mark.marker_id"
-                            :size="16" /><ChoreTypeIcon :type="mark.type"
-                        /></span>
-                      </span></button
-                    ><span
-                      v-else
-                      class="calendar-blank"
-                      aria-hidden="true"
-                    ></span>
-                  </template>
-                </div>
-              </Transition>
+                    <span class="calendar-day-number"
+                      >{{ cell.day
+                      }}<small
+                        v-if="cell.marks.length > 2"
+                        class="calendar-more"
+                        >+{{ cell.marks.length - 2 }}</small
+                      ></span
+                    ><span class="calendar-cell-marks"
+                      ><span
+                        v-for="mark in cell.visibleMarks"
+                        :key="`${mark.assignee_id}:${mark.type}`"
+                        class="calendar-task-mark"
+                        :data-task-type="mark.type"
+                        :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
+                        aria-hidden="true"
+                        ><MemberMark
+                          :id="mark.marker_id"
+                          :size="16" /><ChoreTypeIcon :type="mark.type"
+                      /></span>
+                    </span></button
+                  ><span
+                    v-else
+                    class="calendar-blank"
+                    aria-hidden="true"
+                  ></span>
+                </template>
+              </div>
             </div>
           </div>
           <div class="calendar-type-legend" aria-label="任务标记图例">
@@ -651,31 +679,6 @@ h1 > span {
       transform var(--ui-release-time) var(--ui-ease-out),
       background-color 160ms ease,
       border-color 160ms ease;
-  }
-  .month-next-enter-active,
-  .month-prev-enter-active {
-    transition:
-      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-      opacity 160ms ease;
-  }
-  .month-next-leave-active,
-  .month-prev-leave-active {
-    position: absolute;
-    top: 0;
-    pointer-events: none;
-    transition:
-      opacity 100ms ease,
-      transform 160ms ease;
-  }
-  .month-next-enter-from,
-  .month-prev-leave-to {
-    opacity: 0;
-    transform: translateX(12px);
-  }
-  .month-prev-enter-from,
-  .month-next-leave-to {
-    opacity: 0;
-    transform: translateX(-12px);
   }
 }
 @media (prefers-reduced-motion: reduce) {

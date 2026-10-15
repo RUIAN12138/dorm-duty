@@ -27,6 +27,7 @@ import SortableMembers from "./SortableMembers.vue";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
 import CompletionAction from "./CompletionAction.vue";
+import GalaxySpinner from "./GalaxySpinner.vue";
 import ActionItem from "./ActionItem.vue";
 import { tilt as vTilt } from "../interactions/tilt";
 import WaterNudge from "./WaterNudge.vue";
@@ -41,6 +42,8 @@ import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
 import { createTaskSwipe } from "../interaction/taskSwipe";
+import { navigationScrubbing } from "../interaction/motion";
+import { completionFeedback } from "../interaction/completionFeedback";
 const props = defineProps<{
   invite: string;
   dormName: string;
@@ -65,6 +68,17 @@ const board = ref<ChoreBoardData | null>(null),
   busy = ref("");
 const completionSyncPending = ref(false),
   syncAction = ref("打卡");
+const showSyncStatus = ref(false);
+let syncStatusTimer: ReturnType<typeof setTimeout> | undefined;
+watch(completionSyncPending, (pending) => {
+  clearTimeout(syncStatusTimer);
+  showSyncStatus.value = false;
+  if (pending)
+    syncStatusTimer = setTimeout(() => {
+      showSyncStatus.value = true;
+    }, 700);
+});
+onUnmounted(() => clearTimeout(syncStatusTimer));
 const month = ref(
   new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -645,6 +659,10 @@ async function complete(task: ChoreTask) {
   syncAction.value = "打卡";
   busy.value = `complete-${task.id}`;
   actionError.value = "";
+  const feedbackBounds = document
+    .querySelector(`[data-testid="complete-${task.key}-${task.id}"]`)
+    ?.getBoundingClientRect();
+  const feedbackSection = props.section;
   try {
     const syncStatus = await completeChore(
       task.id,
@@ -652,6 +670,8 @@ async function complete(task: ChoreTask) {
       (receipt) => {
         if (!alive) return;
         acceptCompletion(receipt);
+        if (props.section === feedbackSection)
+          completionFeedback(feedbackBounds);
       },
       () => (alive ? load() : Promise.resolve(false)),
     );
@@ -908,10 +928,10 @@ onUnmounted(() => {
       role="status"
       aria-label="正在加载任务"
     >
-      <span></span><span></span><span></span>
+      <GalaxySpinner class="board-spinner" />
     </div>
     <div
-      v-if="completionSyncPending"
+      v-if="completionSyncPending && showSyncStatus"
       class="chore-sync-status"
       role="status"
       data-testid="completion-sync-pending"
@@ -928,7 +948,7 @@ onUnmounted(() => {
     </div>
     <template v-if="board">
       <div class="board-identity">
-        <span class="identity-name">{{ board.member.nickname }}</span>
+        <span class="identity-name">{{ dormName }}</span>
         <div class="identity-actions">
           <button
             class="order-trigger"
@@ -971,6 +991,7 @@ onUnmounted(() => {
         @lostpointercapture="sectionSwipeCancel"
       >
         <Transition
+          :css="!navigationScrubbing"
           :name="direction > 0 ? 'focus-next' : 'focus-prev'"
           @before-leave="hideLeaving"
           @before-enter="showEntered"
@@ -1789,11 +1810,21 @@ onUnmounted(() => {
   color: #111;
 }
 .chore-sync-status {
+  position: fixed;
+  z-index: 105;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  width: min(calc(100% - 40px), 480px);
+  border: 1px solid #eee;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 18px #0000000a;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0 16px;
+  padding: 8px 16px;
   color: #555;
   font-size: 14px;
 }
@@ -2377,6 +2408,9 @@ onUnmounted(() => {
 <style scoped>
 .water-title-stage {
   width: min(100%, 300px);
+  min-height: clamp(55.2px, 19.55vw, 82.8px);
+  display: grid;
+  place-items: center;
 }
 .water-title-stage h2 {
   width: 100%;
@@ -2413,6 +2447,20 @@ onUnmounted(() => {
   .water-remind:active,
   .round-progress:active {
     transform: none;
+  }
+}
+</style>
+
+<style scoped>
+/* Keep the caption and name anchored when completing water reveals the next
+   roommate and the previous turn's completed button. Only the action area grows. */
+.water-pane {
+  justify-content: flex-start;
+  padding-top: clamp(72px, 15dvh, 130px);
+}
+@media (max-height: 730px) {
+  .water-pane {
+    padding-top: 48px;
   }
 }
 </style>
@@ -2470,5 +2518,19 @@ onUnmounted(() => {
 }
 .round-summary-line .round-summary {
   margin: 0;
+}
+</style>
+
+<style scoped>
+.board-loading {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+}
+.board-loading :deep(.board-spinner) {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border-width: 2px;
 }
 </style>
