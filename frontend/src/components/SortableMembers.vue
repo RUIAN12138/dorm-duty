@@ -193,7 +193,7 @@ onBeforeUnmount(cancel);
     :class="{ 'keyboard-step': keyboardStepping }"
     @keydown.esc.stop.prevent="cancel"
   >
-    <p class="sort-hint">按住右侧拖动，调整先后</p>
+    <p class="sort-hint">按住室友或右侧拖动柄，调整先后</p>
     <ol
       aria-label="抬水轮换顺序"
       class="sort-list"
@@ -210,8 +210,24 @@ onBeforeUnmount(cancel);
         }"
       >
         <span class="sort-position">{{ index + 1 }}</span>
-        <MemberMark :id="people.get(id)?.marker_id" :size="24" />
-        <strong>{{ people.get(id)?.nickname || "室友" }}</strong>
+        <button
+          type="button"
+          class="sort-person"
+          :disabled="disabled"
+          :aria-label="`长按${people.get(id)?.nickname}拖动`"
+          :data-testid="`order-person-water-${id}`"
+          @pointerdown="down($event, id)"
+          @pointermove="move"
+          @pointerup="up($event)"
+          @pointercancel="up($event, true)"
+          @lostpointercapture="up($event, true)"
+          @contextmenu.prevent
+          @keydown.up.prevent="step(id, -1, true)"
+          @keydown.down.prevent="step(id, 1, true)"
+        >
+          <MemberMark :id="people.get(id)?.marker_id" :size="24" />
+          <strong>{{ people.get(id)?.nickname || "室友" }}</strong>
+        </button>
         <button
           type="button"
           class="sort-step"
@@ -346,13 +362,23 @@ button {
   width: 28px;
   font-size: 18px;
 }
-.sort-handle {
-  width: 44px;
+.sort-person {
+  display: flex;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.sort-handle,
+.sort-person {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   cursor: grab;
+}
+.sort-handle {
+  width: 44px;
 }
 .dragging .sort-handle {
   cursor: grabbing;

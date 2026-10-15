@@ -243,6 +243,17 @@ try {
   eq(captured, null, "saving disables gestures");
   state.disabled = false;
   await flush();
+  const person = all(root).find(
+    (el) => el.props["data-testid"] === "order-person-water-1",
+  );
+  person.props.onPointerdown(event(100));
+  await new Promise((r) => setTimeout(r, 280));
+  person.props.onPointermove(event(172));
+  await flush();
+  eq(ids(), [3, 1, 4, 5, 6, 2], "holding the member name also drags the row");
+  person.props.onPointerup(event(172));
+  await flush();
+  eq(state.order, [3, 1, 4, 5, 6, 2], "name drag persists on drop");
   await start(6, 470);
   const job = [...frames.values()][0];
   frames.clear();
