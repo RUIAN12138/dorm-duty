@@ -632,7 +632,7 @@ try {
     );
     await snapshot(entry.page, `invite-help-${width}`);
     await entry.page
-      .getByRole("button", { name: "关闭提示", exact: true })
+      .getByRole("button", { name: "知道了", exact: true })
       .click();
     await entry.page
       .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
@@ -804,7 +804,7 @@ try {
   await a.page.getByTestId("round-members").waitFor();
   await a.page.getByRole("button", { name: "调整排列", exact: true }).click();
   await a.page.getByRole("dialog", { name: "调整排列", exact: true }).waitFor();
-  await a.page.getByRole("button", { name: "关闭提示", exact: true }).click();
+  await a.page.getByRole("button", { name: "知道了", exact: true }).click();
   await a.page
     .getByRole("dialog", { name: "调整排列", exact: true })
     .waitFor({ state: "hidden" });

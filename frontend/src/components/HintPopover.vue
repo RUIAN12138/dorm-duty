@@ -52,16 +52,6 @@ onBeforeUnmount(() => removeBack?.());
       <DialogContent class="hint-popover" @escape-key-down.stop>
         <div class="hint-heading">
           <DialogTitle>{{ title }}</DialogTitle>
-          <DialogClose class="hint-close" aria-label="关闭提示"
-            ><svg viewBox="0 0 20 20" aria-hidden="true">
-              <path
-                d="m6 6 8 8M14 6l-8 8"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-              /></svg
-          ></DialogClose>
         </div>
         <DialogDescription>{{ text }}</DialogDescription>
         <DialogClose class="hint-confirm">知道了</DialogClose>
@@ -95,9 +85,9 @@ onBeforeUnmount(() => removeBack?.());
   position: fixed;
   inset: 0;
   z-index: 3999;
-  background: rgb(235 235 235 / 35%);
-  backdrop-filter: blur(8px) saturate(0.85);
-  -webkit-backdrop-filter: blur(8px) saturate(0.85);
+  background: transparent;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   pointer-events: auto;
 }
 .hint-popover {
@@ -122,9 +112,10 @@ onBeforeUnmount(() => removeBack?.());
 .hint-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  text-align: center;
 }
 .hint-heading h2 {
   margin: 0;
@@ -132,24 +123,6 @@ onBeforeUnmount(() => removeBack?.());
   line-height: 1.35;
   font-weight: 600;
   letter-spacing: -0.4px;
-}
-.hint-close {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  margin: -7px -7px -7px 0;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: #888;
-  background: transparent;
-  cursor: pointer;
-}
-.hint-close svg {
-  width: 22px;
-  height: 22px;
 }
 .hint-popover > p {
   margin: 0;
@@ -173,7 +146,6 @@ onBeforeUnmount(() => removeBack?.());
   cursor: pointer;
 }
 .hint-trigger:focus-visible,
-.hint-close:focus-visible,
 .hint-confirm:focus-visible {
   outline: 2px solid #111;
   outline-offset: 3px;
@@ -245,7 +217,7 @@ onBeforeUnmount(() => removeBack?.());
 }
 @media (prefers-reduced-transparency: reduce) {
   .hint-glass {
-    background: #eee;
+    background: rgb(0 0 0 / 8%);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

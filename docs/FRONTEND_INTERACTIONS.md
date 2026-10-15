@@ -55,35 +55,35 @@
 
 **C：27 个自定义组件**
 
-| 编号 | 组件                               | 用途                                                           | 当前范围           |
-| ---- | ---------------------------------- | -------------------------------------------------------------- | ------------------ |
-| C01  | `ChoreBoard.vue`                   | 值日、抬水、日历的业务编排，菜单、消息、详情、打卡、轮次、同步 | 当前主入口         |
-| C02  | `ChoreBottomNav.vue`               | 三项底部导航、连续弹簧、触摸拖动、键盘                         | 当前主入口         |
-| C03  | `ChoreCalendar.vue`                | 月历 / 完成列表、日期详情、标记与月份切换                      | 当前主入口         |
-| C04  | `ElasticSheet.vue`                 | Teleport 模态抽屉、底部 / 共享元素动画、拖拽关闭、焦点和返回栈 | 公共，两套入口均用 |
-| C05  | `ElasticSegments.vue`              | 日历 / 列表的两段滑动选择器                                    | 当前主入口         |
-| C06  | `WaterNudge.vue`                   | 点名字敲击、波纹、浮字；业务发送通过父组件处理                 | 当前主入口         |
-| C07  | `ChoreSettings.vue`                | 创建者编辑四类任务设置与保存                                   | 当前主入口         |
-| C08  | `SortableMembers.vue`              | 抬水竖列排序、长按拿起、让位、自动滚动与键盘                   | 当前主入口         |
-| C08a | `SortableMemberRow.vue`            | Motion Reorder 单行、长按、触摸滚动竞争及取消清理              | 当前主入口         |
-| C09  | `ChorePushSettings.vue`            | Web / 原生通知状态、权限、测试与关闭                           | 当前主入口         |
-| C10  | `TimedReminderSettings.vue`        | 个人 1–3 个提醒时刻                                            | 当前主入口         |
-| C11  | `CalendarSubscriptionSettings.vue` | 私有 ICS 创建、设置、复制、轮换、撤销                          | 当前主入口         |
-| C12  | `CreatorRecovery.vue`              | 创建者恢复码管理 / 恢复身份                                    | 当前主入口         |
-| C13  | `MarkerPicker.vue`                 | 个人像素标记选择、占用状态、展开更多                           | 当前主入口         |
-| C14  | `MemberMark.vue`                   | 像素 SVG、尺寸及静态淡荧光投影                                 | 当前主入口         |
-| C15  | `ChoreTypeIcon.vue`                | 值日扫帚 / 抬水水滴 SVG                                        | 当前主入口         |
-| C16  | `DutyRow.vue`                      | 可点击的账号版任务列表行                                       | 保留账号版         |
-| C17  | `ScheduleSettings.vue`             | 账号版规则、顺序、固定星期、跳过日期、预览和保存               | 保留账号版         |
-| C18  | `StatusBadge.vue`                  | 待做、完成、逾期等状态标签                                     | 保留账号版         |
-| C19  | `EmptyState.vue`                   | 加载 / 空数据 / 错误与重试的公共空状态                         | 保留账号版         |
-| C20  | `ActionItem.vue`                   | 图标快捷卡 / 分组菜单行、按压和短交错入场                      | 当前主入口         |
-| C21  | `CompletionAction.vue`             | 同一打卡按钮的完成 / 再次点击恢复、提交状态                    | 当前主入口         |
-| C22  | `JoinedDorms.vue`                  | 已加入宿舍卡片和身份回访                                       | 当前主入口         |
-| C23  | `WaterOrderSheet.vue`              | 顶部独立抬水轮序、只读或创建者编辑                             | 当前主入口         |
-| C24  | `TaskTitle.vue`                    | 任务文字立即更新、轻量可打断过渡                               | 当前主入口         |
-| C25  | `ChoreRecordRow.vue`               | 日历详情与列表共用对齐记录行，整行恢复本人打卡                 | 当前主入口         |
-| C26  | `HintPopover.vue`                  | 居中小提示与玻璃蒙版，点蒙版 / 确认 / Esc / 原生返回关闭       | 当前主入口         |
+| 编号 | 组件                               | 用途                                                                     | 当前范围           |
+| ---- | ---------------------------------- | ------------------------------------------------------------------------ | ------------------ |
+| C01  | `ChoreBoard.vue`                   | 值日、抬水、日历的业务编排，菜单、消息、详情、打卡、轮次、同步           | 当前主入口         |
+| C02  | `ChoreBottomNav.vue`               | 三项底部导航、连续弹簧、触摸拖动、键盘                                   | 当前主入口         |
+| C03  | `ChoreCalendar.vue`                | 月历 / 完成列表、日期详情、标记与月份切换                                | 当前主入口         |
+| C04  | `ElasticSheet.vue`                 | Teleport 模态抽屉、底部 / 共享元素动画、拖拽关闭、焦点和返回栈           | 公共，两套入口均用 |
+| C05  | `ElasticSegments.vue`              | 日历 / 列表的两段滑动选择器                                              | 当前主入口         |
+| C06  | `WaterNudge.vue`                   | 点名字敲击、波纹、浮字；业务发送通过父组件处理                           | 当前主入口         |
+| C07  | `ChoreSettings.vue`                | 创建者编辑四类任务设置与保存                                             | 当前主入口         |
+| C08  | `SortableMembers.vue`              | 抬水竖列排序、长按拿起、让位、自动滚动与键盘                             | 当前主入口         |
+| C08a | `SortableMemberRow.vue`            | Motion Reorder 单行、长按、触摸滚动竞争及取消清理                        | 当前主入口         |
+| C09  | `ChorePushSettings.vue`            | Web / 原生通知状态、权限、测试与关闭                                     | 当前主入口         |
+| C10  | `TimedReminderSettings.vue`        | 个人 1–3 个提醒时刻                                                      | 当前主入口         |
+| C11  | `CalendarSubscriptionSettings.vue` | 私有 ICS 创建、设置、复制、轮换、撤销                                    | 当前主入口         |
+| C12  | `CreatorRecovery.vue`              | 创建者恢复码管理 / 恢复身份                                              | 当前主入口         |
+| C13  | `MarkerPicker.vue`                 | 个人像素标记选择、占用状态、展开更多                                     | 当前主入口         |
+| C14  | `MemberMark.vue`                   | 像素 SVG、尺寸及静态淡荧光投影                                           | 当前主入口         |
+| C15  | `ChoreTypeIcon.vue`                | 值日扫帚 / 抬水水滴 SVG                                                  | 当前主入口         |
+| C16  | `DutyRow.vue`                      | 可点击的账号版任务列表行                                                 | 保留账号版         |
+| C17  | `ScheduleSettings.vue`             | 账号版规则、顺序、固定星期、跳过日期、预览和保存                         | 保留账号版         |
+| C18  | `StatusBadge.vue`                  | 待做、完成、逾期等状态标签                                               | 保留账号版         |
+| C19  | `EmptyState.vue`                   | 加载 / 空数据 / 错误与重试的公共空状态                                   | 保留账号版         |
+| C20  | `ActionItem.vue`                   | 图标快捷卡 / 分组菜单行、按压和短交错入场                                | 当前主入口         |
+| C21  | `CompletionAction.vue`             | 同一打卡按钮的完成 / 再次点击恢复、提交状态                              | 当前主入口         |
+| C22  | `JoinedDorms.vue`                  | 已加入宿舍卡片和身份回访                                                 | 当前主入口         |
+| C23  | `WaterOrderSheet.vue`              | 顶部独立抬水轮序、只读或创建者编辑                                       | 当前主入口         |
+| C24  | `TaskTitle.vue`                    | 任务文字立即更新、轻量可打断过渡                                         | 当前主入口         |
+| C25  | `ChoreRecordRow.vue`               | 日历详情与列表共用对齐记录行，整行恢复本人打卡                           | 当前主入口         |
+| C26  | `HintPopover.vue`                  | 居中标题小提示与背景虚化，无关闭图标，点空白 / 确认 / Esc / 原生返回关闭 | 当前主入口         |
 
 组件位于 `frontend/src/components/`；`useLoad.ts` 是加载逻辑辅助，不是 Vue 组件。
 
