@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { TimePicker } from "vant";
+import {
+  TimePicker,
+  type TimePickerInstance,
+  type PickerConfirmEventParams,
+} from "vant";
 import "vant/es/time-picker/style/index.mjs";
 import ElasticSheet from "./ElasticSheet.vue";
 import { motionAllowed } from "../interaction/motion";
@@ -10,13 +14,17 @@ const props = defineProps<{
   testId?: string;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const picker = ref<TimePickerInstance>();
 const open = ref(false),
   values = ref<string[]>([]);
 watch(open, (value) => {
   if (value) values.value = props.modelValue.split(":");
 });
 function confirm() {
-  emit("update:modelValue", values.value.join(":"));
+  picker.value?.confirm();
+}
+function apply({ selectedValues }: PickerConfirmEventParams) {
+  emit("update:modelValue", selectedValues.join(":"));
   open.value = false;
 }
 </script>
@@ -43,6 +51,8 @@ function confirm() {
   <ElasticSheet v-model="open" title="截止时间" motion="bottom">
     <div class="time-wheel" data-testid="time-wheel">
       <TimePicker
+        ref="picker"
+        @confirm="apply"
         v-model="values"
         :show-toolbar="false"
         :option-height="48"

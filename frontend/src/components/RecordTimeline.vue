@@ -61,6 +61,9 @@ onBeforeUnmount(() => clearTimeout(timer));
     class="record-timeline"
     :class="{ 'is-expanded': expanded, 'quiet-motion': !motionAllowed() }"
     data-testid="record-timeline"
+    role="region"
+    tabindex="0"
+    aria-label="完成记录时间线"
     @scroll.passive="scroll"
     @scrollend="settled"
   >
@@ -106,6 +109,11 @@ onBeforeUnmount(() => clearTimeout(timer));
   scroll-padding-block: 18px;
   scrollbar-width: none;
   padding: 4px 0;
+}
+.record-timeline:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 3px;
+  border-radius: 18px;
 }
 .record-timeline::-webkit-scrollbar {
   display: none;
