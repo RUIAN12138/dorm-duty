@@ -2,6 +2,10 @@
 
 2026-10-14：安卓 APK、鸿蒙未签名 HAP 和原生设备绑定接口已实现。当前未创建推送应用、未配置厂商通道、未在安卓或鸿蒙真机验收，不能声称后台/锁屏通知已接通。iPhone PWA 继续使用已验收的 Web Push。
 
+2026-10-15：1.2.0 本地体验版补齐主页面连接失败 / 20 秒超时后的重试入口，保留原有身份和目标页面；子资源错误不替换整个界面。鸿蒙返回键改为先关闭网页最上层抽屉，安卓增加 Android 15 系统栏避让。网页收到鸿蒙迟到的原生桥后重新检测通知能力，通知面板的旧请求不覆盖新身份状态。两端构建通过，安卓单元测试 / lint 与桥接检查通过；真实手机 UI 和后台通知仍未验收。
+
+安装工程已使用远程 Vue 页面。日常页面修改部署网站即可，不要求重装 APK / HAP；页面内发现 PWA 新版时确认「更新页面」。原生 SDK、桥和桌面卡片变化需要更新安装包。完整进度、原生提醒 / 卡片 / 替干等后续验收见 [App 演进清单](../docs/APP_ROADMAP.md)。
+
 ## 客户端
 
 - Android：Java + Android WebView + AndroidX WebKit，最低 Android 6。页面使用正式 HTTPS 地址；保存宿舍和室友选择；系统权限由原生申请。JPush 5.6.0 / JCore 5.5.7 固定版本。
@@ -22,9 +26,20 @@
 
 ## 构建
 
-Android 需要 JDK 17、Android SDK 35、Gradle 8.11：在 `android` 执行 `gradle :app:assembleDebug :app:lintDebug`。默认生成调试签名 APK，可安装验收界面，未配置推送应用。
+Android 需要 JDK 17 或兼容版本、Android SDK 35、Gradle Wrapper 8.11：在 `android` 执行 `./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug`。默认生成调试签名 APK，可安装验收界面，未配置推送应用。输出在 `app/build/outputs/apk/debug/app-debug.apk`；本机本轮用 Android Studio 的 JDK 21 构建，GitHub CI 用 JDK 17。GitHub Actions 成功后保留 `lundao-android-preview` APK 附件 14 天；这是调试体验包，不含发布签名。
+
+GitHub 临时 runner 的调试签名可能随构建变化，这些附件不作为连续覆盖升级的正式分发渠道。给室友长期使用前，应配置本项目固定的发布签名；版本升级需保持同一签名。APK / HAP 当前连接正式 HTTPS 站点，新网页修复在正式服务器发布前只可在本地验证。
 
 HarmonyOS 需要 DevEco Studio 与 SDK 6.1.1：在 `harmony` 执行 `ohpm install --all`，再执行 `hvigorw --mode module -p product=default -p buildMode=debug assembleHap --no-daemon`。当前未配置签名，生成 `entry-default-unsigned.hap`，不能直接安装真机。DevEco 会负责配置签名，不通过代码生成假 Profile。
+
+## 1.2.0 设备验收
+
+1. Android 安装调试 APK；HarmonyOS 先为 `cn.lundao.dorm` 配置本应用调试签名，再安装。重装 / 换设备时管理者用已保存的恢复码取回权限，不导入其他应用的签名。
+2. 正常创建 / 加入、选人、值日与抬水打卡；完全关闭再打开，确认身份仍保留。
+3. 打开任务详情、菜单或系统通知抽屉后按系统返回，先关闭最上层；无抽屉时按网页历史返回，入口页才退出。连续按返回不重复处理。
+4. 网络断开后冷启动，或让主页面连接失败，检查「暂时连接不上 / 重新连接」；恢复网络点击后回到原任务页面，身份不被清除。图片等子资源失败不应覆盖整个页面。
+5. Android 15 检查顶部系统栏、底部手势区、邀请码 / 恢复码输入键盘和横屏。当前 SDK 没有注册推送应用时应显示未配置，不能显示已成功开启。
+6. 完成真实推送配置后，再测开启 / 拒绝 / 系统设置关闭 / 重新开启；换人后绑定新身份；锁屏、关闭应用和点击通知都用新消息验收。构建、队列接受或界面 toast 不能代替真实通知。
 
 ## 服务器接口与投递
 

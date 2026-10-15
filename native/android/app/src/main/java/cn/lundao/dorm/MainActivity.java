@@ -6,6 +6,9 @@ import android.os.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.graphics.Color;
+import android.view.*;
+import android.widget.*;
 import android.webkit.*;
 import androidx.webkit.*;
 import cn.jpush.android.api.JPushInterface;
@@ -24,6 +27,10 @@ public final class MainActivity extends Activity {
   private JSONObject pendingPermission;
   private JavaScriptReplyProxy pendingReply;
   private boolean handlingBack;
+  private final Handler ui=new Handler(Looper.getMainLooper());
+  private LinearLayout connectionPanel;
+  private final WebLoadState loadState=new WebLoadState(BASE);
+  private final Runnable loadTimeout=()->{if(loadState.fail(loadState.url())){web.stopLoading();showConnectionError();}};
   static boolean trusted(String value) {
     Uri uri=Uri.parse(value==null?"":value);
     return "https".equals(uri.getScheme()) && "8.148.190.114".equals(uri.getHost()) && (uri.getPort()==-1||uri.getPort()==443) && uri.getUserInfo()==null && uri.getPath()!=null && uri.getPath().startsWith("/dorm-duty/");
@@ -33,13 +40,19 @@ public final class MainActivity extends Activity {
     prefs=getSharedPreferences("install",MODE_PRIVATE);
     if(Build.VERSION.SDK_INT>=26) getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("dorm-reminders","室友提醒",NotificationManager.IMPORTANCE_HIGH));
     web=new WebView(this);
+    createLayout();
     WebSettings settings=web.getSettings();
     settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
     settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     web.setWebViewClient(new WebViewClient(){
       @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) { return request.isForMainFrame() && !trusted(request.getUrl().toString()); }
-      @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler handler,android.net.http.SslError error){handler.cancel();}
+      @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){if(trusted(url)){loadState.begin(url);connectionPanel.setVisibility(View.GONE);ui.removeCallbacks(loadTimeout);ui.postDelayed(loadTimeout,20000);}}
+      @Override public void onPageCommitVisible(WebView view,String url){if(loadState.finish(url)){ui.removeCallbacks(loadTimeout);connectionPanel.setVisibility(View.GONE);}}
+      @Override public void onPageFinished(WebView view,String url){if(loadState.finish(url)){ui.removeCallbacks(loadTimeout);connectionPanel.setVisibility(View.GONE);}}
+      @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame()&&loadState.fail(request.getUrl().toString()))showConnectionError();}
+      @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame()&&loadState.fail(request.getUrl().toString()))showConnectionError();}
+      @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler handler,android.net.http.SslError error){handler.cancel();if(loadState.fail(error.getUrl()))showConnectionError();}
     });
     if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
       WebViewCompat.addWebMessageListener(web,"DormNativePush",Collections.singleton(ORIGIN),(view,message,origin,mainFrame,reply)->{
@@ -54,10 +67,27 @@ public final class MainActivity extends Activity {
         } catch(Exception ignored){ /* Never log credentials or provider data. */ }
       });
     }
-    setContentView(web);
     String route=getIntent().getStringExtra("route");
-    if(state!=null) web.restoreState(state);else web.loadUrl(trusted(route)?route:BASE);
+    if(state==null || web.restoreState(state)==null)web.loadUrl(trusted(route)?route:BASE);
   }
+  private void createLayout(){
+    FrameLayout root=new FrameLayout(this);root.setBackgroundColor(Color.WHITE);
+    root.addView(web,new FrameLayout.LayoutParams(-1,-1));
+    connectionPanel=new LinearLayout(this);connectionPanel.setOrientation(LinearLayout.VERTICAL);connectionPanel.setGravity(Gravity.CENTER);connectionPanel.setBackgroundColor(Color.WHITE);connectionPanel.setPadding(dp(28),dp(28),dp(28),dp(28));
+    TextView title=new TextView(this);title.setText("暂时连接不上");title.setTextColor(Color.BLACK);title.setTextSize(28);title.setGravity(Gravity.CENTER);
+    connectionPanel.addView(title,new LinearLayout.LayoutParams(-1,-2));
+    Button retry=new Button(this);retry.setText("重新连接");retry.setTextSize(18);retry.setTextColor(Color.WHITE);retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.BLACK));
+    LinearLayout.LayoutParams button=new LinearLayout.LayoutParams(-1,dp(56));button.topMargin=dp(28);connectionPanel.addView(retry,button);
+    retry.setOnClickListener(view->{connectionPanel.setVisibility(View.GONE);web.loadUrl(loadState.url());});
+    root.addView(connectionPanel,new FrameLayout.LayoutParams(-1,-1));connectionPanel.setVisibility(View.GONE);
+    if(Build.VERSION.SDK_INT>=35){
+      root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets safe=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());view.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;});
+      root.requestApplyInsets();
+    }
+    setContentView(root);
+  }
+  private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
+  private void showConnectionError(){ui.removeCallbacks(loadTimeout);connectionPanel.setVisibility(View.VISIBLE);}
   @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grants) {
     super.onRequestPermissionsResult(requestCode,permissions,grants);
     if(requestCode==31 && pendingPermission!=null){JSONObject request=pendingPermission;JavaScriptReplyProxy reply=pendingReply;pendingPermission=null;pendingReply=null;
@@ -104,7 +134,7 @@ public final class MainActivity extends Activity {
     }finally{connection.disconnect();}
   }
   private void respond(JavaScriptReplyProxy reply,JSONObject request,boolean ok,String message,boolean enabled){
-    try {String value=new JSONObject().put("id",request.optString("id")).put("ok",ok).put("message",message).put("enabled",enabled).put("platform","android").put("configured",BuildConfig.JPUSH_APPKEY.matches("[a-fA-F0-9]{24}")).toString();runOnUiThread(()->{if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);});}catch(JSONException ignored){}
+    try {String value=new JSONObject().put("id",request.optString("id")).put("ok",ok).put("message",message).put("enabled",enabled).put("platform","android").put("configured",BuildConfig.JPUSH_APPKEY.matches("[a-fA-F0-9]{24}")).toString();runOnUiThread(()->{try{if(!isDestroyed()&&WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);}catch(IllegalStateException ignored){ /* The initiating document may already be closed. */ }});}catch(JSONException ignored){}
   }
   @Override protected void onSaveInstanceState(Bundle out){web.saveState(out);super.onSaveInstanceState(out);}
   @Override public void onBackPressed(){
@@ -120,5 +150,5 @@ public final class MainActivity extends Activity {
   }
   private void navigateBack(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String url=intent.getStringExtra("route");if(trusted(url))web.loadUrl(url);}
-  @Override protected void onDestroy(){io.shutdownNow();web.destroy();super.onDestroy();}
+  @Override protected void onDestroy(){ui.removeCallbacks(loadTimeout);io.shutdownNow();web.destroy();super.onDestroy();}
 }

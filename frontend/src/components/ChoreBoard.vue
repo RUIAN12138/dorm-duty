@@ -19,6 +19,7 @@ import ChoreSettings from "./ChoreSettings.vue";
 import ChorePushSettings from "./ChorePushSettings.vue";
 import CreatorRecovery from "./CreatorRecovery.vue";
 import { syncMemberPush } from "../api/memberPush";
+import { onNativePushReady } from "../api/nativePush";
 import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
@@ -605,6 +606,9 @@ function visibleRefresh() {
     void load();
 }
 watch(month, () => void load());
+const removeNativeReady = onNativePushReady(() => {
+  if (!props.demo) void syncMemberPush(props.token).catch(() => {});
+});
 onMounted(() => {
   void load();
   poll = setInterval(visibleRefresh, 10000);
@@ -613,6 +617,7 @@ onMounted(() => {
   window.addEventListener("online", visibleRefresh);
 });
 onUnmounted(() => {
+  removeNativeReady();
   ++requestId;
   controller?.abort();
   targetController?.abort();
