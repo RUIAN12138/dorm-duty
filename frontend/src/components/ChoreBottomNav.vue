@@ -3,6 +3,7 @@ import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { motion } from "motion-v";
 import { useSelectionMotion } from "../interaction/motion";
+import { horizontalIntent } from "../interaction/gestures";
 const router = useRouter();
 const props = defineProps<{
   section: "duty" | "water" | "calendar";
@@ -23,6 +24,8 @@ watch(currentIndex, (next) => {
 });
 onUnmounted(() => {
   gesture = null;
+  window.removeEventListener("blur", cancelGesture);
+  document.removeEventListener("visibilitychange", cancelWhenHidden);
 });
 let gesture: { id: number; x: number; y: number; nav: HTMLElement } | null =
   null;
@@ -48,15 +51,33 @@ function down(event: PointerEvent) {
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
-  if (
-    !dragging.value &&
-    Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < 8
-  )
-    return;
+  if (!dragging.value) {
+    const intent = horizontalIntent(
+      event.clientX - gesture.x,
+      event.clientY - gesture.y,
+    );
+    if (intent === "vertical") return cancelGesture();
+    if (intent !== "horizontal") return;
+  }
   dragging.value = true;
   pressedIndex.value = -1;
   selection.track(position(event.clientX, gesture.nav).progress);
 }
+function cancelGesture() {
+  if (!gesture) return;
+  const { nav, id } = gesture;
+  gesture = null;
+  dragging.value = false;
+  pressedIndex.value = -1;
+  suppressClickUntil = performance.now() + 500;
+  if (nav.hasPointerCapture(id)) nav.releasePointerCapture(id);
+  selection.move(currentIndex.value);
+}
+function cancelWhenHidden() {
+  if (document.hidden) cancelGesture();
+}
+window.addEventListener("blur", cancelGesture);
+document.addEventListener("visibilitychange", cancelWhenHidden);
 function finish(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
   const nav = gesture.nav;
@@ -161,10 +182,10 @@ function click(event: MouseEvent) {
   width: min(100%, 520px);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  background: #fff;
+  background: var(--ui-surface);
   border-top: 1px solid #e9e9e9;
   padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -176,8 +197,8 @@ function click(event: MouseEvent) {
   top: 6px;
   width: calc((100% - 32px) / 3);
   height: 54px;
-  border-radius: 14px;
-  background: #f3f3f3;
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-surface-muted);
 }
 .is-moving .nav-selection {
   will-change: transform;
@@ -192,17 +213,18 @@ a {
   color: #666;
   text-decoration: none;
   font-size: 13px;
-  border-radius: 14px;
+  border-radius: var(--ui-control-radius);
   transition:
     color 180ms ease,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform var(--ui-release-time) var(--ui-ease-out);
 }
 a:active,
 a.pressed {
-  transform: scale(0.96);
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 a.active {
-  color: #111;
+  color: var(--ui-ink);
   font-weight: 600;
 }
 @media (prefers-reduced-motion: reduce) {

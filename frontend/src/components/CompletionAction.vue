@@ -31,7 +31,7 @@ defineEmits<{ complete: [task: ChoreTask]; undo: [task: ChoreTask] }>();
       color: task.status === 'completed' ? '#111111' : '#ffffff',
       borderRadius: task.status === 'completed' ? 24 : 20,
     }"
-    :while-press="motionAllowed() ? { scaleX: 1.025, scaleY: 0.94 } : {}"
+    :while-press="motionAllowed() ? motionTokens.press : {}"
     :transition="
       motionAllowed()
         ? {

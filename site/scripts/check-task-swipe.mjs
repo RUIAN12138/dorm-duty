@@ -27,6 +27,45 @@ try {
   const { createTaskSwipe } = await import(
     pathToFileURL(path.join(temp, "swipe.mjs"))
   );
+  await build({
+    entryPoints: [
+      new URL("../../frontend/src/interaction/gestures.ts", import.meta.url)
+        .pathname,
+    ],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    outfile: path.join(temp, "gestures.mjs"),
+  });
+  const { createVelocityTracker, rubberBand } = await import(
+    pathToFileURL(path.join(temp, "gestures.mjs"))
+  );
+  const velocity = createVelocityTracker(0, 0);
+  velocity.add(30, 30);
+  velocity.add(60, 60);
+  velocity.add(61, 61);
+  eq(
+    velocity.read(70),
+    1,
+    "drawer flick uses recent travel instead of one event",
+  );
+  velocity.add(50, 81);
+  eq(
+    velocity.read(85) < 0,
+    true,
+    "reversing the drawer cancels downward momentum",
+  );
+  eq(
+    velocity.read(200),
+    0,
+    "holding still releases without stale flick velocity",
+  );
+  eq(
+    Math.abs(rubberBand(-100)) < Math.abs(rubberBand(-1000)),
+    true,
+    "edge resistance stays monotonic",
+  );
+  eq(Math.abs(rubberBand(-1000)) < 64, true, "over-pull remains bounded");
   const offsets = [],
     steps = [];
   let capture = null;
@@ -70,6 +109,8 @@ try {
   swipe.move(event(300, 100, 2));
   swipe.up(event(300, 100, 2));
   eq(steps, [], "secondary pointer cannot finish swipe");
+  swipe.cancel(event(300, 100, 2));
+  eq(capture, 1, "secondary pointer cancellation cannot cancel active swipe");
   swipe.up(event(40));
   eq(steps, [1], "left advances");
   eq(capture, null);

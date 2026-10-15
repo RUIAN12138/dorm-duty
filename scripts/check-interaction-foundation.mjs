@@ -38,19 +38,19 @@ try {
     `<script lang="ts">import {createRouter,createMemoryHistory} from 'vue-router';export const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{render:()=>null}}]});</script>
 <script setup lang="ts">
 import {ref,computed,nextTick} from 'vue';import {useRoute} from 'vue-router';import {TabsRoot,TabsContent} from 'reka-ui';
-import Nav from './src/components/ChoreBottomNav.vue';import Segments from './src/components/ElasticSegments.vue';import Sheet from './src/components/ElasticSheet.vue';import Sort from './src/components/SortableMembers.vue';import {confirmInSheet} from './src/interactions/confirm';import {installNativeBack} from './src/interactions/nativeBack';
+import Calendar from './src/components/ChoreCalendar.vue';import Nav from './src/components/ChoreBottomNav.vue';import Segments from './src/components/ElasticSegments.vue';import Sheet from './src/components/ElasticSheet.vue';import Sort from './src/components/SortableMembers.vue';import {confirmInSheet} from './src/interactions/confirm';import {installNativeBack} from './src/interactions/nativeBack';
 installNativeBack();
 window.addEventListener('keydown',()=>document.documentElement.dataset.interaction='keyboard');window.addEventListener('pointerdown',()=>document.documentElement.dataset.interaction='pointer');
 const route=useRoute();const section=computed(()=>route.path==='/water'?'water':route.path==='/calendar'?'calendar':'duty');
 const view=ref('calendar'),open=ref(false),nested=ref(false),mode=ref<'bottom'|'shared'>('bottom'),origin=ref<DOMRect|null>(null),closed=ref(0),draft=ref('保留输入');
 const make=(n:number)=>Array.from({length:n},(_,i)=>({user_id:i+1,nickname:'室友'+(i+1),marker_id:'pixel-01',role:'member',rotation_order:i}));
 const members=ref(make(6)),order=ref([1,2,3,4,5,6]),disabled=ref(false),active=ref(true),mounted=ref(true);
-const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);
+const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);const calendarFixture=ref(false),calendarMonth=ref('2026-10'),calendarLoading=ref(false);const calendarRecords=make(6).map((m,i)=>({id:i+1,key:i===5?'water':'floor',name:i===5?'抬水':'地板',assignee_id:m.user_id,assignee_name:m.nickname,marker_id:m.marker_id,completed_at:'2026-10-15T'+String(i+8).padStart(2,'0')+':00:00Z',completed_date:'2026-10-15'}));
 function show(event:MouseEvent){origin.value=(event.currentTarget as HTMLElement).getBoundingClientRect();open.value=true;}
 async function confirm(){try{await confirmInSheet({title:'确认操作',message:'确认后仍保留抽屉'});confirmed.value++;}catch{}}
-(window as any).qa={preview:()=>previewOpen.value=true,backgroundClicks:()=>backgroundClicks.value,tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
+(window as any).qa={calendar:()=>calendarFixture.value=true,calendarMonth:()=>calendarMonth.value,calendarLoading:(value:boolean)=>calendarLoading.value=value,preview:()=>previewOpen.value=true,backgroundClicks:()=>backgroundClicks.value,tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
 </script>
-<template><main style="padding:24px;min-height:1600px"><h1>交互验证</h1><button data-testid="background-action" @click="backgroundClicks++">底层操作</button><p data-testid="identity">室友一 · 身份保留</p><button data-testid="open" @click="show">打开面板</button><TabsRoot v-model="view"><Segments v-model="view" group-label="完成记录显示方式" :options="[{value:'calendar',label:'日历',testId:'segment-calendar'},{value:'list',label:'列表',testId:'segment-list'}]"/><TabsContent value="calendar">月历</TabsContent><TabsContent value="list">完成列表</TabsContent></TabsRoot>
+<template><main style="padding:24px;min-height:1600px"><Calendar v-if="calendarFixture" :month="calendarMonth" today="2026-10-15" :members="members" :records="calendarRecords" :loading="calendarLoading" @change="calendarMonth=$event"/><h1>交互验证</h1><button data-testid="background-action" @click="backgroundClicks++">底层操作</button><p data-testid="identity">室友一 · 身份保留</p><button data-testid="open" @click="show">打开面板</button><TabsRoot v-model="view"><Segments v-model="view" group-label="完成记录显示方式" :options="[{value:'calendar',label:'日历',testId:'segment-calendar'},{value:'list',label:'列表',testId:'segment-list'}]"/><TabsContent value="calendar">月历</TabsContent><TabsContent value="list">完成列表</TabsContent></TabsRoot>
 <Nav :section="section"/><Sheet v-model="open" title="排序设置" :motion="mode" :origin="origin" @closed="closed++"><label>内容<input data-testid="input" v-model="draft"/></label><Sort v-if="mounted" v-model="order" :members="members" :active="open && active" :disabled="disabled"/><button data-testid="nested" @click="nested=true">打开嵌套</button><button data-testid="confirm" @click="confirm">确认操作</button><Sheet v-model="nested" title="嵌套面板"><button data-testid="inner-button">内部操作</button></Sheet></Sheet><Sheet v-model="previewOpen" title="任务说明" motion="bottom" :modal="false"><p>可以继续操作底层页面</p></Sheet></main></template>`,
   );
   const port = await reserve();
@@ -175,6 +175,23 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   assert(Math.abs(cancelledNav.x - navStart.x) < 2);
   checks.push("cancelled navigation settles back");
 
+  await page.mouse.move(navStart.x + navStart.width / 2, navStart.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(navStart.x + navStart.width / 2 + 2, navStart.y + 30);
+  eq(
+    await page
+      .locator("nav")
+      .evaluate((el) => el.classList.contains("is-dragging")),
+    false,
+    "vertical navigation movement does not start horizontal dragging",
+  );
+  await page.mouse.up();
+  eq(
+    await page.evaluate(() => window.qa.route()),
+    "/",
+    "vertical navigation movement preserves route",
+  );
+
   await page.getByTestId("segment-list").click();
   eq(
     await page.evaluate(() => window.qa.view()),
@@ -223,6 +240,16 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
       ),
     true,
     "short drawer pull springs fully back",
+  );
+
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 92, { steps: 6 });
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 52, { steps: 4 });
+  await page.mouse.up();
+  await waitOpen();
+  checks.push(
+    "drawer pull reversed before release returns instead of dismissing",
   );
 
   await drag(1, 6);
@@ -491,6 +518,213 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
     "nonmodal preview permits background interaction",
   );
   await waitClosed();
+  await page.evaluate(() => window.qa.calendar());
+  await page.getByTestId("chore-calendar").waitFor();
+  const calendarGesture = async (dx, dy, cancel = false) => {
+    const bounds = await page.locator(".calendar-surface").boundingBox();
+    const x = bounds.x + bounds.width / 2,
+      y = bounds.y + 65;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    if (cancel)
+      await page
+        .locator(".calendar-surface")
+        .dispatchEvent("pointercancel", { pointerId: 1, isPrimary: true });
+    await page.mouse.up();
+  };
+  await page.evaluate(() => scrollTo(0, 0));
+  await calendarGesture(-80, 2);
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-11",
+    "calendar swipe advances one month",
+  );
+  eq(
+    await page.getByTestId("calendar-day-details").count(),
+    0,
+    "month swipe never opens a date",
+  );
+  await calendarGesture(80, 2);
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-10",
+    "calendar swipe returns to previous month",
+  );
+  await calendarGesture(-20, 0);
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-10",
+    "short month pull returns without changing month",
+  );
+  await calendarGesture(-80, 0, true);
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-10",
+    "cancelled month drag preserves month",
+  );
+  await page.evaluate(() => window.qa.calendarLoading(true));
+  await calendarGesture(-80, 0);
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-10",
+    "loading prevents a second month request",
+  );
+  await page.evaluate(() => window.qa.calendarLoading(false));
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate(() => scrollTo(0, 0));
+    eq(
+      await page
+        .locator(".calendar-more, .calendar-task-mark")
+        .evaluateAll((els) =>
+          els.every((el) => {
+            const a = el.getBoundingClientRect(),
+              b = el.closest("button").getBoundingClientRect();
+            return (
+              a.left >= b.left &&
+              a.right <= b.right + 0.5 &&
+              a.top >= b.top &&
+              a.bottom <= b.bottom + 0.5
+            );
+          }),
+        ),
+      true,
+      "dense calendar markers stay in their date at " + width + "px",
+    );
+    eq(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+      "calendar has no horizontal overflow at " + width + "px",
+    );
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const touchCalendarBox = await page
+    .locator(".calendar-surface")
+    .boundingBox();
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      {
+        x: touchCalendarBox.x + touchCalendarBox.width - 45,
+        y: touchCalendarBox.y + 100,
+      },
+    ],
+  });
+  for (let i = 1; i <= 8; i++)
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        {
+          x: touchCalendarBox.x + touchCalendarBox.width - 45 - i * 12,
+          y: touchCalendarBox.y + 102,
+        },
+      ],
+    });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-11",
+    "real browser touch swipe advances the calendar",
+  );
+  await page.getByTestId("calendar-prev").click();
+  eq(
+    await page.getByTestId("calendar-day-details").count(),
+    0,
+    "touch swipe does not generate a date tap",
+  );
+  const calendarBox = await page.locator(".calendar-surface").boundingBox();
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: calendarBox.x + 40, y: calendarBox.y + 170 }],
+  });
+  for (let i = 1; i <= 8; i++)
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: calendarBox.x + 42, y: calendarBox.y + 170 - i * 12 }],
+    });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  eq(
+    await page.evaluate(() => window.qa.calendarMonth()),
+    "2026-10",
+    "vertical calendar touch preserves month",
+  );
+  eq(
+    await page.evaluate(() => scrollY > 0),
+    true,
+    "vertical calendar touch scrolls the page",
+  );
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.getByTestId("calendar-day-2026-10-15").click();
+  await waitOpen();
+  eq(
+    await page
+      .locator(".calendar-details .record-description strong")
+      .first()
+      .textContent(),
+    "室友6",
+    "date details show latest completion first",
+  );
+  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await waitClosed();
+  // Leaving the window while dragging must restore the active selection.
+  await page.getByTestId("nav-duty").click();
+  const start = await page.getByTestId("nav-duty").boundingBox(),
+    end = await page.getByTestId("nav-calendar").boundingBox();
+  await page.mouse.move(start.x + start.width / 2, start.y + 25);
+  await page.mouse.down();
+  await page.mouse.move(end.x + end.width / 2, end.y + 25, { steps: 5 });
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.mouse.up();
+  eq(
+    await page.evaluate(() => window.qa.route()),
+    "/",
+    "window blur cancels navigation preview",
+  );
+  eq(
+    await page
+      .locator("nav")
+      .evaluate((el) => el.classList.contains("is-dragging")),
+    false,
+    "window blur clears pressed navigation state",
+  );
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: start.x + start.width / 2, y: start.y + 25 }],
+  });
+  for (let i = 1; i <= 8; i++)
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        {
+          x: start.x + start.width / 2 + ((end.x - start.x) * i) / 8,
+          y: start.y + 25,
+        },
+      ],
+    });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  eq(
+    await page.evaluate(() => window.qa.route()),
+    "/calendar",
+    "touch navigation still follows horizontal drag with vertical scrolling enabled",
+  );
+  await page
+    .getByTestId("chore-calendar")
+    .screenshot({ path: path.join(evidence, "calendar-dense-390.jpg") });
+  await page.screenshot({
+    path: path.join(evidence, "calendar-polish-390.jpg"),
+  });
   await page.screenshot({ path: path.join(evidence, "rest.png") });
   eq(errors, [], "no browser runtime exceptions");
   await fs.writeFile(

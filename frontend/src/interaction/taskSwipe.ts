@@ -1,3 +1,4 @@
+import { horizontalIntent } from "./gestures";
 // Horizontal intent keeps vertical scrolling and ordinary taps available.
 export function createTaskSwipe(
   offset: (value: number, dragging: boolean) => void,
@@ -9,7 +10,8 @@ export function createTaskSwipe(
     horizontal = false;
   let target: HTMLElement | null = null;
   let suppressUntil = 0;
-  function cancel() {
+  function cancel(event?: Event) {
+    if (event && "pointerId" in event && event.pointerId !== pointer) return;
     const id = pointer;
     pointer = null;
     if (id !== null && target?.hasPointerCapture(id))
@@ -31,11 +33,12 @@ export function createTaskSwipe(
       const x = event.clientX - startX,
         y = event.clientY - startY;
       if (!horizontal) {
-        if (Math.abs(y) > 8 && Math.abs(y) >= Math.abs(x)) {
+        const intent = horizontalIntent(x, y);
+        if (intent === "vertical") {
           cancel();
           return;
         }
-        if (Math.abs(x) < 8 || Math.abs(x) <= Math.abs(y) * 1.2) return;
+        if (intent !== "horizontal") return;
         horizontal = true;
         target?.setPointerCapture(event.pointerId);
       }

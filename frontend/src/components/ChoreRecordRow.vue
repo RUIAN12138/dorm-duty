@@ -62,9 +62,9 @@ const time = (value: string) =>
   min-height: 80px;
   padding: 15px 0;
   border: 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--ui-border);
   background: transparent;
-  color: #111;
+  color: var(--ui-ink);
   font: inherit;
   text-align: left;
 }
@@ -139,7 +139,7 @@ time {
 @media (prefers-reduced-motion: no-preference) {
   .own-record {
     transition:
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform var(--ui-release-time) var(--ui-ease-out),
       background-color 140ms ease;
   }
 }
