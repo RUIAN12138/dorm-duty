@@ -349,6 +349,12 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   await waitOpen();
   await page.evaluate(() => window.qa.reset());
   const cdp = await context.newCDPSession(page);
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".sort-row")].every((el) => {
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      return Math.abs(matrix.m42) < 0.5;
+    }),
+  );
   await page.evaluate(() => {
     window.__secondRowTop = document
       .querySelector('[data-testid="order-person-water-2"]')
@@ -380,6 +386,15 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
     await page.locator(".sort-row.lifted").count(),
     1,
     "long-press lifts the whole row",
+  );
+  // Reorder measures layout on animation frames. Keep holding until the next
+  // compositor frame shows displacement, rather than sampling the event task.
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-testid="order-person-water-2"]')
+        .getBoundingClientRect().top <
+      window.__secondRowTop - 8,
   );
   eq(
     await page
