@@ -151,6 +151,16 @@ async function roomMembers(db, roomId) {
   );
 }
 export async function ensureChoreMarkers(db, roomId) {
+  // The common poll path is read-only; repair marks only after membership changes.
+  const repair = await first(
+    db,
+    `SELECT
+    EXISTS(SELECT 1 FROM member_marks mm WHERE mm.dorm_id=? AND NOT EXISTS(SELECT 1 FROM dorm_members m WHERE m.dorm_id=mm.dorm_id AND m.user_id=mm.user_id AND m.is_active=1))
+    OR EXISTS(SELECT 1 FROM dorm_members m LEFT JOIN member_marks mm ON mm.dorm_id=m.dorm_id AND mm.user_id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 AND mm.id IS NULL) AS needed`,
+    [roomId, roomId],
+  );
+  if (!repair.needed) return;
+
   // Matching two ranked sets assigns every unmarked member one still-free design in one statement.
   // Departed members release their live mark; completed records keep their immutable snapshot.
   await stmt(
@@ -204,6 +214,13 @@ async function categories(db, roomId) {
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
+  const initialized = await first(
+    db,
+    "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
+    [room.id, room.id],
+  );
+  if (initialized) return;
+
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "宿舍没有有效成员");
   const legacy = parse(room.rotation_order || "[]"),
@@ -540,6 +557,7 @@ async function maintain(db, room, now) {
       settings = await categories(db, room.id),
       members = await roomMembers(db, room.id),
       ids = members.map((member) => member.user_id);
+    if (!members.length) fail(409, "no_members", "宿舍没有有效成员");
     const replacements = [],
       mutation = new Mutation(db, room, state.version);
     for (const category of settings) {
@@ -1020,6 +1038,22 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         updated.find((entry) => entry.key === category.key) || category,
     ),
     mutation = new Mutation(db, room, state.version, who, !orderOnly);
+  if (orderOnly) {
+    for (const category of updated)
+      mutation.update(
+        "chore_categories",
+        { rotation_order: JSON.stringify(category.rotation_order) },
+        "dorm_id=? AND key=?",
+        [room.id, category.key],
+      );
+    const scheduledKeys = updated
+      .filter((c) => c.mode === "scheduled")
+      .map((c) => c.key);
+    if (scheduledKeys.length)
+      await planDaily(db, mutation, room, draft, members, now, scheduledKeys);
+    await mutation.finish();
+    return json({ version: state.version + 1, categories: draft });
+  }
   for (const category of updated)
     mutation.update(
       "chore_categories",

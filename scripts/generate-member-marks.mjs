@@ -167,6 +167,7 @@ await fs.mkdir(destination, { recursive: true });
 await fs.mkdir(new URL("frontend/src/data/", root), { recursive: true });
 await fs.mkdir(new URL("site/shared/", root), { recursive: true });
 const catalog = [];
+const pixelPaths = {};
 const signatures = new Set();
 for (let index = 0; index < 100; index++) {
   const [name, rows] = shapes[index % shapes.length];
@@ -189,6 +190,7 @@ for (let index = 0; index < 100; index++) {
   const signature = JSON.stringify(cells);
   if (signatures.has(signature)) throw new Error(`Duplicate silhouette: ${id}`);
   signatures.add(signature);
+  pixelPaths[id] = cells.map(([x, y]) => `M${x} ${y}h1v1h-1z`).join("");
   const color = "#47b985";
   const rects = cells
     .map(([x, y]) => `<rect x="${x}" y="${y}" width="1" height="1"/>`)
@@ -200,6 +202,10 @@ for (let index = 0; index < 100; index++) {
 await fs.writeFile(
   new URL("frontend/src/data/member-marks.json", root),
   JSON.stringify(catalog, null, 2) + "\n",
+);
+await fs.writeFile(
+  new URL("frontend/src/data/member-mark-paths.json", root),
+  JSON.stringify(pixelPaths, null, 2) + "\n",
 );
 await fs.writeFile(
   new URL("site/shared/member-marks.mjs", root),
