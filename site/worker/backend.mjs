@@ -1,5 +1,6 @@
 // Cloudflare Worker/D1 implementation of the original FastAPI business contract.
 // Business identity comes exclusively from opaque Bearer sessions, never platform headers.
+import { CalendarError } from "./calendar.mjs";
 import {
   ChoreError,
   choreGuestMemberMarks,
@@ -1842,7 +1843,11 @@ export async function handleApi(request, env, ctx) {
   try {
     return await dispatch(request, env, ctx);
   } catch (error) {
-    if (error instanceof ApiError || error instanceof ChoreError)
+    if (
+      error instanceof ApiError ||
+      error instanceof ChoreError ||
+      error instanceof CalendarError
+    )
       return json(
         { detail: { code: error.code, message: error.message } },
         error.status,

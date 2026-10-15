@@ -7536,10 +7536,16 @@ var MARK_IDS = Object.freeze(
   )
 );
 
+// shared/ical.mjs
+var encoder = new TextEncoder();
+
+// worker/calendar.mjs
+var encoder2 = new TextEncoder();
+
 // worker/chores.mjs
 var DAY = 864e5;
 var KEYS = ["floor", "toilet", "water"];
-var encoder = new TextEncoder();
+var encoder3 = new TextEncoder();
 var markerIds = new Set(MARK_IDS);
 var ChoreError = class extends Error {
   constructor(status, code, message) {

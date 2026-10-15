@@ -23,6 +23,7 @@ import { onNativePushReady } from "../api/nativePush";
 import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
+import { createTaskSwipe } from "../interaction/taskSwipe";
 const props = defineProps<{
   invite: string;
   dormName: string;
@@ -81,6 +82,30 @@ function runQueuedTool() {
   action?.();
 }
 const selectedTaskId = ref<number | null>(null);
+const titleAnimation = ref(true);
+function chooseDutyTask(id: number, event: MouseEvent) {
+  titleAnimation.value = event.detail !== 0;
+  selectedTaskId.value = id;
+}
+const titleOffset = ref(0),
+  titleDragging = ref(false);
+const taskSwipe = createTaskSwipe(
+  (value, dragging) => {
+    titleOffset.value = value;
+    titleDragging.value = dragging;
+  },
+  (direction) => {
+    const index = personalTasks.value.findIndex(
+      (task) => task.id === activeDutyTask.value?.id,
+    );
+    const next = personalTasks.value[index + direction];
+    if (next) {
+      titleAnimation.value = true;
+      selectedTaskId.value = next.id;
+    } else if (personalTasks.value.length > 1)
+      showToast(direction > 0 ? "已经是最后一项" : "已经是第一项");
+  },
+);
 const detailTask = ref<ChoreTask | null>(null);
 const detailOpen = ref(false);
 const detailMotion = ref<"shared" | "bottom">("shared");
@@ -90,11 +115,13 @@ const sectionOrder = ["duty", "water", "calendar"];
 watch(
   () => props.section,
   (next, previous) => {
+    taskSwipe.cancel();
     direction.value =
       sectionOrder.indexOf(next) >= sectionOrder.indexOf(previous) ? 1 : -1;
   },
 );
 function openTask(task: ChoreTask, event: MouseEvent) {
+  if (task.key !== "water" && taskSwipe.suppressesClick(event)) return;
   detailMotion.value = task.key === "water" ? "bottom" : "shared";
   detailOrigin.value =
     task.key === "water"
@@ -172,6 +199,7 @@ onMounted(() => {
   document.addEventListener("visibilitychange", updateNudgeClock);
 });
 onUnmounted(() => {
+  taskSwipe.cancel();
   if (nudgeClock) clearInterval(nudgeClock);
   document.removeEventListener("visibilitychange", updateNudgeClock);
 });
@@ -708,7 +736,7 @@ onUnmounted(() => {
                   v-for="task in personalTasks"
                   :key="task.id"
                   :aria-pressed="activeDutyTask?.id === task.id"
-                  @click="selectedTaskId = task.id"
+                  @click="chooseDutyTask(task.id, $event)"
                 >
                   {{ task.name
                   }}<van-icon
@@ -718,63 +746,80 @@ onUnmounted(() => {
                   />
                 </button>
               </div>
-              <Transition name="hero-task" mode="out-in">
-                <article
-                  v-if="activeDutyTask"
-                  :key="activeDutyTask.id"
-                  class="chore-task focus-hero"
-                  :class="{
-                    'task-is-completed': activeDutyTask.status === 'completed',
-                  }"
-                  :data-testid="`chore-task-${activeDutyTask.key}-${activeDutyTask.id}`"
+              <article
+                v-if="activeDutyTask"
+                class="chore-task focus-hero"
+                :class="{
+                  'task-is-completed': activeDutyTask.status === 'completed',
+                }"
+                :data-testid="`chore-task-${activeDutyTask.key}-${activeDutyTask.id}`"
+              >
+                <div
+                  class="task-title-stage"
+                  data-testid="task-title-swipe"
+                  :class="{ 'title-dragging': titleDragging }"
+                  :style="{ transform: `translate3d(${titleOffset}px,0,0)` }"
+                  @pointerdown="taskSwipe.down"
+                  @pointermove="taskSwipe.move"
+                  @pointerup="taskSwipe.up"
+                  @pointercancel="taskSwipe.cancel"
+                  @lostpointercapture="taskSwipe.cancel"
+                  @keydown.esc="taskSwipe.cancel"
                 >
-                  <h2>
-                    <button
-                      class="task-title-button"
-                      :aria-label="`查看${activeDutyTask.name}详情`"
-                      @click="openTask(activeDutyTask, $event)"
-                    >
-                      {{ activeDutyTask.name }}
-                    </button>
-                  </h2>
-                  <p v-if="!hasToday && !activeRound" class="hero-date">
-                    {{ dateText(activeDutyTask.duty_date) }}
-                  </p>
-                  <p v-if="activeDutyTask.completed_at" class="chore-completed">
-                    <van-icon name="success" aria-hidden="true" />{{
-                      activeRound ? "本轮已完成" : "已完成"
-                    }}
-                  </p>
-                  <button
-                    v-else-if="activeDutyTask.can_complete || demo"
-                    :data-testid="`complete-${activeDutyTask.key}-${activeDutyTask.id}`"
-                    class="chore-complete-button"
-                    :disabled="
-                      !!busy ||
-                      completionSyncPending ||
-                      (!demo && activeDutyTask.duty_date > board.today)
-                    "
-                    @click="complete(activeDutyTask)"
+                  <Transition
+                    name="hero-task"
+                    mode="out-in"
+                    :css="titleAnimation"
+                    @before-leave="hideLeaving"
                   >
-                    {{
-                      busy === `complete-${activeDutyTask.id}`
-                        ? "正在记录…"
-                        : "我已完成"
-                    }}
-                  </button>
-                  <button
-                    v-if="activeRound"
-                    class="round-progress"
-                    data-testid="round-progress"
-                    @click="roundOpen = true"
-                  >
-                    第 {{ activeRound.sequence }} 轮 · 已完成
-                    {{ activeRound.completed }}/{{ activeRound.total }}
-                    <van-icon name="arrow" aria-hidden="true" />
-                  </button>
-                </article>
-                <div v-else class="focus-hero"><h2>休息</h2></div>
-              </Transition>
+                    <h2 :key="activeDutyTask.id">
+                      <button
+                        class="task-title-button"
+                        :aria-label="`查看${activeDutyTask.name}详情`"
+                        @click="openTask(activeDutyTask, $event)"
+                      >
+                        {{ activeDutyTask.name }}
+                      </button>
+                    </h2>
+                  </Transition>
+                </div>
+                <p v-if="!hasToday && !activeRound" class="hero-date">
+                  {{ dateText(activeDutyTask.duty_date) }}
+                </p>
+                <p v-if="activeDutyTask.completed_at" class="chore-completed">
+                  <van-icon name="success" aria-hidden="true" />{{
+                    activeRound ? "本轮已完成" : "已完成"
+                  }}
+                </p>
+                <button
+                  v-else-if="activeDutyTask.can_complete || demo"
+                  :data-testid="`complete-${activeDutyTask.key}-${activeDutyTask.id}`"
+                  class="chore-complete-button"
+                  :disabled="
+                    !!busy ||
+                    completionSyncPending ||
+                    (!demo && activeDutyTask.duty_date > board.today)
+                  "
+                  @click="complete(activeDutyTask)"
+                >
+                  {{
+                    busy === `complete-${activeDutyTask.id}`
+                      ? "正在记录…"
+                      : "我已完成"
+                  }}
+                </button>
+                <button
+                  v-if="activeRound"
+                  class="round-progress"
+                  data-testid="round-progress"
+                  @click="roundOpen = true"
+                >
+                  第 {{ activeRound.sequence }} 轮 · 已完成
+                  {{ activeRound.completed }}/{{ activeRound.total }}
+                  <van-icon name="arrow" aria-hidden="true" />
+                </button>
+              </article>
+              <div v-else class="focus-hero"><h2>休息</h2></div>
             </section>
             <section
               v-if="section === 'water'"
@@ -1306,6 +1351,24 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
   text-align: center;
   max-width: 100%;
+}
+.task-title-stage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: clamp(55.2px, 19.55vw, 82.8px);
+  touch-action: pan-y;
+}
+.task-title-stage h2 {
+  grid-area: 1 / 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .task-title-stage {
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .task-title-stage.title-dragging {
+    transition: none;
+  }
 }
 .chore-water h2 {
   width: 100%;

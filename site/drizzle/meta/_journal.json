@@ -57,6 +57,13 @@
       "when": 1792026529498,
       "tag": "0007_scheduled_task_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792028220115,
+      "tag": "0008_calendar_subscriptions",
+      "breakpoints": true
     }
   ]
 }
