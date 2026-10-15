@@ -329,6 +329,43 @@ async function stableIdentity(page, before) {
     "navigation must preserve the selected member and device credentials",
   );
 }
+async function navigationMotion(page) {
+  const before = await identity(page);
+  const tab = (key) => page.getByTestId(`nav-${key}`);
+  // Retarget before the previous spring has settled, then check the actual
+  // component/router agree. The numeric spring itself has deterministic tests.
+  for (const key of ["calendar", "duty", "water", "calendar", "water"]) {
+    const box = await tab(key).boundingBox();
+    assert(box, "rapid navigation target is visible");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  }
+  await pane(page, "water");
+  await page.waitForFunction(() => {
+    const nav = document.querySelector('[data-testid="chore-bottom-nav"]');
+    return nav && !nav.classList.contains("is-moving") &&
+      Math.abs(Number(nav.style.getPropertyValue("--nav-index")) - 1) < 0.001;
+  });
+  const source = await tab("water").boundingBox();
+  const target = await tab("calendar").boundingBox();
+  assert(source && target);
+  await page.mouse.move(source.x + source.width / 2, source.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, source.y + 20, { steps: 5 });
+  await page.mouse.move(target.x + target.width / 2, source.y - 80);
+  await page.mouse.up();
+  await pane(page, "water");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await navigate(page, "calendar");
+  assert.equal(await page.getByTestId("chore-bottom-nav").evaluate((nav) =>
+    nav.classList.contains("is-moving")), false, "reduced motion settles immediately");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await tab("duty").focus();
+  await page.keyboard.press("Enter");
+  await pane(page, "duty");
+  assert.equal(await page.getByTestId("chore-bottom-nav").evaluate((nav) =>
+    nav.classList.contains("is-moving")), false, "keyboard navigation does not spring");
+  await stableIdentity(page, before);
+}
 async function pageMatrix(page, role) {
   const before = await identity(page);
   for (const width of [320, 390, 430]) {
@@ -348,6 +385,7 @@ async function pageMatrix(page, role) {
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await navigationMotion(page);
   navigationStep = `history:${role}:seed-duty`;
   await navigate(page, "duty");
   navigationStep = `history:${role}:seed-water`;

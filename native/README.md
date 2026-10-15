@@ -6,11 +6,13 @@
 
 安装工程已使用远程 Vue 页面。日常页面修改部署网站即可，不要求重装 APK / HAP；页面内发现 PWA 新版时确认「更新页面」。原生 SDK、桥和桌面卡片变化需要更新安装包。完整进度、原生提醒 / 卡片 / 替干等后续验收见 [App 演进清单](../docs/APP_ROADMAP.md)。
 
+2026-10-15 模拟器推进：鸿蒙 6.1.1 专用模拟器已实际安装 HAP，打开正式 HTTPS 站点并完成游客选人、值日 / 抬水 / 日历切换、关闭重启后身份保留，以及系统返回先关闭菜单。未签名 HAP 只在该模拟器安装成功，不能据此分发给真机。Android 已按开发者提供的公开 AppKey 从构建参数重新打包，未把该 Key 写入源码；正式服务器检查结果为原生推送配置文件不存在。安装包与系统通知送达分别验收。
+
 ## 客户端
 
 - Android：Java + Android WebView + AndroidX WebKit，最低 Android 6。页面使用正式 HTTPS 地址；保存宿舍和室友选择；系统权限由原生申请。JPush 5.6.0 / JCore 5.5.7 固定版本。
 - HarmonyOS：ArkTS + ArkWeb + `@jg/push` 1.4.2，最低 HarmonyOS 5。HarmonyOS 4 系列可另验收 Android APK；HarmonyOS 5 及以上使用 HAP。
-- SDK 仅在主动开启通知后初始化；不开启通知仍可使用宿舍功能。鸿蒙不启用分群推送/数据洞察。当前 AppKey 为空，UI 明确显示未配置，不模拟系统通知成功。
+- SDK 仅在主动开启通知后初始化；不开启通知仍可使用宿舍功能。鸿蒙不启用分群推送/数据洞察。鸿蒙公共 AppKey 已接入；安卓源码默认不配置 AppKey，本机体验包通过构建参数注入。服务端缺少配套配置时仍显示未配置，不模拟系统通知成功。
 - 安卓返回键通过受信任页面的 `DormNativeBack` 先关闭最上层抽屉，无弹层时再处理网页历史 / 退出；新版调试包构建和 lint 已通过，真机返回体验尚待验收。
 - 原生桥只允许正式 HTTPS 站点的主文档，安卓使用 origin 限制的 WebMessageListener；鸿蒙将专用 MessagePort 交给主文档。客户端不包含 Master Secret，不忽略证书错误。
 
@@ -25,6 +27,17 @@
 账号实名、平台条款确认和签名材料由你在官方页面完成。密码、Master Secret 和私钥无需发送到聊天。创建应用后可交由 Agent 继续集成公开应用标识及本机安全配置。
 
 ## 构建
+
+macOS 本机可直接使用统一入口，脚本使用已安装的工具链，避免误用系统 JDK 26 或依赖未保存的 `local.properties`：
+
+```bash
+# 可选：把自己安卓应用的公开 AppKey 作为本次命令的环境变量传入。
+# 不传时仍可构建界面体验包，原生通知会显示未配置。
+DORM_JPUSH_APPKEY=<你的公开AppKey> bash native/build-preview.sh android
+bash native/build-preview.sh harmony
+```
+
+输出目录为被 Git 忽略的 `data/native-preview/`。可通过 `DORM_JAVA_HOME`、`ANDROID_HOME`、`DORM_DEVECO_HOME` 指定其他安装位置。此脚本只构建和复制本机包，不安装、不上传，也不配置服务器密钥。Android 使用调试签名；Harmony 输出未签名 HAP，真机仍需本应用签名。
 
 Android 需要 JDK 17 或兼容版本、Android SDK 35、Gradle Wrapper 8.11：在 `android` 执行 `./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug`。默认生成调试签名 APK，可安装验收界面，未配置推送应用。输出在 `app/build/outputs/apk/debug/app-debug.apk`；本机本轮用 Android Studio 的 JDK 21 构建，GitHub CI 用 JDK 17。GitHub Actions 成功后保留 `lundao-android-preview` APK 附件 14 天；这是调试体验包，不含发布签名。
 
