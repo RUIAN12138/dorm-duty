@@ -37,7 +37,7 @@ try {
     vue,
     `<script lang="ts">import {createRouter,createMemoryHistory} from 'vue-router';export const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{render:()=>null}}]});</script>
 <script setup lang="ts">
-import {ref,computed} from 'vue';import {useRoute} from 'vue-router';import {TabsRoot,TabsContent} from 'reka-ui';
+import {ref,computed,nextTick} from 'vue';import {useRoute} from 'vue-router';import {TabsRoot,TabsContent} from 'reka-ui';
 import Nav from './src/components/ChoreBottomNav.vue';import Segments from './src/components/ElasticSegments.vue';import Sheet from './src/components/ElasticSheet.vue';import Sort from './src/components/SortableMembers.vue';import {confirmInSheet} from './src/interactions/confirm';import {installNativeBack} from './src/interactions/nativeBack';
 installNativeBack();
 window.addEventListener('keydown',()=>document.documentElement.dataset.interaction='keyboard');window.addEventListener('pointerdown',()=>document.documentElement.dataset.interaction='pointer');
@@ -48,7 +48,7 @@ const members=ref(make(6)),order=ref([1,2,3,4,5,6]),disabled=ref(false),active=r
 const confirmed=ref(0);
 function show(event:MouseEvent){origin.value=(event.currentTarget as HTMLElement).getBoundingClientRect();open.value=true;}
 async function confirm(){try{await confirmInSheet({title:'确认操作',message:'确认后仍保留抽屉'});confirmed.value++;}catch{}}
-(window as any).qa={open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
+(window as any).qa={tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
 </script>
 <template><main style="padding:24px;min-height:1600px"><h1>交互验证</h1><p data-testid="identity">室友一 · 身份保留</p><button data-testid="open" @click="show">打开面板</button><TabsRoot v-model="view"><Segments v-model="view" group-label="完成记录显示方式" :options="[{value:'calendar',label:'日历',testId:'segment-calendar'},{value:'list',label:'列表',testId:'segment-list'}]"/><TabsContent value="calendar">月历</TabsContent><TabsContent value="list">完成列表</TabsContent></TabsRoot>
 <Nav :section="section"/><Sheet v-model="open" title="排序设置" :motion="mode" :origin="origin" @closed="closed++"><label>内容<input data-testid="input" v-model="draft"/></label><Sort v-if="mounted" v-model="order" :members="members" :active="open && active" :disabled="disabled"/><button data-testid="nested" @click="nested=true">打开嵌套</button><button data-testid="confirm" @click="confirm">确认操作</button><Sheet v-model="nested" title="嵌套面板"><button data-testid="inner-button">内部操作</button></Sheet></Sheet></main></template>`,
@@ -238,19 +238,28 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   await page.waitForTimeout(70);
   await page.evaluate(() => window.qa.close());
   await page.waitForTimeout(50);
-  const beforeReverse = await page
-    .locator(".elastic-sheet")
-    .evaluate((el) => getComputedStyle(el).transform);
-  await page.evaluate(() => window.qa.open());
-  const afterReverse = await page
-    .locator(".elastic-sheet")
-    .evaluate((el) => getComputedStyle(el).transform);
-  const delta = await page.evaluate(
-    ([a, b]) =>
-      Math.abs(new DOMMatrixReadOnly(a).m42 - new DOMMatrixReadOnly(b).m42),
-    [beforeReverse, afterReverse],
+  // Separate protocol round trips include real animation travel on a busy CI
+  // runner. Reuse must be exact; allow a compositor frame of travel when Motion
+  // synchronises its in-flight value, while rejecting a full hidden/open reset.
+  const reversal = await page.evaluate(async () => {
+    const el = document.querySelector(".elastic-sheet");
+    const height = el.offsetHeight;
+    const before = new DOMMatrixReadOnly(getComputedStyle(el).transform).m42;
+    window.qa.open();
+    await window.qa.tick();
+    await window.qa.tick();
+    return {
+      height,
+      samePanel: el === document.querySelector(".elastic-sheet"),
+      delta: Math.abs(
+        before - new DOMMatrixReadOnly(getComputedStyle(el).transform).m42,
+      ),
+    };
+  });
+  assert(
+    reversal.samePanel && reversal.delta < reversal.height * 0.2,
+    JSON.stringify(reversal),
   );
-  assert(delta < 45);
   checks.push("opening/closing reversal continues from current position");
   await waitOpen();
   eq(
