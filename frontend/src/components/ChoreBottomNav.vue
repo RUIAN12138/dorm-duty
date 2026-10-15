@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { createNavMotion } from "../interaction/navMotion";
+import { motion } from "motion-v";
+import { useSelectionMotion } from "../interaction/motion";
 const router = useRouter();
 const props = defineProps<{
   section: "duty" | "water" | "calendar";
@@ -15,31 +16,14 @@ const dragging = ref(false);
 const currentIndex = computed(() =>
   items.findIndex((item) => item.section === props.section),
 );
-const navIndex = ref(currentIndex.value);
-const speed = ref(0);
-const moving = ref(false);
 const pressedIndex = ref(-1);
-const motion = createNavMotion(
-  currentIndex.value,
-  (position, velocity, settled) => {
-    navIndex.value = position;
-    speed.value = velocity;
-    moving.value = !settled;
-  },
-);
-const stretch = computed(() =>
-  dragging.value ? 0.015 : Math.min(0.055, Math.abs(speed.value) * 0.008),
-);
-function animateMotion() {
-  return (
-    !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
-    document.documentElement.dataset.interaction !== "keyboard"
-  );
-}
+const selection = useSelectionMotion(currentIndex.value, () => items.length);
 watch(currentIndex, (next) => {
-  if (!dragging.value) motion.move(next, animateMotion());
+  if (!dragging.value) selection.move(next);
 });
-onUnmounted(() => motion.dispose());
+onUnmounted(() => {
+  gesture = null;
+});
 let gesture: { id: number; x: number; y: number; nav: HTMLElement } | null =
   null;
 let suppressClickUntil = 0;
@@ -71,7 +55,7 @@ function move(event: PointerEvent) {
     return;
   dragging.value = true;
   pressedIndex.value = -1;
-  motion.track(position(event.clientX, gesture.nav).progress, event.timeStamp);
+  selection.track(position(event.clientX, gesture.nav).progress);
 }
 function finish(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
@@ -88,11 +72,11 @@ function finish(event: PointerEvent, cancelled = false) {
     event.clientY < rect.top - 24 ||
     event.clientY > rect.bottom + 24
   ) {
-    motion.move(currentIndex.value, animateMotion());
+    selection.move(currentIndex.value);
     return;
   }
   const index = position(event.clientX, nav).index;
-  motion.move(index, animateMotion());
+  selection.move(index);
   const item = items[index]!;
   const request = ++navigationRequest;
   void router
@@ -101,7 +85,7 @@ function finish(event: PointerEvent, cancelled = false) {
     })
     .finally(() => {
       if (request === navigationRequest && !gesture)
-        motion.move(currentIndex.value, animateMotion());
+        selection.move(currentIndex.value);
     });
 }
 function click(event: MouseEvent) {
@@ -116,7 +100,7 @@ function click(event: MouseEvent) {
     class="chore-bottom-nav"
     aria-label="宿舍导航"
     data-testid="chore-bottom-nav"
-    :class="{ 'is-dragging': dragging, 'is-moving': moving }"
+    :class="{ 'is-dragging': dragging, 'is-moving': selection.moving.value }"
     @pointerdown="down"
     @pointermove="move"
     @pointerup="finish($event)"
@@ -124,13 +108,12 @@ function click(event: MouseEvent) {
     @lostpointercapture="finish($event, true)"
     @click.capture="click"
     @dragstart.prevent
-    :style="{
-      '--nav-index': navIndex,
-      '--nav-scale-x': 1 + stretch,
-      '--nav-scale-y': 1 - stretch * 0.4,
-    }"
   >
-    <span class="nav-selection" aria-hidden="true"></span>
+    <motion.span
+      class="nav-selection"
+      aria-hidden="true"
+      :style="{ transform: selection.transform }"
+    />
     <router-link
       v-for="(item, index) in items"
       :key="item.section"
@@ -195,8 +178,6 @@ function click(event: MouseEvent) {
   height: 54px;
   border-radius: 14px;
   background: #f3f3f3;
-  transform: translate3d(calc(var(--nav-index) * 100%), 0, 0)
-    scale(var(--nav-scale-x, 1), var(--nav-scale-y, 1));
 }
 .is-moving .nav-selection {
   will-change: transform;

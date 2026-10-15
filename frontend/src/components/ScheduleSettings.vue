@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { confirmInSheet } from "../interactions/confirm";
 import { ref, computed, watch, onUnmounted } from "vue";
-import { showConfirmDialog, showToast } from "vant";
+import { showToast } from "vant";
 import { api, patch } from "../api";
 import { currentDay, shiftDay } from "../api/date";
 import type { Dorm, ScheduleRules, PreviewDay } from "../api/types";
@@ -137,7 +138,7 @@ async function save() {
     return;
   }
   try {
-    await showConfirmDialog({
+    await confirmInSheet({
       title: "应用新的排班规则？",
       message:
         "将更新明天起的未完成排班，包括手工调整。今天、过去及已完成记录会保留。请先确认下方预览。",

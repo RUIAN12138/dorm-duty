@@ -333,7 +333,7 @@ async function navigationMotion(page) {
   const before = await identity(page);
   const tab = (key) => page.getByTestId(`nav-${key}`);
   // Retarget before the previous spring has settled, then check the actual
-  // component/router agree. The numeric spring itself has deterministic tests.
+  // component/router agree. Shared motion is also tested in the browser harness.
   for (const key of ["calendar", "duty", "water", "calendar", "water"]) {
     const box = await tab(key).boundingBox();
     assert(box, "rapid navigation target is visible");
@@ -342,28 +342,51 @@ async function navigationMotion(page) {
   await pane(page, "water");
   await page.waitForFunction(() => {
     const nav = document.querySelector('[data-testid="chore-bottom-nav"]');
-    return nav && !nav.classList.contains("is-moving") &&
-      Math.abs(Number(nav.style.getPropertyValue("--nav-index")) - 1) < 0.001;
+    const indicator = nav
+      ?.querySelector(".nav-selection")
+      ?.getBoundingClientRect();
+    const target = nav
+      ?.querySelector('[aria-current="page"]')
+      ?.getBoundingClientRect();
+    return (
+      nav &&
+      !nav.classList.contains("is-moving") &&
+      indicator &&
+      target &&
+      Math.abs(indicator.x - target.x) < 1
+    );
   });
   const source = await tab("water").boundingBox();
   const target = await tab("calendar").boundingBox();
   assert(source && target);
   await page.mouse.move(source.x + source.width / 2, source.y + 20);
   await page.mouse.down();
-  await page.mouse.move(target.x + target.width / 2, source.y + 20, { steps: 5 });
+  await page.mouse.move(target.x + target.width / 2, source.y + 20, {
+    steps: 5,
+  });
   await page.mouse.move(target.x + target.width / 2, source.y - 80);
   await page.mouse.up();
   await pane(page, "water");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await navigate(page, "calendar");
-  assert.equal(await page.getByTestId("chore-bottom-nav").evaluate((nav) =>
-    nav.classList.contains("is-moving")), false, "reduced motion settles immediately");
+  assert.equal(
+    await page
+      .getByTestId("chore-bottom-nav")
+      .evaluate((nav) => nav.classList.contains("is-moving")),
+    false,
+    "reduced motion settles immediately",
+  );
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await tab("duty").focus();
   await page.keyboard.press("Enter");
   await pane(page, "duty");
-  assert.equal(await page.getByTestId("chore-bottom-nav").evaluate((nav) =>
-    nav.classList.contains("is-moving")), false, "keyboard navigation does not spring");
+  assert.equal(
+    await page
+      .getByTestId("chore-bottom-nav")
+      .evaluate((nav) => nav.classList.contains("is-moving")),
+    false,
+    "keyboard navigation does not spring",
+  );
   await stableIdentity(page, before);
 }
 async function pageMatrix(page, role) {
@@ -729,6 +752,38 @@ try {
     .getByTestId("settings-content-water")
     .fill("抬水：从一楼运一桶饮用水");
   await a.page.getByTestId(`order-up-water-${otherId}`).click();
+  const draftOrder = await a.page
+    .locator(".sort-list .sort-person")
+    .allTextContents();
+  await a.page.route(
+    "**/chores/settings",
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: { message: "版本冲突" } }),
+      });
+    },
+    { times: 1 },
+  );
+  await a.page.getByTestId("settings-save").click();
+  assert.equal(await a.page.getByTestId("settings-save").isDisabled(), true);
+  await a.page
+    .getByRole("alert")
+    .filter({ hasText: "室友刚刚更新了排班" })
+    .waitFor();
+  assert.deepEqual(
+    await a.page.locator(".sort-list .sort-person").allTextContents(),
+    draftOrder,
+  );
+  assert.equal(
+    await a.page.getByTestId("settings-content-water").inputValue(),
+    "抬水：从一楼运一桶饮用水",
+  );
+  checks.push(
+    "delayed settings save disables duplicate submissions; version conflict retains edited order and content with an explicit error",
+  );
   await snapshot(a.page, "custom-settings-390");
   const settingsResponse = a.page.waitForResponse(
     (r) =>

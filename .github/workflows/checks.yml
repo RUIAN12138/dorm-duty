@@ -46,14 +46,25 @@ jobs:
           node site/scripts/check-native-back.mjs
           node site/scripts/check-native-bridge.mjs
           node site/scripts/check-push-settings.mjs
-          node site/scripts/check-water-order.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs
           node site/scripts/check-task-swipe.mjs
-          node site/scripts/check-navigation-motion.mjs
           node site/scripts/check-scheduled-reminders.mjs
           node site/scripts/check-reminder-runtime.mjs
           node site/scripts/check-creator-recovery.mjs
+      - name: Install browser for interaction checks
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Verify mobile interaction foundation
+        run: node scripts/check-interaction-foundation.mjs
+      - name: Keep interaction failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: interaction-failure
+          path: docs/evidence/interaction-foundation/failure.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Build server website
         env:
           DORM_WEB_BASE: /dorm-duty/

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { confirmInSheet } from "../interactions/confirm";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { showConfirmDialog, showToast } from "vant";
+import { showToast } from "vant";
 import { ApiError } from "../api";
 import { appPath } from "../api/path";
 import {
@@ -51,7 +52,7 @@ async function run(action: "load" | "create" | "save" | "revoke") {
   busy.value = true;
   if (["create", "revoke"].includes(action) && config.value?.enabled) {
     try {
-      await showConfirmDialog({
+      await confirmInSheet({
         title: action === "revoke" ? "撤销日历订阅？" : "更换订阅地址？",
         message: "旧地址将失效。已同步的日程请在系统日历中移除。",
         confirmButtonText: action === "revoke" ? "撤销订阅" : "更换地址",

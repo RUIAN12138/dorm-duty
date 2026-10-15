@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { TabsRoot, TabsContent } from "reka-ui";
 import type { ChoreMember, ChoreRecord } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
@@ -113,166 +114,187 @@ watch(
 );
 </script>
 <template>
-  <section
-    class="chore-calendar"
-    aria-labelledby="calendar-title"
-    data-testid="chore-calendar"
+  <TabsRoot
+    :model-value="view"
+    @update:model-value="view = $event === 'list' ? 'list' : 'calendar'"
+    as-child
   >
-    <header>
-      <div>
-        <h1
-          id="calendar-title"
-          data-section-swipe-handle
-          data-testid="page-swipe-title"
-        >
-          {{ monthText }}
-        </h1>
-      </div>
-      <div class="calendar-nav">
-        <button
-          aria-label="上一个月"
-          data-testid="calendar-prev"
-          :disabled="loading"
-          @click="step(-1)"
-        >
-          <van-icon name="arrow-left" /></button
-        ><button
-          aria-label="下一个月"
-          data-testid="calendar-next"
-          :disabled="loading"
-          @click="step(1)"
-        >
-          <van-icon name="arrow" />
-        </button>
-      </div>
-    </header>
-    <ElasticSegments
-      v-model="view"
-      :options="viewOptions"
-      group-label="完成记录显示方式"
-    />
-    <div v-if="view === 'calendar'" class="calendar-mode">
-      <div class="chore-weekdays" aria-hidden="true">
-        <span v-for="name in weekNames" :key="name">{{ name }}</span>
-      </div>
-      <div class="month-stage">
-        <Transition :name="monthDirection > 0 ? 'month-next' : 'month-prev'">
-          <div :key="month" class="chore-calendar-grid" :aria-busy="loading">
-            <template
-              v-for="(cell, index) in cells"
-              :key="cell?.date || `blank-${index}`"
-            >
-              <button
-                v-if="cell"
-                :class="{
-                  'is-today': cell.date === today,
-                  'is-selected': cell.date === selected,
-                }"
-                :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
-                :aria-pressed="cell.date === selected"
-                :data-testid="`calendar-day-${cell.date}`"
-                @click="selected = selected === cell.date ? '' : cell.date"
-              >
-                <span class="calendar-day-number"
-                  >{{ cell.day
-                  }}<small v-if="cell.marks.length > 2" class="calendar-more"
-                    >+{{ cell.marks.length - 2 }}</small
-                  ></span
-                ><span class="calendar-cell-marks"
-                  ><span
-                    v-for="mark in cell.visibleMarks"
-                    :key="`${mark.assignee_id}:${mark.type}`"
-                    class="calendar-task-mark"
-                    :data-task-type="mark.type"
-                    :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
-                    aria-hidden="true"
-                    ><MemberMark
-                      :id="mark.marker_id"
-                      :size="14" /><ChoreTypeIcon :type="mark.type"
-                  /></span>
-                </span></button
-              ><span v-else class="calendar-blank" aria-hidden="true"></span>
-            </template>
-          </div>
-        </Transition>
-      </div>
-      <div class="calendar-type-legend" aria-label="任务标记图例">
-        <span><ChoreTypeIcon type="duty" />值日</span>
-        <span><ChoreTypeIcon type="water" />抬水</span>
-      </div>
-    </div>
-    <div
-      v-else
-      class="calendar-list"
-      data-testid="calendar-list"
-      :aria-busy="loading"
+    <section
+      class="chore-calendar"
+      aria-labelledby="calendar-title"
+      data-testid="chore-calendar"
     >
-      <p v-if="!listRecords.length" class="calendar-list-empty">
-        本月还没有完成记录
-      </p>
-      <ol v-else>
-        <li
-          v-for="record in listRecords"
-          :key="record.id"
-          :data-testid="`calendar-list-record-${record.id}`"
-        >
-          <MemberMark :id="record.marker_id" :size="22" />
-          <div>
-            <strong>{{ record.assignee_name }}</strong
-            ><span>{{ record.name }}</span>
-          </div>
-          <time :datetime="record.completed_at">{{
-            completionTime(record.completed_at)
-          }}</time>
-        </li>
-      </ol>
-    </div>
-    <ElasticSheet
-      :model-value="!!selected"
-      :title="`${Number(selected.slice(5, 7))}月${Number(selected.slice(8))}日`"
-      @update:model-value="selected = $event ? selected : ''"
-      @closed="emit('closed')"
-    >
-      <div
-        v-if="selected"
-        class="calendar-details"
-        data-testid="calendar-day-details"
-        aria-live="polite"
-      >
-        <p v-if="!selectedRecords.length">暂无完成记录</p>
-        <div
-          v-for="record in selectedRecords"
-          :key="record.id"
-          class="calendar-record"
-        >
-          <MemberMark :id="record.marker_id" :size="22" /><ChoreTypeIcon
-            :type="record.key === 'water' ? 'water' : 'duty'"
-          /><span
-            ><strong>{{ record.assignee_name }}</strong
-            ><small>{{ record.name }}</small></span
-          ><time :datetime="record.completed_at">{{
-            time(record.completed_at)
-          }}</time>
+      <header>
+        <div>
+          <h1
+            id="calendar-title"
+            data-section-swipe-handle
+            data-testid="page-swipe-title"
+          >
+            {{ monthText }}
+          </h1>
         </div>
-      </div>
-    </ElasticSheet>
-    <details
-      v-if="view === 'calendar'"
-      class="calendar-legend"
-      aria-label="室友标记图例"
-    >
-      <summary>
-        室友标记<van-icon name="arrow-down" aria-hidden="true" />
-      </summary>
-      <div>
-        <span v-for="person in members" :key="person.user_id"
-          ><MemberMark :id="person.marker_id" :size="16" /><span>{{
-            person.nickname
-          }}</span></span
+        <div class="calendar-nav">
+          <button
+            aria-label="上一个月"
+            data-testid="calendar-prev"
+            :disabled="loading"
+            @click="step(-1)"
+          >
+            <van-icon name="arrow-left" /></button
+          ><button
+            aria-label="下一个月"
+            data-testid="calendar-next"
+            :disabled="loading"
+            @click="step(1)"
+          >
+            <van-icon name="arrow" />
+          </button>
+        </div>
+      </header>
+      <ElasticSegments
+        v-model="view"
+        :options="viewOptions"
+        group-label="完成记录显示方式"
+      />
+      <TabsContent value="calendar" as-child>
+        <div class="calendar-mode">
+          <div class="chore-weekdays" aria-hidden="true">
+            <span v-for="name in weekNames" :key="name">{{ name }}</span>
+          </div>
+          <div class="month-stage">
+            <Transition
+              :name="monthDirection > 0 ? 'month-next' : 'month-prev'"
+            >
+              <div
+                :key="month"
+                class="chore-calendar-grid"
+                :aria-busy="loading"
+              >
+                <template
+                  v-for="(cell, index) in cells"
+                  :key="cell?.date || `blank-${index}`"
+                >
+                  <button
+                    v-if="cell"
+                    :class="{
+                      'is-today': cell.date === today,
+                      'is-selected': cell.date === selected,
+                    }"
+                    :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
+                    :aria-pressed="cell.date === selected"
+                    :data-testid="`calendar-day-${cell.date}`"
+                    @click="selected = selected === cell.date ? '' : cell.date"
+                  >
+                    <span class="calendar-day-number"
+                      >{{ cell.day
+                      }}<small
+                        v-if="cell.marks.length > 2"
+                        class="calendar-more"
+                        >+{{ cell.marks.length - 2 }}</small
+                      ></span
+                    ><span class="calendar-cell-marks"
+                      ><span
+                        v-for="mark in cell.visibleMarks"
+                        :key="`${mark.assignee_id}:${mark.type}`"
+                        class="calendar-task-mark"
+                        :data-task-type="mark.type"
+                        :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
+                        aria-hidden="true"
+                        ><MemberMark
+                          :id="mark.marker_id"
+                          :size="14" /><ChoreTypeIcon :type="mark.type"
+                      /></span>
+                    </span></button
+                  ><span
+                    v-else
+                    class="calendar-blank"
+                    aria-hidden="true"
+                  ></span>
+                </template>
+              </div>
+            </Transition>
+          </div>
+          <div class="calendar-type-legend" aria-label="任务标记图例">
+            <span><ChoreTypeIcon type="duty" />值日</span>
+            <span><ChoreTypeIcon type="water" />抬水</span>
+          </div>
+        </div>
+      </TabsContent>
+      <TabsContent value="list" as-child>
+        <div
+          class="calendar-list"
+          data-testid="calendar-list"
+          :aria-busy="loading"
         >
-      </div>
-    </details>
-  </section>
+          <p v-if="!listRecords.length" class="calendar-list-empty">
+            本月还没有完成记录
+          </p>
+          <ol v-else>
+            <li
+              v-for="record in listRecords"
+              :key="record.id"
+              :data-testid="`calendar-list-record-${record.id}`"
+            >
+              <MemberMark :id="record.marker_id" :size="22" />
+              <div>
+                <strong>{{ record.assignee_name }}</strong
+                ><span>{{ record.name }}</span>
+              </div>
+              <time :datetime="record.completed_at">{{
+                completionTime(record.completed_at)
+              }}</time>
+            </li>
+          </ol>
+        </div>
+      </TabsContent>
+      <ElasticSheet
+        :model-value="!!selected"
+        :title="`${Number(selected.slice(5, 7))}月${Number(selected.slice(8))}日`"
+        @update:model-value="selected = $event ? selected : ''"
+        @closed="emit('closed')"
+      >
+        <div
+          v-if="selected"
+          class="calendar-details"
+          data-testid="calendar-day-details"
+          aria-live="polite"
+        >
+          <p v-if="!selectedRecords.length">暂无完成记录</p>
+          <div
+            v-for="record in selectedRecords"
+            :key="record.id"
+            class="calendar-record"
+          >
+            <MemberMark :id="record.marker_id" :size="22" /><ChoreTypeIcon
+              :type="record.key === 'water' ? 'water' : 'duty'"
+            /><span
+              ><strong>{{ record.assignee_name }}</strong
+              ><small>{{ record.name }}</small></span
+            ><time :datetime="record.completed_at">{{
+              time(record.completed_at)
+            }}</time>
+          </div>
+        </div>
+      </ElasticSheet>
+      <details
+        v-if="view === 'calendar'"
+        class="calendar-legend"
+        aria-label="室友标记图例"
+      >
+        <summary>
+          室友标记<van-icon name="arrow-down" aria-hidden="true" />
+        </summary>
+        <div>
+          <span v-for="person in members" :key="person.user_id"
+            ><MemberMark :id="person.marker_id" :size="16" /><span>{{
+              person.nickname
+            }}</span></span
+          >
+        </div>
+      </details>
+    </section>
+  </TabsRoot>
 </template>
 <style scoped>
 .chore-calendar {

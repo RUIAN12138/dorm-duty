@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { confirmInSheet } from "../interactions/confirm";
 import { ref, computed } from "vue";
 import { useRoute } from "vue-router";
-import { showToast, showConfirmDialog } from "vant";
+import { showToast } from "vant";
 import { api, post, patch, query } from "../api";
 import { shiftDay, currentDay } from "../api/date";
 import type { Duty, Today, Page } from "../api/types";
@@ -125,7 +126,7 @@ async function generate() {
   }
   try {
     if (replace)
-      await showConfirmDialog({
+      await confirmInSheet({
         title: "重新安排选定日期？",
         message: "将覆盖范围内未完成的手工安排，已完成记录保留。",
       });
