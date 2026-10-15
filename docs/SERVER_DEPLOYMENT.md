@@ -2,7 +2,15 @@
 
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
-## 最新发布（2026-10-15，v26）
+## 最新发布（2026-10-15，v27）
+
+正式版本为 `20261015-gesture-calendar-v27`，代码见 PR #21。日期区支持触摸左右滑月，纵向保留页面滚动，密集标记约束在格内，日期详情按实际完成时间倒序。底栏 / 分段复用水平意图判断，失焦取消预览；修复浏览器隐式捕获转交引起的滑动误取消。抽屉使用最近移动判断速度，反向重置、停住不沿用旧速度。保留黑白大字与暗色无虚化提示。
+
+发布前在线备份 `dorm-20261015T122935Z.sqlite`，切换后 59 条既有完成记录逐条摘要一致。Worker SHA-256：`33c2f4d9a02d8f1892911bd19a5369284599b41a33ee059f0dfee9fd1cbc2774`。前一目录 `20261015-tactile-dim-v26` 保留；未更改数据库结构、业务轮次、权限、通知凭据或 Nginx。
+
+最终 28 个公网页面 / JS / CSS / Manifest / SW 与构建字节一致，健康检查正常。28 项手势 / 速度检查、64 项实际 Chromium 组件检查和最终构建双身份持久化流程通过，含触摸事件、取消、反向和 320 / 390 / 430px 布局；两项 GitHub 必需检查通过。证据在忽略目录 `docs/evidence/gesture-polish/`、`docs/evidence/interaction-foundation/`、`docs/evidence/ui-focus/regression/`。实体三端触摸手感与帧率独立验收。设计参考与具体行为见 [移动交互优化](REFERENCE_POLISH.md)。
+
+## 历史发布（2026-10-15，v26）
 
 正式版本为 `20261015-tactile-dim-v26`，代码见 PR #20。完成按钮再次点击恢复、轮次成员拖动排列、日历对齐与居中入口已上线；提示弹窗标题居中、无关闭图标、半透明暗色背景、不虚化，弹窗略低于屏幕中心，点空白或「知道了」收起。抬水保留原大名字与留白。Worker SHA-256：`91c2479bbca6dc384ab2ff7bd39410ff7d4647abbf9249f2ef84ff8f6443dc80`。
 
@@ -65,7 +73,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261015-tactile-dim-v26`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261015-gesture-calendar-v27`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 
