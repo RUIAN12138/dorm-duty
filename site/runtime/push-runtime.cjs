@@ -7606,6 +7606,14 @@ async function roomMembers(db, roomId) {
   );
 }
 async function ensureChoreMarkers(db, roomId) {
+  const repair = await first(
+    db,
+    `SELECT
+    EXISTS(SELECT 1 FROM member_marks mm WHERE mm.dorm_id=? AND NOT EXISTS(SELECT 1 FROM dorm_members m WHERE m.dorm_id=mm.dorm_id AND m.user_id=mm.user_id AND m.is_active=1))
+    OR EXISTS(SELECT 1 FROM dorm_members m LEFT JOIN member_marks mm ON mm.dorm_id=m.dorm_id AND mm.user_id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 AND mm.id IS NULL) AS needed`,
+    [roomId, roomId]
+  );
+  if (!repair.needed) return;
   await stmt(
     db,
     "DELETE FROM member_marks WHERE dorm_id=? AND NOT EXISTS(SELECT 1 FROM dorm_members m WHERE m.dorm_id=member_marks.dorm_id AND m.user_id=member_marks.user_id AND m.is_active=1)",
@@ -7649,6 +7657,12 @@ async function categories(db, roomId) {
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
+  const initialized = await first(
+    db,
+    "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
+    [room.id, room.id]
+  );
+  if (initialized) return;
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "\u5BBF\u820D\u6CA1\u6709\u6709\u6548\u6210\u5458");
   const legacy = parse(room.rotation_order || "[]"), ids = members.map((member) => member.user_id);
@@ -7867,6 +7881,7 @@ async function maintain(db, room, now) {
       "SELECT * FROM chore_settings WHERE dorm_id=?",
       [room.id]
     ), settings = await categories(db, room.id), members = await roomMembers(db, room.id), ids = members.map((member) => member.user_id);
+    if (!members.length) fail(409, "no_members", "\u5BBF\u820D\u6CA1\u6709\u6709\u6548\u6210\u5458");
     const replacements = [], mutation = new Mutation(db, room, state.version);
     for (const category of settings) {
       const order = synchronizedOrder(category.rotation_order, ids);

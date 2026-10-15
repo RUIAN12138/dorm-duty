@@ -180,7 +180,7 @@ onBeforeUnmount(() => {
         @keydown.up.prevent="emit('step', member.user_id, -1, true)"
         @keydown.down.prevent="emit('step', member.user_id, 1, true)"
       >
-        <MemberMark :id="member.marker_id" :size="24" /><strong
+        <MemberMark :id="member.marker_id" :size="24" inline /><strong
           ><span>{{ member.nickname }}</span
           ><small v-if="completed !== undefined">{{
             completed ? "已完成" : "待完成"

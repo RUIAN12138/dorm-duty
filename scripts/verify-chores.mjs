@@ -318,7 +318,7 @@ async function navigate(page, key) {
               a.effect?.target?.classList?.contains("focus-pane") &&
               a.effect
                 .getKeyframes()
-                .some((k) => String(k.clipPath).startsWith("circle(")),
+                .some((k) => k.opacity !== undefined && Number(k.opacity) < 1),
           );
         if (performance.now() - start < 600) requestAnimationFrame(sample);
       }
@@ -330,7 +330,7 @@ async function navigate(page, key) {
     await page.waitForFunction(() => window.__revealSeen);
     checkedReveal.add(page);
     checks.push(
-      "tapping a page tab reveals its new page from a circular clip at the touch origin",
+      "tapping a page tab crossfades without translating or clipping its content",
     );
   }
 }
@@ -345,6 +345,50 @@ async function swipeSection(page, deltaX) {
   await page.mouse.down();
   await page.mouse.move(x + deltaX, y, { steps: 8 });
   await page.mouse.up();
+}
+async function swipeBlank(page, dx, hold = 0) {
+  const point = await page.locator(".board-focus").evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    for (
+      let y = b.top + 35;
+      y < Math.min(b.bottom - 30, innerHeight - 130);
+      y += 28
+    ) {
+      const x = b.left + b.width * 0.55,
+        target = document.elementFromPoint(x, y);
+      if (
+        target &&
+        el.contains(target) &&
+        !target.closest(
+          "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll]",
+        )
+      )
+        return { x, y };
+    }
+    return null;
+  });
+  assert(point, "a blank area is available for page swiping");
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [point],
+    });
+    for (let i = 1; i <= 4; i++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: point.x + (dx * i) / 4, y: point.y }],
+      });
+      await page.waitForTimeout(12);
+    }
+    if (hold) await page.waitForTimeout(hold);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  } finally {
+    await cdp.detach();
+  }
 }
 async function dragBottomNav(page, from, to) {
   navigationStep = `drag-navigation:${from}:${to}`;
@@ -367,7 +411,9 @@ async function dragBottomNav(page, from, to) {
           .some(
             (a) =>
               a.effect?.target?.classList?.contains("focus-pane") &&
-              a.effect?.getTiming().duration === 180,
+              a.effect
+                ?.getKeyframes()
+                .some((k) => k.opacity !== undefined && Number(k.opacity) < 1),
           );
       if (performance.now() - start < 700) requestAnimationFrame(sample);
     }
@@ -943,18 +989,28 @@ try {
   );
   await a.page.getByTestId("round-progress").click();
   await a.page.getByTestId("round-members").waitFor();
-  await a.page.getByTestId("edit-round-order").click();
-  await a.page.getByRole("dialog", { name: "调整排列", exact: true }).waitFor();
-  assert.equal(await a.page.getByTestId("round-members").isVisible(), true);
+  assert.equal(await a.page.getByTestId("edit-round-order").count(), 0);
+  assert.equal(
+    await a.page
+      .getByTestId("round-members")
+      .locator(".sort-list,.hint-trigger")
+      .count(),
+    0,
+  );
+  await a.page
+    .getByRole("dialog")
+    .getByRole("button", { name: "关闭详情", exact: true })
+    .click();
+  await a.page.getByTestId("round-members").waitFor({ state: "hidden" });
   const initialRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",
   );
+  await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId("order-category-floor").click();
   await a.page.getByTestId(`order-down-floor-${ownerId}`).focus();
   await a.page.keyboard.press("Enter");
-  await a.page.waitForTimeout(600);
-  await snapshot(a.page, "round-order-390");
   await a.page.getByTestId("round-order-save").click();
-  await a.page.getByTestId("round-members").waitFor({ state: "hidden" });
+  await a.page.getByRole("dialog").waitFor({ state: "hidden" });
   const reorderedRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",
   );
@@ -970,8 +1026,9 @@ try {
     reorderedRound.members,
   );
   checks.push(
-    "creator reorders roommates in the round panel; member sees the same order and completed counts/round number stay unchanged",
+    "round progress contains only completion information; task order is edited from the separate header control",
   );
+
   await snapshot(a.page, "duty-polished-390");
   // During rapid task changes there must always be a readable outgoing/incoming title.
   for (let i = 0; i < 12; i++) {
@@ -1003,6 +1060,19 @@ try {
   checks.push(
     "creator and member each have isolated duty, water and calendar pages without horizontal overflow at 320, 390 and 430 pixels",
     "bottom navigation, page-heading swipes, boundary hints, browser back/forward and reloads preserve both browser identities and device credentials",
+  );
+  await navigate(a.page, "duty");
+  const identityBeforeSwipe = await identity(a.page);
+  await swipeBlank(a.page, -32);
+  await pane(a.page, "water");
+  await swipeBlank(a.page, 24, 180);
+  await a.page.waitForTimeout(300);
+  assert.equal(new URL(a.page.url()).pathname, "/water");
+  await swipeBlank(a.page, 90);
+  await pane(a.page, "duty");
+  await stableIdentity(a.page, identityBeforeSwipe);
+  checks.push(
+    "content-area touch flick uses momentum to snap one page; a slow short pull returns; identity persists",
   );
   phase = "reminder";
   const floor = ownerBoard.today_tasks.find((t) => t.key === "floor");

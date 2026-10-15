@@ -2,7 +2,17 @@
 
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
-## 最新发布（2026-10-15，v30）
+## 最新发布（2026-10-16，v31）
+
+正式版本 `20261015-pager-order-v31`（沿用开始开发日期作为版本前缀），于北京时间 2026-10-16 00:01:00 上线。Worker SHA-256：`dcdbae1f301e9118a2d3acfe06eade378631224537de6531838867e9a95143de`。前版 `20261015-fluid-rings-v30` 保留。
+
+完成轮次面板只展示完成信息；顶部独立轮序抽屉把标题、滚动名单和保存区分开，问号与关闭按钮同排，排序图标改同源内联 SVG。切页统一渐隐渐显，内容空白支持近期速度投影的左右轻扫与回位；月历每个滑动面板有月份标签和轻微表面区分。抬水催促加强局部形变，不改变实际提醒冷却。
+
+后端稳定轮询不再重复初始化写入；独立轮序保存仅更新版本和顺序，按日排班仍重排待办。无数据库迁移、凭据或 Nginx 变更。在线备份 `dorm-20261015T160100Z.sqlite`；切换后 61 条既有完成记录逐条摘要一致，28 个公网资源与本轮构建字节一致，服务健康正常。证据：忽略目录 `docs/evidence/order-boundaries/deployment-v31.log`、`public-assets-v31.json`。
+
+验证：79 项交互基础、Chromium 35 / WebKit 34 项轮环月历、两引擎各 30 项轮序边界检查、30 条完整双身份流程（含内容区真实浏览器触摸轻扫、慢拖回位、身份保留、撤销和服务重启）、790 项核心业务、120 项轮序、186 项轮次、73 项撤销、156 项通知、698 项 Worker 检查及无写轮询成本检查通过。实体 iPhone 帧率 / 震动未验收；浏览器引擎和触摸模拟不替代真机。
+
+## 历史发布（2026-10-15，v30）
 
 正式版本 `20261015-fluid-rings-v30`，于 2026-10-15 15:21:43 UTC（北京时间 23:21:43）上线。运行目录 `/opt/dorm-duty/releases/20261015-fluid-rings-v30`；Worker SHA-256：`751d15890ef75fb0ceda4852d66f6c8b42af9467c829319aa641ffccfca3f189`。
 
@@ -105,7 +115,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261015-fluid-rings-v30`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261015-pager-order-v31`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 

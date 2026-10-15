@@ -17,6 +17,7 @@ const props = withDefaults(
     modelValue: boolean;
     modal?: boolean;
     stickyHeader?: boolean;
+    contained?: boolean;
     title: string;
     origin?: DOMRect | null;
     motion?: "shared" | "bottom";
@@ -315,6 +316,7 @@ onBeforeUnmount(() => {
             :class="{
               'is-bottom-sheet': props.motion === 'bottom',
               'has-sticky-header': stickyHeader,
+              'has-contained-scroll': contained,
             }"
             :style="{
               transformOrigin: 'top left',
@@ -342,11 +344,17 @@ onBeforeUnmount(() => {
               <div>
                 <DialogTitle as="h2">{{ title }}</DialogTitle>
               </div>
-              <button type="button" aria-label="关闭详情" @click="close">
-                <van-icon name="cross" />
-              </button>
+              <div class="sheet-heading-actions">
+                <slot name="header-actions" />
+                <button type="button" aria-label="关闭详情" @click="close">
+                  <van-icon name="cross" />
+                </button>
+              </div>
             </header>
-            <div class="sheet-content"><slot /></div>
+            <div class="sheet-content" data-sheet-scroll><slot /></div>
+            <footer v-if="$slots.footer" class="sheet-footer">
+              <slot name="footer" />
+            </footer>
           </section>
         </div>
       </DialogContent>
@@ -386,5 +394,51 @@ onBeforeUnmount(() => {
   margin-top: 0;
   margin-bottom: 16px;
   box-shadow: 0 -14px 0 var(--canvas, #fff);
+}
+</style>
+
+<style scoped>
+.sheet-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.has-contained-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+  height: min(90dvh, 820px);
+}
+.has-contained-scroll .sheet-handle,
+.has-contained-scroll .sheet-heading {
+  flex-shrink: 0;
+}
+.has-contained-scroll .sheet-heading {
+  position: relative;
+  top: auto;
+  margin: 0;
+  padding: 8px 0 16px;
+  box-shadow: none;
+}
+.has-contained-scroll .sheet-content {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scroll-padding-block: 12px;
+  padding: 4px 3px 14px;
+  margin: 0 -3px;
+  isolation: isolate;
+}
+.sheet-footer {
+  position: relative;
+  z-index: 40;
+  flex-shrink: 0;
+  padding: 14px 0 calc(18px + env(safe-area-inset-bottom));
+  background: var(--canvas, #fff);
+  border-top: 1px solid #eee;
 }
 </style>

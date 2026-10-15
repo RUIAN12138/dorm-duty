@@ -26,7 +26,6 @@ const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   saved: [];
   closed: [];
-  recover: [];
 }>();
 const selectedKey = ref("water");
 const selectedCategory = computed(
@@ -89,7 +88,7 @@ async function save() {
     :model-value="modelValue"
     :title="`${selectedCategory.name}轮序`"
     motion="bottom"
-    sticky-header
+    contained
     @update:model-value="emit('update:modelValue', $event)"
     @closed="emit('closed')"
   >
@@ -100,7 +99,7 @@ async function save() {
         :options="options"
         group-label="选择任务轮序"
     /></TabsRoot>
-    <div class="order-help">
+    <template #header-actions>
       <HintPopover
         title="调整轮序"
         :text="
@@ -109,7 +108,7 @@ async function save() {
             : '游客仅可查看。加入正式宿舍后，每位成员都能调整轮序。'
         "
       />
-    </div>
+    </template>
     <SortableMembers
       v-if="editable"
       v-model="order"
@@ -129,6 +128,7 @@ async function save() {
         ><MemberMark
           :id="members.find((m) => m.user_id === id)?.marker_id"
           :size="27"
+          inline
         /><strong>{{
           members.find((m) => m.user_id === id)?.nickname || "室友"
         }}</strong
@@ -139,32 +139,24 @@ async function save() {
         >
       </li>
     </ol>
-    <p v-if="error" class="order-error" role="alert">{{ error }}</p>
-    <div v-if="editable" class="order-save">
-      <button
-        class="guest-primary"
-        :data-testid="
-          selectedKey === 'water' ? 'water-order-save' : 'round-order-save'
-        "
-        :disabled="saving"
-        @click="save"
-      >
-        {{ saving ? "正在保存…" : "保存轮序" }}
-      </button>
-    </div>
+    <template v-if="editable" #footer>
+      <p v-if="error" class="order-error" role="alert">{{ error }}</p>
+      <div class="order-save">
+        <button
+          class="guest-primary"
+          :data-testid="
+            selectedKey === 'water' ? 'water-order-save' : 'round-order-save'
+          "
+          :disabled="saving"
+          @click="save"
+        >
+          {{ saving ? "正在保存…" : "保存轮序" }}
+        </button>
+      </div>
+    </template>
   </ElasticSheet>
 </template>
 <style scoped>
-.order-help {
-  display: flex;
-  justify-content: flex-end;
-  margin: 12px 0;
-}
-.order-caption {
-  margin: 0 0 20px;
-  font-size: 16px;
-  color: #666;
-}
 .order-people {
   list-style: none;
   padding: 0;
@@ -203,18 +195,6 @@ strong {
   background: #111;
   color: white;
   border-radius: 12px;
-}
-.order-save {
-  position: sticky;
-  bottom: -24px;
-  padding: 12px 0 8px;
-  background: #fff;
-}
-.order-save p {
-  font-size: 14px;
-  color: #777;
-  margin: 8px 0 16px;
-  line-height: 1.5;
 }
 .order-error {
   color: #9c2929;

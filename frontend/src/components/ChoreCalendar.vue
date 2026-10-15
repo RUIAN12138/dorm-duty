@@ -221,9 +221,6 @@ watch(
             @click.capture="carousel.click"
             @dragstart.prevent
           >
-            <div class="chore-weekdays" aria-hidden="true">
-              <span v-for="name in weekNames" :key="name">{{ name }}</span>
-            </div>
             <div ref="monthViewport" class="month-viewport">
               <div
                 ref="monthTrack"
@@ -235,60 +232,78 @@ watch(
                 <div
                   v-for="page in months"
                   :key="page.key"
-                  class="chore-calendar-grid"
+                  class="month-page"
+                  :class="{
+                    'month-page-even': Number(page.key.slice(5)) % 2 === 0,
+                  }"
                   :data-month="page.key"
                   :aria-hidden="page.delta !== 0 ? true : undefined"
                   :inert="page.delta !== 0 ? true : undefined"
                   :aria-busy="loading"
                 >
-                  <template
-                    v-for="(cell, index) in page.cells"
-                    :key="cell?.date || `blank-${index}`"
+                  <div class="month-page-heading" aria-hidden="true">
+                    <strong>{{ Number(page.key.slice(5)) }}月</strong
+                    ><span>{{ page.key.slice(0, 4) }}</span>
+                  </div>
+                  <div class="chore-weekdays" aria-hidden="true">
+                    <span v-for="name in weekNames" :key="name">{{
+                      name
+                    }}</span>
+                  </div>
+                  <div
+                    class="chore-calendar-grid"
+                    :data-month="page.key"
+                    :inert="page.delta !== 0 ? true : undefined"
                   >
-                    <button
-                      v-if="cell"
-                      :class="{
-                        'is-today': cell.date === today,
-                        'has-records': !!cell.records.length,
-                        'is-selected': cell.date === selected,
-                      }"
-                      :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
-                      :aria-pressed="cell.date === selected"
-                      :data-testid="
-                        page.delta === 0
-                          ? `calendar-day-${cell.date}`
-                          : undefined
-                      "
-                      @click="
-                        selected = selected === cell.date ? '' : cell.date
-                      "
+                    <template
+                      v-for="(cell, index) in page.cells"
+                      :key="cell?.date || `blank-${index}`"
                     >
-                      <span class="calendar-day-number"
-                        >{{ cell.day
-                        }}<small
-                          v-if="cell.marks.length > 2"
-                          class="calendar-more"
-                          >+{{ cell.marks.length - 2 }}</small
-                        ></span
-                      ><span class="calendar-cell-marks"
-                        ><span
-                          v-for="mark in cell.visibleMarks"
-                          :key="`${mark.assignee_id}:${mark.type}`"
-                          class="calendar-task-mark"
-                          :data-task-type="mark.type"
-                          :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
-                          aria-hidden="true"
-                          ><MemberMark
-                            :id="mark.marker_id"
-                            :size="16" /><ChoreTypeIcon :type="mark.type"
-                        /></span>
-                      </span></button
-                    ><span
-                      v-else
-                      class="calendar-blank"
-                      aria-hidden="true"
-                    ></span>
-                  </template>
+                      <button
+                        v-if="cell"
+                        :class="{
+                          'is-today': cell.date === today,
+                          'has-records': !!cell.records.length,
+                          'is-selected': cell.date === selected,
+                        }"
+                        :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
+                        :aria-pressed="cell.date === selected"
+                        :data-testid="
+                          page.delta === 0
+                            ? `calendar-day-${cell.date}`
+                            : undefined
+                        "
+                        @click="
+                          selected = selected === cell.date ? '' : cell.date
+                        "
+                      >
+                        <span class="calendar-day-number"
+                          >{{ cell.day
+                          }}<small
+                            v-if="cell.marks.length > 2"
+                            class="calendar-more"
+                            >+{{ cell.marks.length - 2 }}</small
+                          ></span
+                        ><span class="calendar-cell-marks"
+                          ><span
+                            v-for="mark in cell.visibleMarks"
+                            :key="`${mark.assignee_id}:${mark.type}`"
+                            class="calendar-task-mark"
+                            :data-task-type="mark.type"
+                            :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
+                            aria-hidden="true"
+                            ><MemberMark
+                              :id="mark.marker_id"
+                              :size="16" /><ChoreTypeIcon :type="mark.type"
+                          /></span>
+                        </span></button
+                      ><span
+                        v-else
+                        class="calendar-blank"
+                        aria-hidden="true"
+                      ></span>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
@@ -581,12 +596,39 @@ h1 > span {
   width: 100%;
   will-change: transform;
 }
-.month-stage > .chore-calendar-grid {
-  grid-auto-rows: minmax(62px, auto);
+.month-stage > .month-page {
+  padding: 10px 5px 0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    inset 1px 0 #efefef,
+    inset -1px 0 #efefef;
+}
+.month-page.month-page-even {
+  background: #fafafa;
+}
+.month-page-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 8px 16px;
+  gap: 10px;
+  color: #888;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+.month-page-heading strong {
+  font-size: 17px;
+  letter-spacing: -0.3px;
+  color: #444;
+  font-weight: 550;
+}
+.month-stage > .month-page {
   flex: 0 0 100%;
   min-width: 0;
 }
 .chore-calendar-grid {
+  grid-auto-rows: minmax(62px, auto);
   width: 100%;
 }
 .calendar-nav button:active {
@@ -613,7 +655,7 @@ h1 > span {
   }
 }
 @media (max-height: 650px) {
-  .month-stage > .chore-calendar-grid {
+  .month-page .chore-calendar-grid {
     grid-auto-rows: minmax(48px, auto);
   }
   header {

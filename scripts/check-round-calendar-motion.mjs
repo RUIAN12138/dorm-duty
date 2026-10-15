@@ -307,6 +307,18 @@ try {
     "2026-10",
     "held month preview has not committed a different month",
   );
+  check(
+    await page.locator(".month-page-heading strong").allTextContents(),
+    ["9月", "10月", "11月"],
+    "every sliding month carries its own month label",
+  );
+  const tones = await page
+    .locator(".month-page")
+    .evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).backgroundColor),
+    );
+  assert(tones[0] !== tones[1] && tones[1] !== tones[2]);
+  checks.push("adjacent months have subtly distinct surfaces during drag");
   const preview = await page
     .locator('.chore-calendar-grid[data-month="2026-11"]')
     .boundingBox();

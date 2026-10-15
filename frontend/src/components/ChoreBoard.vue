@@ -9,6 +9,7 @@ function showToast(message: string) {
     duration: 1600,
   });
 }
+import { createVelocityTracker, rubberBand } from "../interaction/gestures";
 import { useRouter } from "vue-router";
 import { ApiError } from "../api";
 import { completeChore } from "../api/completion";
@@ -20,10 +21,7 @@ import {
   type ChoreReminder,
   type ChoreCompletion,
   type ChoreTask,
-  type ChoreCategory,
 } from "../api/chores";
-import HintPopover from "./HintPopover.vue";
-import SortableMembers from "./SortableMembers.vue";
 import RoundProgress from "./RoundProgress.vue";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
@@ -43,11 +41,7 @@ import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
 import { createTaskSwipe } from "../interaction/taskSwipe";
-import {
-  navigationScrubbing,
-  navigationOrigin,
-  motionAllowed,
-} from "../interaction/motion";
+import { navigationOrigin, motionAllowed } from "../interaction/motion";
 const props = defineProps<{
   invite: string;
   dormName: string;
@@ -179,7 +173,6 @@ const detailTask = ref<ChoreTask | null>(null);
 const detailOpen = ref(false);
 const detailMotion = ref<"shared" | "bottom">("shared");
 const detailOrigin = ref<DOMRect | null>(null);
-const direction = ref(1);
 const sectionOrder = ["duty", "water", "calendar"];
 const sectionPaths = ["/", "/water", "/calendar"];
 const sectionSwipeOffset = ref(0);
@@ -190,6 +183,7 @@ let sectionPointer: {
   y: number;
   horizontal: boolean;
   surface: HTMLElement;
+  velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 function resetSectionSwipe() {
   const active = sectionPointer;
@@ -203,7 +197,9 @@ function sectionSwipeDown(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || sectionPointer) return;
   if (
     !(event.target instanceof Element) ||
-    !event.target.closest("[data-section-swipe-handle]")
+    event.target.closest(
+      "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll]",
+    )
   )
     return;
   sectionPointer = {
@@ -212,6 +208,7 @@ function sectionSwipeDown(event: PointerEvent) {
     y: event.clientY,
     horizontal: false,
     surface: event.currentTarget as HTMLElement,
+    velocity: createVelocityTracker(event.clientX, performance.now()),
   };
 }
 function sectionSwipeMove(event: PointerEvent) {
@@ -219,6 +216,7 @@ function sectionSwipeMove(event: PointerEvent) {
   if (!active || active.id !== event.pointerId) return;
   const x = event.clientX - active.x;
   const y = event.clientY - active.y;
+  active.velocity.add(event.clientX, performance.now());
   if (!active.horizontal) {
     if (Math.abs(y) > 8 && Math.abs(y) >= Math.abs(x)) {
       resetSectionSwipe();
@@ -230,31 +228,53 @@ function sectionSwipeMove(event: PointerEvent) {
   }
   event.preventDefault();
   sectionSwipeDragging.value = true;
-  sectionSwipeOffset.value = Math.max(-36, Math.min(36, x * 0.24));
+  sectionSwipeOffset.value = rubberBand(x, 150);
 }
 function sectionSwipeUp(event: PointerEvent) {
   const active = sectionPointer;
   if (!active || active.id !== event.pointerId) return;
   const x = event.clientX - active.x;
-  const commit = active.horizontal && Math.abs(x) >= 56;
+  const speed = active.velocity.read(performance.now());
+  const projected = x + speed * 160;
+  const commit =
+    active.horizontal &&
+    Math.abs(x) >= 18 &&
+    (Math.abs(x) >= 56 || Math.abs(projected) >= 72);
+  const travel = Math.abs(speed) > 0.3 ? projected : x;
   resetSectionSwipe();
   if (!commit) return;
   const index = sectionOrder.indexOf(props.section);
-  const next = index + (x < 0 ? 1 : -1);
+  const next = index + (travel < 0 ? 1 : -1);
   const path = sectionPaths[next];
   if (path) void router.push(path);
   else showToast(x < 0 ? "已经是最后一页" : "已经是第一页");
 }
 function sectionSwipeCancel(event: PointerEvent) {
+  if (
+    event.type === "lostpointercapture" &&
+    sectionPointer?.surface.hasPointerCapture(event.pointerId)
+  )
+    return;
   if (sectionPointer?.id === event.pointerId) resetSectionSwipe();
 }
+function sectionHidden() {
+  if (document.hidden) resetSectionSwipe();
+}
+onMounted(() => {
+  window.addEventListener("blur", resetSectionSwipe);
+  document.addEventListener("visibilitychange", sectionHidden);
+});
+onUnmounted(() => {
+  resetSectionSwipe();
+  window.removeEventListener("blur", resetSectionSwipe);
+  document.removeEventListener("visibilitychange", sectionHidden);
+});
 watch(
   () => props.section,
-  (next, previous) => {
+  () => {
     taskSwipe.cancel();
+    resetSectionSwipe();
     detailOpen.value = false;
-    direction.value =
-      sectionOrder.indexOf(next) >= sectionOrder.indexOf(previous) ? 1 : -1;
   },
 );
 function openTask(task: ChoreTask, event: MouseEvent) {
@@ -267,46 +287,10 @@ function openTask(task: ChoreTask, event: MouseEvent) {
   detailTask.value = task;
   detailOpen.value = true;
 }
-let scrubAnimation: Animation | undefined;
 function showEntered(element: Element) {
   element.removeAttribute("aria-hidden");
   element.removeAttribute("inert");
-}
-function animateEntered(element: Element) {
-  scrubAnimation?.cancel();
-  if (!motionAllowed()) {
-    navigationOrigin.value = null;
-    return;
-  }
-  const origin = navigationOrigin.value;
   navigationOrigin.value = null;
-  if (origin && performance.now() - origin.time < 600) {
-    const bounds = element.getBoundingClientRect();
-    const x = Math.max(0, Math.min(bounds.width, origin.x - bounds.left)),
-      y = Math.max(0, Math.min(bounds.height, origin.y - bounds.top));
-    const radius = Math.hypot(
-      Math.max(x, bounds.width - x),
-      Math.max(y, bounds.height - y),
-    );
-    scrubAnimation = element.animate(
-      [
-        { clipPath: `circle(0px at ${x}px ${y}px)` },
-        { clipPath: `circle(${radius}px at ${x}px ${y}px)` },
-      ],
-      { duration: 280, easing: "cubic-bezier(.22,1,.36,1)" },
-    );
-  } else if (navigationScrubbing.value) {
-    scrubAnimation = element.animate(
-      [
-        {
-          transform: `translate3d(${direction.value * 18}px,0,0)`,
-          opacity: 0.65,
-        },
-        { transform: "translate3d(0,0,0)", opacity: 1 },
-      ],
-      { duration: 180, easing: "cubic-bezier(.22,1,.36,1)" },
-    );
-  }
 }
 function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
@@ -347,7 +331,6 @@ const activeRound = computed(
       (round) => round.key === activeDutyTask.value?.key,
     ) || null,
 );
-const roundEditing = ref(false);
 const completedRoundReceipt = ref<ChoreBoardData["rounds"][number] | null>(
   null,
 );
@@ -361,51 +344,9 @@ const displayRound = computed(() => {
     ? last
     : current;
 });
-const roundOrder = ref<number[]>([]),
-  roundSaving = ref(false),
-  roundError = ref("");
-let roundVersion = 0,
-  roundCategory: ChoreCategory | undefined;
 watch(roundOpen, (open) => {
-  roundEditing.value = false;
   if (!open) completedRoundReceipt.value = null;
-  if (!open || !board.value || !activeRound.value) return;
-  const category = board.value.categories.find(
-    (c) => c.key === activeRound.value?.key,
-  );
-  if (!category) return;
-  roundCategory = JSON.parse(JSON.stringify(category));
-  roundOrder.value = [...category.rotation_order];
-  roundVersion = board.value.version;
-  roundError.value = "";
 });
-async function saveRoundOrder() {
-  if (roundSaving.value || !roundCategory || !board.value || props.demo) return;
-  roundSaving.value = true;
-  roundError.value = "";
-  try {
-    await choreRequest("/chores/order", props.token, {
-      method: "PATCH",
-      body: JSON.stringify({
-        version: roundVersion,
-        key: roundCategory.key,
-        rotation_order: roundOrder.value,
-      }),
-    });
-    if (!alive) return;
-    roundOpen.value = false;
-    await load();
-  } catch (e) {
-    if (alive)
-      roundError.value =
-        e instanceof ApiError && e.status === 409
-          ? "排列已被更新，请关闭后重新打开再调整。"
-          : (e as Error).message;
-  } finally {
-    if (alive) roundSaving.value = false;
-  }
-}
-onUnmounted(() => scrubAnimation?.cancel());
 
 const dutyCaption = computed(() =>
   activeRound.value
@@ -1033,8 +974,15 @@ onUnmounted(() => {
       </div>
       <div
         class="board-focus"
-        :class="{ 'section-swipe-dragging': sectionSwipeDragging }"
-        :style="{ '--section-swipe-offset': `${sectionSwipeOffset}px` }"
+        :class="{
+          'section-swipe-dragging': sectionSwipeDragging,
+          'quiet-pages': !motionAllowed(),
+        }"
+        :style="{
+          '--section-swipe-opacity': String(
+            1 - Math.min(0.42, Math.abs(sectionSwipeOffset) / 210),
+          ),
+        }"
         @pointerdown="sectionSwipeDown"
         @pointermove="sectionSwipeMove"
         @pointerup="sectionSwipeUp"
@@ -1042,11 +990,9 @@ onUnmounted(() => {
         @lostpointercapture="sectionSwipeCancel"
       >
         <Transition
-          :css="!navigationScrubbing && !navigationOrigin"
-          :name="direction > 0 ? 'focus-next' : 'focus-prev'"
+          name="focus-fade"
           @before-leave="hideLeaving"
           @before-enter="showEntered"
-          @enter="animateEntered"
         >
           <div :key="section" class="focus-pane">
             <section
@@ -1422,10 +1368,6 @@ onUnmounted(() => {
         :current-id="water?.assignee_id"
         :editable="!demo"
         :categories="board.categories"
-        @recover="
-          queuedTool = () => emit('recover-owner');
-          orderOpen = false;
-        "
         :version="board.version"
         :token="token"
         @saved="load"
@@ -1462,59 +1404,15 @@ onUnmounted(() => {
       </ElasticSheet>
       <ElasticSheet
         v-model="roundOpen"
-        :title="
-          roundEditing
-            ? '调整排列'
-            : `${activeDutyTask?.name || '值日'} · 第 ${displayRound?.sequence || 1} 轮`
-        "
+        :title="`${activeDutyTask?.name || '值日'} · 第 ${displayRound?.sequence || 1} 轮`"
         @closed="presentNewReminders"
       >
         <div
-          v-if="activeRound"
+          v-if="displayRound"
           class="round-members"
           data-testid="round-members"
         >
-          <template v-if="!roundEditing && displayRound">
-            <RoundProgress :round="displayRound" :active="roundOpen" />
-            <button
-              v-if="!demo"
-              class="round-edit-entry"
-              data-testid="edit-round-order"
-              @click="roundEditing = true"
-            >
-              <van-icon name="sort" />调整排列<van-icon name="arrow" />
-            </button>
-            <HintPopover
-              v-else
-              title="调整轮序"
-              text="游客模式仅可查看，加入正式宿舍后可以长按名字调整轮序。"
-            />
-          </template>
-          <template v-if="roundEditing && !demo">
-            <SortableMembers
-              v-model="roundOrder"
-              :members="activeRound.members"
-              :active="roundOpen"
-              :disabled="roundSaving"
-              :category-key="activeRound.key"
-              :completed-ids="
-                activeRound.members
-                  .filter((m) => m.completed)
-                  .map((m) => m.user_id)
-              "
-            />
-            <p v-if="roundError" class="chore-inline-error" role="alert">
-              {{ roundError }}
-            </p>
-            <button
-              class="guest-primary round-save"
-              :disabled="roundSaving"
-              data-testid="round-order-save"
-              @click="saveRoundOrder"
-            >
-              {{ roundSaving ? "正在保存…" : "保存排列" }}
-            </button>
-          </template>
+          <RoundProgress :round="displayRound" :active="roundOpen" />
         </div>
       </ElasticSheet>
       <ElasticSheet
@@ -1584,10 +1482,6 @@ onUnmounted(() => {
       <ChoreSettings
         v-model="settingsOpen"
         :categories="board.categories"
-        @recover="
-          queuedTool = () => emit('recover-owner');
-          orderOpen = false;
-        "
         :members="board.members"
         :version="board.version"
         :token="token"
@@ -1868,23 +1762,20 @@ onUnmounted(() => {
 .board-focus {
   position: relative;
 }
+.board-focus {
+  touch-action: pan-y;
+}
 .board-focus :deep([data-section-swipe-handle]) {
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.board-focus.section-swipe-dragging :deep([data-section-swipe-handle]) {
-  transform: translateX(var(--section-swipe-offset));
+.board-focus > .focus-pane:not([inert]) {
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.board-focus.section-swipe-dragging > .focus-pane:not([inert]) {
+  opacity: var(--section-swipe-opacity);
   transition: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .board-focus :deep([data-section-swipe-handle]) {
-    transition: none;
-  }
-  .board-focus.section-swipe-dragging :deep([data-section-swipe-handle]) {
-    transform: none;
-  }
 }
 .focus-pane {
   width: 100%;
@@ -2204,30 +2095,18 @@ onUnmounted(() => {
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .focus-next-enter-active,
-  .focus-prev-enter-active {
-    transition:
-      opacity 260ms ease,
-      transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  .focus-fade-enter-active {
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
   }
-  .focus-next-leave-active,
-  .focus-prev-leave-active {
+  .focus-fade-leave-active {
     position: absolute;
     top: 0;
     pointer-events: none;
-    transition:
-      opacity 100ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 160ms ease;
   }
-  .focus-next-enter-from,
-  .focus-prev-leave-to {
+  .focus-fade-enter-from,
+  .focus-fade-leave-to {
     opacity: 0;
-    transform: translateX(14px);
-  }
-  .focus-prev-enter-from,
-  .focus-next-leave-to {
-    opacity: 0;
-    transform: translateX(-14px);
   }
   .chore-complete-button,
   .water-remind {
@@ -2559,5 +2438,12 @@ onUnmounted(() => {
   .chore-personal {
     transition: none;
   }
+}
+</style>
+
+<style scoped>
+.quiet-pages > .focus-pane {
+  transition: none !important;
+  opacity: 1 !important;
 }
 </style>
