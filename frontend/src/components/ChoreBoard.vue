@@ -169,6 +169,59 @@ const activeRound = computed(
       (round) => round.key === activeDutyTask.value?.key,
     ) || null,
 );
+const roundProgressCircumference = 2 * Math.PI * 50;
+const roundAnimatedProgress = ref(0);
+const roundAnimatedCompleted = ref(0);
+let roundProgressFrame = 0;
+let roundProgressAnimation = 0;
+watch(
+  () => ({
+    open: roundOpen.value,
+    completed: activeRound.value?.completed ?? 0,
+    total: activeRound.value?.total ?? 0,
+  }),
+  ({ open, completed, total }) => {
+    if (roundProgressFrame) cancelAnimationFrame(roundProgressFrame);
+    roundProgressFrame = 0;
+    const animationId = ++roundProgressAnimation;
+    const boundedTotal = Math.max(0, total);
+    const boundedCompleted = Math.min(boundedTotal, Math.max(0, completed));
+    const targetProgress = boundedTotal
+      ? boundedCompleted / boundedTotal
+      : 0;
+    if (!open) {
+      roundAnimatedProgress.value = 0;
+      roundAnimatedCompleted.value = 0;
+      return;
+    }
+    if (
+      matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      document.documentElement.dataset.interaction === "keyboard"
+    ) {
+      roundAnimatedProgress.value = targetProgress;
+      roundAnimatedCompleted.value = boundedCompleted;
+      return;
+    }
+    roundAnimatedProgress.value = 0;
+    roundAnimatedCompleted.value = 0;
+    const startedAt = performance.now();
+    const animate = (now: number) => {
+      if (animationId !== roundProgressAnimation) return;
+      const progress = Math.min(1, (now - startedAt) / 560);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      roundAnimatedProgress.value = targetProgress * eased;
+      roundAnimatedCompleted.value = Math.round(boundedCompleted * eased);
+      if (progress < 1) roundProgressFrame = requestAnimationFrame(animate);
+      else roundProgressFrame = 0;
+    };
+    roundProgressFrame = requestAnimationFrame(animate);
+  },
+  { flush: "sync" },
+);
+onUnmounted(() => {
+  if (roundProgressFrame) cancelAnimationFrame(roundProgressFrame);
+});
+
 const dutyCaption = computed(() =>
   activeRound.value
     ? activeDutyTask.value?.status === "completed"
@@ -1042,8 +1095,28 @@ onUnmounted(() => {
           class="round-members"
           data-testid="round-members"
         >
+          <div class="round-progress-display" aria-hidden="true" data-testid="round-progress-ring">
+            <svg viewBox="0 0 120 120">
+              <circle class="round-progress-track" cx="60" cy="60" r="50" />
+              <circle
+                class="round-progress-value"
+                cx="60"
+                cy="60"
+                r="50"
+                :stroke-dasharray="roundProgressCircumference"
+                :stroke-dashoffset="
+                  roundProgressCircumference * (1 - roundAnimatedProgress)
+                "
+              />
+            </svg>
+            <div class="round-progress-center">
+              <strong>{{ roundAnimatedCompleted }}</strong>
+              <span>人已完成</span>
+            </div>
+          </div>
           <p class="round-summary">
-            已完成 {{ activeRound.completed }}/{{ activeRound.total }}
+            已完成 {{ activeRound.completed }}/{{ activeRound.total }} · 还差
+            {{ Math.max(0, activeRound.total - activeRound.completed) }} 人
           </p>
           <div
             v-for="person in activeRound.members"
@@ -1224,9 +1297,55 @@ onUnmounted(() => {
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
+.round-progress-display {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 148px;
+  aspect-ratio: 1;
+  margin: 0 auto 14px;
+}
+.round-progress-display svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.round-progress-display circle {
+  fill: none;
+  stroke-width: 6;
+}
+.round-progress-track {
+  stroke: #eee;
+}
+.round-progress-value {
+  stroke: #111;
+  stroke-linecap: round;
+}
+.round-progress-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.round-progress-center strong {
+  font-size: 42px;
+  line-height: 1;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.round-progress-center span {
+  color: #666;
+  font-size: 13px;
+}
 .round-summary {
-  font-size: 24px;
   margin: 0 0 24px;
+  color: #555;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 .round-member {
   display: flex;
