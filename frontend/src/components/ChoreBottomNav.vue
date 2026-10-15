@@ -80,6 +80,11 @@ window.addEventListener("blur", cancelGesture);
 document.addEventListener("visibilitychange", cancelWhenHidden);
 function finish(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
+  if (
+    event.type === "lostpointercapture" &&
+    gesture.nav.hasPointerCapture(event.pointerId)
+  )
+    return;
   const nav = gesture.nav;
   gesture = null;
   pressedIndex.value = -1;

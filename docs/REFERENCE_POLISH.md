@@ -7,7 +7,7 @@
 - [zackha/habit](https://github.com/zackha/habit)：借鉴克制的信息层级和组件组织，继续使用现有 Vue 工程，不迁移 Nuxt。
 - [mpvue-calendar](https://github.com/Hzy0913/mpvue-calendar)：借鉴移动端滑月思路，在既有日历日期区域增加横向手势，保留箭头与键盘入口。
 - [concrete.css](https://github.com/louismerlin/concrete.css)：借鉴样式一致性的思路，整理现有颜色、圆角和按压节奏，保留本项目圆角与页面外观。
-- [any-touch](https://github.com/any86/any-touch)：参考手势识别与业务分离的思路，本轮不增加依赖。只抽取已有水平意图、松手速度和阻尼规则，Motion / Reka 的职责不变。
+- [any-touch](https://github.com/any86/any-touch)：参考手势识别与业务分离的思路，本轮不增加依赖。只抽取已有水平意图、松手速度和阻尼规则，Motion / Reka 的职责不变。手指隐式捕获转交到手势表面时，仅忽略旧子元素冒泡的失捕获事件；真正取消仍回退。该行为对照 [Pointer Events 规范](https://www.w3.org/TR/pointerevents3/#implicit-pointer-capture)并使用浏览器触摸输入复现。
 - 本地 React Bits Dock / ClickSpark：参考连续运动与点击反馈的分工，没有引入 React、Canvas 特效或上游代码。
 
 本轮为自行实现，没有复制上述项目的代码或素材。未接入热力图、每日连续打卡、积分、XP、小部件或离线提交；自由轮次和按需抬水不以每日打卡评分。

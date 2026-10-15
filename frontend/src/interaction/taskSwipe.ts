@@ -12,6 +12,14 @@ export function createTaskSwipe(
   let suppressUntil = 0;
   function cancel(event?: Event) {
     if (event && "pointerId" in event && event.pointerId !== pointer) return;
+    // Touch starts with implicit capture on the date/title child. Transferring
+    // it to the gesture surface emits a bubbling loss from that old child.
+    if (
+      event?.type === "lostpointercapture" &&
+      pointer !== null &&
+      target?.hasPointerCapture(pointer)
+    )
+      return;
     const id = pointer;
     pointer = null;
     if (id !== null && target?.hasPointerCapture(id))

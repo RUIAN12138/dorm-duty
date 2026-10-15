@@ -212,6 +212,11 @@ function move(event: PointerEvent) {
 }
 function up(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
+  if (
+    event.type === "lostpointercapture" &&
+    gesture.element.hasPointerCapture(event.pointerId)
+  )
+    return;
   const speed = gesture.velocity.read(performance.now());
   resetGesture();
   if (!cancelled && (pose.y > 130 || (pose.y > 35 && speed > 0.6))) close();
