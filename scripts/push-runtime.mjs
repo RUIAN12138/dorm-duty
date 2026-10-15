@@ -7,6 +7,11 @@ import {
   createNativeSender,
 } from "./native-push-provider.mjs";
 import { validPushEndpoint } from "../site/shared/push-endpoint.mjs";
+import {
+  dailyReminderTasksSql,
+  SCHEDULE_CATCH_UP_MS,
+} from "../site/shared/notifications.mjs";
+export { createReminderScheduler } from "./reminder-scheduler.mjs";
 
 export function createPushDelivery(
   db,
@@ -43,9 +48,12 @@ export function createPushDelivery(
       const job = db.sqlite
         .prepare(
           `SELECT j.*,s.endpoint,s.p256dh,s.auth,s.provider,s.platform,s.is_active,s.revision,s.dorm_id AS device_dorm,s.user_id AS device_user,
-        r.sender_name_snapshot,r.task_name_snapshot,r.task_content_snapshot,r.target_member_id,r.dorm_id AS reminder_dorm,r.read_at,r.created_at AS reminder_created,t.status AS task_status,t.key AS task_key,t.assignee_id,c.enabled AS category_enabled,
+        r.sender_name_snapshot,r.task_name_snapshot,r.task_content_snapshot,r.source,r.target_member_id,r.dorm_id AS reminder_dorm,r.read_at,r.created_at AS reminder_created,t.status AS task_status,t.key AS task_key,t.assignee_id,c.enabled AS category_enabled,
+        e.day AS schedule_day,e.scheduled_at,e.task_ids,e.preference_version,p.version AS plan_version,p.enabled AS plan_enabled,
         m.is_active AS member_active,u.current_dorm_id,u.nickname AS recipient_name FROM chore_push_jobs j JOIN chore_push_subscriptions s ON s.id=j.subscription_id
         LEFT JOIN chore_reminders r ON r.id=j.reminder_id LEFT JOIN chore_tasks t ON t.id=r.task_id LEFT JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
+        LEFT JOIN chore_scheduled_reminders e ON e.reminder_id=r.id
+        LEFT JOIN chore_reminder_preferences p ON p.id=e.preference_id AND p.dorm_id=j.dorm_id AND p.user_id=j.user_id
         LEFT JOIN dorm_members m ON m.dorm_id=j.dorm_id AND m.user_id=j.user_id LEFT JOIN users u ON u.id=j.user_id WHERE j.id=? AND j.lease=?`,
         )
         .get(id, lease);
@@ -71,14 +79,45 @@ export function createPushDelivery(
             )) ||
         date.getTime() - Date.parse(job.created_at) > 86400000 ||
         job.attempts > 5;
+      const scheduled = job?.kind === "reminder" && job.source === "scheduled";
+      let taskIds = [];
+      if (scheduled) {
+        try {
+          const ids = JSON.parse(job.task_ids);
+          if (Array.isArray(ids)) taskIds = ids.filter(Number.isSafeInteger);
+        } catch {
+          /* Invalid snapshots are never delivered. */
+        }
+      }
+      const remaining = scheduled
+        ? db.sqlite
+            .prepare(dailyReminderTasksSql)
+            .all(
+              job.dorm_id,
+              job.user_id,
+              job.schedule_day || "",
+              job.schedule_day || "",
+            )
+            .filter((task) => taskIds.includes(task.id))
+        : [];
+      const scheduleAge = scheduled
+        ? date.getTime() - Date.parse(job.scheduled_at)
+        : 0;
       const obsoleteReminder =
         job?.kind === "reminder" &&
         (job.target_member_id !== job.user_id ||
           job.reminder_dorm !== job.dorm_id ||
           job.read_at ||
-          job.task_status !== "pending" ||
-          job.assignee_id !== job.user_id ||
-          !job.category_enabled);
+          (scheduled
+            ? !job.plan_enabled ||
+              job.preference_version !== job.plan_version ||
+              !Number.isFinite(scheduleAge) ||
+              scheduleAge < 0 ||
+              scheduleAge >= SCHEDULE_CATCH_UP_MS ||
+              !remaining.length
+            : job.task_status !== "pending" ||
+              job.assignee_id !== job.user_id ||
+              !job.category_enabled));
       if (stale || obsoleteReminder) {
         finish("cancelled");
         continue;
@@ -89,14 +128,18 @@ export function createPushDelivery(
         title:
           job.kind === "test"
             ? "轮到 · 测试通知"
-            : `${job.sender_name_snapshot} 提醒你${job.task_name_snapshot}`,
+            : scheduled
+              ? "轮到 · 值日提醒"
+              : `${job.sender_name_snapshot} 提醒你${job.task_name_snapshot}`,
         body:
           job.kind === "test"
             ? `${job.recipient_name}，这是一条测试提醒。示例：室友提醒你抬水，抬完后记得打卡。`
-            : `待办：${job.task_name_snapshot}。${String(job.task_content_snapshot || "").trim() || "完成后记得打卡。"}`.slice(
-                0,
-                160,
-              ),
+            : scheduled
+              ? `${remaining.map((task) => task.name).join("、")}还没完成，做完记得打卡。`
+              : `待办：${job.task_name_snapshot}。${String(job.task_content_snapshot || "").trim() || "完成后记得打卡。"}`.slice(
+                  0,
+                  160,
+                ),
         tag:
           job.kind === "test"
             ? `dorm-test-${id}`
@@ -126,7 +169,12 @@ export function createPushDelivery(
           },
           payload,
           {
-            TTL: 86400,
+            TTL: scheduled
+              ? Math.max(
+                  1,
+                  Math.floor((SCHEDULE_CATCH_UP_MS - scheduleAge) / 1000),
+                )
+              : 86400,
             urgency: "high",
             timeout: 10000,
             contentEncoding: "aes128gcm",
@@ -227,7 +275,7 @@ export async function createPushRuntime(
     db,
     (subscription, payload, options) =>
       subscription.provider === "jpush"
-        ? nativeSender(subscription, payload)
+        ? nativeSender(subscription, payload, options)
         : webpush.sendNotification(
             { endpoint: subscription.endpoint, keys: subscription.keys },
             payload,

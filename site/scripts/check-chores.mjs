@@ -393,6 +393,23 @@ export async function runChoreChecks() {
       status: 422,
     });
   });
+  test("saved non-adjacent water order survives reload and controls the next turn", async (h) => {
+    const r = await room(h);
+    const owner = { user_id: r.member_id, token: r.token };
+    const initial = await board(h, r, owner);
+    const order = [r.ids[2], r.ids[0], r.ids[1]];
+    await api(h, "/chores/settings", { method: "PATCH", token: r.token,
+      data: { version: initial.version, categories: [{ key: "water", rotation_order: order }] } });
+    const reloaded = await board(h, r, owner);
+    equal(reloaded.categories.find(c => c.key === "water").rotation_order, order);
+    equal(reloaded.water_task.assignee_id, initial.water_task.assignee_id);
+    const actor = initial.water_task.assignee_id === owner.user_id ? owner : await claim(h, r, initial.water_task.assignee_id);
+    await complete(h, actor, reloaded.water_task);
+    const next = await board(h, r, owner);
+    equal(next.water_task.assignee_id, order[(order.indexOf(actor.user_id) + 1) % order.length]);
+    equal(next.calendar.find(t => t.id === initial.water_task.id).assignee_id, actor.user_id);
+    equal(next.categories.find(c => c.key === "water").rotation_order, order);
+  });
   test("calendar uses Shanghai completion day, including late completion and month boundary", async (h) => {
     now = new OriginalDate("2026-10-31T15:50:00Z").getTime();
     const r = await room(h);

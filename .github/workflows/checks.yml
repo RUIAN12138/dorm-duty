@@ -46,6 +46,9 @@ jobs:
           node site/scripts/check-native-back.mjs
           node site/scripts/check-native-bridge.mjs
           node site/scripts/check-push-settings.mjs
+          node site/scripts/check-water-order.mjs
+          node site/scripts/check-scheduled-reminders.mjs
+          node site/scripts/check-reminder-runtime.mjs
           node site/scripts/check-creator-recovery.mjs
       - name: Build server website
         env:

@@ -8,6 +8,7 @@ import {
 } from "../api/chores";
 import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
+import SortableMembers from "./SortableMembers.vue";
 const props = defineProps<{
   modelValue: boolean;
   categories: ChoreCategory[];
@@ -220,7 +221,14 @@ async function save() {
         <span v-if="category.mode !== 'self_round'" class="settings-label"
           >轮换顺序</span
         >
-        <ol v-if="category.mode !== 'self_round'" class="settings-order">
+        <SortableMembers
+          v-if="category.key === 'water'"
+          v-model="category.rotation_order"
+          :members="members"
+          :active="modelValue"
+          :disabled="saving"
+        />
+        <ol v-else-if="category.mode !== 'self_round'" class="settings-order">
           <li
             v-for="(memberId, index) in category.rotation_order"
             :key="memberId"

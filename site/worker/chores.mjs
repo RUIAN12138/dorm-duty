@@ -2,6 +2,7 @@
 // Member claims are intentionally incapable of authenticating any legacy admin endpoint.
 import { MARK_IDS } from "../shared/member-marks.mjs";
 import { validPushEndpoint } from "../shared/push-endpoint.mjs";
+import { notifyUser } from "../shared/notifications.mjs";
 
 const DAY = 86_400_000;
 const KEYS = ["floor", "toilet", "water"];
@@ -675,7 +676,8 @@ function taskView(task, now, who, settings, members) {
 function reminderView(row) {
   return {
     id: row.id,
-    sender_id: row.sender_id,
+    sender_id: row.source === "scheduled" ? null : row.sender_id,
+    source: row.source || "member",
     sender_name: row.sender_name_snapshot,
     target_member_id: row.target_member_id,
     task_id: row.task_id,
@@ -683,7 +685,10 @@ function reminderView(row) {
     task_content: row.task_content_snapshot,
     created_at: row.created_at,
     read_at: row.read_at,
-    title: `${row.sender_name_snapshot} 提醒你${row.task_name_snapshot}`,
+    title:
+      row.source === "scheduled"
+        ? "轮到 · 值日提醒"
+        : `${row.sender_name_snapshot} 提醒你${row.task_name_snapshot}`,
     body: row.task_content_snapshot,
   };
 }
@@ -1211,23 +1216,16 @@ async function remind(request, db, room, who, now, env) {
     ],
   );
   // Reminder and every configured device are committed in the same CAS transaction.
-  mutation.raw(
-    `INSERT INTO chore_push_jobs(dorm_id,user_id,subscription_id,subscription_revision,reminder_id,next_attempt_at,created_at)
-    SELECT s.dorm_id,s.user_id,s.id,s.revision,r.id,?,? FROM chore_push_subscriptions s JOIN chore_reminders r ON r.mutation_key=?
-    WHERE s.dorm_id=? AND s.user_id=? AND s.is_active=1
-    AND ((s.provider='web' AND ?=1) OR (s.provider='jpush' AND ((s.platform='android' AND ?=1) OR (s.platform='harmony' AND ?=1))))
-    AND ${mutation.guard}`,
-    [
-      now.toISOString(),
-      now.toISOString(),
-      mutation.token,
-      room.id,
+  mutation.ops.push(
+    notifyUser(
       target,
-      Number(Boolean(env.PUSH_CONFIG?.available)),
-      Number(Boolean(env.NATIVE_PUSH_CONFIG?.android)),
-      Number(Boolean(env.NATIVE_PUSH_CONFIG?.harmony)),
-      ...mutation.guardValues,
-    ],
+      {
+        dormId: room.id,
+        reminderKey: mutation.token,
+        createdAt: now.toISOString(),
+      },
+      { db, env, guard: mutation.guard, values: mutation.guardValues },
+    ),
   );
   try {
     await mutation.finish();
@@ -1425,6 +1423,112 @@ async function memberPush(request, db, room, who, now, env, path) {
   env.PUSH_WAKE?.();
   return json({ ok: true, queued: true }, 202);
 }
+async function reminderPlan(request, db, room, who, now) {
+  if (!["GET", "PATCH"].includes(request.method))
+    fail(404, "not_found", "接口不存在");
+  const current = await first(
+    db,
+    "SELECT * FROM chore_reminder_preferences WHERE dorm_id=? AND user_id=?",
+    [room.id, who.user_id],
+  );
+  const view = async (row) => ({
+    enabled: Boolean(row?.enabled),
+    times: row ? parse(row.times) : ["08:00", "19:00"],
+    version: row?.version || 0,
+    timezone: "Asia/Shanghai",
+    updated_at: row?.updated_at || null,
+    last_reminder: await first(
+      db,
+      `SELECT r.created_at,COUNT(j.id) AS devices,
+      SUM(CASE WHEN j.status IN ('pending','sending') THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN j.status='accepted' THEN 1 ELSE 0 END) AS accepted,
+      SUM(CASE WHEN j.status='failed' THEN 1 ELSE 0 END) AS failed,
+      SUM(CASE WHEN j.status='cancelled' THEN 1 ELSE 0 END) AS cancelled
+      FROM chore_reminders r LEFT JOIN chore_push_jobs j ON j.reminder_id=r.id
+      WHERE r.dorm_id=? AND r.target_member_id=? AND r.source='scheduled'
+      GROUP BY r.id ORDER BY r.created_at DESC,r.id DESC LIMIT 1`,
+      [room.id, who.user_id],
+    ),
+  });
+  if (request.method === "GET") return json(await view(current));
+  const input = await body(
+    request,
+    ["enabled", "times", "version"],
+    ["enabled", "times", "version"],
+  );
+  const version = integer(input.version, 0);
+  if (
+    typeof input.enabled !== "boolean" ||
+    !Array.isArray(input.times) ||
+    input.times.length < 1 ||
+    input.times.length > 3
+  )
+    invalid("请选择每天 1 至 3 个提醒时间");
+  if (
+    input.times.some(
+      (value) =>
+        typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value),
+    )
+  )
+    invalid("提醒时间应为 00:00 至 23:59");
+  const times = [...input.times].sort();
+  if (new Set(times).size !== times.length) invalid("提醒时间不能重复");
+  if (version !== (current?.version || 0))
+    fail(409, "plan_changed", "提醒设置已变化，请重新打开后再试");
+  if (
+    current &&
+    current.enabled === Number(input.enabled) &&
+    current.times === JSON.stringify(times)
+  )
+    return json(await view(current));
+  const hash = await digest(request.headers.get("Authorization").slice(7));
+  const session = who.scoped ? "member_sessions" : "sessions";
+  const live = `EXISTS(SELECT 1 FROM ${session} s JOIN users u ON u.id=s.user_id
+    JOIN dorm_members m ON m.user_id=u.id AND m.dorm_id=u.current_dorm_id AND m.is_active=1
+    JOIN dormitories d ON d.id=m.dorm_id AND d.is_demo=0
+    WHERE s.token_hash=? AND s.expires_at>? AND s.user_id=? AND m.dorm_id=?${who.scoped ? " AND s.dorm_id=m.dorm_id" : ""})`;
+  const results = await db.batch([
+    stmt(
+      db,
+      `INSERT INTO chore_reminder_preferences(dorm_id,user_id,enabled,times,version,updated_at)
+      SELECT ?,?,?,?,1,? WHERE COALESCE((SELECT version FROM chore_reminder_preferences WHERE dorm_id=? AND user_id=?),0)=? AND ${live}
+      ON CONFLICT(dorm_id,user_id) DO UPDATE SET enabled=excluded.enabled,times=excluded.times,version=chore_reminder_preferences.version+1,updated_at=excluded.updated_at WHERE chore_reminder_preferences.version=?`,
+      [
+        room.id,
+        who.user_id,
+        Number(input.enabled),
+        JSON.stringify(times),
+        now.toISOString(),
+        room.id,
+        who.user_id,
+        version,
+        hash,
+        now.toISOString(),
+        who.user_id,
+        room.id,
+        version,
+      ],
+    ),
+    stmt(
+      db,
+      `UPDATE chore_push_jobs SET status='cancelled' WHERE status='pending' AND dorm_id=? AND user_id=?
+      AND reminder_id IN (SELECT e.reminder_id FROM chore_scheduled_reminders e JOIN chore_reminder_preferences p ON p.id=e.preference_id
+      WHERE p.dorm_id=? AND p.user_id=? AND p.version=? AND e.preference_version<>p.version)`,
+      [room.id, who.user_id, room.id, who.user_id, version + 1],
+    ),
+  ]);
+  if (changes(results[0]) !== 1)
+    fail(409, "plan_changed", "身份或提醒设置已变化，请重新打开后再试");
+  return json(
+    await view(
+      await first(
+        db,
+        "SELECT * FROM chore_reminder_preferences WHERE dorm_id=? AND user_id=?",
+        [room.id, who.user_id],
+      ),
+    ),
+  );
+}
 async function nativePush(request, db, room, who, now, env, path) {
   const configured = env.NATIVE_PUSH_CONFIG || {};
   if (path === "/chores/native/config" && request.method === "GET")
@@ -1590,6 +1694,8 @@ export async function handleChores(request, env, now) {
   const who = await actor(request, db, now, true);
   assertWrite(who);
   const room = await roomByActor(db, who);
+  if (path === "/chores/reminder-plan")
+    return reminderPlan(request, db, room, who, now);
   if (path.startsWith("/chores/native/"))
     return nativePush(request, db, room, who, now, env, path);
   if (path.startsWith("/chores/push/"))
@@ -1623,3 +1729,5 @@ export async function handleChores(request, env, now) {
   }
   fail(404, "not_found", "接口不存在");
 }
+
+export { maintain as maintainChores };

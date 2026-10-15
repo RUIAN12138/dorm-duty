@@ -23,7 +23,7 @@ export async function readNativeConfig(directory) {
 }
 // Keys stay on the server; the request has exactly one registration ID, never broadcast.
 export function createNativeSender(config, transport = fetch) {
-  return async (subscription, payload) => {
+  return async (subscription, payload, options = {}) => {
     const app = config[subscription.platform];
     const match = /^jpush:(android|harmony):([A-Za-z0-9_-]{8,256})$/.exec(
       subscription.endpoint,
@@ -56,7 +56,14 @@ export function createNativeSender(config, transport = fetch) {
         platform: [platform],
         audience: { registration_id: [match[2]] },
         notification: { [platform]: notification },
-        options: { time_to_live: 86400 },
+        options: {
+          time_to_live:
+            Number.isInteger(options.TTL) &&
+            options.TTL >= 1 &&
+            options.TTL <= 86400
+              ? options.TTL
+              : 86400,
+        },
       }),
     });
     const result = await response.json().catch(() => null);

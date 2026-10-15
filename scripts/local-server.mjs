@@ -27,7 +27,8 @@ let db,
   ownsLock = false,
   server,
   closing = false,
-  pushRuntime;
+  pushRuntime,
+  reminderScheduler;
 const waits = new Set();
 
 async function lockDatabase() {
@@ -74,6 +75,7 @@ async function lockDatabase() {
 }
 
 async function release() {
+  await reminderScheduler?.close();
   await Promise.allSettled(waits);
   await pushRuntime?.close();
   db?.close();
@@ -123,6 +125,7 @@ try {
     console.error("系统通知暂不可用，站内提醒和任务服务继续运行");
     env.PUSH_CONFIG = { available: false, public_key: null };
   }
+  reminderScheduler = pushRuntimeModule.createReminderScheduler(db, { env });
   server = http.createServer(async (req, res) => {
     try {
       if (closing) {
