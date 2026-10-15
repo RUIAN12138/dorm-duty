@@ -18,7 +18,7 @@ const props = defineProps<{
   category: ChoreCategory;
   categories?: ChoreCategory[];
   currentId?: number;
-  creator: boolean;
+  editable: boolean;
   version: number;
   token: string;
 }>();
@@ -60,15 +60,16 @@ watch(
   },
 );
 async function save() {
-  if (saving.value || !props.creator) return;
+  if (saving.value || !props.editable) return;
   saving.value = true;
   error.value = "";
   try {
-    await choreRequest("/chores/settings", props.token, {
+    await choreRequest("/chores/order", props.token, {
       method: "PATCH",
       body: JSON.stringify({
         version,
-        categories: [{ ...category, rotation_order: order.value }],
+        key: category.key,
+        rotation_order: order.value,
       }),
     });
     emit("saved");
@@ -88,6 +89,7 @@ async function save() {
     :model-value="modelValue"
     :title="`${selectedCategory.name}轮序`"
     motion="bottom"
+    sticky-header
     @update:model-value="emit('update:modelValue', $event)"
     @closed="emit('closed')"
   >
@@ -102,14 +104,14 @@ async function save() {
       <HintPopover
         title="调整轮序"
         :text="
-          creator
+          editable
             ? '长按名字提起整行，上下拖动调整先后，松手后保存。'
-            : '仅宿舍创建者可以调整轮序。若你是创建者，请从更多操作中恢复管理身份。'
+            : '游客仅可查看。加入正式宿舍后，每位成员都能调整轮序。'
         "
       />
     </div>
     <SortableMembers
-      v-if="creator"
+      v-if="editable"
       v-model="order"
       :members="members"
       :active="modelValue"
@@ -120,6 +122,7 @@ async function save() {
       <li
         v-for="(id, index) in selectedCategory.rotation_order"
         :key="id"
+        :style="{ '--entry-index': index }"
         :class="{ current: selectedKey === 'water' && id === currentId }"
       >
         <span class="order-number">{{ index + 1 }}</span
@@ -136,16 +139,8 @@ async function save() {
         >
       </li>
     </ol>
-    <button
-      v-if="!creator"
-      class="guest-secondary"
-      data-testid="order-recover-owner"
-      @click="emit('recover')"
-    >
-      创建者管理
-    </button>
     <p v-if="error" class="order-error" role="alert">{{ error }}</p>
-    <div v-if="creator" class="order-save">
+    <div v-if="editable" class="order-save">
       <button
         class="guest-primary"
         :data-testid="
@@ -184,6 +179,10 @@ async function save() {
   margin-bottom: 8px;
   border: 1px solid #eee;
   border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 3px 7px #00000005;
+  animation: order-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1)
+    calc(var(--entry-index) * 45ms) both;
 }
 .order-number {
   width: 16px;
@@ -224,5 +223,24 @@ strong {
 }
 :deep(.sort-hint) {
   display: none;
+}
+</style>
+
+<style scoped>
+@keyframes order-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--entry-index) * -24px)) translateX(20px)
+      scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-people li {
+    animation: none;
+  }
 }
 </style>

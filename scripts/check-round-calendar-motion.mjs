@@ -31,14 +31,14 @@ try {
     vue,
     `<script setup lang="ts">
  import {ref} from 'vue';import Round from './src/components/RoundProgress.vue';import Calendar from './src/components/ChoreCalendar.vue';import Sort from './src/components/SortableMembers.vue';import TimeWheel from './src/components/TimeWheel.vue';
- const order=ref([3,1,2]),deadline=ref("22:00");
+ const order=ref([3,1,2]),deadline=ref("22:00"),epoch=ref(0);
  const today=ref('2026-10-15'),month=ref('2026-10'),active=ref(true);
  const people=[3,1,2].map((id,i)=>({id,user_id:id,nickname:'室友'+id,marker_id:'pixel-01',completed_at:'2026-10-15T0'+i+':00:00Z'}));
  const round=ref({key:'floor',sequence:1,total:4,completed:3,members:[],completions:people});
  const records=people.map(p=>({id:p.id,key:'floor',name:'地板',assignee_id:p.user_id,assignee_name:p.nickname,marker_id:p.marker_id,completed_at:p.completed_at,completed_date:'2026-10-15'}));
  const past=[...records,...records.map(r=>({...r,id:r.id+20}))].map(r=>({...r,id:r.id+10,completed_at:r.completed_at.replace('15T','14T'),completed_date:'2026-10-14'}));
- (window as any).qa={nextDay:()=>today.value='2026-10-16',full:()=>{round.value={...round.value,completed:4,completions:[...people,{...people[0]!,id:4,user_id:4,nickname:'室友4',completed_at:'2026-10-15T04:00:00Z'}]}},undo:()=>{round.value={...round.value,completed:3,completions:people}},reopen:()=>{active.value=false;setTimeout(()=>active.value=true,20)},deadline:()=>deadline.value,order:()=>order.value,month:()=>month.value};
- </script><template><main style="max-width:430px;padding:24px;margin:auto"><Round :round="round" :active="active"/><Calendar v-model:month="month" :month="month" :today="today" :records="[...records,...past]" :members="people" @change="month=$event"/><Sort v-model="order" :members="people" :active="true"/><TimeWheel v-model="deadline" test-id="wheel-input"/></main></template>`,
+ (window as any).qa={own:()=>{epoch.value++;(window as any).qa.full()},nextDay:()=>today.value='2026-10-16',full:()=>{round.value={...round.value,completed:4,completions:[...people,{...people[0]!,id:4,user_id:4,nickname:'室友4',completed_at:'2026-10-15T04:00:00Z'}]}},undo:()=>{round.value={...round.value,completed:3,completions:people}},reopen:async()=>{active.value=false;await new Promise(r=>setTimeout(r,30));active.value=true},deadline:()=>deadline.value,order:()=>order.value,month:()=>month.value};
+ </script><template><main style="max-width:430px;padding:24px;margin:auto"><div data-testid="large-round"><Round :round="round" :active="active"/></div><div data-testid="mini-round"><Round :round="round" :active="active" :celebrate="epoch" compact/></div><Calendar v-model:month="month" :month="month" :today="today" :records="[...records,...past]" :members="people" @change="month=$event"/><Sort v-model="order" :members="people" :active="true"/><TimeWheel v-model="deadline" test-id="wheel-input"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -80,7 +80,46 @@ try {
   });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(url);
-  await page.getByTestId("round-count").waitFor();
+  await page.getByTestId("large-round").getByTestId("round-count").waitFor();
+  check(
+    await page
+      .getByTestId("mini-round")
+      .getByTestId("round-count")
+      .textContent(),
+    "3",
+    "compact ring starts at final result",
+  );
+  check(
+    await page.getByTestId("mini-round").locator(".round-plus").count(),
+    0,
+    "compact ring has no entry celebration",
+  );
+  const rankingHeight = await page
+    .locator(".round-ranking")
+    .evaluate((e) => e.getBoundingClientRect().height);
+  await page.waitForTimeout(120);
+  check(
+    await page
+      .locator(".round-ranking")
+      .evaluate((e) => e.getBoundingClientRect().height),
+    rankingHeight,
+    "all rank rows reserve height before particle impacts",
+  );
+  await page.evaluate(() => window.qa.reopen());
+  const arcSamples = await page
+    .locator('[data-testid="large-round"] .round-progress-value')
+    .evaluate(async (el) => {
+      const values = [];
+      for (let i = 0; i < 70; i++) {
+        await new Promise(requestAnimationFrame);
+        values.push(Number(el.getAttribute("stroke-dashoffset")));
+      }
+      return values;
+    });
+  assert(new Set(arcSamples.map((n) => n.toFixed(2))).size > 12);
+  checks.push(
+    "arc fills continuously over animation frames instead of integer steps",
+  );
   await page.waitForFunction(
     () =>
       document.querySelector('[data-testid="round-count"]').textContent === "3",
@@ -94,7 +133,7 @@ try {
   );
   check(
     await page
-      .locator(".round-progress-value")
+      .locator('[data-testid="large-round"] .round-progress-value')
       .evaluate((e) => Number(e.getAttribute("stroke-dashoffset")) > 0),
     true,
     "ring remains open until everyone completes",
@@ -102,7 +141,7 @@ try {
   await page.evaluate(() => window.qa.full());
   await page.locator(".round-plus").waitFor();
   check(
-    await page.locator(".round-plus").innerText(),
+    await page.locator(".round-plus").first().innerText(),
     "+1",
     "new completion visibly travels into the ring",
   );
@@ -112,16 +151,22 @@ try {
   );
   check(
     await page
-      .locator(".round-progress-value")
+      .locator('[data-testid="large-round"] .round-progress-value')
       .getAttribute("stroke-dashoffset"),
     "0",
     "last completion closes the ring",
   );
   await page
+    .getByTestId("large-round")
     .getByTestId("round-progress-ring")
     .screenshot({
       path: path.join(evidence, `${safari ? "webkit" : "chromium"}-ring.jpg`),
     });
+  check(
+    await page.getByTestId("mini-round").locator(".round-plus").count(),
+    0,
+    "remote completion updates mini without celebration",
+  );
   await page.evaluate(() => window.qa.undo());
   await page.waitForFunction(
     () =>
@@ -135,6 +180,10 @@ try {
     3,
     "undo removes the actual finisher and reopens the ring",
   );
+  await page.evaluate(() => window.qa.own());
+  await page.getByTestId("mini-round").locator(".round-plus").waitFor();
+  checks.push("local completion alone celebrates compact progress");
+  await page.waitForTimeout(1400);
   await page.getByTestId("calendar-view-list").click();
   check(
     await page
@@ -167,32 +216,63 @@ try {
     );
   assert(delays[1] > delays[0] && delays[2] > delays[1]);
   checks.push("record entrances stagger downwards");
-  await page.waitForTimeout(350);
-  const timeline = page.locator("#records-2026-10-14 .record-timeline");
-  await timeline.scrollIntoViewIfNeeded();
-  const timelineBounds = await timeline.boundingBox();
-  await page.mouse.move(
-    timelineBounds.x + timelineBounds.width / 2,
-    timelineBounds.y + timelineBounds.height / 2,
-  );
-  if (safari)
-    await timeline.evaluate((el) =>
-      el.scrollTo({ top: 130, behavior: "smooth" }),
-    );
-  else await page.mouse.wheel(0, 130);
-  await page.waitForTimeout(750);
-  const snap = await timeline.evaluate((el) => {
-    const b = el.getBoundingClientRect(),
-      row = el.querySelector(".is-focused").getBoundingClientRect();
-    return Math.abs(row.top + row.height / 2 - b.top - b.height / 2);
-  });
-  assert(snap < 4, `record snap centre distance ${snap}`);
-  checks.push("record cards settle at the viewport centre");
+  const stack = page.locator("#records-2026-10-14");
   check(
-    (await timeline.locator("path.is-drawn").count()) > 0,
-    true,
-    "timeline draws after cards settle",
+    await stack.locator(".timeline-rail").count(),
+    0,
+    "record cards have no decorative timeline",
   );
+  const intermediate = await stack
+    .locator(".record-stagger")
+    .evaluateAll((els) => els.map((e) => getComputedStyle(e).transform));
+  assert(intermediate.some((t) => t !== "none"));
+  checks.push(
+    "real record cards interpolate from stacked depth to separate rows",
+  );
+  await page.waitForTimeout(850);
+  const positions = await stack
+    .locator(".record-stagger")
+    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+  assert(positions.every((p, i) => i === 0 || p > positions[i - 1] + 70));
+  checks.push("expanded cards occupy separate readable rows");
+  await page.getByTestId("record-group-2026-10-14").click();
+  await page.waitForTimeout(850);
+  const layers = await stack.locator(".record-stagger").evaluateAll((els) =>
+    els.slice(0, 3).map((e) => ({
+      transform: getComputedStyle(e).transform,
+      width: e.getBoundingClientRect().width,
+      top: e.getBoundingClientRect().top,
+    })),
+  );
+  assert(
+    layers[0].width > layers[1].width && layers[1].width > layers[2].width,
+  );
+  check(
+    await stack.getAttribute("inert"),
+    "",
+    "collapsed stack never accepts hidden record actions",
+  );
+  checks.push("closed cards retain distinct scaled and angled depth");
+  await page
+    .getByTestId("record-group-2026-10-14")
+    .locator("..")
+    .screenshot({
+      path: path.join(
+        evidence,
+        `${safari ? "webkit" : "chromium"}-stack-closed.jpg`,
+      ),
+    });
+  await page.getByTestId("record-group-2026-10-14").click();
+  await page.waitForTimeout(850);
+  await page
+    .getByTestId("record-group-2026-10-14")
+    .locator("..")
+    .screenshot({
+      path: path.join(
+        evidence,
+        `${safari ? "webkit" : "chromium"}-stack-open.jpg`,
+      ),
+    });
   await page.screenshot({
     path: path.join(evidence, `${safari ? "webkit" : "chromium"}-records.jpg`),
   });
@@ -338,8 +418,11 @@ try {
   await page.evaluate(() => window.qa.reopen());
   await page.waitForTimeout(50);
   check(
-    await page.getByTestId("round-count").innerText(),
-    "3",
+    await page
+      .getByTestId("large-round")
+      .getByTestId("round-count")
+      .innerText(),
+    "4",
     "reduced motion immediately shows the final progress",
   );
   check(errors, [], "no runtime exceptions");

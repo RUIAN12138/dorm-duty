@@ -981,15 +981,21 @@ function normalizeCategory(input, current, ids, today) {
   if (typeof value.enabled !== "boolean") invalid();
   return value;
 }
-async function configure(request, db, room, who, now) {
-  if (!who.is_creator || who.scoped)
+async function configure(request, db, room, who, now, orderOnly = false) {
+  if (!orderOnly && (!who.is_creator || who.scoped))
     fail(403, "admin_required", "只有宿舍创建者可以修改任务设置");
-  const input = await body(
-      request,
-      ["version", "categories"],
-      ["version", "categories"],
-    ),
-    expected = integer(input.version),
+  const input = orderOnly
+    ? await body(
+        request,
+        ["version", "key", "rotation_order"],
+        ["version", "key", "rotation_order"],
+      )
+    : await body(request, ["version", "categories"], ["version", "categories"]);
+  if (orderOnly)
+    input.categories = [
+      { key: input.key, rotation_order: input.rotation_order },
+    ];
+  const expected = integer(input.version),
     { state, settings, members } = await maintain(db, room, now);
   if (expected !== state.version)
     fail(409, "stale_version", "任务已变化，请刷新设置后重试");
@@ -1013,7 +1019,7 @@ async function configure(request, db, room, who, now) {
       (category) =>
         updated.find((entry) => entry.key === category.key) || category,
     ),
-    mutation = new Mutation(db, room, state.version, who, true);
+    mutation = new Mutation(db, room, state.version, who, !orderOnly);
   for (const category of updated)
     mutation.update(
       "chore_categories",
@@ -1854,6 +1860,8 @@ export async function handleChores(request, env, now) {
     return nativePush(request, db, room, who, now, env, path);
   if (path.startsWith("/chores/push/"))
     return memberPush(request, db, room, who, now, env, path);
+  if (path === "/chores/order" && method === "PATCH")
+    return configure(request, db, room, who, now, true);
   if (path === "/chores/settings" && method === "PATCH")
     return configure(request, db, room, who, now);
   if (path === "/chores/marker" && method === "PATCH") {

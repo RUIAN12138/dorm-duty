@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onBeforeUnmount } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
 import type { ChoreRecord } from "../api/chores";
 import ChoreRecordRow from "./ChoreRecordRow.vue";
 import { motionAllowed } from "../interaction/motion";
@@ -10,204 +17,253 @@ const props = withDefaults(
     busy?: boolean;
     expanded?: boolean;
     list?: boolean;
+    date?: string;
+    label?: string;
   }>(),
   { expanded: true },
 );
-const emit = defineEmits<{ undo: [id: number] }>();
-const scroller = ref<HTMLElement>(),
-  focused = ref(0),
-  drawing = ref(false);
-let timer: ReturnType<typeof setTimeout> | undefined;
-function settled() {
-  const el = scroller.value;
-  if (!el || !props.expanded) return;
-  const center = el.getBoundingClientRect().top + el.clientHeight / 2;
-  const rows = [...el.querySelectorAll<HTMLElement>(".timeline-record")];
-  let nearest = 0,
-    distance = Infinity;
-  rows.forEach((row, index) => {
-    const b = row.getBoundingClientRect(),
-      d = Math.abs(b.top + b.height / 2 - center);
-    if (d < distance) {
-      distance = d;
-      nearest = index;
-    }
+const emit = defineEmits<{ undo: [id: number]; toggle: [] }>();
+const root = ref<HTMLElement>(),
+  header = ref<HTMLElement>(),
+  entered = ref(false),
+  heights = ref<number[]>([]),
+  headerHeight = ref(64);
+const open = computed(() => props.expanded && entered.value);
+const offsets = computed(() => {
+  let y = props.list ? headerHeight.value + 10 : 0;
+  return props.records.map((_, i) => {
+    const top = y;
+    y += (heights.value[i] || 88) + 10;
+    return top;
   });
-  focused.value = nearest;
-  drawing.value = true;
-}
-function scroll() {
-  clearTimeout(timer);
-  drawing.value = false;
-  timer = setTimeout(settled, 100);
-}
-watch(
-  () => [props.expanded, props.records.length],
-  async () => {
-    clearTimeout(timer);
-    drawing.value = false;
-    if (props.expanded) {
-      await nextTick();
-      timer = setTimeout(settled, 280);
-    }
-  },
-  { immediate: true },
+});
+const height = computed(() =>
+  open.value
+    ? props.records.length
+      ? (offsets.value.at(-1) || 0) + (heights.value.at(-1) || 88)
+      : props.list
+        ? headerHeight.value
+        : 0
+    : props.list
+      ? headerHeight.value + Math.min(props.records.length, 3) * 7
+      : 0,
 );
-onBeforeUnmount(() => clearTimeout(timer));
+function style(index: number) {
+  const depth = Math.min(index + 1, 3);
+  return {
+    zIndex: props.records.length - index,
+    height: `${open.value ? heights.value[index] || 88 : headerHeight.value}px`,
+    transform: open.value
+      ? `translate3d(0,${offsets.value[index]}px,0) scale(1) rotate(0deg)`
+      : `translate3d(0,${depth * 7}px,0) scale(${1 - depth * 0.028}) rotate(${index % 2 ? -depth * 0.45 : depth * 0.45}deg)`,
+    opacity: open.value || (props.list && index < 3) ? 1 : 0,
+    "--record-delay": `${Math.min(open.value ? index : props.records.length - 1 - index, 6) * 45}ms`,
+  };
+}
+let observer: ResizeObserver | undefined,
+  frame = 0;
+function measure() {
+  headerHeight.value = header.value?.offsetHeight || 64;
+  heights.value = Array.from(
+    root.value?.querySelectorAll<HTMLElement>(".record-card-content") || [],
+    (el) => el.offsetHeight,
+  );
+}
+function observe() {
+  observer?.disconnect();
+  measure();
+  if (root.value) {
+    observer = new ResizeObserver(measure);
+    root.value
+      .querySelectorAll(".record-card-content")
+      .forEach((el) => observer?.observe(el));
+    if (header.value) observer.observe(header.value);
+  }
+}
+onMounted(() => {
+  observe();
+  frame = requestAnimationFrame(() => {
+    entered.value = true;
+  });
+});
+watch(
+  () => props.records.map((r) => r.id).join(","),
+  async () => {
+    await nextTick();
+    observe();
+  },
+);
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  cancelAnimationFrame(frame);
+});
 </script>
 <template>
-  <div
-    ref="scroller"
-    class="record-timeline"
-    :class="{ 'is-expanded': expanded, 'quiet-motion': !motionAllowed() }"
-    data-testid="record-timeline"
-    role="region"
-    tabindex="0"
-    aria-label="完成记录时间线"
-    @scroll.passive="scroll"
-    @scrollend="settled"
+  <section
+    ref="root"
+    class="record-stack"
+    :class="{
+      'is-expanded': open,
+      'is-stacked': list && !open,
+      'quiet-motion': !motionAllowed(),
+    }"
+    :style="{ height: `${height}px` }"
+    data-testid="record-stack"
   >
-    <div
-      v-for="(record, index) in records"
-      :key="record.id"
-      class="timeline-record record-stagger"
-      :class="{ 'is-focused': index === focused }"
-      :style="{ '--record-delay': `${Math.min(index, 7) * 35}ms` }"
+    <button
+      v-if="list"
+      ref="header"
+      class="records-heading"
+      :style="{ zIndex: records.length + 1 }"
+      :aria-expanded="expanded"
+      :aria-controls="`records-${date}`"
+      :data-testid="`record-group-${date}`"
+      @click="emit('toggle')"
     >
-      <span class="timeline-rail" aria-hidden="true"
-        ><svg viewBox="0 0 2 100" preserveAspectRatio="none">
-          <path
-            d="M1 0V100"
-            pathLength="1"
-            :class="{ 'is-drawn': drawing && index <= focused }"
-          /></svg
-        ><i
+      <h2>{{ label }}</h2>
+      <span
+        >{{ records.length }}<van-icon name="arrow-down" aria-hidden="true"
       /></span>
-      <ChoreRecordRow
-        :class="{ 'calendar-record': !list }"
-        :record="record"
-        :own="record.assignee_id === memberId"
-        :busy="busy"
-        :test-id="
-          list
-            ? `calendar-list-record-${record.id}`
-            : record.assignee_id === memberId
-              ? `calendar-undo-${record.id}`
-              : undefined
-        "
-        @toggle="emit('undo', $event)"
-      />
+    </button>
+    <div
+      :id="date ? `records-${date}` : undefined"
+      class="record-stack-body"
+      :inert="!expanded ? true : undefined"
+      :aria-hidden="!expanded"
+    >
+      <div
+        v-for="(record, index) in records"
+        :key="record.id"
+        class="record-stagger"
+        :style="style(index)"
+      >
+        <div class="record-card-content">
+          <ChoreRecordRow
+            :class="{ 'calendar-record': !list }"
+            :record="record"
+            :own="record.assignee_id === memberId"
+            :busy="busy"
+            :test-id="
+              list
+                ? `calendar-list-record-${record.id}`
+                : record.assignee_id === memberId
+                  ? `calendar-undo-${record.id}`
+                  : undefined
+            "
+            @toggle="emit('undo', $event)"
+          />
+        </div>
+      </div>
     </div>
-  </div>
+  </section>
 </template>
 <style scoped>
-.record-timeline {
-  max-height: 360px;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  scroll-snap-type: y mandatory;
-  scroll-padding-block: 18px;
-  scrollbar-width: none;
-  padding: 4px 0;
-}
-.record-timeline:focus-visible {
-  outline: 2px solid #111;
-  outline-offset: 3px;
-  border-radius: 18px;
-}
-.record-timeline::-webkit-scrollbar {
-  display: none;
-}
-.timeline-record {
+.record-stack {
   position: relative;
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 10px;
-  scroll-snap-align: center;
-  padding: 5px 0;
-  opacity: 0;
-  transform: translateY(-10px) scale(0.985);
-  transition:
-    opacity 130ms ease,
-    transform 180ms ease;
-}
-.is-expanded .timeline-record {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition:
-    opacity 190ms ease var(--record-delay),
-    transform 320ms cubic-bezier(0.22, 1.3, 0.36, 1) var(--record-delay);
-}
-.timeline-rail {
-  position: relative;
-  display: block;
-  width: 12px;
-  height: 100%;
-  background: linear-gradient(#eee, #eee) center/1px 100% no-repeat;
-}
-.timeline-rail svg {
-  position: absolute;
-  left: 5px;
-  top: 0;
-  width: 2px;
-  height: 100%;
+  isolation: isolate;
+  margin: 10px 0 24px;
+  transition: height 460ms cubic-bezier(0.22, 0.8, 0.3, 1);
   overflow: visible;
 }
-.timeline-rail path {
-  fill: none;
-  stroke: #222;
-  stroke-width: 1.5;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  transition: stroke-dashoffset 280ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.timeline-rail .is-drawn {
-  stroke-dashoffset: 0;
-}
-.timeline-rail i {
+.record-stack-body {
   position: absolute;
-  top: calc(50% - 4px);
-  left: 2px;
-  width: 8px;
-  height: 8px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #ddd;
-  box-shadow: 0 0 0 1px #eee;
+  inset: 0;
+  pointer-events: none;
+  perspective: 800px;
 }
-.is-focused .timeline-rail i {
-  background: #111;
-  box-shadow: 0 0 0 1px #111;
+.records-heading {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 64px;
+  padding: 18px 17px;
+  border: 1px solid #e9e9e9;
+  border-radius: 20px;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 2px 4px #00000003;
+}
+h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+.records-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #888;
+  font-size: 14px;
+}
+.van-icon {
+  transition: transform 320ms ease;
+}
+.is-expanded .van-icon {
+  transform: rotate(180deg);
+}
+.record-stagger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border: 1px solid #e7e7e7;
+  border-radius: 20px;
+  background: #f9f9f9;
+  box-shadow: 0 3px 6px #00000005;
+  overflow: hidden;
+  transform-origin: 50% 0;
+  pointer-events: none;
+  transition:
+    transform 520ms cubic-bezier(0.18, 0.85, 0.25, 1.08) var(--record-delay),
+    opacity 260ms ease var(--record-delay),
+    height 420ms cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+.is-expanded .record-stagger {
+  background: #fff;
+  pointer-events: auto;
+}
+.record-card-content {
+  opacity: 0;
+  transform: translateX(18px);
+  transition:
+    opacity 180ms ease,
+    transform 240ms ease;
+}
+.is-expanded .record-card-content {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 280ms ease calc(var(--record-delay) + 70ms),
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1) var(--record-delay);
 }
 :deep(.record-row) {
-  border: 1px solid #eee;
-  border-radius: 18px;
-  padding: 12px;
-  min-height: 88px;
-  background: #fff;
-  transition: background-color 180ms ease;
-}
-.is-focused :deep(.record-row) {
-  background: #f8f8f8;
+  min-height: 86px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 19px;
+  background: transparent;
 }
 :deep(.record-avatar) {
   width: 36px;
   height: 36px;
   border-radius: 12px;
 }
-.quiet-motion .timeline-record,
-.quiet-motion .timeline-rail path {
-  transition: none;
+.quiet-motion,
+.quiet-motion * {
+  transition: none !important;
+}
+.quiet-motion .record-card-content {
   transform: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .record-timeline {
-    scroll-snap-type: none;
-  }
-  .timeline-record,
-  .timeline-rail path {
+  .record-stack,
+  .record-stack * {
     transition: none !important;
-    transform: none !important;
   }
 }
 </style>

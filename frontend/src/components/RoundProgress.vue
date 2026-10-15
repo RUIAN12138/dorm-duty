@@ -7,73 +7,87 @@ const props = defineProps<{
   round: ChoreBoardData["rounds"][number];
   active: boolean;
   compact?: boolean;
+  celebrate?: number;
 }>();
 const count = ref(0),
-  ring = ref<HTMLElement>(),
-  digit = ref<HTMLElement>();
-const plus = ref(false),
-  pulse = ref(0);
-const circumference = 2 * Math.PI * 54;
+  ring = ref<HTMLElement>();
+const flights = ref<{ id: number; side: number }[]>([]);
+const circumference = 2 * Math.PI * 58;
 const completed = computed(() =>
   Math.min(props.round.total, Math.max(0, props.round.completed)),
+);
+const digits = computed(() =>
+  Array.from({ length: props.round.total + 1 }, (_, i) => i),
 );
 const people = computed(() =>
   [...(props.round.completions || [])].sort(
     (a, b) => a.completed_at.localeCompare(b.completed_at) || a.id - b.id,
   ),
 );
-let timer: ReturnType<typeof setTimeout> | undefined;
-let absorption: ReturnType<typeof setTimeout> | undefined;
-let animations: Animation[] = [];
+let frame = 0,
+  pulse = 0;
+let timers: ReturnType<typeof setTimeout>[] = [];
+let spring: Animation | undefined;
 function stop() {
-  clearTimeout(timer);
-  clearTimeout(absorption);
-  animations.forEach((a) => a.cancel());
-  animations = [];
-  plus.value = false;
+  cancelAnimationFrame(frame);
+  timers.forEach(clearTimeout);
+  timers = [];
+  flights.value = [];
+  spring?.cancel();
 }
 function absorb() {
-  animations.forEach((a) => a.cancel());
-  animations = [];
-  if (!motionAllowed()) return;
-  if (ring.value)
-    animations.push(
-      ring.value.animate(
-        [
-          { transform: "scale(1)" },
-          { transform: "scale(1.035,.965)", offset: 0.28 },
-          { transform: "scale(.985,1.02)", offset: 0.6 },
-          { transform: "scale(1)" },
-        ],
-        { duration: 320, easing: "cubic-bezier(.22,1,.36,1)" },
-      ),
-    );
-  if (digit.value)
-    animations.push(
-      digit.value.animate(
-        [
-          { transform: "translateY(8px) scale(.94)", opacity: 0.5 },
-          {
-            transform: "translateY(-1px) scale(1.05)",
-            opacity: 1,
-            offset: 0.65,
-          },
-          { transform: "translateY(0) scale(1)", opacity: 1 },
-        ],
-        { duration: 220, easing: "cubic-bezier(.22,1,.36,1)" },
-      ),
-    );
+  if (!ring.value || !motionAllowed()) return;
+  const current = getComputedStyle(ring.value).transform;
+  spring?.cancel();
+  spring = ring.value.animate(
+    [
+      { transform: current === "none" ? "scale(1)" : current },
+      { transform: "scale(1.035,.972)", offset: 0.22 },
+      { transform: "scale(.983,1.022)", offset: 0.48 },
+      { transform: "scale(1.008,.993)", offset: 0.72 },
+      { transform: "scale(1)" },
+    ],
+    { duration: 440, easing: "cubic-bezier(.22,.7,.3,1)" },
+  );
 }
-function advance() {
-  if (!props.active || count.value >= completed.value) return;
-  pulse.value++;
-  plus.value = true;
-  absorption = setTimeout(() => {
-    plus.value = false;
-    count.value = Math.min(count.value + 1, completed.value);
-    absorb();
-    timer = setTimeout(advance, 110);
-  }, 160);
+function flight(side: number) {
+  const id = ++pulse;
+  flights.value.push({ id, side });
+  timers.push(setTimeout(absorb, 410));
+  timers.push(
+    setTimeout(() => {
+      flights.value = flights.value.filter((f) => f.id !== id);
+    }, 460),
+  );
+}
+function animate(from: number, to: number) {
+  count.value = from;
+  const delta = to - from;
+  if (delta <= 0) {
+    count.value = to;
+    return;
+  }
+  // One uninterrupted arc; particles are timed to its crossings, never drive it.
+  const duration = props.compact ? 460 : Math.min(1100, 560 + delta * 110);
+  const lead = 420;
+  const started = performance.now();
+  for (let n = Math.floor(from) + 1; n <= to; n++) {
+    const crossing =
+      ((Math.asin(Math.min(1, (n - from) / delta)) * 2) / Math.PI) * duration;
+    timers.push(
+      setTimeout(
+        () => flight(n % 2 ? 1 : -1),
+        Math.max(0, lead + crossing - 410),
+      ),
+    );
+  }
+  function tick(now: number) {
+    const t = Math.max(0, Math.min(1, (now - started - lead) / duration));
+    count.value = from + delta * Math.sin((t * Math.PI) / 2);
+    if (t < 1) frame = requestAnimationFrame(tick);
+    else count.value = to;
+  }
+  frame = requestAnimationFrame(tick);
 }
 watch(
   () =>
@@ -82,18 +96,23 @@ watch(
       props.round.key,
       props.round.sequence,
       completed.value,
+      props.celebrate,
     ] as const,
   (next, previous) => {
+    const from = count.value;
     stop();
     if (!next[0]) return;
-    const reset =
+    const entering =
       !previous?.[0] || next[1] !== previous[1] || next[2] !== previous[2];
-    if (reset) count.value = 0;
-    if (!motionAllowed() || document.hidden) count.value = completed.value;
-    else if (count.value > completed.value) {
+    const ownCompletion =
+      previous && next[4] !== previous[4] && next[3] > previous[3];
+    if (
+      !motionAllowed() ||
+      document.hidden ||
+      (props.compact && !ownCompletion)
+    )
       count.value = completed.value;
-      absorb();
-    } else advance();
+    else animate(entering ? 0 : from, completed.value);
   },
   { immediate: true, flush: "post" },
 );
@@ -105,7 +124,6 @@ onBeforeUnmount(stop);
     :class="{ 'quiet-motion': !motionAllowed(), 'is-compact': compact }"
   >
     <div
-      ref="ring"
       class="round-progress-display"
       data-testid="round-progress-ring"
       role="progressbar"
@@ -114,24 +132,40 @@ onBeforeUnmount(stop);
       :aria-valuemax="round.total"
       :aria-label="`本轮${completed}人已完成`"
     >
-      <svg viewBox="0 0 140 140" aria-hidden="true">
-        <circle class="round-progress-track" cx="70" cy="70" r="54" />
-        <circle
-          class="round-progress-value"
-          cx="70"
-          cy="70"
-          r="54"
-          :stroke-dasharray="circumference"
-          :stroke-dashoffset="
-            circumference * (1 - (round.total ? count / round.total : 0))
-          "
-        />
-      </svg>
-      <div class="round-progress-center" aria-hidden="true">
-        <strong ref="digit" data-testid="round-count">{{ count }}</strong
-        ><span>/ {{ round.total }}</span>
+      <div ref="ring" class="round-ring-visual">
+        <svg viewBox="0 0 160 160" aria-hidden="true">
+          <circle class="round-progress-track" cx="80" cy="80" r="58" />
+          <circle
+            class="round-progress-value"
+            cx="80"
+            cy="80"
+            r="58"
+            :stroke-dasharray="circumference"
+            :stroke-dashoffset="
+              circumference * (1 - (round.total ? count / round.total : 0))
+            "
+          />
+        </svg>
       </div>
-      <span v-if="plus" :key="pulse" class="round-plus" aria-hidden="true"
+      <div class="round-progress-center" aria-hidden="true">
+        <strong class="round-number-window"
+          ><span
+            class="round-number-reel"
+            :style="{ transform: `translateY(${-count}em)` }"
+            ><span v-for="digit in digits" :key="digit">{{ digit }}</span></span
+          ></strong
+        >
+        <span class="round-total">/ {{ round.total }}</span>
+      </div>
+      <span class="round-sr" data-testid="round-count">{{
+        Math.floor(count)
+      }}</span>
+      <span
+        v-for="f in flights"
+        :key="f.id"
+        class="round-plus"
+        :style="{ '--side': f.side }"
+        aria-hidden="true"
         >+1</span
       >
     </div>
@@ -140,15 +174,17 @@ onBeforeUnmount(stop);
     </p>
     <TransitionGroup
       v-if="!compact"
+      appear
       name="round-rank"
       tag="ol"
       class="round-ranking"
       data-testid="round-ranking"
     >
       <li
-        v-for="(person, index) in people.slice(0, count)"
+        v-for="(person, index) in people"
         :key="person.id"
         :data-member-id="person.user_id"
+        :style="{ '--rank-delay': `${Math.min(index, 8) * 55}ms` }"
       >
         <span class="rank-number">{{ String(index + 1).padStart(2, "0") }}</span
         ><MemberMark :id="person.marker_id" :size="28" /><strong>{{
@@ -161,29 +197,19 @@ onBeforeUnmount(stop);
   </div>
 </template>
 <style scoped>
-.is-compact .round-progress-display {
-  width: 48px;
-  margin: 0;
-}
-.is-compact .round-progress-center strong {
-  font-size: 16px;
-  letter-spacing: 0;
-}
-.is-compact .round-progress-center span {
-  display: none;
-}
-.is-compact .round-plus {
-  animation-name: absorb-mini;
-  font-size: 12px;
-}
 .round-progress-display {
   position: relative;
   display: grid;
   place-items: center;
-  width: 192px;
+  width: 224px;
   aspect-ratio: 1;
-  margin: 12px auto 16px;
+  margin: 8px auto 16px;
   isolation: isolate;
+}
+.round-ring-visual {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
 }
 svg {
   width: 100%;
@@ -193,7 +219,7 @@ svg {
 }
 circle {
   fill: none;
-  stroke-width: 14;
+  stroke-width: 24;
   stroke-linecap: round;
 }
 .round-progress-track {
@@ -201,7 +227,6 @@ circle {
 }
 .round-progress-value {
   stroke: #111;
-  transition: stroke-dashoffset 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .round-progress-center {
   position: absolute;
@@ -209,24 +234,34 @@ circle {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
   font-variant-numeric: tabular-nums;
 }
-strong {
-  font-weight: 600;
-}
-.round-progress-center strong {
-  font-size: 58px;
-  line-height: 1;
-  letter-spacing: -2px;
+.round-number-window {
+  display: block;
+  height: 1em;
+  overflow: hidden;
   min-width: 1ch;
   text-align: center;
+  font-size: 58px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -2px;
 }
-.round-progress-center span {
+.round-number-reel {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+.round-number-reel > span {
+  display: block;
+  height: 1em;
+  flex-shrink: 0;
+}
+.round-total {
   font-size: 17px;
   color: #999;
-  align-self: center;
-  margin-top: 22px;
+  margin-top: 24px;
 }
 .round-summary {
   text-align: center;
@@ -236,21 +271,39 @@ strong {
 }
 .round-plus {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: calc(50% - 18px);
+  top: calc(50% - 16px);
   font-size: 23px;
   font-weight: 650;
   pointer-events: none;
-  animation: absorb-plus 170ms cubic-bezier(0.32, 0.72, 0, 1) both;
   background: #fff;
   border-radius: 20px;
   padding: 3px 7px;
+  animation: absorb-plus 460ms cubic-bezier(0.55, 0.03, 0.88, 0.5) both;
+}
+@keyframes absorb-plus {
+  0% {
+    opacity: 0;
+    transform: translate(calc(var(--side) * 138px), 112px) scale(0.8);
+  }
+  25% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+    transform: translate(calc(var(--side) * 76px), 62px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--side) * 40px), 35px) scale(0.25);
+  }
 }
 .round-ranking {
   padding: 0;
   margin: 0;
   list-style: none;
   position: relative;
+  overflow: hidden;
 }
 .round-ranking li {
   display: flex;
@@ -259,84 +312,105 @@ strong {
   min-height: 66px;
   border-bottom: 1px solid #eee;
 }
+.round-ranking li > strong {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 500;
+}
 .rank-number {
-  width: 24px;
-  flex-shrink: 0;
-  color: #aaa;
-  font-size: 13px;
+  width: 22px;
+  color: #999;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.round-ranking strong {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 18px;
-}
 .round-ranking .van-icon {
-  color: #999;
-  font-size: 16px;
-}
-.round-empty {
-  text-align: center;
   color: #aaa;
-  margin: 22px 0;
-  font-size: 15px;
+  font-size: 18px;
 }
 .round-rank-enter-active {
   transition:
-    opacity 230ms ease,
-    transform 300ms cubic-bezier(0.22, 1.3, 0.36, 1);
+    transform 520ms cubic-bezier(0.18, 0.8, 0.25, 1) var(--rank-delay),
+    opacity 360ms ease var(--rank-delay);
 }
 .round-rank-leave-active {
-  transition: opacity 120ms ease;
+  transition:
+    opacity 160ms ease,
+    transform 240ms ease;
   position: absolute;
   width: 100%;
 }
-.round-rank-move {
-  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
-}
 .round-rank-enter-from {
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateX(42px);
 }
 .round-rank-leave-to {
   opacity: 0;
+  transform: translateX(20px);
+}
+.round-rank-move {
+  transition: transform 320ms ease;
+}
+.round-empty {
+  text-align: center;
+  color: #999;
+  margin: 12px 0 20px;
+  font-size: 15px;
+}
+.round-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.is-compact .round-progress-display {
+  width: 48px;
+  margin: 0;
+}
+.is-compact circle {
+  stroke-width: 22;
+}
+.is-compact .round-number-window {
+  font-size: 16px;
+  letter-spacing: 0;
+}
+.is-compact .round-total {
+  display: none;
+}
+.is-compact .round-plus {
+  font-size: 12px;
+  left: calc(50% - 12px);
+  top: calc(50% - 9px);
+  animation-name: absorb-mini;
 }
 @keyframes absorb-mini {
   0% {
-    transform: translate(18px, 18px) scale(0.92);
     opacity: 0;
+    transform: translate(calc(var(--side) * 50px), 40px) scale(0.8);
   }
   25% {
     opacity: 1;
   }
-  100% {
-    transform: translate(6px, 5px) scale(0.65);
-    opacity: 0;
-  }
-}
-@keyframes absorb-plus {
-  0% {
-    transform: translate(66px, 62px) scale(0.92);
-    opacity: 0;
-  }
-  25% {
+  72% {
     opacity: 1;
+    transform: translate(calc(var(--side) * 27px), 24px);
   }
   100% {
-    transform: translate(34px, 39px) scale(0.65);
     opacity: 0;
+    transform: translate(calc(var(--side) * 12px), 12px) scale(0.25);
   }
 }
-.quiet-motion .round-progress-value,
-.quiet-motion .round-rank-enter-active,
-.quiet-motion .round-rank-leave-active,
-.quiet-motion .round-rank-move {
-  transition: none;
+.quiet-motion * {
+  animation: none !important;
+  transition: none !important;
+}
+.quiet-motion .round-plus {
+  display: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .round-plus {
-    display: none;
+  * {
+    animation: none !important;
+    transition: none !important;
   }
 }
 </style>

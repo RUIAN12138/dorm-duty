@@ -16,6 +16,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean;
     modal?: boolean;
+    stickyHeader?: boolean;
     title: string;
     origin?: DOMRect | null;
     motion?: "shared" | "bottom";
@@ -311,7 +312,10 @@ onBeforeUnmount(() => {
           <section
             :ref="setPanel"
             class="elastic-sheet"
-            :class="{ 'is-bottom-sheet': props.motion === 'bottom' }"
+            :class="{
+              'is-bottom-sheet': props.motion === 'bottom',
+              'has-sticky-header': stickyHeader,
+            }"
             :style="{
               transformOrigin: 'top left',
               willChange: phase === 'open' ? 'auto' : 'transform',
@@ -369,5 +373,18 @@ onBeforeUnmount(() => {
   width: calc(100% - 24px);
   margin-bottom: calc(74px + env(safe-area-inset-bottom));
   border-radius: var(--ui-panel-radius);
+}
+</style>
+
+<style scoped>
+.has-sticky-header .sheet-heading {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--canvas, #fff);
+  padding: 12px 0;
+  margin-top: 0;
+  margin-bottom: 16px;
+  box-shadow: 0 -14px 0 var(--canvas, #fff);
 }
 </style>

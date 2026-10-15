@@ -108,6 +108,92 @@ try {
       order,
     );
   }
+  // Scoped room members may edit order only, without gaining creator settings.
+  for (const key of ["floor", "toilet", "sink", "water"]) {
+    const before = await board();
+    const category = before.categories.find((c) => c.key === key);
+    const rotation_order = [...category.rotation_order].reverse();
+    const tasks = h.db.sqlite
+      .prepare("SELECT * FROM chore_tasks WHERE dorm_id=? ORDER BY id")
+      .all(r.dorm.id);
+    const input = { version: before.version, key, rotation_order };
+    await api("/chores/order", {
+      method: "PATCH",
+      token: claimed.access_token,
+      data: input,
+    });
+    const after = await board();
+    eq(
+      after.categories.find((c) => c.key === key).rotation_order,
+      rotation_order,
+    );
+    eq(after.calendar, before.calendar);
+    eq(
+      h.db.sqlite
+        .prepare("SELECT * FROM chore_tasks WHERE dorm_id=? ORDER BY id")
+        .all(r.dorm.id),
+      tasks,
+    );
+    eq(
+      after.categories.map((c) => ({ ...c, rotation_order: [] })),
+      before.categories.map((c) => ({ ...c, rotation_order: [] })),
+    );
+    await api(
+      "/chores/order",
+      { method: "PATCH", token: claimed.access_token, data: input },
+      409,
+    );
+    await api(
+      "/chores/order",
+      {
+        method: "PATCH",
+        token: claimed.access_token,
+        data: {
+          ...input,
+          version: after.version,
+          rotation_order: [owner.id, owner.id, owner.id],
+        },
+      },
+      422,
+    );
+    await api(
+      "/chores/order",
+      {
+        method: "PATCH",
+        token: claimed.access_token,
+        data: {
+          ...input,
+          version: after.version,
+          rotation_order: [...rotation_order.slice(1), 999999],
+        },
+      },
+      422,
+    );
+    await api(
+      "/chores/order",
+      {
+        method: "PATCH",
+        token: claimed.access_token,
+        data: { ...input, version: after.version, name: "不能越权改名称" },
+      },
+      422,
+    );
+    eq((await board()).version, after.version);
+  }
+  const versioned = await board();
+  const orderInput = {
+    version: versioned.version,
+    key: "floor",
+    rotation_order: versioned.categories.find((c) => c.key === "floor")
+      .rotation_order,
+  };
+  await api("/chores/order", { method: "PATCH", data: orderInput }, 401);
+  const concurrent = await Promise.all(
+    [owner.token, claimed.access_token].map((token) =>
+      h.request("/chores/order", { method: "PATCH", token, data: orderInput }),
+    ),
+  );
+  eq(concurrent.map((r) => r.status).sort(), [200, 409]);
   // Month previews must carry the real completion markers over a month boundary.
   const current = await board();
   const done = current.calendar[0];
@@ -133,7 +219,7 @@ try {
         status: "passed",
         assertions,
         scope:
-          "three independent voluntary round orders, member visibility, creator permission, stale version and unchanged tasks/history",
+          "three independent voluntary round orders, member visibility, member order-only permissions, concurrent stale version and unchanged tasks/history",
       },
       null,
       2,

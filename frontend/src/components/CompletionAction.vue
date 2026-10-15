@@ -3,6 +3,7 @@ import { computed, ref, watch, onBeforeUnmount } from "vue";
 import GalaxySpinner from "./GalaxySpinner.vue";
 import GalaxyCheck from "./GalaxyCheck.vue";
 import type { ChoreTask } from "../api/chores";
+import { completionFeedback } from "../interaction/completionFeedback";
 import { motionAllowed } from "../interaction/motion";
 const props = defineProps<{
   task: ChoreTask;
@@ -16,16 +17,22 @@ const emit = defineEmits<{
   undo: [task: ChoreTask];
   settled: [id: number];
 }>();
+const ready = ref(false),
+  button = ref<HTMLButtonElement>();
 const round = ref(false),
   confirmed = ref<ChoreTask | null>(null);
+let pressedAt = 0;
 let pressedId: number | null = null,
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: ReturnType<typeof setTimeout> | undefined,
+  revealTimer: ReturnType<typeof setTimeout> | undefined;
 const visualTask = computed(() =>
   round.value && confirmed.value ? confirmed.value : props.task,
 );
 function reset() {
   if (confirmed.value) emit("settled", confirmed.value.id);
   clearTimeout(timer);
+  clearTimeout(revealTimer);
+  ready.value = false;
   round.value = false;
   confirmed.value = null;
   pressedId = null;
@@ -38,6 +45,7 @@ function click() {
     return;
   }
   if (!props.demo && motionAllowed()) {
+    pressedAt = performance.now();
     pressedId = props.task.id;
     round.value = true;
   }
@@ -54,7 +62,23 @@ watch(
           : null;
     if (receipt && round.value && !confirmed.value) {
       confirmed.value = receipt;
-      timer = setTimeout(reset, 650);
+      revealTimer = setTimeout(
+        () => {
+          ready.value = true;
+          const bounds = button.value?.getBoundingClientRect();
+          if (bounds)
+            completionFeedback(
+              new DOMRect(
+                bounds.x + (bounds.width - 60) / 2,
+                bounds.y,
+                60,
+                bounds.height,
+              ),
+            );
+          timer = setTimeout(reset, 620);
+        },
+        Math.max(0, 300 - (performance.now() - pressedAt)),
+      );
     } else if (
       !confirmed.value &&
       pressedId !== null &&
@@ -68,9 +92,14 @@ onBeforeUnmount(reset);
 </script>
 <template>
   <button
+    ref="button"
     type="button"
     class="completion-surface"
-    :class="{ 'is-done': visualTask.status === 'completed', 'is-round': round }"
+    :class="{
+      'is-done': visualTask.status === 'completed',
+      'is-round': round,
+      'is-ready': ready,
+    }"
     :data-testid="
       visualTask.status === 'completed'
         ? `undo-${visualTask.id}`
@@ -88,21 +117,20 @@ onBeforeUnmount(reset);
   >
     <span class="completion-fill" aria-hidden="true"></span>
     <span class="completion-label"
-      ><GalaxyCheck v-if="visualTask.status === 'completed'" /><span
-        class="completion-word"
-        >{{
-          visualTask.status === "completed"
-            ? visualTask.key === "water"
-              ? "已抬水"
-              : "已完成"
-            : visualTask.key === "water"
-              ? "我已抬水"
-              : "我已完成"
-        }}</span
-      ></span
+      ><GalaxyCheck
+        v-if="visualTask.status === 'completed' && (!round || ready)"
+      /><span class="completion-word">{{
+        visualTask.status === "completed"
+          ? visualTask.key === "water"
+            ? "已抬水"
+            : "已完成"
+          : visualTask.key === "water"
+            ? "我已抬水"
+            : "我已完成"
+      }}</span></span
     >
     <GalaxySpinner
-      v-if="busy && visualTask.status !== 'completed'"
+      v-if="round ? !ready : busy && visualTask.status !== 'completed'"
       class="completion-spinner"
     />
   </button>
@@ -135,7 +163,7 @@ onBeforeUnmount(reset);
   background: #111;
   clip-path: inset(0 0 round 20px);
   transition:
-    clip-path 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    clip-path 320ms cubic-bezier(0.22, 0.8, 0.3, 1),
     background-color 180ms ease;
 }
 .completion-label {
@@ -180,7 +208,7 @@ onBeforeUnmount(reset);
 .completion-surface[aria-busy="true"]:not(.is-round) {
   color: #aaa;
 }
-.is-round[aria-busy="true"] .completion-label {
+.is-round:not(.is-ready)[aria-busy="true"] .completion-label {
   opacity: 0;
 }
 .completion-spinner {
