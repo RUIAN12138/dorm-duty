@@ -8,6 +8,7 @@ import {
 } from "motion-v";
 
 export const motionTokens = {
+  press: { scaleX: 1.025, scaleY: 0.94 },
   selection: {
     type: "spring" as const,
     stiffness: 620,

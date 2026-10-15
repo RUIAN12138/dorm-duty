@@ -79,7 +79,7 @@ onBeforeUnmount(() => removeBack?.());
 }
 .hint-trigger:active {
   transform: scale(0.92);
-  background: #f3f3f3;
+  background: var(--ui-surface-muted);
 }
 .hint-glass {
   position: fixed;
@@ -102,7 +102,7 @@ onBeforeUnmount(() => removeBack?.());
   padding: 22px;
   border: 1px solid rgb(255 255 255 / 90%);
   border-radius: 28px;
-  background: #fff;
+  background: var(--ui-surface);
   color: #222;
   box-shadow:
     0 20px 70px #00000014,
@@ -151,13 +151,14 @@ onBeforeUnmount(() => removeBack?.());
   outline-offset: 3px;
 }
 .hint-confirm:active {
-  transform: scaleX(1.02) scaleY(0.94);
+  transform: var(--ui-press-action);
+  transition-duration: var(--ui-press-time);
 }
 @media (prefers-reduced-motion: no-preference) {
   .hint-trigger,
   .hint-confirm {
     transition:
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform var(--ui-release-time) var(--ui-ease-out),
       background-color 140ms ease;
   }
   .hint-glass[data-state="open"] {

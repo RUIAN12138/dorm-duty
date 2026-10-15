@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { motion } from "motion-v";
 import { TabsList, TabsTrigger } from "reka-ui";
 import { useSelectionMotion } from "../interaction/motion";
+import { horizontalIntent } from "../interaction/gestures";
 
 type SegmentOption = {
   value: string;
@@ -49,12 +50,12 @@ function move(event: PointerEvent) {
   const deltaX = event.clientX - startX;
   const deltaY = event.clientY - startY;
   if (!dragging.value) {
-    if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
-      reset();
+    const intent = horizontalIntent(deltaX, deltaY);
+    if (intent === "vertical") {
+      cancelGesture();
       return;
     }
-    if (Math.abs(deltaX) < 8 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2)
-      return;
+    if (intent !== "horizontal") return;
     dragging.value = true;
   }
   event.preventDefault();
@@ -86,10 +87,20 @@ function up(event: PointerEvent) {
 }
 function cancel(event: PointerEvent) {
   if (event.pointerId === pointerId) {
-    selection.move(selectedIndex.value);
-    reset();
+    cancelGesture();
   }
 }
+function cancelGesture() {
+  if (pointerId === null) return;
+  suppressClickUntil = performance.now() + 500;
+  selection.move(selectedIndex.value);
+  reset();
+}
+function cancelWhenHidden() {
+  if (document.hidden) cancelGesture();
+}
+window.addEventListener("blur", cancelGesture);
+document.addEventListener("visibilitychange", cancelWhenHidden);
 function reset() {
   pointerId = null;
   dragging.value = false;
@@ -116,7 +127,11 @@ watch(
     }
   },
 );
-onUnmounted(reset);
+onUnmounted(() => {
+  reset();
+  window.removeEventListener("blur", cancelGesture);
+  document.removeEventListener("visibilitychange", cancelWhenHidden);
+});
 </script>
 
 <template>
@@ -158,8 +173,8 @@ onUnmounted(reset);
   gap: 4px;
   padding: 4px;
   margin-bottom: 24px;
-  border-radius: 14px;
-  background: #f3f3f3;
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-surface-muted);
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
@@ -174,7 +189,7 @@ onUnmounted(reset);
     (100% - 8px - (var(--segment-count) - 1) * 4px) / var(--segment-count)
   );
   border-radius: 10px;
-  background: #fff;
+  background: var(--ui-surface);
   box-shadow: 0 1px 3px #00000012;
   pointer-events: none;
 }
@@ -192,13 +207,14 @@ onUnmounted(reset);
   cursor: pointer;
   transition:
     color 160ms ease,
-    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform var(--ui-release-time) var(--ui-ease-out);
 }
 .calendar-view-selector button[data-state="active"] {
-  color: #111;
+  color: var(--ui-ink);
 }
 .calendar-view-selector button:active {
-  transform: scale(0.97);
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 @media (max-width: 350px) {
   .calendar-view-selector button {

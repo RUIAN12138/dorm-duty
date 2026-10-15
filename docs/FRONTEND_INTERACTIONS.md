@@ -18,7 +18,7 @@
 | I02  | 创建 / 加入          | 输入邀请码查询室友；创建时填写宿舍名、自己昵称、室友名单与个人标记；成功后展示邀请码，可复制或收起。                                                                                                          |
 | I03  | 选择身份             | 点室友姓名；正式宿舍确认个人标记后进入，已占用标记不可重复选择；游客可直接选演示室友。                                                                                                                        |
 | I04  | 身份保留             | 保存宿舍、成员与设备身份；切换页展示最多 12 个已加入宿舍，点卡片恢复原身份，无需再次输入邀请码。新设备仍要显式输入；无效成员需重新选择。                                                                      |
-| I05  | 底部导航             | 点击值日 / 抬水 / 日历；按住横向拖动选中背景，释放后切到落点页；向外移出释放或系统取消则回到当前页；支持 Enter。                                                                                              |
+| I05  | 底部导航             | 点击值日 / 抬水 / 日历；按住横向拖动选中背景，释放后切到落点页；向外移出释放、系统取消或失去窗口焦点则回到当前页；纵向意图不进入横向拖动；支持 Enter。                                                                                              |
 | I06  | 页面标题             | 在标记的标题区域左右滑动切三页；水平意图超过 8px 才接管，位移达到 56px 切页，纵向保留滚动；首尾显示提示。不是整屏任意区域滑动。                                                                               |
 | I07  | 值日类别             | 点地板 / 洗手池 / 厕所按钮，只切换当前任务大标题、状态和操作；当前没有任务时显示即将到来的任务。                                                                                                              |
 | I08  | 任务大标题           | 左右滑动切换自己的任务；48px 触发切换；滑动后的误点击被抑制，首尾提示第一项 / 最后一项。                                                                                                                      |
@@ -97,25 +97,25 @@ Vant 组件包括 Badge、Button、Cell、CellGroup、Checkbox、Field、Form、
 | A02  | 三个主页面切换          | 进入 260ms，水平 14px + 淡入；退出位移 180ms、透明 100ms；按方向切换                                                                                             | `ChoreBoard.vue`                                                   |
 | A03  | 页面标题跟手            | 手指位移乘 0.24，限制 ±36px，松手 180ms 归位                                                                                                                     | `ChoreBoard.vue`                                                   |
 | A04  | 底栏选中背景            | Motion spring：刚度 620 / 阻尼 42 / 质量 0.8；拖动直接跟手；速度驱动横向形变最大 3.5%，纵向轻压缩；后台或减少动态立即到目标                                      | `ChoreBottomNav.vue`、`interaction/motion.ts`                      |
-| A05  | 底栏图文按压            | 0.96 倍，180ms 恢复；图标不再独立跳动                                                                                                                            | `ChoreBottomNav.vue`                                               |
+| A05  | 底栏图文按压            | 0.96 倍，80ms 按下 / 160ms 恢复；图标不再独立跳动                                                                                                                            | `ChoreBottomNav.vue`                                               |
 | A06  | 任务大标题切换          | 跟手位移乘 0.18，限制 ±20px，回位 180ms；稳定 h2 同步换字，140ms / 3px 轻位移，透明度始终至少 0.72；打断不串行等待退出                                           | `TaskTitle.vue`、`interaction/taskSwipe.ts`                        |
 | A07  | 按钮按压                | 入口主按钮 / 标记 0.96，按下 80ms、恢复 260ms；完成按钮纵向压至 0.94、横向轻展至 1.025；菜单卡片按压至 0.97；提醒按钮保留 0.96 的 260ms 弹性恢复                 | `focus.css`、`ChoreBoard.vue`                                      |
 | A08  | 普通抽屉                | Motion 完整 transform 进入 240ms / 退出 180ms；打断采样当前姿态后反向；Reka Dialog 管理焦点、滚动锁和嵌套                                                        | `ElasticSheet.vue`                                                 |
 | A09  | 值日共享元素详情        | 从触发矩形进入 240ms，关闭缩回 180ms；中断从当前位置反向；完整 transform 走元素动画，不逐帧组合六个值                                                            | `ElasticSheet.vue`                                                 |
 | A10  | 抬水底部详情            | 非模态悬浮面板，从屏幕底边进入 240ms、单向下退出 180ms；无背景变暗、无退出超调，底层仍可点                                                                       | `ElasticSheet.vue` 的 bottom 模式                                  |
-| A11  | 抽屉拖拽                | 上拉橡皮筋渐近 64px；超过 130px，或超过 35px 且速度 >0.6px/ms 关闭；取消用 spring 540 / 42 / 0.8 回位；仍是开 / 关两状态                                         | `ElasticSheet.vue`、`interaction/motion.ts`                        |
+| A11  | 抽屉拖拽                | 上拉橡皮筋渐近 64px；超过 130px，或超过 35px 且最近移动速度 >0.6px/ms 关闭，速度采样覆盖最近约 100ms，反向重置，停住超过 80ms 不沿用旧速度；取消用 spring 540 / 42 / 0.8 回位；仍是开 / 关两状态                                         | `ElasticSheet.vue`、`interaction/motion.ts`                        |
 | A12  | 敲名字催促              | WAAPI 260ms：当前姿态 → 纵压横展 → 轻微回弹 → 1；圆环 400ms 扩散至 2.5 倍；「催促 +1」580ms 上浮并淡出；最多保留 8 个敲击效果                                    | `WaterNudge.vue`                                                   |
 | A13  | 排序拿起 / 让位         | 长按 240ms；拿起 1.02 倍；Motion Reorder 布局 spring 540 / 40 / 0.8；边缘自动滚动；预览不提交，取消 / 关闭恢复；保留上下移按钮                                   | `SortableMembers.vue`、`SortableMemberRow.vue`                     |
-| A14  | 日历 / 列表滑块         | 与底栏共用 spring 620 / 42 / 0.8 及 3.5% 形变上限，拖动直接跟手；Reka Tabs 同页语义；按钮按压保持 0.97                                                           | `ElasticSegments.vue`、`interaction/motion.ts`                     |
+| A14  | 日历 / 列表滑块         | 与底栏共用 spring 620 / 42 / 0.8 及 3.5% 形变上限，拖动直接跟手；Reka Tabs 同页语义；按钮按压统一 0.96，80ms 按下 / 160ms 恢复                                                           | `ElasticSegments.vue`、`interaction/motion.ts`                     |
 | A15  | 月历翻月                | 进入 ±12px / 240ms，透明 200ms；退出位移 160ms、透明 100ms                                                                                                       | `ChoreCalendar.vue`                                                |
-| A16  | 日历日期 / 月份按钮按压 | 0.94 倍 / 180ms，背景 160ms；选中日期颜色变化                                                                                                                    | `ChoreCalendar.vue`                                                |
+| A16  | 日历日期 / 月份按钮按压 | 0.96 倍，80ms 按下 / 160ms 恢复，背景 160ms；选中日期颜色变化                                                                                                                    | `ChoreCalendar.vue`                                                |
 | A17  | 轮次圆环 / 人数         | 280ms，三次 ease-out；SVG stroke-dashoffset 与人数从上次数值到新值，重开不从零播放；不是机械翻牌                                                                 | `ChoreBoard.vue`                                                   |
 | A18  | 完成状态出现            | 同一按钮原位切换为完成状态，圆角 20 → 24px、背景 160ms；重复点击恢复，取消成功浮层；保留低频空状态 `task-arrive`                                                 | `ChoreBoard.vue`                                                   |
 | A19  | 加载 / 刷新             | 骨架 opacity 0.45–1，1.2s 往返；刷新图标 700ms 连续旋转；另有 Vant Loading                                                                                       | `ChoreBoard.vue`、Vant                                             |
 | A20  | 小状态变化              | 任务 / 设置选项颜色 180ms；顺序展开箭头旋转 200ms；定时提醒开关滑块 160ms；details 正文当前没有平滑高度动画                                                      | `ChoreBoard.vue`、`ChoreSettings.vue`、`TimedReminderSettings.vue` |
 | A21  | 保留账号版动效          | 首页 / 标题 / 登录插图入场 250ms，上移 5px；任务行 550ms 交错进入、每项延迟 45ms；排班日详情 opacity 150ms / transform 200ms；Vant 等按钮 0.96 与 360ms 弹性恢复 | `style.css`、旧版 Home / Schedule / DutyRow                        |
 
-大部分 ease-out 为 `cubic-bezier(0.22,1,0.36,1)`；弹性按钮为 `cubic-bezier(0.34,1.56,0.64,1)`；底部抽屉进入为 `cubic-bezier(0.32,0.72,0,1)`。底栏与分段共用 Motion 弹簧；集中参数见 `interaction/motion.ts`。
+大部分 ease-out 为 `cubic-bezier(0.22,1,0.36,1)`；弹性按钮为 `cubic-bezier(0.34,1.56,0.64,1)`；底部抽屉进入为 `cubic-bezier(0.32,0.72,0,1)`。底栏与分段共用 Motion 弹簧；集中参数见 `interaction/motion.ts`；颜色、圆角和按压节奏见 `interaction/tokens.css`。日历日期区支持水平滑月，纵向保留页面滚动；短滑、取消、加载中不切月，滑动结束不误开日期。密集个人标记和额外数量约束在日期格内，日期详情按完成时间从新到旧排列。
 
 全局支持 `prefers-reduced-motion`；键盘交互会停用 CSS 动画，主要 JS 动效也独立检查。像素图标当前只有静态阴影，不闪烁、不播放帧序列。
 

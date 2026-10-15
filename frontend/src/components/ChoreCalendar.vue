@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { TabsRoot, TabsContent } from "reka-ui";
 import type { ChoreMember, ChoreRecord } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
@@ -7,6 +7,7 @@ import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 import ElasticSegments from "./ElasticSegments.vue";
 import ChoreRecordRow from "./ChoreRecordRow.vue";
+import { createTaskSwipe } from "../interaction/taskSwipe";
 const props = defineProps<{
   month: string;
   today: string;
@@ -23,6 +24,36 @@ const emit = defineEmits<{
   undo: [id: number];
 }>();
 const selected = ref("");
+const swipeOffset = ref(0);
+const swiping = ref(false);
+const monthSwipe = createTaskSwipe(
+  (offset, dragging) => {
+    swipeOffset.value = offset;
+    swiping.value = dragging;
+  },
+  (direction) => {
+    if (!props.loading) step(direction);
+  },
+);
+function swipeDown(event: PointerEvent) {
+  if (!props.loading) monthSwipe.down(event);
+}
+function suppressSwipeClick(event: MouseEvent) {
+  if (monthSwipe.suppressesClick(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+function cancelWhenHidden() {
+  if (document.hidden) monthSwipe.cancel();
+}
+window.addEventListener("blur", monthSwipe.cancel);
+document.addEventListener("visibilitychange", cancelWhenHidden);
+onBeforeUnmount(() => {
+  monthSwipe.cancel();
+  window.removeEventListener("blur", monthSwipe.cancel);
+  document.removeEventListener("visibilitychange", cancelWhenHidden);
+});
 const view = ref<"calendar" | "list">("calendar");
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
@@ -69,6 +100,17 @@ const monthText = computed(
   () =>
     `${Number(props.month.slice(0, 4))}年 ${Number(props.month.slice(5))}月`,
 );
+const recordsByDate = computed(() => {
+  const dates = new Map<string, ChoreRecord[]>();
+  for (const record of [...props.records].sort(
+    (a, b) => b.completed_at.localeCompare(a.completed_at) || b.id - a.id,
+  )) {
+    const records = dates.get(record.completed_date) || [];
+    records.push(record);
+    dates.set(record.completed_date, records);
+  }
+  return dates;
+});
 const cells = computed(() => {
   const [year = 2026, month = 1] = props.month.split("-").map(Number);
   const first = new Date(Date.UTC(year, month - 1, 1));
@@ -79,9 +121,7 @@ const cells = computed(() => {
     const day = index - before + 1;
     if (day < 1 || day > count) return null;
     const date = `${props.month}-${String(day).padStart(2, "0")}`;
-    const records = props.records.filter(
-      (record) => record.completed_date === date,
-    );
+    const records = recordsByDate.value.get(date) || [];
     const marks = [
       ...new Map(
         records.map((record) => {
@@ -97,8 +137,8 @@ const cells = computed(() => {
     return { day, date, records, marks, visibleMarks };
   });
 });
-const selectedRecords = computed(() =>
-  props.records.filter((record) => record.completed_date === selected.value),
+const selectedRecords = computed(
+  () => recordsByDate.value.get(selected.value) || [],
 );
 function step(amount: number) {
   const [year = 2026, month = 1] = props.month.split("-").map(Number);
@@ -113,6 +153,7 @@ watch(
   (next, previous) => {
     monthDirection.value = next > previous ? 1 : -1;
     selected.value = "";
+    monthSwipe.cancel();
   },
 );
 </script>
@@ -164,11 +205,24 @@ watch(
       />
       <TabsContent value="calendar" as-child>
         <div class="calendar-mode">
-          <div class="calendar-surface">
+          <div
+            class="calendar-surface"
+            @pointerdown="swipeDown"
+            @pointermove="monthSwipe.move"
+            @pointerup="monthSwipe.up"
+            @pointercancel="monthSwipe.cancel"
+            @lostpointercapture="monthSwipe.cancel"
+            @click.capture="suppressSwipeClick"
+            @dragstart.prevent
+          >
             <div class="chore-weekdays" aria-hidden="true">
               <span v-for="name in weekNames" :key="name">{{ name }}</span>
             </div>
-            <div class="month-stage">
+            <div
+              class="month-stage"
+              :class="{ 'is-swiping': swiping }"
+              :style="{ transform: `translate3d(${swipeOffset}px,0,0)` }"
+            >
               <Transition
                 :name="monthDirection > 0 ? 'month-next' : 'month-prev'"
               >
@@ -328,7 +382,7 @@ h1 {
   align-items: baseline;
   gap: 10px;
   margin: 0;
-  color: #111;
+  color: var(--ui-ink);
   line-height: 1.1;
   font-weight: 600;
   letter-spacing: -1.5px;
@@ -362,7 +416,10 @@ h1 > span {
   padding: 16px 8px 10px;
   border: 1px solid #ededed;
   border-radius: 26px;
-  background: #fff;
+  background: var(--ui-surface);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .chore-weekdays,
 .chore-calendar-grid {
@@ -377,6 +434,7 @@ h1 > span {
   padding-bottom: 15px;
 }
 .chore-calendar-grid button {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -393,16 +451,15 @@ h1 > span {
 }
 .chore-calendar-grid button.has-records {
   background: #f6f6f6;
-  color: #111;
+  color: var(--ui-ink);
 }
 .chore-calendar-grid button.is-selected {
-  border-color: #111;
+  border-color: var(--ui-ink);
   background: #f5f5f5;
 }
 .calendar-day-number {
   display: grid;
   place-items: center;
-  position: relative;
   min-width: 28px;
   height: 28px;
   font-size: 16px;
@@ -417,10 +474,10 @@ h1 > span {
 }
 .calendar-more {
   position: absolute;
-  top: -2px;
-  left: calc(100% - 1px);
+  top: 2px;
+  right: 2px;
   color: #888;
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1;
 }
 .calendar-cell-marks {
@@ -434,7 +491,7 @@ h1 > span {
 }
 .calendar-task-mark {
   position: relative;
-  width: 18px;
+  width: 16px;
   height: 22px;
   flex-shrink: 0;
 }
@@ -443,7 +500,7 @@ h1 > span {
   right: -1px;
   bottom: 0;
   font-size: 10px;
-  background: #fff;
+  background: var(--ui-surface);
   border-radius: 3px;
 }
 .calendar-type-legend {
@@ -541,10 +598,12 @@ h1 > span {
   width: 100%;
 }
 .calendar-nav button:active {
-  transform: scaleX(1.03) scaleY(0.92);
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 .chore-calendar-grid button:active {
-  transform: scale(0.94);
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 @media (max-width: 350px) {
   .calendar-surface {
@@ -580,10 +639,16 @@ h1 > span {
   }
 }
 @media (prefers-reduced-motion: no-preference) {
+  .month-stage {
+    transition: transform var(--ui-release-time) var(--ui-ease-out);
+  }
+  .month-stage.is-swiping {
+    transition: none;
+  }
   .calendar-nav button,
   .chore-calendar-grid button {
     transition:
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform var(--ui-release-time) var(--ui-ease-out),
       background-color 160ms ease,
       border-color 160ms ease;
   }
