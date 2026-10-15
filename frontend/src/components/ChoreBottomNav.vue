@@ -2,7 +2,11 @@
 import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { motion } from "motion-v";
-import { useSelectionMotion, navigationScrubbing } from "../interaction/motion";
+import {
+  useSelectionMotion,
+  navigationScrubbing,
+  navigationOrigin,
+} from "../interaction/motion";
 import { horizontalIntent } from "../interaction/gestures";
 const router = useRouter();
 const props = defineProps<{
@@ -92,6 +96,7 @@ function move(event: PointerEvent) {
   }
   dragging.value = true;
   navigationScrubbing.value = true;
+  navigationOrigin.value = null;
   pressedIndex.value = -1;
   const point = position(event.clientX, gesture.nav);
   selection.track(point.progress);
@@ -124,6 +129,7 @@ function finish(event: PointerEvent, cancelled = false) {
   )
     return;
   const nav = gesture.nav;
+  const wasDragging = dragging.value;
   gesture = null;
   pressedIndex.value = -1;
   dragging.value = false;
@@ -141,6 +147,12 @@ function finish(event: PointerEvent, cancelled = false) {
     return;
   }
   const index = position(event.clientX, nav).index;
+  if (!wasDragging && index !== currentIndex.value)
+    navigationOrigin.value = {
+      x: event.clientX,
+      y: event.clientY,
+      time: performance.now(),
+    };
   selection.move(index);
   navigate(index);
 }
@@ -148,7 +160,18 @@ function click(event: MouseEvent) {
   if (event.detail > 0 && performance.now() < suppressClickUntil) {
     event.preventDefault();
     event.stopPropagation();
+    return;
   }
+  if (
+    event.detail &&
+    event.target instanceof Element &&
+    event.target.closest("a")
+  )
+    navigationOrigin.value = {
+      x: event.clientX,
+      y: event.clientY,
+      time: performance.now(),
+    };
 }
 </script>
 <template>

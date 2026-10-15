@@ -181,7 +181,7 @@ async function identity(page) {
 async function openMenu(page) {
   diagnosticPage = page;
   await page.getByTestId("open-tools").click();
-  await page.locator(".elastic-sheet").waitFor();
+  await page.getByTestId("open-reminder").waitFor();
   assert.equal(
     await page
       .locator(".app-shell")
@@ -299,11 +299,40 @@ async function pane(page, key) {
   );
   await closeMenu(page);
 }
+const checkedReveal = new WeakSet();
 async function navigate(page, key) {
   expectedPane = key;
   navigationStep = `tap-navigation:${key}`;
+  const inspectReveal =
+    !checkedReveal.has(page) &&
+    (await page.evaluate(() => location.pathname)) !== panes[key].path;
+  if (inspectReveal)
+    await page.evaluate(() => {
+      window.__revealSeen = false;
+      const start = performance.now();
+      function sample() {
+        window.__revealSeen ||= document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.effect?.target?.classList?.contains("focus-pane") &&
+              a.effect
+                .getKeyframes()
+                .some((k) => String(k.clipPath).startsWith("circle(")),
+          );
+        if (performance.now() - start < 600) requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
   await page.getByTestId(`nav-${key}`).tap();
   await pane(page, key);
+  if (inspectReveal) {
+    await page.waitForFunction(() => window.__revealSeen);
+    checkedReveal.add(page);
+    checks.push(
+      "tapping a page tab reveals its new page from a circular clip at the touch origin",
+    );
+  }
 }
 async function swipeSection(page, deltaX) {
   navigationStep = `heading-swipe:${deltaX}`;
@@ -325,6 +354,25 @@ async function dragBottomNav(page, from, to) {
   const y = source.y + source.height / 2;
   await page.mouse.move(source.x + source.width / 2, y);
   await page.mouse.down();
+  await page.evaluate(() => {
+    window.__scrubAnimated = false;
+    const start = performance.now();
+    function sample() {
+      if (
+        document.querySelector(".chore-bottom-nav.is-dragging") ||
+        document.querySelector('[data-testid="chore-bottom-nav"].is-dragging')
+      )
+        window.__scrubAnimated ||= document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.effect?.target?.classList?.contains("focus-pane") &&
+              a.effect?.getTiming().duration === 180,
+          );
+      if (performance.now() - start < 700) requestAnimationFrame(sample);
+    }
+    requestAnimationFrame(sample);
+  });
   await page.mouse.move(destination.x + destination.width / 2, y, {
     steps: 8,
   });
@@ -341,6 +389,11 @@ async function dragBottomNav(page, from, to) {
     panes[to].path,
   );
   await page.locator(panes[to].selector).waitFor();
+  assert.equal(
+    await page.evaluate(() => window.__scrubAnimated),
+    true,
+    "held navigation animates the page, not only the tab indicator",
+  );
   checks.push(`bottom navigation shows ${to} while the pointer is still held`);
   await page.mouse.up();
 }
@@ -861,12 +914,8 @@ try {
   );
   await a.page.getByTestId("round-progress").click();
   await a.page.getByTestId("round-members").waitFor();
-  await a.page.getByRole("button", { name: "调整排列", exact: true }).click();
+  await a.page.getByTestId("edit-round-order").click();
   await a.page.getByRole("dialog", { name: "调整排列", exact: true }).waitFor();
-  await a.page.getByRole("button", { name: "知道了", exact: true }).click();
-  await a.page
-    .getByRole("dialog", { name: "调整排列", exact: true })
-    .waitFor({ state: "hidden" });
   assert.equal(await a.page.getByTestId("round-members").isVisible(), true);
   const initialRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",

@@ -26,16 +26,17 @@ export function completionFeedback(bounds: DOMRect | undefined) {
     const dot = document.createElement("i");
     Object.assign(dot.style, {
       position: "absolute",
-      width: index % 2 ? "3px" : "4px",
-      height: "4px",
-      borderRadius: "1px",
+      width: index % 2 ? "4px" : "5px",
+      height: "5px",
+      borderRadius: "50%",
+      boxShadow: "0 0 0 2px #fff",
       background: index % 2 ? "#999" : "#222",
     });
     layer.append(dot);
-    const startX = Math.cos(angle) * Math.min(70, bounds.width / 3);
-    const startY = Math.sin(angle) * 25;
-    const endX = startX + Math.cos(angle) * 24;
-    const endY = startY + Math.sin(angle) * 19;
+    const startX = Math.cos(angle) * Math.min(100, bounds.width * 0.36);
+    const startY = Math.sin(angle) * (bounds.height / 2 + 7);
+    const endX = startX + Math.cos(angle) * 30;
+    const endY = startY + Math.sin(angle) * 27;
     return dot.animate(
       [
         {

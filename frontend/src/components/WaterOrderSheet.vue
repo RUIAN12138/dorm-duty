@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { TabsRoot } from "reka-ui";
 import { ApiError } from "../api";
 import {
   choreRequest,
@@ -9,10 +10,13 @@ import {
 import ElasticSheet from "./ElasticSheet.vue";
 import SortableMembers from "./SortableMembers.vue";
 import MemberMark from "./MemberMark.vue";
+import ElasticSegments from "./ElasticSegments.vue";
+import HintPopover from "./HintPopover.vue";
 const props = defineProps<{
   modelValue: boolean;
   members: ChoreMember[];
   category: ChoreCategory;
+  categories?: ChoreCategory[];
   currentId?: number;
   creator: boolean;
   version: number;
@@ -22,18 +26,34 @@ const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   saved: [];
   closed: [];
+  recover: [];
 }>();
+const selectedKey = ref("water");
+const selectedCategory = computed(
+  () =>
+    props.categories?.find((c) => c.key === selectedKey.value) ||
+    props.category,
+);
+const options = computed(() =>
+  (props.categories || [props.category])
+    .filter((c) => c.enabled)
+    .map((c) => ({
+      value: c.key,
+      label: c.name,
+      testId: `order-category-${c.key}`,
+    })),
+);
 const order = ref<number[]>([]),
   saving = ref(false),
   error = ref("");
 let version = 0,
   category: ChoreCategory;
 watch(
-  () => props.modelValue,
-  (open) => {
+  () => [props.modelValue, selectedKey.value] as const,
+  ([open]) => {
     if (open) {
-      order.value = [...props.category.rotation_order];
-      category = JSON.parse(JSON.stringify(props.category));
+      order.value = [...selectedCategory.value.rotation_order];
+      category = JSON.parse(JSON.stringify(selectedCategory.value));
       version = props.version;
       error.value = "";
     }
@@ -66,26 +86,41 @@ async function save() {
 <template>
   <ElasticSheet
     :model-value="modelValue"
-    title="抬水轮序"
+    :title="`${selectedCategory.name}轮序`"
     motion="bottom"
     @update:model-value="emit('update:modelValue', $event)"
     @closed="emit('closed')"
   >
-    <p class="order-caption">
-      {{ creator ? "按住拖动，调整先后" : "按顺序轮流抬水" }}
-    </p>
+    <TabsRoot v-model="selectedKey" :inert="saving ? true : undefined"
+      ><ElasticSegments
+        v-if="options.length > 1"
+        v-model="selectedKey"
+        :options="options"
+        group-label="选择任务轮序"
+    /></TabsRoot>
+    <div class="order-help">
+      <HintPopover
+        title="调整轮序"
+        :text="
+          creator
+            ? '长按名字提起整行，上下拖动调整先后，松手后保存。'
+            : '仅宿舍创建者可以调整轮序。若你是创建者，请从更多操作中恢复管理身份。'
+        "
+      />
+    </div>
     <SortableMembers
       v-if="creator"
       v-model="order"
       :members="members"
       :active="modelValue"
       :disabled="saving"
+      :category-key="selectedCategory.key"
     />
     <ol v-else class="order-people">
       <li
-        v-for="(id, index) in category.rotation_order"
+        v-for="(id, index) in selectedCategory.rotation_order"
         :key="id"
-        :class="{ current: id === currentId }"
+        :class="{ current: selectedKey === 'water' && id === currentId }"
       >
         <span class="order-number">{{ index + 1 }}</span
         ><MemberMark
@@ -94,15 +129,28 @@ async function save() {
         /><strong>{{
           members.find((m) => m.user_id === id)?.nickname || "室友"
         }}</strong
-        ><span v-if="id === currentId" class="current-label">当前轮到</span>
+        ><span
+          v-if="selectedKey === 'water' && id === currentId"
+          class="current-label"
+          >当前轮到</span
+        >
       </li>
     </ol>
+    <button
+      v-if="!creator"
+      class="guest-secondary"
+      data-testid="order-recover-owner"
+      @click="emit('recover')"
+    >
+      创建者管理
+    </button>
     <p v-if="error" class="order-error" role="alert">{{ error }}</p>
     <div v-if="creator" class="order-save">
-      <p>当前抬水人保持不变，下一次按新顺序轮换。</p>
       <button
         class="guest-primary"
-        data-testid="water-order-save"
+        :data-testid="
+          selectedKey === 'water' ? 'water-order-save' : 'round-order-save'
+        "
         :disabled="saving"
         @click="save"
       >
@@ -112,6 +160,11 @@ async function save() {
   </ElasticSheet>
 </template>
 <style scoped>
+.order-help {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0;
+}
 .order-caption {
   margin: 0 0 20px;
   font-size: 16px;

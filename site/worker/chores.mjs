@@ -727,10 +727,15 @@ async function board(request, db, env, now, url) {
     "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
     [room.id],
   );
+  const adjacentMonth = (delta) => {
+    const date = new Date(`${month}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + delta);
+    return date.toISOString().slice(0, 7);
+  };
   const calendarRows = await all(
     db,
-    "SELECT id,key,name,assignee_id,assignee_name_snapshot,marker_id_snapshot,completed_at FROM chore_tasks WHERE dorm_id=? AND status='completed' AND strftime('%Y-%m',completed_at,'+8 hours')=? ORDER BY completed_at,id",
-    [room.id, month],
+    "SELECT id,key,name,assignee_id,assignee_name_snapshot,marker_id_snapshot,completed_at FROM chore_tasks WHERE dorm_id=? AND status='completed' AND strftime('%Y-%m',completed_at,'+8 hours')>=? AND strftime('%Y-%m',completed_at,'+8 hours')<? ORDER BY completed_at,id",
+    [room.id, adjacentMonth(-1), adjacentMonth(2)],
   );
   const reminders =
     who?.user_id === uid
@@ -764,6 +769,18 @@ async function board(request, db, env, now, url) {
       total: members.length,
       completed: current.active.filter((row) => row.status === "completed")
         .length,
+      completions: current.active
+        .filter((row) => row.status === "completed")
+        .sort(
+          (a, b) => a.completed_at.localeCompare(b.completed_at) || a.id - b.id,
+        )
+        .map((row) => ({
+          id: row.id,
+          user_id: row.assignee_id,
+          nickname: row.assignee_name_snapshot,
+          marker_id: row.marker_id_snapshot,
+          completed_at: row.completed_at,
+        })),
       members: [...members]
         .sort(
           (a, b) =>
@@ -810,16 +827,38 @@ async function board(request, db, env, now, url) {
       taskView(task, now, actorForTasks, settings, members),
     ),
     water_order: settings.find((entry) => entry.key === "water").rotation_order,
-    calendar: calendarRows.map((row) => ({
-      id: row.id,
-      key: row.key,
-      name: row.name,
-      assignee_id: row.assignee_id,
-      assignee_name: row.assignee_name_snapshot,
-      marker_id: row.marker_id_snapshot,
-      completed_at: row.completed_at,
-      completed_date: localDate(row.completed_at),
-    })),
+    calendar: calendarRows
+      .filter((row) => localDate(row.completed_at).startsWith(month))
+      .map((row) => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        assignee_id: row.assignee_id,
+        assignee_name: row.assignee_name_snapshot,
+        marker_id: row.marker_id_snapshot,
+        completed_at: row.completed_at,
+        completed_date: localDate(row.completed_at),
+      })),
+    calendar_neighbors: Object.fromEntries(
+      [-1, 1].map((delta) => {
+        const key = adjacentMonth(delta);
+        return [
+          key,
+          calendarRows
+            .filter((row) => localDate(row.completed_at).startsWith(key))
+            .map((row) => ({
+              id: row.id,
+              key: row.key,
+              name: row.name,
+              assignee_id: row.assignee_id,
+              assignee_name: row.assignee_name_snapshot,
+              marker_id: row.marker_id_snapshot,
+              completed_at: row.completed_at,
+              completed_date: localDate(row.completed_at),
+            })),
+        ];
+      }),
+    ),
     reminders: reminders.map(reminderView),
   });
 }

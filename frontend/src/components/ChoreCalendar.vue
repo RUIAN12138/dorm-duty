@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch } from "vue";
 import { TabsRoot, TabsContent } from "reka-ui";
 import type { ChoreMember, ChoreRecord } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 import ElasticSegments from "./ElasticSegments.vue";
-import ChoreRecordRow from "./ChoreRecordRow.vue";
+import RecordTimeline from "./RecordTimeline.vue";
 import { motionAllowed } from "../interaction/motion";
-import { createTaskSwipe } from "../interaction/taskSwipe";
+import { useMonthCarousel, shiftMonth } from "../interaction/monthCarousel";
 const props = defineProps<{
   month: string;
   today: string;
   records: ChoreRecord[];
+  neighbors?: Record<string, ChoreRecord[]>;
   members: ChoreMember[];
   loading?: boolean;
   memberId?: number;
@@ -25,41 +26,37 @@ const emit = defineEmits<{
   undo: [id: number];
 }>();
 const selected = ref("");
-const monthGrid = ref<HTMLElement>();
-const monthLabel = ref<HTMLElement>();
-let monthAnimations: Animation[] = [];
-
-const swipeOffset = ref(0);
-const swiping = ref(false);
-const monthSwipe = createTaskSwipe(
-  (offset, dragging) => {
-    swipeOffset.value = offset;
-    swiping.value = dragging;
-  },
-  (direction) => {
-    if (!props.loading) step(direction);
-  },
+const monthViewport = ref<HTMLElement>(),
+  monthTrack = ref<HTMLElement>();
+const carousel = useMonthCarousel(
+  () => props.month,
+  () => !!props.loading,
+  (value) => emit("change", value),
+  monthViewport,
+  monthTrack,
 );
-function swipeDown(event: PointerEvent) {
-  if (!props.loading) monthSwipe.down(event);
-}
-function suppressSwipeClick(event: MouseEvent) {
-  if (monthSwipe.suppressesClick(event)) {
-    event.preventDefault();
-    event.stopPropagation();
+const expandedPast = ref(new Set<string>());
+const collapsedToday = ref("");
+const isExpanded = (date: string) =>
+  date === props.today
+    ? collapsedToday.value !== date
+    : expandedPast.value.has(date);
+function toggleGroup(date: string) {
+  if (date === props.today) collapsedToday.value = isExpanded(date) ? date : "";
+  else {
+    const next = new Set(expandedPast.value);
+    if (next.has(date)) next.delete(date);
+    else next.add(date);
+    expandedPast.value = next;
   }
 }
-function cancelWhenHidden() {
-  if (document.hidden) monthSwipe.cancel();
-}
-window.addEventListener("blur", monthSwipe.cancel);
-document.addEventListener("visibilitychange", cancelWhenHidden);
-onBeforeUnmount(() => {
-  monthSwipe.cancel();
-  monthAnimations.forEach((animation) => animation.cancel());
-  window.removeEventListener("blur", monthSwipe.cancel);
-  document.removeEventListener("visibilitychange", cancelWhenHidden);
-});
+watch(
+  () => props.today,
+  (next, previous) => {
+    expandedPast.value.delete(previous);
+    collapsedToday.value = "";
+  },
+);
 const view = ref<"calendar" | "list">("calendar");
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
@@ -100,7 +97,7 @@ const dateLabel = (date: string) =>
   date === props.today
     ? "今天"
     : `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
-const monthDirection = ref(1);
+
 const weekNames = ["一", "二", "三", "四", "五", "六", "日"];
 const monthText = computed(
   () =>
@@ -117,78 +114,54 @@ const recordsByDate = computed(() => {
   }
   return dates;
 });
-const cells = computed(() => {
-  const [year = 2026, month = 1] = props.month.split("-").map(Number);
-  const first = new Date(Date.UTC(year, month - 1, 1));
-  const before = (first.getUTCDay() + 6) % 7;
-  const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const total = 42; // Six stable rows prevent month changes from moving the page.
-  return Array.from({ length: total }, (_, index) => {
-    const day = index - before + 1;
-    if (day < 1 || day > count) return null;
-    const date = `${props.month}-${String(day).padStart(2, "0")}`;
-    const records = recordsByDate.value.get(date) || [];
-    const marks = [
-      ...new Map(
-        records.map((record) => {
-          const type =
-            record.key === "water" ? ("water" as const) : ("duty" as const);
-          return [`${record.assignee_id}:${type}`, { ...record, type }];
-        }),
-      ).values(),
-    ];
-    const duty = marks.find((mark) => mark.type === "duty");
-    const water = marks.find((mark) => mark.type === "water");
-    const visibleMarks = duty && water ? [duty, water] : marks.slice(0, 2);
-    return { day, date, records, marks, visibleMarks };
-  });
-});
+const months = computed(() =>
+  [-1, 0, 1].map((delta) => {
+    const key = shiftMonth(props.month, delta);
+    const [year = 2026, month = 1] = key.split("-").map(Number);
+    const records = delta === 0 ? props.records : props.neighbors?.[key] || [];
+    const byDate = new Map<string, ChoreRecord[]>();
+    for (const record of records) {
+      const list = byDate.get(record.completed_date) || [];
+      list.push(record);
+      byDate.set(record.completed_date, list);
+    }
+    const first = new Date(Date.UTC(year, month - 1, 1));
+    const before = (first.getUTCDay() + 6) % 7;
+    const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const total = 42; // Six stable rows prevent month changes from moving the page.
+    const cells = Array.from({ length: total }, (_, index) => {
+      const day = index - before + 1;
+      if (day < 1 || day > count) return null;
+      const date = `${key}-${String(day).padStart(2, "0")}`;
+      const records = byDate.get(date) || [];
+      const marks = [
+        ...new Map(
+          records.map((record) => {
+            const type =
+              record.key === "water" ? ("water" as const) : ("duty" as const);
+            return [`${record.assignee_id}:${type}`, { ...record, type }];
+          }),
+        ).values(),
+      ];
+      const duty = marks.find((mark) => mark.type === "duty");
+      const water = marks.find((mark) => mark.type === "water");
+      const visibleMarks = duty && water ? [duty, water] : marks.slice(0, 2);
+      return { day, date, records, marks, visibleMarks };
+    });
+    return { key, delta, cells };
+  }),
+);
 const selectedRecords = computed(
   () => recordsByDate.value.get(selected.value) || [],
 );
 function step(amount: number) {
-  const [year = 2026, month = 1] = props.month.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1 + amount, 1));
-  emit(
-    "change",
-    `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`,
-  );
+  carousel.step(amount);
 }
 watch(
   () => props.month,
-  (next, previous) => {
-    monthDirection.value = next > previous ? 1 : -1;
+  () => {
     selected.value = "";
-    monthSwipe.cancel();
-    const elements = [monthGrid.value, monthLabel.value].filter(
-      (el): el is HTMLElement => !!el,
-    );
-    const starts = elements.map((el) => {
-      const style = getComputedStyle(el);
-      return { transform: style.transform, opacity: style.opacity };
-    });
-    const interrupted = monthAnimations.some(
-      (animation) => animation.playState === "running",
-    );
-    monthAnimations.forEach((animation) => animation.cancel());
-    monthAnimations = [];
-    if (!motionAllowed() || document.hidden) return;
-    monthAnimations = elements.map((el, index) =>
-      el.animate(
-        [
-          {
-            transform: interrupted
-              ? starts[index]!.transform
-              : `translate3d(${monthDirection.value * (index ? 5 : 18)}px,0,0)`,
-            opacity: interrupted ? starts[index]!.opacity : 0.72,
-          },
-          { transform: "translate3d(0,0,0)", opacity: 1 },
-        ],
-        { duration: 220, easing: "cubic-bezier(.22,1,.36,1)" },
-      ),
-    );
   },
-  { flush: "post" },
 );
 </script>
 <template>
@@ -211,7 +184,7 @@ watch(
             data-testid="page-swipe-title"
           >
             <small>{{ month.slice(0, 4) }}年</small
-            ><span ref="monthLabel">{{ Number(month.slice(5)) }}月</span>
+            ><span>{{ Number(month.slice(5)) }}月</span>
           </h1>
         </div>
         <div class="calendar-nav">
@@ -241,69 +214,83 @@ watch(
         <div class="calendar-mode">
           <div
             class="calendar-surface"
-            @pointerdown="swipeDown"
-            @pointermove="monthSwipe.move"
-            @pointerup="monthSwipe.up"
-            @pointercancel="monthSwipe.cancel"
-            @lostpointercapture="monthSwipe.cancel"
-            @click.capture="suppressSwipeClick"
+            @pointerdown="carousel.down"
+            @pointermove="carousel.move"
+            @pointerup="carousel.up"
+            @pointercancel="carousel.cancel"
+            @lostpointercapture="carousel.lost"
+            @click.capture="carousel.click"
             @dragstart.prevent
           >
             <div class="chore-weekdays" aria-hidden="true">
               <span v-for="name in weekNames" :key="name">{{ name }}</span>
             </div>
-            <div
-              class="month-stage"
-              :class="{ 'is-swiping': swiping }"
-              :style="{ transform: `translate3d(${swipeOffset}px,0,0)` }"
-            >
+            <div ref="monthViewport" class="month-viewport">
               <div
-                ref="monthGrid"
-                class="chore-calendar-grid"
-                :aria-busy="loading"
+                ref="monthTrack"
+                class="month-stage"
+                :style="{
+                  transform: `translate3d(calc(-100% + ${carousel.offset.value}px),0,0)`,
+                }"
               >
-                <template
-                  v-for="(cell, index) in cells"
-                  :key="cell?.date || `blank-${index}`"
+                <div
+                  v-for="page in months"
+                  :key="page.key"
+                  class="chore-calendar-grid"
+                  :data-month="page.key"
+                  :aria-hidden="page.delta !== 0 ? true : undefined"
+                  :inert="page.delta !== 0 ? true : undefined"
+                  :aria-busy="loading"
                 >
-                  <button
-                    v-if="cell"
-                    :class="{
-                      'is-today': cell.date === today,
-                      'has-records': !!cell.records.length,
-                      'is-selected': cell.date === selected,
-                    }"
-                    :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
-                    :aria-pressed="cell.date === selected"
-                    :data-testid="`calendar-day-${cell.date}`"
-                    @click="selected = selected === cell.date ? '' : cell.date"
+                  <template
+                    v-for="(cell, index) in page.cells"
+                    :key="cell?.date || `blank-${index}`"
                   >
-                    <span class="calendar-day-number"
-                      >{{ cell.day
-                      }}<small
-                        v-if="cell.marks.length > 2"
-                        class="calendar-more"
-                        >+{{ cell.marks.length - 2 }}</small
-                      ></span
-                    ><span class="calendar-cell-marks"
-                      ><span
-                        v-for="mark in cell.visibleMarks"
-                        :key="`${mark.assignee_id}:${mark.type}`"
-                        class="calendar-task-mark"
-                        :data-task-type="mark.type"
-                        :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
-                        aria-hidden="true"
-                        ><MemberMark
-                          :id="mark.marker_id"
-                          :size="16" /><ChoreTypeIcon :type="mark.type"
-                      /></span>
-                    </span></button
-                  ><span
-                    v-else
-                    class="calendar-blank"
-                    aria-hidden="true"
-                  ></span>
-                </template>
+                    <button
+                      v-if="cell"
+                      :class="{
+                        'is-today': cell.date === today,
+                        'has-records': !!cell.records.length,
+                        'is-selected': cell.date === selected,
+                      }"
+                      :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
+                      :aria-pressed="cell.date === selected"
+                      :data-testid="
+                        page.delta === 0
+                          ? `calendar-day-${cell.date}`
+                          : undefined
+                      "
+                      @click="
+                        selected = selected === cell.date ? '' : cell.date
+                      "
+                    >
+                      <span class="calendar-day-number"
+                        >{{ cell.day
+                        }}<small
+                          v-if="cell.marks.length > 2"
+                          class="calendar-more"
+                          >+{{ cell.marks.length - 2 }}</small
+                        ></span
+                      ><span class="calendar-cell-marks"
+                        ><span
+                          v-for="mark in cell.visibleMarks"
+                          :key="`${mark.assignee_id}:${mark.type}`"
+                          class="calendar-task-mark"
+                          :data-task-type="mark.type"
+                          :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
+                          aria-hidden="true"
+                          ><MemberMark
+                            :id="mark.marker_id"
+                            :size="16" /><ChoreTypeIcon :type="mark.type"
+                        /></span>
+                      </span></button
+                    ><span
+                      v-else
+                      class="calendar-blank"
+                      aria-hidden="true"
+                    ></span>
+                  </template>
+                </div>
               </div>
             </div>
           </div>
@@ -327,19 +314,43 @@ watch(
             v-else
             :key="group.date"
             class="record-group"
+            :class="{
+              'is-stacked': !isExpanded(group.date) && group.records.length > 1,
+            }"
           >
-            <div class="records-heading">
+            <button
+              class="records-heading"
+              :aria-expanded="isExpanded(group.date)"
+              :aria-controls="`records-${group.date}`"
+              :data-testid="`record-group-${group.date}`"
+              @click="toggleGroup(group.date)"
+            >
               <h2>{{ dateLabel(group.date) }}</h2>
+              <span
+                >{{ group.records.length }}<van-icon name="arrow-down"
+              /></span>
+            </button>
+            <div
+              :id="`records-${group.date}`"
+              class="record-group-body"
+              :class="{
+                'is-expanded': isExpanded(group.date),
+                'quiet-motion': !motionAllowed(),
+              }"
+              :inert="!isExpanded(group.date) ? true : undefined"
+              :aria-hidden="!isExpanded(group.date)"
+            >
+              <div class="record-group-clip">
+                <RecordTimeline
+                  :records="group.records"
+                  :member-id="memberId"
+                  :busy="busy"
+                  :expanded="isExpanded(group.date)"
+                  list
+                  @undo="emit('undo', $event)"
+                />
+              </div>
             </div>
-            <ChoreRecordRow
-              v-for="record in group.records"
-              :key="record.id"
-              :record="record"
-              :own="record.assignee_id === memberId"
-              :busy="busy"
-              :test-id="`calendar-list-record-${record.id}`"
-              @toggle="emit('undo', $event)"
-            />
           </section>
         </div>
       </TabsContent>
@@ -359,19 +370,12 @@ watch(
             {{ undoError }}
           </p>
           <p v-if="!selectedRecords.length">暂无完成记录</p>
-          <ChoreRecordRow
-            v-for="record in selectedRecords"
-            :key="record.id"
-            class="calendar-record"
-            :record="record"
-            :own="record.assignee_id === memberId"
+          <RecordTimeline
+            v-if="selectedRecords.length"
+            :records="selectedRecords"
+            :member-id="memberId"
             :busy="busy"
-            :test-id="
-              record.assignee_id === memberId
-                ? `calendar-undo-${record.id}`
-                : undefined
-            "
-            @toggle="emit('undo', $event)"
+            @undo="emit('undo', $event)"
           />
         </div>
       </ElasticSheet>
@@ -546,11 +550,18 @@ h1 > span {
   font-size: 12px;
 }
 .records-heading {
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 22px 0 6px;
+  padding: 20px 0;
+  border-bottom: 1px solid #eee;
 }
 .records-heading h2 {
   margin: 0;
@@ -560,13 +571,94 @@ h1 > span {
   letter-spacing: -0.5px;
 }
 .records-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: #999;
   font-size: 12px;
   white-space: nowrap;
 }
-.record-group {
-  margin-top: 2px;
+.records-heading[aria-expanded="true"] .van-icon {
+  transform: rotate(180deg);
 }
+.records-heading .van-icon {
+  transition: transform 200ms ease;
+}
+.record-group-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.record-group-body.is-expanded {
+  grid-template-rows: 1fr;
+}
+.record-group-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.record-stagger {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.985);
+  transition:
+    opacity 130ms ease,
+    transform 180ms ease;
+}
+.is-expanded .record-stagger {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 190ms ease var(--record-delay),
+    transform 320ms cubic-bezier(0.22, 1.3, 0.36, 1) var(--record-delay);
+}
+.quiet-motion,
+.quiet-motion .record-stagger {
+  transition: none !important;
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .record-group-body,
+  .record-stagger,
+  .records-heading .van-icon {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+.record-group {
+  position: relative;
+  isolation: isolate;
+  margin-top: 10px;
+  margin-bottom: 16px;
+}
+.record-group::before,
+.record-group::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  z-index: -1;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0) scale(1);
+  transition:
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+.record-group.is-stacked::before {
+  transform: translateY(5px) scale(0.98);
+  opacity: 1;
+}
+.record-group.is-stacked::after {
+  transform: translateY(10px) scale(0.95);
+  opacity: 1;
+}
+.record-group.is-stacked .records-heading {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  padding: 18px 16px;
+}
+
 .calendar-list-empty {
   display: grid;
   place-items: center;
@@ -619,8 +711,20 @@ h1 > span {
 .calendar-legend > div > span > span {
   overflow-wrap: anywhere;
 }
+.month-viewport {
+  overflow: hidden;
+  width: 100%;
+}
 .month-stage {
+  display: flex;
   position: relative;
+  width: 100%;
+  will-change: transform;
+}
+.month-stage > .chore-calendar-grid {
+  grid-auto-rows: minmax(62px, auto);
+  flex: 0 0 100%;
+  min-width: 0;
 }
 .chore-calendar-grid {
   width: 100%;
@@ -649,6 +753,9 @@ h1 > span {
   }
 }
 @media (max-height: 650px) {
+  .month-stage > .chore-calendar-grid {
+    grid-auto-rows: minmax(48px, auto);
+  }
   header {
     padding-bottom: 16px;
   }
@@ -667,12 +774,6 @@ h1 > span {
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .month-stage {
-    transition: transform var(--ui-release-time) var(--ui-ease-out);
-  }
-  .month-stage.is-swiping {
-    transition: none;
-  }
   .calendar-nav button,
   .chore-calendar-grid button {
     transition:
