@@ -9,7 +9,7 @@ type SegmentOption = {
 const props = defineProps<{
   modelValue: string;
   options: SegmentOption[];
-  ariaLabel: string;
+  groupLabel: string;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
@@ -118,7 +118,7 @@ onUnmounted(reset);
     ref="track"
     class="calendar-view-selector"
     role="group"
-    :aria-label="ariaLabel"
+    :aria-label="groupLabel"
     :class="{ 'is-dragging': dragging }"
     :style="indicatorStyle"
     @pointerdown="down"

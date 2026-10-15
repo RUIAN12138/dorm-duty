@@ -143,7 +143,7 @@ watch(
     <ElasticSegments
       v-model="view"
       :options="viewOptions"
-      aria-label="完成记录显示方式"
+      group-label="完成记录显示方式"
     />
     <div v-if="view === 'calendar'" class="calendar-mode">
       <div class="chore-weekdays" aria-hidden="true">
