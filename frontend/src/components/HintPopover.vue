@@ -85,16 +85,16 @@ onBeforeUnmount(() => removeBack?.());
   position: fixed;
   inset: 0;
   z-index: 3999;
-  background: transparent;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgb(0 0 0 / 22%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   pointer-events: auto;
 }
 .hint-popover {
   position: fixed;
   z-index: 4000;
   left: 50%;
-  top: 50%;
+  top: 56%;
   transform: translate(-50%, -50%);
   width: min(320px, calc(100vw - 40px));
   max-height: calc(100dvh - 48px);
@@ -213,13 +213,6 @@ onBeforeUnmount(() => removeBack?.());
   .hint-trigger:active,
   .hint-confirm:active {
     transform: none;
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .hint-glass {
-    background: rgb(0 0 0 / 8%);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
 </style>

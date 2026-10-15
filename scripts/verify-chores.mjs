@@ -623,12 +623,21 @@ try {
       helpBounds.y > 0 && helpBounds.y + helpBounds.height < 844,
       "hint dialog stays inside viewport",
     );
+    const backdropStyle = await entry.page
+      .getByTestId("hint-glass")
+      .evaluate((el) => ({
+        filter: getComputedStyle(el).backdropFilter,
+        background: getComputedStyle(el).backgroundColor,
+      }));
+    assert.equal(backdropStyle.filter, "none", "help backdrop has no blur");
     assert.notEqual(
-      await entry.page
-        .getByTestId("hint-glass")
-        .evaluate((el) => getComputedStyle(el).backdropFilter),
-      "none",
-      "help has a glass backdrop",
+      backdropStyle.background,
+      "rgba(0, 0, 0, 0)",
+      "help backdrop dims the page",
+    );
+    assert(
+      helpBounds.y + helpBounds.height / 2 > 844 * 0.53,
+      "hint dialog rests a little below screen center",
     );
     await snapshot(entry.page, `invite-help-${width}`);
     await entry.page
