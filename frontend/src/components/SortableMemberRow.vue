@@ -107,6 +107,9 @@ function down(event: PointerEvent) {
     if (!pointer) return;
     held.value = true;
     emit("start", props.member.user_id);
+    // Keep the pointer on the whole row after lifting, including when the
+    // finger passes over a sibling or leaves the original name button.
+    row?.setPointerCapture(pointer.pointerId);
     controls.start(pointer);
   }, 240);
 }
@@ -145,6 +148,12 @@ onBeforeUnmount(() => {
     :while-drag="{ scale: motionAllowed() ? 1.02 : 1 }"
     :aria-posinset="index + 1"
     :aria-setsize="count"
+    @pointerdown="
+      (event: PointerEvent) => {
+        if (!(event.target as Element).closest('.sort-step')) down(event);
+      }
+    "
+    @contextmenu.prevent
     @click.capture="suppress"
   >
     <span class="sort-position">{{ index + 1 }}</span>
@@ -154,7 +163,6 @@ onBeforeUnmount(() => {
       :disabled="disabled"
       :aria-label="`长按${member.nickname}拖动`"
       :data-testid="`order-person-${categoryKey}-${member.user_id}`"
-      @pointerdown="down"
       @contextmenu.prevent
       @keydown.up.prevent="emit('step', member.user_id, -1, true)"
       @keydown.down.prevent="emit('step', member.user_id, 1, true)"
@@ -192,7 +200,6 @@ onBeforeUnmount(() => {
       :disabled="disabled"
       :aria-label="`拖动${member.nickname}调整轮序`"
       :data-testid="`order-drag-${categoryKey}-${member.user_id}`"
-      @pointerdown="down"
       @contextmenu.prevent
       @keydown.up.prevent="emit('step', member.user_id, -1, true)"
       @keydown.down.prevent="emit('step', member.user_id, 1, true)"
@@ -232,6 +239,7 @@ onBeforeUnmount(() => {
     background-color 160ms ease;
 }
 .sort-row.lifted {
+  z-index: 10;
   background: #fff;
   box-shadow:
     0 12px 30px #0000001c,
@@ -268,6 +276,21 @@ button {
 .sort-step {
   width: 28px;
   font-size: 18px;
+}
+@media (pointer: coarse) {
+  .sort-step {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .sort-step:focus-visible {
+    position: static;
+    width: 28px;
+    height: 44px;
+    clip-path: none;
+  }
 }
 .sort-person {
   display: flex;

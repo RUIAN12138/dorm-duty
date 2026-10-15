@@ -2,7 +2,17 @@
 
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
-## 最新发布（2026-10-15，v27）
+## 最新发布（2026-10-15，v28）
+
+正式版本为 `20261015-direct-touch-v28`，代码见 PR #22。顶部显示宿舍名，创建者长按名字提起整行并拖动排列；底栏按住经过标签即时显示对应页，连续经过的页面合并为一个历史步骤。打卡按钮固定 60px，反馈为轻压、加载环、成功勾选和局部粒子；同步状态延迟浮现，不插入顶部排版。抬水标题位置固定。月历固定六行、单网格可中断转场，避免跨月高度跳动与离场层叠。
+
+适配 Uiverse Galaxy 六类组件：加载环、勾选描边、按钮填充、输入焦点、分段滑块、菜单箭头；许可原文随网站提供，作者与上游提交见 [组件说明](UIVERSE_COMPONENTS.md)。无新增 npm 依赖，未更改数据库结构、业务轮次、成员权限或通知凭据。
+
+发布前在线备份 `dorm-20261015T133058Z.sqlite`，切换后 59 条原有完成记录逐条摘要一致。Worker SHA-256：`2aa72671f5938d062796e0b4f38d521413737b54fe75875f6153f81a17ec2acc`。前一版本 `20261015-gesture-calendar-v27` 保留。
+
+28 个公网页面 / JS / CSS / Manifest / SW 与最终构建字节一致，MIT 许可文本也逐字一致，健康正常。75 项 Chromium 组件检查、28 项手势检查、完整双身份持久化业务流程及两项 GitHub 必需检查通过。业务流程含值日 / 抬水逐帧布局稳定、撤销、排序、权限、慢响应 / 409 草稿和重启恢复。证据在忽略目录 `docs/evidence/direct-touch/`、`docs/evidence/interaction-foundation/` 和 `docs/evidence/ui-focus/regression/`。实体设备触摸手感 / 帧率及网页实际震动独立验收。
+
+## 历史发布（2026-10-15，v27）
 
 正式版本为 `20261015-gesture-calendar-v27`，代码见 PR #21。日期区支持触摸左右滑月，纵向保留页面滚动，密集标记约束在格内，日期详情按实际完成时间倒序。底栏 / 分段复用水平意图判断，失焦取消预览；修复浏览器隐式捕获转交引起的滑动误取消。抽屉使用最近移动判断速度，反向重置、停住不沿用旧速度。保留黑白大字与暗色无虚化提示。
 
@@ -73,7 +83,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261015-gesture-calendar-v27`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261015-direct-touch-v28`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 

@@ -190,7 +190,10 @@ onUnmounted(() => {
   );
   border-radius: 10px;
   background: var(--ui-surface);
-  box-shadow: 0 1px 3px #00000012;
+  /* Uiverse Pradeepsaranbishnoi heavy-dragonfly-92: isolated glider. */
+  box-shadow:
+    0 0 1px #00000016,
+    0 2px 5px #0000000a;
   pointer-events: none;
 }
 .calendar-view-selector button {

@@ -115,3 +115,30 @@ defineProps<{
   right: 13px;
 }
 </style>
+
+<style scoped>
+/* Arrow feedback adapted from Uiverse nkhlrjrs hungry-pig-21 (MIT). */
+@media (prefers-reduced-motion: no-preference) {
+  .action-arrow {
+    transition:
+      transform 180ms var(--ui-ease-out),
+      color 180ms ease;
+  }
+  .action-item:active .action-arrow {
+    transform: translateX(3px);
+    color: #111;
+  }
+  .action-icon {
+    transition: transform 180ms var(--ui-ease-out);
+  }
+  .action-item:active .action-icon {
+    transform: scale(0.94);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .action-item:hover .action-arrow {
+    transform: translateX(3px);
+    color: #111;
+  }
+}
+</style>

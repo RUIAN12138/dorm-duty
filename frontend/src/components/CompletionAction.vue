@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { motion } from "motion-v";
-import { motionAllowed, motionTokens } from "../interaction/motion";
+import GalaxySpinner from "./GalaxySpinner.vue";
+import GalaxyCheck from "./GalaxyCheck.vue";
 import type { ChoreTask } from "../api/chores";
 defineProps<{
   task: ChoreTask;
@@ -11,7 +11,8 @@ defineProps<{
 defineEmits<{ complete: [task: ChoreTask]; undo: [task: ChoreTask] }>();
 </script>
 <template>
-  <motion.button
+  <button
+    type="button"
     class="completion-surface"
     :class="{ 'is-done': task.status === 'completed' }"
     :data-testid="
@@ -25,56 +26,39 @@ defineEmits<{ complete: [task: ChoreTask]; undo: [task: ChoreTask] }>();
         : undefined
     "
     :aria-pressed="task.status === 'completed'"
+    :aria-busy="busy"
     :disabled="busy || disabled"
-    :animate="{
-      backgroundColor: task.status === 'completed' ? '#efefef' : '#111111',
-      color: task.status === 'completed' ? '#111111' : '#ffffff',
-      borderRadius: task.status === 'completed' ? 24 : 20,
-    }"
-    :while-press="motionAllowed() ? motionTokens.press : {}"
-    :transition="
-      motionAllowed()
-        ? {
-            ...motionTokens.layout,
-            backgroundColor: { duration: 0.16 },
-            color: { duration: 0.16 },
-          }
-        : { duration: 0 }
-    "
     @click="
       task.status === 'completed'
         ? $emit('undo', task)
         : $emit('complete', task)
     "
   >
-    <van-icon
-      v-if="task.status === 'completed'"
-      name="success"
-      aria-hidden="true"
-    />
-    <span>{{
-      busy
-        ? "正在处理…"
-        : task.status === "completed"
+    <span class="completion-label">
+      <GalaxyCheck v-if="task.status === 'completed'" />
+      {{
+        task.status === "completed"
           ? task.key === "water"
             ? "已抬水"
             : "已完成"
           : task.key === "water"
             ? "我已抬水"
             : "我已完成"
-    }}</span>
-  </motion.button>
+      }}
+    </span>
+    <GalaxySpinner v-if="busy" class="completion-spinner" />
+  </button>
 </template>
 <style scoped>
 .completion-surface {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
+  position: relative;
+  display: grid;
+  place-items: center;
   width: min(100%, 300px);
-  min-height: 60px;
-  padding: 15px 24px;
-  border: 0;
+  height: 60px;
+  flex-shrink: 0;
+  padding: 0 24px;
+  border: 1px solid transparent;
   border-radius: 20px;
   background: #111;
   color: #fff;
@@ -84,17 +68,54 @@ defineEmits<{ complete: [task: ChoreTask]; undo: [task: ChoreTask] }>();
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+.completion-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .completion-surface.is-done {
   background: #efefef;
   color: #111;
 }
 .completion-surface:disabled {
-  opacity: 0.5;
   cursor: default;
+  opacity: 1;
+}
+.completion-surface[aria-busy="true"] {
+  color: #aaa;
+}
+.completion-surface:active:not(:disabled) {
+  box-shadow: inset 0 2px 5px #ffffff18;
+}
+.completion-spinner {
+  position: absolute;
+  right: 18px;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
 }
 .completion-surface:focus-visible {
   outline: 2px solid #111;
   outline-offset: 4px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .completion-surface {
+    transition:
+      transform 160ms var(--ui-ease-out),
+      background-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease;
+  }
+  .completion-surface:active:not(:disabled) {
+    transform: scale(0.99);
+    transition-duration: 70ms;
+  }
 }
 </style>
