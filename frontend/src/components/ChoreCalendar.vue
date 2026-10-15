@@ -120,7 +120,13 @@ watch(
   >
     <header>
       <div>
-        <h1 id="calendar-title">{{ monthText }}</h1>
+        <h1
+          id="calendar-title"
+          data-section-swipe-handle
+          data-testid="page-swipe-title"
+        >
+          {{ monthText }}
+        </h1>
       </div>
       <div class="calendar-nav">
         <button

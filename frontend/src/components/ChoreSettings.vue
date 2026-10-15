@@ -15,7 +15,7 @@ const props = defineProps<{
   members: ChoreMember[];
   version: number;
   token: string;
-  initialCategory?: "floor" | "toilet" | "water";
+  initialCategory?: "floor" | "toilet" | "sink" | "water";
 }>();
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
@@ -261,7 +261,7 @@ async function save() {
       <details class="settings-rules">
         <summary>生效规则</summary>
         <p class="settings-effect">
-          自由轮次按地板、厕所分别计算。切换值日方式会重建未完成任务，完成记录保留。按日排班的内容、时间和顺序调整从明天起生效。抬水顺序从下一次轮换生效。
+          地板、厕所、洗手池分别计算自由轮次。切换值日方式会重建未完成任务，完成记录保留。按日排班的内容、时间和顺序调整从明天起生效。抬水顺序从下一次轮换生效。
         </p>
       </details>
       <p v-if="error" class="chore-inline-error" role="alert">{{ error }}</p>
@@ -292,7 +292,7 @@ async function save() {
 }
 .category-selector {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 24px;
 }

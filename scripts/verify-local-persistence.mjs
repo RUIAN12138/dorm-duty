@@ -295,7 +295,7 @@ try {
   assert.equal(creatorBoard.is_creator, true);
   assert.deepEqual(
     creatorBoard.categories.map((category) => category.key),
-    ["floor", "toilet", "water"],
+    ["floor", "toilet", "sink", "water"],
   );
   await api("/chores/settings", {
     method: "PATCH",

@@ -23,24 +23,26 @@ else {
   fixture.people.push({id:member.user_id,token:claim.access_token});
  }
  const boards=await Promise.all(fixture.people.map(board));
- for(const b of boards){equal(b.categories.map(c=>c.mode),['self_round','self_round','completion']);equal(b.rounds.map(r=>[r.sequence,r.completed,r.total]),[[1,0,6],[1,0,6]]);equal(b.next_tasks,[]);}
+ for(const b of boards){equal(b.categories.map(c=>c.mode),['self_round','self_round','self_round','completion']);equal(b.rounds.map(r=>[r.sequence,r.completed,r.total]),[[1,0,6],[1,0,6],[1,0,6]]);equal(b.next_tasks,[]);}
  const oldFloor=boards.map(b=>task(b,'floor'));
  await complete(fixture.people[0],oldFloor[1],403);
  const finished=await Promise.all(fixture.people.map((p,i)=>complete(p,oldFloor[i])));
  await complete(fixture.people[0],oldFloor[0],409);
  const toilet=await complete(fixture.people[0],task(boards[0],'toilet'));
+ const sink=await Promise.all(fixture.people.map((p,i)=>complete(p,task(boards[i],'sink'))));
  const water=await complete(fixture.people[0],boards[0].water_task);
- fixture.completed=[...finished.map(r=>r.task),toilet.task,water.task].map(t=>({id:t.id,completed_at:t.completed_at}));
+ fixture.completed=[...finished.map(r=>r.task),toilet.task,...sink.map(r=>r.task),water.task].map(t=>({id:t.id,completed_at:t.completed_at}));
  await fs.writeFile(fixturePath,JSON.stringify(fixture),{mode:0o600});
 }
 for(const p of fixture.people){
  const b=await board(p);
  equal(round(b,'floor').sequence,2);equal(round(b,'floor').completed,0);equal(round(b,'floor').total,6);
  equal(round(b,'toilet').sequence,1);equal(round(b,'toilet').completed,1);
+ equal(round(b,'sink').sequence,2);equal(round(b,'sink').completed,0);equal(round(b,'sink').total,6);
  equal(b.water_task.assignee_id,fixture.people[1].id);equal(b.water_task.sequence,2);equal(b.water_task.deadline_at,'');
  for(const t of fixture.completed)equal(b.calendar.find(r=>r.id===t.id)?.completed_at,t.completed_at,'calendar must preserve server timestamps');
 }
-const report={date:new Date().toISOString(),status:'passed',origin,runtime:'remote node-server',assertions,phase:process.argv[3]==='verify'?'after-service-restart':'created-and-completed',dormId:fixture.dormId,checks:['six simultaneous completions create exactly one next floor round','toilet remains in round one','duplicate and wrong-person completion rejected','water advances only on completion','every member sees identical round state and immutable history']};
+const report={date:new Date().toISOString(),status:'passed',origin,runtime:'remote node-server',assertions,phase:process.argv[3]==='verify'?'after-service-restart':'created-and-completed',dormId:fixture.dormId,checks:['six simultaneous completions create exactly one next floor round','six simultaneous washbasin completions create exactly one independent next round','toilet remains in round one','duplicate and wrong-person completion rejected','water advances only on completion','every member sees identical round state and immutable history']};
 await fs.mkdir(new URL('../docs/evidence/voluntary-rounds/',import.meta.url),{recursive:true});
 await fs.writeFile(new URL('../docs/evidence/voluntary-rounds/'+(process.argv[3]==='verify'?'public-restart.json':'public-rounds.json'),import.meta.url),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report));

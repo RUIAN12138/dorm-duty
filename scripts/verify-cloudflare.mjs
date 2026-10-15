@@ -279,9 +279,10 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
       content: {
         floor: "云端验收：扫地并拖地",
         toilet: "云端验收：刷洗便池和地漏",
+        sink: "云端验收：刷洗池面与龙头",
         water: "云端验收：抬一桶饮用水",
       }[category.key],
-      deadline_time: { floor: "20:15", toilet: "21:20", water: "18:35" }[
+      deadline_time: { floor: "20:15", toilet: "21:20", sink: "21:40", water: "18:35" }[
         category.key
       ],
       start_date: ownerBoard.today,

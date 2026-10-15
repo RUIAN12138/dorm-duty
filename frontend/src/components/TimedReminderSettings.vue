@@ -154,7 +154,7 @@ onUnmounted(() => {
           >
             加一个时间
           </button>
-          <p>北京时间。只提醒未完成的地板、厕所。</p>
+          <p>北京时间。只提醒未完成的值日任务。</p>
         </div>
         <button
           type="submit"

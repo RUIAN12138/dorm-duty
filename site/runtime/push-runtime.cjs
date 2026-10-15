@@ -7521,7 +7521,7 @@ function notifyUser(userId, message, { db, env, guard = "1=1", values = [] }) {
 }
 var dailyReminderTasksSql = `SELECT t.id,t.name,t.content,t.key FROM chore_tasks t
   JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-  WHERE t.dorm_id=? AND t.assignee_id=? AND t.key IN ('floor','toilet') AND t.status='pending' AND c.enabled=1
+  WHERE t.dorm_id=? AND t.assignee_id=? AND t.key IN ('floor','toilet','sink') AND t.status='pending' AND c.enabled=1
   AND ((c.mode='scheduled' AND t.duty_date=?) OR (c.mode='self_round' AND t.duty_date<=? AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.key`;
 var SCHEDULE_CATCH_UP_MS = 30 * 60 * 1e3;
 
@@ -7544,7 +7544,7 @@ var encoder2 = new TextEncoder();
 
 // worker/chores.mjs
 var DAY = 864e5;
-var KEYS = ["floor", "toilet", "water"];
+var KEYS = ["floor", "toilet", "sink", "water"];
 var encoder3 = new TextEncoder();
 var markerIds = new Set(MARK_IDS);
 var ChoreError = class extends Error {
@@ -7661,6 +7661,7 @@ async function initialize(db, room, now) {
   const defaults = [
     ["floor", "\u5730\u677F", "\u626B\u5730\u3001\u62D6\u5730", "22:00", order],
     ["toilet", "\u5395\u6240", "\u6E05\u6D17\u4FBF\u6C60\u3001\u51B2\u6D17\u5730\u9762", "22:00", shift],
+    ["sink", "\u6D17\u624B\u6C60", "\u6E05\u6D01\u6D17\u624B\u6C60\u3001\u53F0\u9762\u548C\u6C34\u6E0D", "22:00", order],
     ["water", "\u62AC\u6C34", "\u5C06\u996E\u7528\u6C34\u9001\u5230\u5BBF\u820D", "20:00", order]
   ];
   await db.batch([
@@ -7785,7 +7786,7 @@ async function planDaily(db, mutation, room, settings, members, now, replaceKeys
       if (uid) rows.push(plannedRow(room, category, day, uid, members));
     }
   }
-  for (const key of ["floor", "toilet"])
+  for (const key of KEYS.filter((entry) => entry !== "water"))
     appendRows(
       mutation,
       rows.filter((row) => row[1] === key),

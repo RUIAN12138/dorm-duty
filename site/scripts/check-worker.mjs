@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import worker from "../worker/index.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const frontendRoot = resolve(siteRoot, "../frontend/dist");
+const { default: worker } = await import(
+  pathToFileURL(
+    resolve(siteRoot, process.env.DORM_WORKER_INPUT || "worker/index.js"),
+  ).href
+);
+const frontendRoot = resolve(
+  siteRoot,
+  process.env.DORM_FRONTEND_DIST || "../frontend/dist",
+);
 const siteOrigin = "https://dorm.example.site";
 const env = {};
 const originalFetch = globalThis.fetch;

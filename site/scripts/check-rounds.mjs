@@ -33,9 +33,9 @@ const tests=[];
 const test=(name,run)=>tests.push({name,run});
 test('unordered voluntary completion, independent categories, cross-day persistence and permissions',async h=>{
   const r=await room(h), b=await board(h,r);
-  equal(b.categories.map(c=>c.mode),['self_round','self_round','completion']);
-  equal(b.today_tasks.length,2); equal(b.next_tasks,[]);
-  equal(b.rounds.map(c=>[c.sequence,c.completed,c.total]),[[1,0,3],[1,0,3]]);
+  equal(b.categories.map(c=>c.mode),['self_round','self_round','self_round','completion']);
+  equal(b.today_tasks.length,3); equal(b.next_tasks,[]);
+  equal(b.rounds.map(c=>[c.sequence,c.completed,c.total]),[[1,0,3],[1,0,3],[1,0,3]]);
   for (const p of r.people) {
     const v=await board(h,r,p);
     ok(task(v,'floor').can_complete); equal(task(v,'floor').deadline_at,'');
@@ -43,9 +43,10 @@ test('unordered voluntary completion, independent categories, cross-day persiste
   const last=r.people[2], floor=task(await board(h,r,last),'floor');
   await complete(h,r.people[0],floor,403);
   const done=await complete(h,last,floor); equal(done.task.completed_at,new Date().toISOString());
+  await complete(h,r.people[0],task(await board(h,r),'sink'));
   await complete(h,last,floor,409);
   const own=await board(h,r,last); equal(task(own,'floor').status,'completed'); equal(task(own,'floor').can_complete,false);
-  equal(round(own,'floor').completed,1); equal(round(own,'toilet').completed,0);
+  equal(round(own,'floor').completed,1); equal(round(own,'toilet').completed,0); equal(round(own,'sink').completed,1);
   clock+=10*86400000;
   const later=await board(h,r,last); equal(task(later,'floor').id,floor.id); equal(round(later,'floor').sequence,1);
   await complete(h,r.people[0],task(await board(h,r),'toilet'));
@@ -54,7 +55,8 @@ test('unordered voluntary completion, independent categories, cross-day persiste
   const next=await board(h,r);
   equal(round(next,'floor').sequence,2); equal(round(next,'floor').completed,0);
   equal(round(next,'toilet').sequence,1); equal(round(next,'toilet').completed,1);
-  equal(next.calendar.length,4); ok(task(next,'floor').id!==task(b,'floor').id);
+  equal(round(next,'sink').sequence,1); equal(round(next,'sink').completed,1);
+  equal(next.calendar.length,5); ok(task(next,'floor').id!==task(b,'floor').id);
 });
 test('simultaneous final members start exactly one round; duplicate last submission advances once',async h=>{
   const r=await room(h),[a,b,c]=r.people;
@@ -106,6 +108,9 @@ test('creator can switch modes while completed records and water sequence remain
   await complete(h,r.owner,old);
   await configure(h,r,[{key:'floor',mode:'scheduled'}]);
   let v=await board(h,r);equal(v.categories[0].mode,'scheduled');ok(!round(v,'floor'));ok(v.next_tasks.some(t=>t.key==='floor'));
+  equal(v.today_tasks.filter(t=>t.key==='floor').length,1,'mode switch shows only the current scheduled floor task');
+  ok(!v.today_tasks.some(t=>t.id===old.id),'completed round task remains in calendar rather than the current schedule');
+  ok(v.calendar.some(t=>t.id===old.id),'mode switch preserves the completed record');
   await configure(h,r,[{key:'floor',mode:'self_round'}]);
   v=await board(h,r);equal(round(v,'floor').sequence,2);equal(round(v,'floor').completed,0);equal(v.calendar.length,1);
   await complete(h,r.owner,old,409);
