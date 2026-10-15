@@ -2,7 +2,15 @@
 
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
-## 最新发布（2026-10-15，v21）
+## 最新发布（2026-10-15，v26）
+
+正式版本为 `20261015-tactile-dim-v26`，代码见 PR #20。完成按钮再次点击恢复、轮次成员拖动排列、日历对齐与居中入口已上线；提示弹窗标题居中、无关闭图标、半透明暗色背景、不虚化，弹窗略低于屏幕中心，点空白或「知道了」收起。抬水保留原大名字与留白。Worker SHA-256：`91c2479bbca6dc384ab2ff7bd39410ff7d4647abbf9249f2ef84ff8f6443dc80`。
+
+发布前在线备份 `dorm-20261015T115104Z.sqlite` 并校验完整性 / 外键，切换后 59 条既有完成记录逐条摘要一致。未改数据库结构、通知凭据或 Nginx；前一目录 `20261015-tactile-focus-v25` 保留。最终提示弹窗为纯白面板、22% 暗色背景，无虚化，中心位于屏幕高度的 56%。
+
+最终 28 个页面 / JS / CSS / Manifest / SW 与构建字节一致。后端与 v24 相同，v24 的独立公网宿舍验收为 9 组 / 386 项，包含本人恢复与抬水回退；没有为最终 CSS 微调再次写入测试宿舍。证据：`docs/evidence/ui-focus/public-assets-v26.json`、`deployment-v26.json`、`docs/evidence/server/2026-10-15T11-29-46-556Z_mv9gibek_8e16354e/api.json`。本地完整浏览器流程、触摸模拟与真机边界见 [按钮与布局](TACTILE_UI.md)。
+
+## 历史发布（2026-10-15，v21）
 
 正式版本为 `20261015-usability-v21`，对应 PR #18。新增已加入宿舍卡片、本人打卡撤销、顶部独立轮序、分组菜单；任务标题立即更新，抬水只读详情为非模态底部面板。Worker SHA-256：`5b6e779f4e3b9f96ef66c55f4ef9e7a9def9e565ecb4c158ed20c8725a514166`。
 
@@ -57,7 +65,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261015-usability-v21`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261015-tactile-dim-v26`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 

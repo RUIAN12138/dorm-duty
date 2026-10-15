@@ -7,6 +7,7 @@ import {
   savedChoreToken,
   saveChoreToken,
 } from "../api/chores";
+import HintPopover from "../components/HintPopover.vue";
 import JoinedDorms from "../components/JoinedDorms.vue";
 import { joinedDorms, rememberDorm, type JoinedDorm } from "../api/dormHistory";
 import ChoreBoard from "../components/ChoreBoard.vue";
@@ -538,7 +539,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="guest-page" :class="{ 'has-chore-nav': navVisible }">
+  <main
+    class="guest-page"
+    :class="{
+      'has-chore-nav': navVisible,
+      'is-entry-flow':
+        !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
+    }"
+  >
     <header v-if="!navVisible" class="guest-header">
       <div class="guest-brand-line">
         <span class="guest-brand">轮到<span aria-hidden="true">.</span></span>
@@ -557,7 +565,13 @@ onUnmounted(() => {
       data-testid="guest-create-form"
       aria-labelledby="create-title"
     >
-      <h1 id="create-title">创建你的宿舍</h1>
+      <div class="entry-heading">
+        <h1 id="create-title">创建你的宿舍</h1>
+        <HintPopover
+          title="创建者权限"
+          text="管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。"
+        />
+      </div>
       <form @submit.prevent="submitCreate">
         <label for="create-name">宿舍名称</label>
         <input
@@ -604,26 +618,34 @@ onUnmounted(() => {
           {{ loading ? "正在创建…" : "创建宿舍" }}
         </button>
       </form>
-      <p class="guest-create-note">此设备将保存管理权限。</p>
       <div class="guest-form-actions">
         <button :disabled="loading" @click="cancelSelection">返回</button>
       </div>
     </section>
     <section
       v-else-if="changingDorm"
-      class="guest-dorm-form"
+      class="guest-dorm-form guest-switch-form"
       aria-labelledby="switch-title"
     >
-      <h1 id="switch-title">切换宿舍</h1>
+      <div class="entry-heading">
+        <h1 id="switch-title">
+          {{ savedDorms.length ? "切换宿舍" : "加入宿舍" }}
+        </h1>
+        <HintPopover
+          title="邀请码在哪里？"
+          label="邀请码帮助"
+          text="向宿舍创建者索取邀请码。输入后，再选择自己的名字即可进入。"
+        />
+      </div>
       <JoinedDorms
         :rooms="savedDorms"
         :disabled="loading"
         :current="inviteCode"
         @select="returnToDorm"
       />
-      <h2 class="join-new-title">加入新宿舍</h2>
+      <h2 v-if="savedDorms.length" class="join-new-title">加入新宿舍</h2>
       <form @submit.prevent="switchDorm()">
-        <label for="guest-invite">宿舍邀请码</label>
+        <label for="guest-invite" class="invite-label">宿舍邀请码</label>
         <input
           id="guest-invite"
           data-testid="guest-invite"
@@ -689,20 +711,22 @@ onUnmounted(() => {
             创建宿舍
           </button>
         </div>
-        <button
-          class="guest-demo-link"
-          data-testid="guest-demo-entry"
-          @click="switchDorm(true)"
-        >
-          游客体验<van-icon name="arrow" aria-hidden="true" />
-        </button>
-        <button
-          class="guest-demo-link"
-          data-testid="guest-recover-owner"
-          @click="recoveryOpen = true"
-        >
-          恢复管理权限
-        </button>
+        <div class="entry-secondary-actions">
+          <button
+            class="guest-demo-link"
+            data-testid="guest-demo-entry"
+            @click="switchDorm(true)"
+          >
+            游客体验<van-icon name="arrow" aria-hidden="true" />
+          </button>
+          <button
+            class="guest-demo-link"
+            data-testid="guest-recover-owner"
+            @click="recoveryOpen = true"
+          >
+            恢复管理权限
+          </button>
+        </div>
       </section>
       <template v-else-if="dorm && (!loading || pendingPerson)">
         <aside
@@ -875,6 +899,108 @@ onUnmounted(() => {
   .guest-chooser .guest-member-list > button {
     min-height: 48px;
     padding: 6px 0;
+  }
+}
+</style>
+
+<style scoped>
+.is-entry-flow .guest-header {
+  margin-bottom: 0;
+  min-height: 44px;
+}
+.guest-entry,
+.guest-switch-form {
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+}
+.is-entry-flow .guest-entry,
+.is-entry-flow .guest-switch-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 0 96px;
+}
+.guest-entry h1 {
+  text-align: center;
+  font-size: clamp(28px, 8vw, 34px);
+  margin: 0 0 12px;
+}
+.entry-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.entry-heading h1 {
+  margin: 0;
+}
+.guest-switch-form .invite-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.guest-switch-form input {
+  min-height: 64px;
+  border: 1px solid #e8e8e8;
+  border-radius: 20px;
+  background: #f7f7f7;
+  text-align: center;
+  font-size: 22px;
+  letter-spacing: 2px;
+  padding: 16px;
+}
+.guest-switch-form input::placeholder {
+  font-size: 18px;
+  letter-spacing: 0;
+  color: #aaa;
+}
+.guest-switch-form input:focus {
+  outline: 2px solid #111;
+  outline-offset: 3px;
+}
+.guest-entry .guest-primary,
+.guest-entry .guest-secondary,
+.guest-switch-form .guest-primary {
+  position: static;
+  min-height: 58px;
+  border-radius: 20px;
+  font-size: 18px;
+  margin-top: 14px;
+}
+.guest-entry .guest-entry-actions {
+  margin-top: 24px;
+}
+.entry-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 18px;
+}
+.entry-secondary-actions .guest-demo-link {
+  margin: 0;
+  font-size: 14px;
+}
+.guest-form-actions button {
+  font-size: 15px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .guest-entry .guest-primary:active,
+  .guest-entry .guest-secondary:active,
+  .guest-switch-form .guest-primary:active {
+    transform: scaleX(1.02) scaleY(0.94);
+  }
+}
+@media (max-height: 600px) {
+  .is-entry-flow .guest-entry,
+  .is-entry-flow .guest-switch-form {
+    padding: 24px 0 40px;
   }
 }
 </style>

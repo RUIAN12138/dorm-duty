@@ -45,9 +45,9 @@ macOS 默认使用本机 Google Chrome；可用 `BROWSER_EXECUTABLE` 指定，Li
 
 - 浏览器触摸模拟不等于实体 iPhone Safari、Android WebView、HarmonyOS ArkWeb 的手感或 60 / 120Hz 帧率验收；这三项仍需实际设备记录。
 - 本轮没有修改推送协议、原生 SDK 或平台密钥；已有原生通知配置和真机分发待办仍见 `native/README.md`。
-- 新依赖增加下载体积。生产构建的 PWA 预缓存约 683 KiB（未压缩资源总量），应在移动网络实际观察首次下载；不能把该数值称作 gzip 体积或帧率。
+- 新依赖增加下载体积。生产构建的 PWA 预缓存约 697 KiB（未压缩资源总量），应在移动网络实际观察首次下载；不能把该数值称作 gzip 体积或帧率。
 - 本地构建通过不代表已发布；正式版本与发布核验结果以 `PROGRESS.md` / `SERVER_DEPLOYMENT.md` 为准。
 
 官方 API 参考：[Motion Values](https://motion.dev/docs/vue-motion-value)、[Reorder](https://motion.dev/docs/vue-reorder)、[Reka Dialog](https://www.reka-ui.com/docs/components/dialog)、[Reka Tabs](https://www.reka-ui.com/docs/components/tabs)。
 
-当前正式版本为 `20261015-usability-v21`。28 个公网资源与构建一致，386 项独立宿舍 API 检查通过，48 条既有完成记录保留。v20 为交互基础首次升级；当前发布详情见 `SERVER_DEPLOYMENT.md`。
+当前正式版本为 `20261015-tactile-dim-v26`。28 个公网资源与构建一致，当前相同后端已通过 386 项独立宿舍 API 检查，最后切换时 59 条既有完成记录保留。v20 为交互基础首次升级；当前发布详情见 `SERVER_DEPLOYMENT.md`。

@@ -4,14 +4,19 @@ import { Reorder, useDragControls } from "motion-v";
 import type { ChoreMember } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import { motionAllowed, motionTokens } from "../interaction/motion";
-const props = defineProps<{
-  member: ChoreMember;
-  index: number;
-  count: number;
-  active: boolean;
-  disabled?: boolean;
-  reset: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    member: ChoreMember;
+    index: number;
+    count: number;
+    active: boolean;
+    disabled?: boolean;
+    reset: number;
+    categoryKey?: string;
+    completed?: boolean;
+  }>(),
+  { categoryKey: "water", completed: undefined },
+);
 const emit = defineEmits<{
   start: [id: number];
   finish: [id: number, cancelled: boolean];
@@ -148,22 +153,25 @@ onBeforeUnmount(() => {
       class="sort-person"
       :disabled="disabled"
       :aria-label="`长按${member.nickname}拖动`"
-      :data-testid="`order-person-water-${member.user_id}`"
+      :data-testid="`order-person-${categoryKey}-${member.user_id}`"
       @pointerdown="down"
       @contextmenu.prevent
       @keydown.up.prevent="emit('step', member.user_id, -1, true)"
       @keydown.down.prevent="emit('step', member.user_id, 1, true)"
     >
-      <MemberMark :id="member.marker_id" :size="24" /><strong>{{
-        member.nickname
-      }}</strong>
+      <MemberMark :id="member.marker_id" :size="24" /><strong
+        ><span>{{ member.nickname }}</span
+        ><small v-if="completed !== undefined">{{
+          completed ? "已完成" : "待完成"
+        }}</small></strong
+      >
     </button>
     <button
       type="button"
       class="sort-step"
       :disabled="disabled || index === 0"
       :aria-label="`${member.nickname}上移`"
-      :data-testid="`order-up-water-${member.user_id}`"
+      :data-testid="`order-up-${categoryKey}-${member.user_id}`"
       @click="emit('step', member.user_id, -1, false)"
     >
       ↑
@@ -173,7 +181,7 @@ onBeforeUnmount(() => {
       class="sort-step"
       :disabled="disabled || index === count - 1"
       :aria-label="`${member.nickname}下移`"
-      :data-testid="`order-down-water-${member.user_id}`"
+      :data-testid="`order-down-${categoryKey}-${member.user_id}`"
       @click="emit('step', member.user_id, 1, false)"
     >
       ↓
@@ -183,7 +191,7 @@ onBeforeUnmount(() => {
       class="sort-handle"
       :disabled="disabled"
       :aria-label="`拖动${member.nickname}调整轮序`"
-      :data-testid="`order-drag-water-${member.user_id}`"
+      :data-testid="`order-drag-${categoryKey}-${member.user_id}`"
       @pointerdown="down"
       @contextmenu.prevent
       @keydown.up.prevent="emit('step', member.user_id, -1, true)"
@@ -236,6 +244,8 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 strong {
+  display: grid;
+  gap: 4px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -294,6 +304,38 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .sort-row {
     transition: none;
+  }
+}
+</style>
+
+<style scoped>
+strong > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+strong small {
+  font-size: 11px;
+  color: #888;
+  font-weight: 400;
+}
+.sort-step:active:not(:disabled),
+.sort-handle:active:not(:disabled) {
+  transform: scaleX(1.04) scaleY(0.91);
+  background: #eee;
+  border-radius: 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sort-step,
+  .sort-handle {
+    transition:
+      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 140ms ease;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sort-step:active:not(:disabled),
+  .sort-handle:active:not(:disabled) {
+    transform: none;
   }
 }
 </style>
