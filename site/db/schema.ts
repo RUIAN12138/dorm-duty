@@ -314,6 +314,7 @@ export const choreReminders = sqliteTable(
     createdAt: created(),
     readAt: text("read_at"),
     mutationKey: text("mutation_key").notNull().unique(),
+    source: text("source").notNull().default("member"),
   },
   (table) => [
     index("chore_reminders_target_idx").on(
@@ -327,6 +328,55 @@ export const choreReminders = sqliteTable(
       table.taskId,
       table.createdAt,
     ),
+  ],
+);
+
+export const choreReminderPreferences = sqliteTable(
+  "chore_reminder_preferences",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    dormId: integer("dorm_id")
+      .notNull()
+      .references(() => dormitories.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    times: text("times").notNull().default('["08:00","19:00"]'),
+    version: integer("version").notNull().default(1),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("chore_reminder_preferences_member_unique").on(
+      table.dormId,
+      table.userId,
+    ),
+  ],
+);
+
+export const choreScheduledReminders = sqliteTable(
+  "chore_scheduled_reminders",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    preferenceId: integer("preference_id")
+      .notNull()
+      .references(() => choreReminderPreferences.id),
+    preferenceVersion: integer("preference_version").notNull(),
+    reminderId: integer("reminder_id")
+      .notNull()
+      .references(() => choreReminders.id),
+    day: text("day").notNull(),
+    time: text("time").notNull(),
+    scheduledAt: text("scheduled_at").notNull(),
+    taskIds: text("task_ids").notNull().default("[]"),
+  },
+  (table) => [
+    uniqueIndex("chore_schedule_slot_unique").on(
+      table.preferenceId,
+      table.day,
+      table.time,
+    ),
+    uniqueIndex("chore_schedule_reminder_unique").on(table.reminderId),
   ],
 );
 

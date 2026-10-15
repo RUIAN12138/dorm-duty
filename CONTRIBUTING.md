@@ -117,3 +117,5 @@ PR 合并和正式发布是两个独立步骤。当前 Actions 只检查代码�
 - 保留地板 / 厕所独立自由轮次、抬水按完成推进的规则与已完成历史。
 - 数据库、真实凭据、签名私钥、设备日志和生产数据不提交。数据库迁移新增文件，禁止重写已应用迁移。
 - 正式发布使用独立版本、在线备份、历史校验、健康检查和资源校验，见 [部署说明](docs/SERVER_DEPLOYMENT.md)。
+
+定时提醒与轮序交互检查：`node site/scripts/check-scheduled-reminders.mjs`、`node site/scripts/check-reminder-runtime.mjs`、`node site/scripts/check-water-order.mjs`。真实进程检查使用隔离临时数据库，约需 30 秒，不发送实际推送。

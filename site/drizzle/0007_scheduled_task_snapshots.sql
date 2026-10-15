@@ -1,0 +1,1 @@
+ALTER TABLE `chore_scheduled_reminders` ADD `task_ids` text DEFAULT '[]' NOT NULL;

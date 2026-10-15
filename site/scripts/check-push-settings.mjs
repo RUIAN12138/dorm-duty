@@ -151,7 +151,7 @@ try {
           builder.onResolve(
             {
               filter:
-                /^(vant|\.\/ElasticSheet\.vue|\.\.\/api\/memberPush|\.\.\/api\/push)$/,
+                /^(vant|\.\/ElasticSheet\.vue|\.\/TimedReminderSettings\.vue|\.\.\/api\/memberPush|\.\.\/api\/push)$/,
             },
             ({ path: id }) => ({ path: id, namespace: "mock" }),
           );
@@ -161,22 +161,24 @@ try {
               contents:
                 id === "vant"
                   ? "export const showToast=(message)=>globalThis.__pushSettingsMocks.toast(message)"
-                  : id.endsWith("ElasticSheet.vue")
-                    ? "import {defineComponent,h} from 'vue'; export default defineComponent({props:['modelValue'],setup(props,{slots}){return ()=>props.modelValue?h('section',slots.default?.()):null}})"
-                    : id.endsWith("/push")
-                      ? "export const pushCapability=()=>globalThis.__pushSettingsMocks.capability()"
-                      : [
-                          "getMemberPushConfig",
-                          "syncMemberPush",
-                          "enableMemberPush",
-                          "disableMemberPush",
-                          "testMemberPush",
-                        ]
-                          .map(
-                            (name) =>
-                              `export const ${name}=(...args)=>globalThis.__pushSettingsMocks.${name}(...args)`,
-                          )
-                          .join(";"),
+                  : id.endsWith("TimedReminderSettings.vue")
+                    ? "export default {render(){return null}}"
+                    : id.endsWith("ElasticSheet.vue")
+                      ? "import {defineComponent,h} from 'vue'; export default defineComponent({props:['modelValue'],setup(props,{slots}){return ()=>props.modelValue?h('section',slots.default?.()):null}})"
+                      : id.endsWith("/push")
+                        ? "export const pushCapability=()=>globalThis.__pushSettingsMocks.capability()"
+                        : [
+                            "getMemberPushConfig",
+                            "syncMemberPush",
+                            "enableMemberPush",
+                            "disableMemberPush",
+                            "testMemberPush",
+                          ]
+                            .map(
+                              (name) =>
+                                `export const ${name}=(...args)=>globalThis.__pushSettingsMocks.${name}(...args)`,
+                            )
+                            .join(";"),
               loader: "js",
             }),
           );

@@ -7,9 +7,9 @@ var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+var __export = (target, all2) => {
+  for (var name in all2)
+    __defProp(target, name, { get: all2[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -3104,15 +3104,15 @@ var require_buffer = __commonJS({
     DecoderBuffer.prototype.isEmpty = function isEmpty() {
       return this.offset === this.length;
     };
-    DecoderBuffer.prototype.readUInt8 = function readUInt8(fail) {
+    DecoderBuffer.prototype.readUInt8 = function readUInt8(fail2) {
       if (this.offset + 1 <= this.length)
         return this.base.readUInt8(this.offset++, true);
       else
-        return this.error(fail || "DecoderBuffer overrun");
+        return this.error(fail2 || "DecoderBuffer overrun");
     };
-    DecoderBuffer.prototype.skip = function skip(bytes, fail) {
+    DecoderBuffer.prototype.skip = function skip(bytes, fail2) {
       if (!(this.offset + bytes <= this.length))
-        return this.error(fail || "DecoderBuffer overrun");
+        return this.error(fail2 || "DecoderBuffer overrun");
       const res = new DecoderBuffer(this.base);
       res._reporterState = this._reporterState;
       res.offset = this.offset;
@@ -4119,19 +4119,19 @@ var require_der3 = __commonJS({
       buffer.restore(state);
       return buffer.skip(len, 'Failed to match body of: "' + tag + '"');
     };
-    DERNode.prototype._skipUntilEnd = function skipUntilEnd(buffer, fail) {
+    DERNode.prototype._skipUntilEnd = function skipUntilEnd(buffer, fail2) {
       for (; ; ) {
-        const tag = derDecodeTag(buffer, fail);
+        const tag = derDecodeTag(buffer, fail2);
         if (buffer.isError(tag))
           return tag;
-        const len = derDecodeLen(buffer, tag.primitive, fail);
+        const len = derDecodeLen(buffer, tag.primitive, fail2);
         if (buffer.isError(len))
           return len;
         let res;
         if (tag.primitive || len !== null)
           res = buffer.skip(len);
         else
-          res = this._skipUntilEnd(buffer, fail);
+          res = this._skipUntilEnd(buffer, fail2);
         if (buffer.isError(res))
           return res;
         if (tag.tagStr === "end")
@@ -4204,12 +4204,12 @@ var require_der3 = __commonJS({
       }
       if (subident & 128)
         identifiers.push(ident);
-      const first = identifiers[0] / 40 | 0;
+      const first2 = identifiers[0] / 40 | 0;
       const second = identifiers[0] % 40;
       if (relative)
         result = identifiers;
       else
-        result = [first, second].concat(identifiers.slice(1));
+        result = [first2, second].concat(identifiers.slice(1));
       if (values) {
         let tmp = values[result.join(" ")];
         if (tmp === void 0)
@@ -4272,8 +4272,8 @@ var require_der3 = __commonJS({
         entity = entity(obj);
       return entity._getDecoder("der").tree;
     };
-    function derDecodeTag(buf, fail) {
-      let tag = buf.readUInt8(fail);
+    function derDecodeTag(buf, fail2) {
+      let tag = buf.readUInt8(fail2);
       if (buf.isError(tag))
         return tag;
       const cls = der.tagClass[tag >> 6];
@@ -4282,7 +4282,7 @@ var require_der3 = __commonJS({
         let oct = tag;
         tag = 0;
         while ((oct & 128) === 128) {
-          oct = buf.readUInt8(fail);
+          oct = buf.readUInt8(fail2);
           if (buf.isError(oct))
             return oct;
           tag <<= 7;
@@ -4299,8 +4299,8 @@ var require_der3 = __commonJS({
         tagStr
       };
     }
-    function derDecodeLen(buf, primitive, fail) {
-      let len = buf.readUInt8(fail);
+    function derDecodeLen(buf, primitive, fail2) {
+      let len = buf.readUInt8(fail2);
       if (buf.isError(len))
         return len;
       if (!primitive && len === 128)
@@ -4314,7 +4314,7 @@ var require_der3 = __commonJS({
       len = 0;
       for (let i = 0; i < num; i++) {
         len <<= 8;
-        const j = buf.readUInt8(fail);
+        const j = buf.readUInt8(fail2);
         if (buf.isError(j))
           return j;
         len |= j;
@@ -4782,14 +4782,14 @@ var require_buffer_equal_constant_time = __commonJS({
 var require_jwa = __commonJS({
   "node_modules/jwa/index.js"(exports2, module2) {
     var Buffer2 = require_safe_buffer().Buffer;
-    var crypto = require("crypto");
+    var crypto2 = require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
     var util = require("util");
     var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
     var MSG_INVALID_SECRET = "secret must be a string or buffer";
     var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
     var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto.createPublicKey === "function";
+    var supportsKeyObjects = typeof crypto2.createPublicKey === "function";
     if (supportsKeyObjects) {
       MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
       MSG_INVALID_SECRET += "or a KeyObject";
@@ -4879,17 +4879,17 @@ var require_jwa = __commonJS({
       return function sign(thing, secret) {
         checkIsSecretKey(secret);
         thing = normalizeInput(thing);
-        var hmac = crypto.createHmac("sha" + bits, secret);
+        var hmac = crypto2.createHmac("sha" + bits, secret);
         var sig = (hmac.update(thing), hmac.digest("base64"));
         return fromBase64(sig);
       };
     }
     var bufferEqual;
-    var timingSafeEqual = "timingSafeEqual" in crypto ? function timingSafeEqual2(a, b) {
+    var timingSafeEqual = "timingSafeEqual" in crypto2 ? function timingSafeEqual2(a, b) {
       if (a.byteLength !== b.byteLength) {
         return false;
       }
-      return crypto.timingSafeEqual(a, b);
+      return crypto2.timingSafeEqual(a, b);
     } : function timingSafeEqual2(a, b) {
       if (!bufferEqual) {
         bufferEqual = require_buffer_equal_constant_time();
@@ -4906,7 +4906,7 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto.createSign("RSA-SHA" + bits);
+        var signer = crypto2.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
         return fromBase64(sig);
       };
@@ -4916,7 +4916,7 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto.createVerify("RSA-SHA" + bits);
+        var verifier = crypto2.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify(publicKey, signature, "base64");
       };
@@ -4925,11 +4925,11 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto.createSign("RSA-SHA" + bits);
+        var signer = crypto2.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign({
           key: privateKey,
-          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto2.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto2.constants.RSA_PSS_SALTLEN_DIGEST
         }, "base64"));
         return fromBase64(sig);
       };
@@ -4939,12 +4939,12 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto.createVerify("RSA-SHA" + bits);
+        var verifier = crypto2.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify({
           key: publicKey,
-          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto2.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto2.constants.RSA_PSS_SALTLEN_DIGEST
         }, signature, "base64");
       };
     }
@@ -5275,7 +5275,7 @@ var require_urlsafe_base64_helper = __commonJS({
 var require_vapid_helper = __commonJS({
   "node_modules/web-push/src/vapid-helper.js"(exports2, module2) {
     "use strict";
-    var crypto = require("crypto");
+    var crypto2 = require("crypto");
     var asn1 = require_asn1();
     var jws = require_jws();
     var { URL: URL2 } = require("url");
@@ -5302,7 +5302,7 @@ var require_vapid_helper = __commonJS({
       });
     }
     function generateVAPIDKeys() {
-      const curve = crypto.createECDH("prime256v1");
+      const curve = crypto2.createECDH("prime256v1");
       curve.generateKeys();
       let publicKeyBuffer = curve.getPublicKey();
       let privateKeyBuffer = curve.getPrivateKey();
@@ -5452,7 +5452,7 @@ var require_vapid_helper = __commonJS({
 var require_ece = __commonJS({
   "node_modules/http_ece/ece.js"(exports2, module2) {
     "use strict";
-    var crypto = require("crypto");
+    var crypto2 = require("crypto");
     var AES_GCM = "aes-128-gcm";
     var PAD_SIZE = { "aes128gcm": 1, "aesgcm": 2 };
     var TAG_LENGTH = 16;
@@ -5479,7 +5479,7 @@ var require_ece = __commonJS({
       return b;
     }
     function HMAC_hash(key, input) {
-      var hmac = crypto.createHmac("sha256", key);
+      var hmac = crypto2.createHmac("sha256", key);
       hmac.update(input);
       return hmac.digest();
     }
@@ -5747,7 +5747,7 @@ var require_ece = __commonJS({
     function decryptRecord(key, counter, buffer, header, last) {
       keylog("decrypt", buffer);
       var nonce = generateNonce(key.nonce, counter);
-      var gcm = crypto.createDecipheriv(AES_GCM, key.key, nonce);
+      var gcm = crypto2.createDecipheriv(AES_GCM, key.key, nonce);
       gcm.setAuthTag(buffer.slice(buffer.length - TAG_LENGTH));
       var data = gcm.update(buffer.slice(0, buffer.length - TAG_LENGTH));
       data = Buffer.concat([data, gcm.final()]);
@@ -5795,7 +5795,7 @@ var require_ece = __commonJS({
       keylog("encrypt", buffer);
       pad = pad || 0;
       var nonce = generateNonce(key.nonce, counter);
-      var gcm = crypto.createCipheriv(AES_GCM, key.key, nonce);
+      var gcm = crypto2.createCipheriv(AES_GCM, key.key, nonce);
       var ciphertext = [];
       var padSize = PAD_SIZE[header.version];
       var padding = Buffer.alloc(pad + padSize);
@@ -5838,7 +5838,7 @@ var require_ece = __commonJS({
       }
       var header = parseParams(params);
       if (!header.salt) {
-        header.salt = crypto.randomBytes(KEY_LENGTH);
+        header.salt = crypto2.randomBytes(KEY_LENGTH);
       }
       var result;
       if (header.version === "aes128gcm") {
@@ -5903,7 +5903,7 @@ var require_ece = __commonJS({
 var require_encryption_helper = __commonJS({
   "node_modules/web-push/src/encryption-helper.js"(exports2, module2) {
     "use strict";
-    var crypto = require("crypto");
+    var crypto2 = require("crypto");
     var ece = require_ece();
     var encrypt = function(userPublicKey, userAuth, payload, contentEncoding) {
       if (!userPublicKey) {
@@ -5930,9 +5930,9 @@ var require_encryption_helper = __commonJS({
       if (typeof payload === "string" || payload instanceof String) {
         payload = Buffer.from(payload);
       }
-      const localCurve = crypto.createECDH("prime256v1");
+      const localCurve = crypto2.createECDH("prime256v1");
       const localPublicKey = localCurve.generateKeys();
-      const salt = crypto.randomBytes(16).toString("base64url");
+      const salt = crypto2.randomBytes(16).toString("base64url");
       const cipherText = ece.encrypt(payload, {
         version: contentEncoding,
         dh: userPublicKey,
@@ -5983,7 +5983,7 @@ var require_ms = __commonJS({
       options = options || {};
       var type = typeof val;
       if (type === "string" && val.length > 0) {
-        return parse(val);
+        return parse2(val);
       } else if (type === "number" && isFinite(val)) {
         return options.long ? fmtLong(val) : fmtShort(val);
       }
@@ -5991,7 +5991,7 @@ var require_ms = __commonJS({
         "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
       );
     };
-    function parse(str) {
+    function parse2(str) {
       str = String(str);
       if (str.length > 100) {
         return;
@@ -6655,12 +6655,12 @@ var require_helpers = __commonJS({
     var https = __importStar(require("https"));
     async function toBuffer(stream) {
       let length = 0;
-      const chunks = [];
+      const chunks2 = [];
       for await (const chunk of stream) {
         length += chunk.length;
-        chunks.push(chunk);
+        chunks2.push(chunk);
       }
-      return Buffer.concat(chunks, length);
+      return Buffer.concat(chunks2, length);
     }
     exports2.toBuffer = toBuffer;
     async function json(stream) {
@@ -7405,12 +7405,13 @@ var require_src2 = __commonJS({
 var push_runtime_exports = {};
 __export(push_runtime_exports, {
   createPushDelivery: () => createPushDelivery,
-  createPushRuntime: () => createPushRuntime
+  createPushRuntime: () => createPushRuntime,
+  createReminderScheduler: () => createReminderScheduler
 });
 module.exports = __toCommonJS(push_runtime_exports);
 var import_promises2 = __toESM(require("node:fs/promises"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
-var import_node_crypto = require("node:crypto");
+var import_node_crypto2 = require("node:crypto");
 var import_src = __toESM(require_src2(), 1);
 
 // ../scripts/native-push-provider.mjs
@@ -7434,7 +7435,7 @@ async function readNativeConfig(directory) {
   }
 }
 function createNativeSender(config, transport = fetch) {
-  return async (subscription, payload) => {
+  return async (subscription, payload, options = {}) => {
     const app = config[subscription.platform];
     const match = /^jpush:(android|harmony):([A-Za-z0-9_-]{8,256})$/.exec(
       subscription.endpoint
@@ -7465,7 +7466,9 @@ function createNativeSender(config, transport = fetch) {
         platform: [platform],
         audience: { registration_id: [match[2]] },
         notification: { [platform]: notification },
-        options: { time_to_live: 86400 }
+        options: {
+          time_to_live: Number.isInteger(options.TTL) && options.TTL >= 1 && options.TTL <= 86400 ? options.TTL : 86400
+        }
       })
     });
     const result = await response.json().catch(() => null);
@@ -7494,6 +7497,601 @@ function validPushEndpoint(value) {
   }
 }
 
+// shared/notifications.mjs
+function notifyUser(userId, message, { db, env, guard = "1=1", values = [] }) {
+  return db.prepare(
+    `INSERT OR IGNORE INTO chore_push_jobs(dorm_id,user_id,subscription_id,subscription_revision,reminder_id,next_attempt_at,created_at)
+    SELECT s.dorm_id,s.user_id,s.id,s.revision,r.id,?,? FROM chore_push_subscriptions s JOIN chore_reminders r ON r.mutation_key=? AND r.dorm_id=s.dorm_id AND r.target_member_id=s.user_id
+    JOIN dorm_members m ON m.dorm_id=s.dorm_id AND m.user_id=s.user_id AND m.is_active=1
+    JOIN users u ON u.id=s.user_id AND u.current_dorm_id=s.dorm_id
+    JOIN dormitories d ON d.id=s.dorm_id AND d.is_demo=0
+    WHERE s.dorm_id=? AND s.user_id=? AND s.is_active=1
+    AND ((s.provider='web' AND ?=1) OR (s.provider='jpush' AND ((s.platform='android' AND ?=1) OR (s.platform='harmony' AND ?=1)))) AND (${guard})`
+  ).bind(
+    message.createdAt,
+    message.createdAt,
+    message.reminderKey,
+    message.dormId,
+    userId,
+    Number(Boolean(env.PUSH_CONFIG?.available)),
+    Number(Boolean(env.NATIVE_PUSH_CONFIG?.android)),
+    Number(Boolean(env.NATIVE_PUSH_CONFIG?.harmony)),
+    ...values
+  );
+}
+var dailyReminderTasksSql = `SELECT t.id,t.name,t.content,t.key FROM chore_tasks t
+  JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
+  WHERE t.dorm_id=? AND t.assignee_id=? AND t.key IN ('floor','toilet') AND t.status='pending' AND c.enabled=1
+  AND ((c.mode='scheduled' AND t.duty_date=?) OR (c.mode='self_round' AND t.duty_date<=? AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.key`;
+var SCHEDULE_CATCH_UP_MS = 30 * 60 * 1e3;
+
+// ../scripts/reminder-scheduler.mjs
+var import_node_crypto = require("node:crypto");
+
+// shared/member-marks.mjs
+var MARK_IDS = Object.freeze(
+  Array.from(
+    { length: 100 },
+    (_, i) => `pixel-${String(i + 1).padStart(2, "0")}`
+  )
+);
+
+// worker/chores.mjs
+var DAY = 864e5;
+var KEYS = ["floor", "toilet", "water"];
+var encoder = new TextEncoder();
+var markerIds = new Set(MARK_IDS);
+var ChoreError = class extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+};
+function fail(status, code, message) {
+  throw new ChoreError(status, code, message);
+}
+function stmt(db, sql, values = []) {
+  return db.prepare(sql).bind(...values);
+}
+async function first(db, sql, values = []) {
+  return stmt(db, sql, values).first();
+}
+async function all(db, sql, values = []) {
+  return (await stmt(db, sql, values).all()).results || [];
+}
+function changes(result) {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+function random() {
+  return [...crypto.getRandomValues(new Uint8Array(32))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function localDate(now) {
+  return new Date(new Date(now).getTime() + 8 * 36e5).toISOString().slice(0, 10);
+}
+function addDate(day, count) {
+  return new Date((/* @__PURE__ */ new Date(`${day}T00:00:00.000Z`)).getTime() + count * DAY).toISOString().slice(0, 10);
+}
+function diffDate(a, b) {
+  return Math.round(
+    (/* @__PURE__ */ new Date(`${a}T00:00:00.000Z`) - /* @__PURE__ */ new Date(`${b}T00:00:00.000Z`)) / DAY
+  );
+}
+function weekday(day) {
+  return (/* @__PURE__ */ new Date(`${day}T00:00:00.000Z`)).getUTCDay() || 7;
+}
+function deadline(day, hhmm) {
+  return (/* @__PURE__ */ new Date(`${day}T${hhmm}:00+08:00`)).toISOString();
+}
+function parse(value) {
+  return JSON.parse(value);
+}
+function chunks(items, size) {
+  const parts = [];
+  for (let i = 0; i < items.length; i += size)
+    parts.push(items.slice(i, i + size));
+  return parts;
+}
+async function roomMembers(db, roomId) {
+  return all(
+    db,
+    "SELECT m.user_id,u.nickname,m.role,m.sort_order,mm.marker_id FROM dorm_members m JOIN users u ON u.id=m.user_id LEFT JOIN member_marks mm ON mm.dorm_id=m.dorm_id AND mm.user_id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 ORDER BY m.sort_order,m.id",
+    [roomId]
+  );
+}
+async function ensureChoreMarkers(db, roomId) {
+  await stmt(
+    db,
+    "DELETE FROM member_marks WHERE dorm_id=? AND NOT EXISTS(SELECT 1 FROM dorm_members m WHERE m.dorm_id=member_marks.dorm_id AND m.user_id=member_marks.user_id AND m.is_active=1)",
+    [roomId]
+  ).run();
+  await stmt(
+    db,
+    `INSERT OR IGNORE INTO member_marks(dorm_id,user_id,marker_id)
+    WITH missing AS (SELECT m.user_id,ROW_NUMBER() OVER (ORDER BY m.sort_order,m.id) AS n FROM dorm_members m LEFT JOIN member_marks mm ON mm.dorm_id=m.dorm_id AND mm.user_id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 AND mm.id IS NULL),
+    available AS (SELECT j.value AS marker_id,ROW_NUMBER() OVER (ORDER BY CAST(j.key AS INTEGER)) AS n FROM json_each(?) j WHERE NOT EXISTS (SELECT 1 FROM member_marks mm WHERE mm.dorm_id=? AND mm.marker_id=j.value))
+    SELECT ?,missing.user_id,available.marker_id FROM missing JOIN available ON missing.n=available.n`,
+    [roomId, JSON.stringify(MARK_IDS), roomId, roomId]
+  ).run();
+  const missing = await first(
+    db,
+    "SELECT m.user_id FROM dorm_members m LEFT JOIN member_marks mm ON mm.dorm_id=m.dorm_id AND mm.user_id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 AND mm.id IS NULL",
+    [roomId]
+  );
+  if (missing)
+    fail(409, "marker_capacity", "\u50CF\u7D20\u6807\u8BB0\u5DF2\u5168\u90E8\u4F7F\u7528\uFF0C\u8BF7\u5148\u91CA\u653E\u79BB\u5F00\u6210\u5458\u7684\u6807\u8BB0");
+}
+function categoryView(row) {
+  return {
+    key: row.key,
+    name: row.name,
+    content: row.content,
+    deadline_time: row.deadline_time,
+    start_date: row.start_date,
+    weekdays: parse(row.weekdays),
+    rotation_days: row.rotation_days,
+    rotation_order: parse(row.rotation_order),
+    enabled: Boolean(row.enabled),
+    mode: row.mode
+  };
+}
+async function categories(db, roomId) {
+  const rows = await all(db, "SELECT * FROM chore_categories WHERE dorm_id=?", [
+    roomId
+  ]);
+  return KEYS.map((key) => rows.find((row) => row.key === key)).filter(Boolean).map(categoryView);
+}
+async function initialize(db, room, now) {
+  await ensureChoreMarkers(db, room.id);
+  const members = await roomMembers(db, room.id);
+  if (!members.length) fail(409, "no_members", "\u5BBF\u820D\u6CA1\u6709\u6709\u6548\u6210\u5458");
+  const legacy = parse(room.rotation_order || "[]"), ids = members.map((member) => member.user_id);
+  const order = [
+    ...legacy.filter((id) => ids.includes(id)),
+    ...ids.filter((id) => !legacy.includes(id))
+  ];
+  const shift = order.length > 1 ? [...order.slice(1), order[0]] : order;
+  const start = localDate(now);
+  const defaults = [
+    ["floor", "\u5730\u677F", "\u626B\u5730\u3001\u62D6\u5730", "22:00", order],
+    ["toilet", "\u5395\u6240", "\u6E05\u6D17\u4FBF\u6C60\u3001\u51B2\u6D17\u5730\u9762", "22:00", shift],
+    ["water", "\u62AC\u6C34", "\u5C06\u996E\u7528\u6C34\u9001\u5230\u5BBF\u820D", "20:00", order]
+  ];
+  await db.batch([
+    stmt(db, "INSERT OR IGNORE INTO chore_settings(dorm_id) VALUES (?)", [
+      room.id
+    ]),
+    ...defaults.map(
+      ([key, name, content, hhmm, rotation]) => stmt(
+        db,
+        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode) VALUES (?,?,?,?,?,?,?,?)",
+        [
+          room.id,
+          key,
+          name,
+          content,
+          hhmm,
+          start,
+          JSON.stringify(rotation),
+          key === "water" ? "completion" : "self_round"
+        ]
+      )
+    )
+  ]);
+}
+var Mutation = class {
+  constructor(db, room, version, who = null, admin = false, extra = "", extraValues = []) {
+    this.db = db;
+    this.room = room;
+    this.token = random();
+    this.guard = "EXISTS (SELECT 1 FROM chore_settings WHERE dorm_id=? AND mutation_key=?)";
+    this.guardValues = [room.id, this.token];
+    let permission = "";
+    const values = [this.token, room.id, version];
+    if (who) {
+      permission += " AND EXISTS (SELECT 1 FROM dorm_members m JOIN users u ON u.id=m.user_id JOIN dormitories d ON d.id=m.dorm_id WHERE m.dorm_id=chore_settings.dorm_id AND m.user_id=? AND m.is_active=1 AND u.current_dorm_id=m.dorm_id AND d.is_demo=0";
+      values.push(who.user_id);
+      if (admin)
+        permission += " AND m.role='admin' AND d.admin_user_id=m.user_id";
+      permission += ")";
+    }
+    if (extra) {
+      permission += ` AND (${extra})`;
+      values.push(...extraValues);
+    }
+    this.ops = [
+      stmt(
+        db,
+        `UPDATE chore_settings SET version=version+1,mutation_key=? WHERE dorm_id=? AND version=?${permission}`,
+        values
+      )
+    ];
+  }
+  raw(sql, values = []) {
+    this.ops.push(stmt(this.db, sql, values));
+  }
+  update(table, fields, where, values = []) {
+    const keys = Object.keys(fields);
+    this.raw(
+      `UPDATE ${table} SET ${keys.map((key) => `${key}=?`).join(",")} WHERE (${where}) AND ${this.guard}`,
+      [...keys.map((key) => fields[key]), ...values, ...this.guardValues]
+    );
+  }
+  async finish() {
+    const results = await this.db.batch(this.ops);
+    if (changes(results[0]) !== 1)
+      fail(409, "stale_version", "\u4EFB\u52A1\u5DF2\u53D8\u5316\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5");
+    return results;
+  }
+};
+function scheduledAssignee(category, day) {
+  if (!category.enabled || day < category.start_date || !category.weekdays.includes(weekday(day)))
+    return null;
+  const count = diffDate(day, category.start_date), weeks = Math.floor(count / 7), tail = count % 7;
+  let turns = weeks * category.weekdays.length;
+  for (let i = 0; i < tail; i++)
+    if (category.weekdays.includes(weekday(addDate(category.start_date, i))))
+      turns++;
+  return category.rotation_order[Math.floor(turns / category.rotation_days) % category.rotation_order.length];
+}
+function plannedRow(room, category, day, uid, members, sequence = null) {
+  const member = members.find((entry) => entry.user_id === uid);
+  if (!member) fail(409, "invalid_order", "\u6392\u73ED\u6210\u5458\u5DF2\u53D8\u5316\uFF0C\u8BF7\u5237\u65B0");
+  return [
+    room.id,
+    category.key,
+    sequence === null ? day : `turn-${sequence}`,
+    category.name,
+    category.content,
+    day,
+    uid,
+    member.nickname,
+    member.marker_id,
+    deadline(day, category.deadline_time),
+    sequence
+  ];
+}
+function appendRows(mutation, rows, replace = false) {
+  for (const part of chunks(rows, 8)) {
+    mutation.raw(
+      `INSERT INTO chore_tasks(dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,sequence)
+      SELECT column1,column2,column3,column4,column5,column6,column7,column8,column9,column10,column11 FROM (VALUES ${part.map(() => "(?,?,?,?,?,?,?,?,?,?,?)").join(",")}) WHERE ${mutation.guard}
+      ON CONFLICT(dorm_id,key,task_key) ${replace ? "DO UPDATE SET name=excluded.name,content=excluded.content,assignee_id=excluded.assignee_id,assignee_name_snapshot=excluded.assignee_name_snapshot,marker_id_snapshot=excluded.marker_id_snapshot,deadline_at=excluded.deadline_at,status='pending' WHERE chore_tasks.status<>'completed'" : "DO NOTHING"}`,
+      [...part.flat(), ...mutation.guardValues]
+    );
+  }
+}
+async function planDaily(db, mutation, room, settings, members, now, replaceKeys = []) {
+  const today = localDate(now), end = addDate(today, 29), rows = [];
+  for (const category of settings.filter(
+    (entry) => entry.mode === "scheduled"
+  )) {
+    const replace = replaceKeys.includes(category.key);
+    if (replace)
+      mutation.update(
+        "chore_tasks",
+        { status: "cancelled" },
+        "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
+        [room.id, category.key, today]
+      );
+    for (let i = replace ? 1 : 0; i < 30; i++) {
+      const day = addDate(today, i), uid = scheduledAssignee(category, day);
+      if (uid) rows.push(plannedRow(room, category, day, uid, members));
+    }
+  }
+  for (const key of ["floor", "toilet"])
+    appendRows(
+      mutation,
+      rows.filter((row) => row[1] === key),
+      replaceKeys.includes(key)
+    );
+  return end;
+}
+async function roundState(db, room, category, members) {
+  const latest = await first(
+    db,
+    "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL",
+    [room.id, category.key]
+  );
+  const sequence = Number(latest?.sequence || 0);
+  const rows = sequence ? await all(
+    db,
+    "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence=?",
+    [room.id, category.key, sequence]
+  ) : [];
+  return {
+    sequence,
+    rows,
+    active: rows.filter(
+      (row) => row.status !== "cancelled" && members.some((m) => m.user_id === row.assignee_id)
+    )
+  };
+}
+function roundRow(room, category, member, members, now, sequence) {
+  const row = plannedRow(
+    room,
+    category,
+    localDate(now),
+    member.user_id,
+    members,
+    sequence
+  );
+  row[2] = `round-${sequence}-${member.user_id}`;
+  row[9] = "";
+  return row;
+}
+async function planRound(db, mutation, room, category, members, now, completingId = null) {
+  if (category.mode !== "self_round" || !category.enabled) return;
+  const current = await roundState(db, room, category, members);
+  const completed = new Set(
+    current.active.filter((row) => row.status === "completed" || row.id === completingId).map((row) => row.assignee_id)
+  );
+  const advance = !current.active.length || members.every((member) => completed.has(member.user_id));
+  const sequence = current.sequence + (advance ? 1 : 0);
+  if (advance && current.sequence)
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "dorm_id=? AND key=? AND sequence=? AND status='pending' AND id<>?",
+      [room.id, category.key, current.sequence, completingId || -1]
+    );
+  const missing = advance ? members : members.filter(
+    (member) => !current.active.some((row) => row.assignee_id === member.user_id)
+  );
+  appendRows(
+    mutation,
+    missing.map(
+      (member) => roundRow(room, category, member, members, now, sequence)
+    ),
+    true
+  );
+}
+function synchronizedOrder(order, ids) {
+  return [
+    ...order.filter((id) => ids.includes(id)),
+    ...ids.filter((id) => !order.includes(id))
+  ];
+}
+async function maintain(db, room, now) {
+  await initialize(db, room, now);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const state = await first(
+      db,
+      "SELECT * FROM chore_settings WHERE dorm_id=?",
+      [room.id]
+    ), settings = await categories(db, room.id), members = await roomMembers(db, room.id), ids = members.map((member) => member.user_id);
+    const replacements = [], mutation = new Mutation(db, room, state.version);
+    for (const category of settings) {
+      const order = synchronizedOrder(category.rotation_order, ids);
+      if (JSON.stringify(order) !== JSON.stringify(category.rotation_order)) {
+        category.rotation_order = order;
+        mutation.update(
+          "chore_categories",
+          { rotation_order: JSON.stringify(order) },
+          "dorm_id=? AND key=?",
+          [room.id, category.key]
+        );
+        if (category.mode === "scheduled") replacements.push(category.key);
+      }
+    }
+    const today = localDate(now), end = addDate(today, 29);
+    const existing = await all(
+      db,
+      "SELECT key,task_key FROM chore_tasks WHERE dorm_id=? AND duty_date BETWEEN ? AND ?",
+      [room.id, today, end]
+    );
+    const tokens = new Set(existing.map((row) => `${row.key}:${row.task_key}`));
+    let missing = replacements.length > 0;
+    for (const category of settings.filter(
+      (entry) => entry.mode === "scheduled"
+    ))
+      for (let i = 0; i < 30; i++) {
+        const day = addDate(today, i);
+        if (scheduledAssignee(category, day) && !tokens.has(`${category.key}:${day}`))
+          missing = true;
+      }
+    const water = settings.find((entry) => entry.key === "water"), pending = await first(
+      db,
+      "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
+      [room.id]
+    );
+    if (pending && !ids.includes(pending.assignee_id)) {
+      const uid = water.rotation_order[0], member = members.find((entry) => entry.user_id === uid);
+      mutation.update(
+        "chore_tasks",
+        {
+          assignee_id: uid,
+          assignee_name_snapshot: member.nickname,
+          marker_id_snapshot: member.marker_id
+        },
+        "id=? AND status='pending'",
+        [pending.id]
+      );
+      missing = true;
+    }
+    if (water.enabled && !pending) {
+      const last = await first(
+        db,
+        "SELECT assignee_id,sequence FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
+        [room.id]
+      );
+      const sequence = Number(last?.sequence || 0) + 1;
+      const index = last?.sequence ? (water.rotation_order.indexOf(last.assignee_id) + 1) % water.rotation_order.length : 0;
+      appendRows(mutation, [
+        plannedRow(
+          room,
+          water,
+          today > water.start_date ? today : water.start_date,
+          water.rotation_order[index],
+          members,
+          sequence
+        )
+      ]);
+      missing = true;
+    }
+    for (const category of settings.filter(
+      (entry) => entry.mode === "self_round"
+    ))
+      await planRound(db, mutation, room, category, members, now);
+    if (!missing && mutation.ops.length === 1)
+      return { state, settings, members };
+    await planDaily(db, mutation, room, settings, members, now, replacements);
+    try {
+      await mutation.finish();
+    } catch (error) {
+      if (error instanceof ChoreError && error.code === "stale_version")
+        continue;
+      throw error;
+    }
+    return {
+      state: { ...state, version: state.version + 1 },
+      settings,
+      members
+    };
+  }
+  fail(409, "stale_version", "\u5BBF\u820D\u6B63\u5728\u66F4\u65B0\uFF0C\u8BF7\u7A0D\u540E\u5237\u65B0");
+}
+
+// ../scripts/reminder-scheduler.mjs
+var DAY2 = 864e5;
+function dueSlots(preference, now) {
+  let times;
+  try {
+    times = JSON.parse(preference.times);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(times) || times.length > 3) return [];
+  const slots = [];
+  for (const offset of [-DAY2, 0]) {
+    const day = new Date(now.getTime() + 8 * 36e5 + offset).toISOString().slice(0, 10);
+    for (const time of new Set(times)) {
+      if (typeof time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
+        continue;
+      const date = /* @__PURE__ */ new Date(`${day}T${time}:00+08:00`);
+      if (date.getTime() <= now.getTime() && now.getTime() - date.getTime() < SCHEDULE_CATCH_UP_MS && date.toISOString() >= preference.updated_at)
+        slots.push({ day, time, at: date.toISOString() });
+    }
+  }
+  return slots;
+}
+function createReminderScheduler(db, { env, now = () => /* @__PURE__ */ new Date(), intervalMs = 3e4, autoStart = true } = {}) {
+  if (!env) throw new Error("\u63D0\u9192\u8C03\u5EA6\u7F3A\u5C11\u8FD0\u884C\u914D\u7F6E");
+  let stopped = false, running = null, cursor = 0, timer;
+  const run = async () => {
+    const time = now();
+    const select = db.sqlite.prepare(`SELECT p.* FROM chore_reminder_preferences p
+      JOIN dorm_members m ON m.dorm_id=p.dorm_id AND m.user_id=p.user_id AND m.is_active=1
+      JOIN users u ON u.id=p.user_id AND u.current_dorm_id=p.dorm_id
+      JOIN dormitories d ON d.id=p.dorm_id AND d.is_demo=0 WHERE p.enabled=1 AND p.id>? ORDER BY p.id LIMIT 128`);
+    let preferences = select.all(cursor);
+    if (!preferences.length && cursor) {
+      cursor = 0;
+      preferences = select.all(0);
+    }
+    const maintained = /* @__PURE__ */ new Set();
+    let reminders = 0;
+    for (const preference of preferences) {
+      if (stopped) break;
+      cursor = preference.id;
+      const slots = dueSlots(preference, time);
+      if (!slots.length) continue;
+      if (!maintained.has(preference.dorm_id)) {
+        const room = db.sqlite.prepare("SELECT * FROM dormitories WHERE id=? AND is_demo=0").get(preference.dorm_id);
+        if (!room) continue;
+        await maintain(db, room, time);
+        maintained.add(preference.dorm_id);
+      }
+      for (const slot of slots) {
+        const reminderKey = (0, import_node_crypto.createHash)("sha256").update(
+          `schedule:${preference.dorm_id}:${preference.user_id}:${slot.day}:${slot.time}`
+        ).digest("hex");
+        if (db.sqlite.prepare("SELECT 1 FROM chore_reminders WHERE mutation_key=?").get(reminderKey))
+          continue;
+        const taskValues = [
+          preference.dorm_id,
+          preference.user_id,
+          slot.day,
+          slot.day
+        ];
+        const guard = `EXISTS(SELECT 1 FROM chore_reminder_preferences p
+          JOIN dorm_members m ON m.dorm_id=p.dorm_id AND m.user_id=p.user_id AND m.is_active=1
+          JOIN users u ON u.id=p.user_id AND u.current_dorm_id=p.dorm_id
+          JOIN dormitories d ON d.id=p.dorm_id AND d.is_demo=0
+          WHERE p.id=? AND p.version=? AND p.enabled=1 AND p.updated_at<=?)`;
+        const values = [preference.id, preference.version, slot.at];
+        const result = await db.batch([
+          db.prepare(
+            `INSERT OR IGNORE INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source)
+            SELECT ?,?,'\u8F6E\u5230',?,NULL,'\u503C\u65E5',(SELECT group_concat(name,'\u3001') || '\u8FD8\u6CA1\u5B8C\u6210\uFF0C\u505A\u5B8C\u8BB0\u5F97\u6253\u5361\u3002' FROM (${dailyReminderTasksSql})),?,?,'scheduled'
+            WHERE ${guard} AND EXISTS(${dailyReminderTasksSql})`
+          ).bind(
+            preference.dorm_id,
+            preference.user_id,
+            preference.user_id,
+            ...taskValues,
+            time.toISOString(),
+            reminderKey,
+            ...values,
+            ...taskValues
+          ),
+          db.prepare(
+            `INSERT OR IGNORE INTO chore_scheduled_reminders(preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids)
+            SELECT ?,?,r.id,?,?,?,(SELECT json_group_array(id) FROM (${dailyReminderTasksSql})) FROM chore_reminders r WHERE r.mutation_key=? AND r.source='scheduled' AND ${guard}`
+          ).bind(
+            preference.id,
+            preference.version,
+            slot.day,
+            slot.time,
+            slot.at,
+            ...taskValues,
+            reminderKey,
+            ...values
+          ),
+          notifyUser(
+            preference.user_id,
+            {
+              dormId: preference.dorm_id,
+              reminderKey,
+              createdAt: time.toISOString()
+            },
+            { db, env, guard, values }
+          )
+        ]);
+        reminders += Number(result[0]?.meta?.changes || 0);
+      }
+    }
+    if (reminders) env.PUSH_WAKE?.();
+    return { reminders, scanned: preferences.length };
+  };
+  const drain = () => {
+    if (stopped) return Promise.resolve({ reminders: 0, scanned: 0 });
+    if (!running)
+      running = run().finally(() => {
+        running = null;
+      });
+    return running;
+  };
+  const kick = () => {
+    void drain().catch(
+      () => console.error("\u5B9A\u65F6\u63D0\u9192\u6682\u65F6\u5904\u7406\u5931\u8D25\uFF0C\u5C06\u5728\u4E0B\u8F6E\u91CD\u8BD5")
+    );
+  };
+  if (autoStart) {
+    timer = setInterval(kick, intervalMs);
+    timer.unref();
+    kick();
+  }
+  return {
+    drain,
+    close: async () => {
+      stopped = true;
+      clearInterval(timer);
+      await running;
+    }
+  };
+}
+
 // ../scripts/push-runtime.mjs
 function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = null, now = () => /* @__PURE__ */ new Date() } = {}) {
   if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base))
@@ -7511,16 +8109,19 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = nul
     ).all(time, time);
     for (const { id } of jobs) {
       if (stopped) break;
-      const lease = (0, import_node_crypto.randomBytes)(16).toString("hex"), date = now(), until = new Date(date.getTime() + 12e4).toISOString();
+      const lease = (0, import_node_crypto2.randomBytes)(16).toString("hex"), date = now(), until = new Date(date.getTime() + 12e4).toISOString();
       const claimed = db.sqlite.prepare(
         "UPDATE chore_push_jobs SET status='sending',attempts=attempts+1,lease=?,lease_until=? WHERE id=? AND ((status='pending' AND next_attempt_at<=?) OR (status='sending' AND lease_until<?))"
       ).run(lease, until, id, date.toISOString(), date.toISOString());
       if (!claimed.changes) continue;
       const job = db.sqlite.prepare(
         `SELECT j.*,s.endpoint,s.p256dh,s.auth,s.provider,s.platform,s.is_active,s.revision,s.dorm_id AS device_dorm,s.user_id AS device_user,
-        r.sender_name_snapshot,r.task_name_snapshot,r.task_content_snapshot,r.target_member_id,r.dorm_id AS reminder_dorm,r.read_at,r.created_at AS reminder_created,t.status AS task_status,t.key AS task_key,t.assignee_id,c.enabled AS category_enabled,
+        r.sender_name_snapshot,r.task_name_snapshot,r.task_content_snapshot,r.source,r.target_member_id,r.dorm_id AS reminder_dorm,r.read_at,r.created_at AS reminder_created,t.status AS task_status,t.key AS task_key,t.assignee_id,c.enabled AS category_enabled,
+        e.day AS schedule_day,e.scheduled_at,e.task_ids,e.preference_version,p.version AS plan_version,p.enabled AS plan_enabled,
         m.is_active AS member_active,u.current_dorm_id,u.nickname AS recipient_name FROM chore_push_jobs j JOIN chore_push_subscriptions s ON s.id=j.subscription_id
         LEFT JOIN chore_reminders r ON r.id=j.reminder_id LEFT JOIN chore_tasks t ON t.id=r.task_id LEFT JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
+        LEFT JOIN chore_scheduled_reminders e ON e.reminder_id=r.id
+        LEFT JOIN chore_reminder_preferences p ON p.id=e.preference_id AND p.dorm_id=j.dorm_id AND p.user_id=j.user_id
         LEFT JOIN dorm_members m ON m.dorm_id=j.dorm_id AND m.user_id=j.user_id LEFT JOIN users u ON u.id=j.user_id WHERE j.id=? AND j.lease=?`
       ).get(id, lease);
       const finish = (status, http = null, next = null) => db.sqlite.prepare(
@@ -7529,15 +8130,31 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = nul
       const stale = !job || !job.is_active || job.revision !== job.subscription_revision || job.device_dorm !== job.dorm_id || job.device_user !== job.user_id || !job.member_active || job.current_dorm_id !== job.dorm_id || !(job.provider === "web" ? validPushEndpoint(job.endpoint) : job.provider === "jpush" && /^jpush:(android|harmony):[A-Za-z0-9_-]{8,256}$/.test(
         job.endpoint
       )) || date.getTime() - Date.parse(job.created_at) > 864e5 || job.attempts > 5;
-      const obsoleteReminder = job?.kind === "reminder" && (job.target_member_id !== job.user_id || job.reminder_dorm !== job.dorm_id || job.read_at || job.task_status !== "pending" || job.assignee_id !== job.user_id || !job.category_enabled);
+      const scheduled = job?.kind === "reminder" && job.source === "scheduled";
+      let taskIds = [];
+      if (scheduled) {
+        try {
+          const ids = JSON.parse(job.task_ids);
+          if (Array.isArray(ids)) taskIds = ids.filter(Number.isSafeInteger);
+        } catch {
+        }
+      }
+      const remaining = scheduled ? db.sqlite.prepare(dailyReminderTasksSql).all(
+        job.dorm_id,
+        job.user_id,
+        job.schedule_day || "",
+        job.schedule_day || ""
+      ).filter((task) => taskIds.includes(task.id)) : [];
+      const scheduleAge = scheduled ? date.getTime() - Date.parse(job.scheduled_at) : 0;
+      const obsoleteReminder = job?.kind === "reminder" && (job.target_member_id !== job.user_id || job.reminder_dorm !== job.dorm_id || job.read_at || (scheduled ? !job.plan_enabled || job.preference_version !== job.plan_version || !Number.isFinite(scheduleAge) || scheduleAge < 0 || scheduleAge >= SCHEDULE_CATCH_UP_MS || !remaining.length : job.task_status !== "pending" || job.assignee_id !== job.user_id || !job.category_enabled));
       if (stale || obsoleteReminder) {
         finish("cancelled");
         continue;
       }
       const route = job.kind === "reminder" && job.task_key === "water" ? "water" : "";
       const message = {
-        title: job.kind === "test" ? "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u901A\u77E5" : `${job.sender_name_snapshot} \u63D0\u9192\u4F60${job.task_name_snapshot}`,
-        body: job.kind === "test" ? `${job.recipient_name}\uFF0C\u8FD9\u662F\u4E00\u6761\u6D4B\u8BD5\u63D0\u9192\u3002\u793A\u4F8B\uFF1A\u5BA4\u53CB\u63D0\u9192\u4F60\u62AC\u6C34\uFF0C\u62AC\u5B8C\u540E\u8BB0\u5F97\u6253\u5361\u3002` : `\u5F85\u529E\uFF1A${job.task_name_snapshot}\u3002${String(job.task_content_snapshot || "").trim() || "\u5B8C\u6210\u540E\u8BB0\u5F97\u6253\u5361\u3002"}`.slice(
+        title: job.kind === "test" ? "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u901A\u77E5" : scheduled ? "\u8F6E\u5230 \xB7 \u503C\u65E5\u63D0\u9192" : `${job.sender_name_snapshot} \u63D0\u9192\u4F60${job.task_name_snapshot}`,
+        body: job.kind === "test" ? `${job.recipient_name}\uFF0C\u8FD9\u662F\u4E00\u6761\u6D4B\u8BD5\u63D0\u9192\u3002\u793A\u4F8B\uFF1A\u5BA4\u53CB\u63D0\u9192\u4F60\u62AC\u6C34\uFF0C\u62AC\u5B8C\u540E\u8BB0\u5F97\u6253\u5361\u3002` : scheduled ? `${remaining.map((task) => task.name).join("\u3001")}\u8FD8\u6CA1\u5B8C\u6210\uFF0C\u505A\u5B8C\u8BB0\u5F97\u6253\u5361\u3002` : `\u5F85\u529E\uFF1A${job.task_name_snapshot}\u3002${String(job.task_content_snapshot || "").trim() || "\u5B8C\u6210\u540E\u8BB0\u5F97\u6253\u5361\u3002"}`.slice(
           0,
           160
         ),
@@ -7565,7 +8182,10 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = nul
           },
           payload,
           {
-            TTL: 86400,
+            TTL: scheduled ? Math.max(
+              1,
+              Math.floor((SCHEDULE_CATCH_UP_MS - scheduleAge) / 1e3)
+            ) : 86400,
             urgency: "high",
             timeout: 1e4,
             contentEncoding: "aes128gcm"
@@ -7651,7 +8271,7 @@ async function createPushRuntime(db, directory, {
   const nativeSender = createNativeSender(native);
   const delivery = createPushDelivery(
     db,
-    (subscription, payload, options) => subscription.provider === "jpush" ? nativeSender(subscription, payload) : import_src.default.sendNotification(
+    (subscription, payload, options) => subscription.provider === "jpush" ? nativeSender(subscription, payload, options) : import_src.default.sendNotification(
       { endpoint: subscription.endpoint, keys: subscription.keys },
       payload,
       options
@@ -7677,7 +8297,8 @@ async function createPushRuntime(db, directory, {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   createPushDelivery,
-  createPushRuntime
+  createPushRuntime,
+  createReminderScheduler
 });
 /*! Bundled license information:
 
