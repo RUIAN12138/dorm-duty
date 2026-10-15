@@ -144,6 +144,13 @@ async function fit(page, label) {
   );
 }
 async function snapshot(page, name) {
+  await page.waitForFunction(
+    () =>
+      ![...document.querySelectorAll(".sheet-layer")].some((el) =>
+        ["opening", "closing"].includes(el.getAttribute("data-phase")),
+      ),
+  );
+  await page.waitForTimeout(100);
   await fit(page, name);
   await page.screenshot({
     path: path.join(evidence, `${name}.jpg`),
@@ -175,6 +182,13 @@ async function openMenu(page) {
   diagnosticPage = page;
   await page.getByTestId("open-tools").click();
   await page.locator(".elastic-sheet").waitFor();
+  assert.equal(
+    await page
+      .locator(".app-shell")
+      .evaluate((el) => getComputedStyle(el).transform),
+    "none",
+    "opening sheets does not shrink the underlying page",
+  );
 }
 async function closeMenu(page) {
   const menu = page.locator(".elastic-sheet");
@@ -208,6 +222,8 @@ async function closePresentedReminder(page) {
 }
 async function openTool(page, id) {
   await openMenu(page);
+  if (!(await page.getByTestId(id).count()))
+    await page.getByTestId("open-preferences").click();
   await page.getByTestId(id).click();
   const title = {
     "open-reminder": "提醒一位室友",
@@ -273,7 +289,7 @@ async function pane(page, key) {
   await openMenu(page);
   assert.equal(
     await page.getByTestId("open-reminder").count(),
-    key === "calendar" ? 0 : 1,
+    1,
     `reminder action visibility on ${key}`,
   );
   assert.equal(
@@ -399,7 +415,7 @@ async function pageMatrix(page, role) {
       await openMenu(page);
       assert.equal(
         await page.getByTestId("open-chore-settings").count(),
-        role === "creator" && key !== "calendar" ? 1 : 0,
+        role === "creator" ? 1 : 0,
         `${role} task settings visibility on ${key}`,
       );
       await closeMenu(page);
@@ -607,6 +623,7 @@ try {
   assert.equal(memberBoard.member.marker_id, "pixel-11");
   await api("/dorms/current", { token: memberToken, status: 401 });
   await openMenu(b.page);
+  await snapshot(b.page, "compact-menu-390");
   assert.equal(await b.page.getByTestId("open-chore-settings").count(), 0);
   await closeMenu(b.page);
   await openTool(a.page, "open-chore-settings");
@@ -631,6 +648,106 @@ try {
     "creator creates without password and selects a mark; second browser joins through invite and receives a scoped member identity",
     "creator footer links to dorm member management; ordinary member has no creator management link",
     "room entry and member/mark chooser hide the bottom navigation until a member is selected",
+  );
+  await openTool(a.page, "guest-change-dorm");
+  await a.page.getByRole("button", { name: "游客体验", exact: true }).click();
+  await a.page.locator('[data-testid^="guest-member-"]').first().click();
+  await pane(a.page, "duty");
+  await openTool(a.page, "guest-change-dorm");
+  await snapshot(a.page, "saved-dorms-390");
+  await a.page.getByTestId(`saved-dorm-${created.invite_code}`).click();
+  await pane(a.page, "duty");
+  assert.equal(
+    (await identity(a.page)).choice,
+    JSON.stringify({
+      invite_code: created.invite_code,
+      guest_mode: "dorm",
+      member_id: ownerId,
+    }),
+  );
+  checks.push(
+    "switching away and selecting saved dorm restores the same member without entering an invite or claiming again",
+  );
+  const secondRoom = await api("/guest/create", {
+    method: "POST",
+    status: 201,
+    data: {
+      name: "第二个已加入宿舍",
+      nickname: "另一位创建者",
+      members: ["其他室友"],
+    },
+  });
+  secrets.push(secondRoom.access_token);
+  const secondMember = secondRoom.dorm.members.find(
+    (m) => m.user_id !== secondRoom.member_id,
+  );
+  await openTool(b.page, "guest-change-dorm");
+  await b.page.getByTestId("guest-invite").fill(secondRoom.invite_code);
+  await b.page.getByTestId("guest-join-submit").click();
+  await b.page.getByTestId(`guest-member-${secondMember.user_id}`).click();
+  await b.page.getByTestId("marker-confirm").click();
+  await pane(b.page, "duty");
+  await b.page.reload();
+  await pane(b.page, "duty");
+  await openTool(b.page, "guest-change-dorm");
+  await b.page.getByTestId(`saved-dorm-${created.invite_code}`).click();
+  await pane(b.page, "duty");
+  assert.equal(
+    (await identity(b.page)).choice,
+    JSON.stringify({
+      invite_code: created.invite_code,
+      guest_mode: "dorm",
+      member_id: otherId,
+    }),
+  );
+  checks.push(
+    "ordinary member switches between two real dorms, reloads and returns with the original scoped identity without another invite",
+  );
+  await a.page.getByTestId("open-water-order").click();
+  await a.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
+  await snapshot(a.page, "independent-water-order-390");
+  await a.page.getByTestId(`order-down-water-${ownerId}`).click();
+  await a.page.getByTestId("water-order-save").click();
+  await a.page
+    .getByRole("dialog", { name: "抬水轮序", exact: true })
+    .waitFor({ state: "hidden" });
+  assert.equal(
+    (await board(ownerId, ownerToken)).water_task.assignee_id,
+    ownerId,
+  );
+  await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId(`order-up-water-${ownerId}`).click();
+  await a.page.getByTestId("water-order-save").click();
+  await a.page
+    .getByRole("dialog", { name: "抬水轮序", exact: true })
+    .waitFor({ state: "hidden" });
+  checks.push(
+    "independent header order control persists a reorder while keeping the current water assignee",
+  );
+  await snapshot(a.page, "duty-polished-390");
+  // During rapid task changes there must always be a readable outgoing/incoming title.
+  for (let i = 0; i < 12; i++) {
+    const name = ["地板", "洗手池", "厕所"][i % 3];
+    await a.page
+      .locator(".task-selector")
+      .getByRole("button", { name, exact: true })
+      .click();
+    assert(
+      await a.page
+        .locator(".task-title-stage")
+        .evaluate((el) =>
+          [...el.querySelectorAll("h2")].some(
+            (h) => Number(getComputedStyle(h).opacity) > 0.1,
+          ),
+        ),
+    );
+  }
+  await a.page
+    .locator(".task-selector")
+    .getByRole("button", { name: "地板", exact: true })
+    .click();
+  checks.push(
+    "rapid task-title switches keep at least one readable title instead of a serial exit/enter blank interval",
   );
   phase = "three_page_navigation";
   await pageMatrix(a.page, "creator");
@@ -681,9 +798,35 @@ try {
   );
   phase = "complete_categories_calendar";
   await complete(a.page, floor);
+  await snapshot(a.page, "undo-receipt-390");
+  await a.page.getByTestId(`undo-${floor.id}`).click();
+  await a.page.getByTestId(`complete-floor-${floor.id}`).waitFor();
+  assert.equal(
+    (await board(ownerId, ownerToken)).today_tasks.find(
+      (t) => t.id === floor.id,
+    ).status,
+    "pending",
+  );
+  await complete(a.page, floor);
+  checks.push(
+    "visible undo receipt restores a mistakenly completed chore and permits a correct re-completion",
+  );
   ownerBoard = await board(ownerId, ownerToken);
   await navigate(a.page, "water");
   await complete(a.page, ownerBoard.water_task);
+  const originalWater = ownerBoard.water_task;
+  await a.page.getByTestId(`undo-${originalWater.id}`).click();
+  await a.page.getByTestId(`complete-water-${originalWater.id}`).waitFor();
+  await complete(a.page, originalWater);
+  await a.page.getByRole("button", { name: "查看任务", exact: true }).click();
+  await a.page.locator(".sheet-layer.is-nonmodal").waitFor();
+  assert.equal(await a.page.locator(".sheet-scrim").count(), 0);
+  await a.page.getByTestId("nav-calendar").click();
+  await pane(a.page, "calendar");
+  await navigate(a.page, "water");
+  checks.push(
+    "water undo rewinds the turn; its nonmodal bottom details preserve interaction with the page",
+  );
   await b.page.reload();
   await pane(b.page, "duty");
   memberBoard = await board(otherId, memberToken);

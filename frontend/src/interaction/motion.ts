@@ -16,14 +16,14 @@ export const motionTokens = {
     restDelta: 0.001,
     restSpeed: 0.01,
   },
-  settle: { type: "spring" as const, stiffness: 480, damping: 38, mass: 0.8 },
+  settle: { type: "spring" as const, stiffness: 540, damping: 42, mass: 0.8 },
   layout: { type: "spring" as const, stiffness: 540, damping: 40, mass: 0.8 },
   enter: {
-    duration: 0.26,
+    duration: 0.24,
     ease: [0.32, 0.72, 0, 1] as [number, number, number, number],
   },
   exit: {
-    duration: 0.2,
+    duration: 0.18,
     ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
   },
 };

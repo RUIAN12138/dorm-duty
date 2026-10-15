@@ -7,6 +7,8 @@ import {
   savedChoreToken,
   saveChoreToken,
 } from "../api/chores";
+import JoinedDorms from "../components/JoinedDorms.vue";
+import { joinedDorms, rememberDorm, type JoinedDorm } from "../api/dormHistory";
 import ChoreBoard from "../components/ChoreBoard.vue";
 import MarkerPicker from "../components/MarkerPicker.vue";
 import MemberMark from "../components/MemberMark.vue";
@@ -22,6 +24,7 @@ import {
   type GuestCreation,
 } from "../api/guest";
 
+const savedDorms = ref(joinedDorms());
 const storageKey = "dorm-guest-view-v1";
 const route = useRoute(),
   router = useRouter(),
@@ -105,6 +108,31 @@ function storedChoice(): {
   }
 }
 function remember() {
+  if (
+    viewMode.value === "dorm" &&
+    dorm.value &&
+    member.value &&
+    choreToken.value
+  ) {
+    saveChoreToken(inviteCode.value, member.value.user_id, choreToken.value);
+    savedDorms.value = rememberDorm({
+      code: inviteCode.value,
+      name: dorm.value.name,
+      memberId: member.value.user_id,
+      nickname: member.value.nickname,
+      marker: member.value.marker_id || "pixel-01",
+      creator:
+        (session.dorm?.invite_code === inviteCode.value &&
+          session.dorm.is_admin &&
+          session.user?.id === member.value.user_id) ||
+        savedDorms.value.some(
+          (room) =>
+            room.code === inviteCode.value &&
+            room.memberId === member.value?.user_id &&
+            room.creator === true,
+        ),
+    });
+  }
   try {
     if (viewMode.value === "entry") {
       return;
@@ -430,6 +458,29 @@ async function switchDorm(useDefault = false) {
     path: route.path,
   });
 }
+async function returnToDorm(room: JoinedDorm) {
+  if (loading.value) return;
+  if (await loadDorm(room.code, room.memberId)) {
+    if (room.creator && choreToken.value) {
+      try {
+        const current = await choreRequest<{ id: number; is_admin: boolean }>(
+          "/dorms/current",
+          choreToken.value,
+        );
+        if (current?.id === dorm.value?.id && current.is_admin) {
+          sessionStorage.setItem("dorm-token", choreToken.value);
+          localStorage.setItem("dorm-owner-token", choreToken.value);
+          await session.refresh();
+        }
+      } catch {
+        /* Viewing still works; management remains server-authorized. */
+      }
+    }
+    changingDorm.value = false;
+    creatingRoom.value = false;
+    await router.replace({ path: route.path });
+  }
+}
 function visibleRefresh() {
   if (
     document.visibilityState === "visible" &&
@@ -563,7 +614,14 @@ onUnmounted(() => {
       class="guest-dorm-form"
       aria-labelledby="switch-title"
     >
-      <h1 id="switch-title">加入你的宿舍</h1>
+      <h1 id="switch-title">切换宿舍</h1>
+      <JoinedDorms
+        :rooms="savedDorms"
+        :disabled="loading"
+        :current="inviteCode"
+        @select="returnToDorm"
+      />
+      <h2 class="join-new-title">加入新宿舍</h2>
       <form @submit.prevent="switchDorm()">
         <label for="guest-invite">宿舍邀请码</label>
         <input
@@ -610,6 +668,11 @@ onUnmounted(() => {
         aria-labelledby="entry-title"
       >
         <h1 id="entry-title">先找到你的宿舍</h1>
+        <JoinedDorms
+          :rooms="savedDorms"
+          :disabled="loading"
+          @select="returnToDorm"
+        />
         <div class="guest-entry-actions">
           <button
             class="guest-primary"
@@ -776,6 +839,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.join-new-title {
+  margin: 0 0 18px;
+  font-size: 19px;
+  font-weight: 600;
+}
 .guest-page.has-chore-nav {
   padding-bottom: calc(104px + env(safe-area-inset-bottom));
 }

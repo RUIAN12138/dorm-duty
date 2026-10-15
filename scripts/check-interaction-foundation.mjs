@@ -45,13 +45,13 @@ const route=useRoute();const section=computed(()=>route.path==='/water'?'water':
 const view=ref('calendar'),open=ref(false),nested=ref(false),mode=ref<'bottom'|'shared'>('bottom'),origin=ref<DOMRect|null>(null),closed=ref(0),draft=ref('保留输入');
 const make=(n:number)=>Array.from({length:n},(_,i)=>({user_id:i+1,nickname:'室友'+(i+1),marker_id:'pixel-01',role:'member',rotation_order:i}));
 const members=ref(make(6)),order=ref([1,2,3,4,5,6]),disabled=ref(false),active=ref(true),mounted=ref(true);
-const confirmed=ref(0);
+const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);
 function show(event:MouseEvent){origin.value=(event.currentTarget as HTMLElement).getBoundingClientRect();open.value=true;}
 async function confirm(){try{await confirmInSheet({title:'确认操作',message:'确认后仍保留抽屉'});confirmed.value++;}catch{}}
-(window as any).qa={tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
+(window as any).qa={preview:()=>previewOpen.value=true,backgroundClicks:()=>backgroundClicks.value,tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
 </script>
-<template><main style="padding:24px;min-height:1600px"><h1>交互验证</h1><p data-testid="identity">室友一 · 身份保留</p><button data-testid="open" @click="show">打开面板</button><TabsRoot v-model="view"><Segments v-model="view" group-label="完成记录显示方式" :options="[{value:'calendar',label:'日历',testId:'segment-calendar'},{value:'list',label:'列表',testId:'segment-list'}]"/><TabsContent value="calendar">月历</TabsContent><TabsContent value="list">完成列表</TabsContent></TabsRoot>
-<Nav :section="section"/><Sheet v-model="open" title="排序设置" :motion="mode" :origin="origin" @closed="closed++"><label>内容<input data-testid="input" v-model="draft"/></label><Sort v-if="mounted" v-model="order" :members="members" :active="open && active" :disabled="disabled"/><button data-testid="nested" @click="nested=true">打开嵌套</button><button data-testid="confirm" @click="confirm">确认操作</button><Sheet v-model="nested" title="嵌套面板"><button data-testid="inner-button">内部操作</button></Sheet></Sheet></main></template>`,
+<template><main style="padding:24px;min-height:1600px"><h1>交互验证</h1><button data-testid="background-action" @click="backgroundClicks++">底层操作</button><p data-testid="identity">室友一 · 身份保留</p><button data-testid="open" @click="show">打开面板</button><TabsRoot v-model="view"><Segments v-model="view" group-label="完成记录显示方式" :options="[{value:'calendar',label:'日历',testId:'segment-calendar'},{value:'list',label:'列表',testId:'segment-list'}]"/><TabsContent value="calendar">月历</TabsContent><TabsContent value="list">完成列表</TabsContent></TabsRoot>
+<Nav :section="section"/><Sheet v-model="open" title="排序设置" :motion="mode" :origin="origin" @closed="closed++"><label>内容<input data-testid="input" v-model="draft"/></label><Sort v-if="mounted" v-model="order" :members="members" :active="open && active" :disabled="disabled"/><button data-testid="nested" @click="nested=true">打开嵌套</button><button data-testid="confirm" @click="confirm">确认操作</button><Sheet v-model="nested" title="嵌套面板"><button data-testid="inner-button">内部操作</button></Sheet></Sheet><Sheet v-model="previewOpen" title="任务说明" motion="bottom" :modal="false"><p>可以继续操作底层页面</p></Sheet></main></template>`,
   );
   const port = await reserve();
   service = spawn(
@@ -199,6 +199,32 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   const box = await page.locator(".elastic-sheet").boundingBox();
   assert(Math.abs(box.y + box.height - 844) < 2);
   checks.push("bottom sheet ends at viewport bottom");
+  eq(
+    await page
+      .locator(".sheet-layer")
+      .evaluate((el) => el.classList.contains("is-nonmodal")),
+    false,
+    "sheets remain modal by default",
+  );
+  const grip = await page.locator(".sheet-handle").boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 92, { steps: 8 });
+  await page.waitForTimeout(110);
+  await page.mouse.up();
+  await waitOpen();
+  eq(
+    await page
+      .locator(".elastic-sheet")
+      .evaluate(
+        (el) =>
+          Math.abs(new DOMMatrixReadOnly(getComputedStyle(el).transform).m42) <
+          1,
+      ),
+    true,
+    "short drawer pull springs fully back",
+  );
+
   await drag(1, 6);
   eq((await order()).at(-1), 1, "first member moves to last");
   await drag(1, 2);
@@ -450,6 +476,20 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   await page.evaluate(() => window.qa.mounted(true));
 
   await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await waitClosed();
+  await page.evaluate(() => window.qa.preview());
+  await waitOpen();
+  eq(
+    await page.locator(".sheet-scrim").count(),
+    0,
+    "nonmodal preview has no scrim",
+  );
+  await page.getByTestId("background-action").click();
+  eq(
+    await page.evaluate(() => window.qa.backgroundClicks()),
+    1,
+    "nonmodal preview permits background interaction",
+  );
   await waitClosed();
   await page.screenshot({ path: path.join(evidence, "rest.png") });
   eq(errors, [], "no browser runtime exceptions");

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
-import { animate, motion, useMotionValue } from "motion-v";
+import { animate } from "motion-v";
 import {
   DialogRoot,
   DialogPortal,
@@ -11,12 +11,16 @@ import {
 import { registerNativeBack } from "../interactions/nativeBack";
 import { motionAllowed, motionTokens } from "../interaction/motion";
 
-const props = defineProps<{
-  modelValue: boolean;
-  title: string;
-  origin?: DOMRect | null;
-  motion?: "shared" | "bottom";
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    modal?: boolean;
+    title: string;
+    origin?: DOMRect | null;
+    motion?: "shared" | "bottom";
+  }>(),
+  { modal: true },
+);
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   closed: [];
@@ -25,14 +29,15 @@ const present = ref(false);
 const phase = ref<"opening" | "open" | "closing" | "dragging">("opening");
 const panel = ref<HTMLElement>();
 const layer = ref<HTMLElement>();
-const x = useMotionValue(0),
-  y = useMotionValue(0);
-const scaleX = useMotionValue(1),
-  scaleY = useMotionValue(1);
-const opacity = useMotionValue(0),
-  scrimOpacity = useMotionValue(0);
-const values = { x, y, scaleX, scaleY, opacity, scrimOpacity };
-type Goal = Record<keyof typeof values, number>;
+const scrim = ref<HTMLElement>();
+type Goal = {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  opacity: number;
+  scrimOpacity: number;
+};
 const opened: Goal = {
   x: 0,
   y: 0,
@@ -41,6 +46,17 @@ const opened: Goal = {
   opacity: 1,
   scrimOpacity: 1,
 };
+let pose: Goal = { ...opened };
+const transform = (goal: Goal) =>
+  `translate3d(${goal.x}px,${goal.y}px,0) scale(${goal.scaleX},${goal.scaleY})`;
+function paint(goal: Goal) {
+  pose = { ...goal };
+  if (panel.value) {
+    panel.value.style.transform = transform(goal);
+    panel.value.style.opacity = String(goal.opacity);
+  }
+  if (scrim.value) scrim.value.style.opacity = String(goal.scrimOpacity);
+}
 let controls: { stop: () => void }[] = [];
 let generation = 0;
 let removeBack: (() => void) | undefined;
@@ -63,16 +79,38 @@ function setPanel(value: unknown) {
 }
 function stop() {
   generation++;
+  if (panel.value?.isConnected) {
+    const style = getComputedStyle(panel.value),
+      matrix = new DOMMatrixReadOnly(
+        style.transform === "none" ? undefined : style.transform,
+      );
+    pose = {
+      x: matrix.m41,
+      y: matrix.m42,
+      scaleX: matrix.a,
+      scaleY: matrix.d,
+      opacity: Number(style.opacity),
+      scrimOpacity: scrim.value
+        ? Number(getComputedStyle(scrim.value).opacity)
+        : 0,
+    };
+    paint(pose);
+  }
   controls.forEach((control) => control.stop());
   controls = [];
 }
 function hiddenGoal(): Goal {
   const el = panel.value;
   if (el && props.motion !== "bottom" && props.origin) {
-    const bounds = el.getBoundingClientRect();
     return {
-      x: props.origin.left - (bounds.left - x.get()),
-      y: props.origin.top - (bounds.top - y.get()),
+      x:
+        props.origin.left -
+        el.offsetLeft -
+        (layer.value?.getBoundingClientRect().left || 0),
+      y:
+        props.origin.top -
+        el.offsetTop -
+        (layer.value?.getBoundingClientRect().top || 0),
       scaleX: props.origin.width / Math.max(1, el.offsetWidth),
       scaleY: props.origin.height / Math.max(1, el.offsetHeight),
       opacity: 0,
@@ -81,7 +119,12 @@ function hiddenGoal(): Goal {
   }
   return {
     ...opened,
-    y: (el?.offsetHeight || window.innerHeight) + 24,
+    y: el
+      ? window.innerHeight -
+        el.offsetTop -
+        (layer.value?.getBoundingClientRect().top || 0) +
+        24
+      : window.innerHeight + 24,
     opacity: 1,
     scrimOpacity: 0,
   };
@@ -89,19 +132,31 @@ function hiddenGoal(): Goal {
 async function go(goal: Goal, kind: "enter" | "exit" | "settle") {
   stop();
   const id = generation;
-  if (!motionAllowed() || document.hidden) {
-    for (const key of Object.keys(values) as (keyof Goal)[])
-      values[key].jump(goal[key]);
+  if (!motionAllowed() || document.hidden || !panel.value) {
+    paint(goal);
   } else {
-    const running = (Object.keys(values) as (keyof Goal)[]).map((key) =>
+    // Full transform strings let Motion use native element animation. Dragging
+    // writes the same pose directly; no six per-frame Vue/MotionValue updates.
+    const transition =
+      kind === "settle" ? motionTokens.settle : motionTokens[kind];
+    const running = [
       animate(
-        values[key],
-        goal[key],
-        kind === "settle" ? motionTokens.settle : motionTokens[kind],
+        panel.value,
+        { transform: transform(goal), opacity: goal.opacity },
+        transition,
       ),
-    );
+    ];
+    if (scrim.value)
+      running.push(
+        animate(
+          scrim.value,
+          { opacity: goal.scrimOpacity },
+          motionTokens[kind === "exit" ? "exit" : "enter"],
+        ),
+      );
     controls = running;
     await Promise.all(running.map((control) => control.then(() => {})));
+    if (id === generation) paint(goal);
   }
   if (id !== generation) return;
   if (props.modelValue) phase.value = "open";
@@ -144,7 +199,7 @@ function down(event: PointerEvent) {
     id: event.pointerId,
     element,
     start: event.clientY,
-    baseline: y.get(),
+    baseline: pose.y,
     last: event.clientY,
     time: performance.now(),
     speed: 0,
@@ -160,13 +215,13 @@ function move(event: PointerEvent) {
   gesture.last = event.clientY;
   gesture.time = now;
   const delta = gesture.baseline + event.clientY - gesture.start;
-  y.set(delta < 0 ? delta / (1 + Math.abs(delta) / 64) : delta);
+  paint({ ...pose, y: delta < 0 ? delta / (1 + Math.abs(delta) / 64) : delta });
 }
 function up(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
   const speed = performance.now() - gesture.time > 80 ? 0 : gesture.speed;
   resetGesture();
-  if (!cancelled && (y.get() > 130 || (y.get() > 35 && speed > 0.6))) close();
+  if (!cancelled && (pose.y > 130 || (pose.y > 35 && speed > 0.6))) close();
   else {
     phase.value = "opening";
     void go(opened, "settle");
@@ -212,9 +267,7 @@ watch(
       await nextTick();
       if (!props.modelValue || !panel.value) return;
       if (fresh) {
-        const goal = hiddenGoal();
-        for (const key of Object.keys(values) as (keyof Goal)[])
-          values[key].jump(goal[key]);
+        paint(hiddenGoal());
       }
       void go(opened, "enter");
     } else if (present.value) {
@@ -230,11 +283,14 @@ onBeforeUnmount(() => {
   removeBack?.();
   media.removeEventListener("change", settleWhenInactive);
   document.removeEventListener("visibilitychange", settleWhenInactive);
-  Object.values(values).forEach((value) => value.destroy());
 });
 </script>
 <template>
-  <DialogRoot :open="present" @update:open="requested">
+  <DialogRoot
+    :open="present"
+    :modal="props.modal !== false"
+    @update:open="requested"
+  >
     <DialogPortal v-if="present">
       <DialogContent
         as-child
@@ -246,27 +302,21 @@ onBeforeUnmount(() => {
         <div
           ref="layer"
           class="sheet-layer"
+          :class="{ 'is-nonmodal': props.modal === false }"
           :data-motion="props.motion === 'bottom' ? 'bottom' : 'shared'"
           :data-phase="phase"
           tabindex="-1"
         >
-          <DialogOverlay as-child
-            ><motion.div
-              class="sheet-scrim"
-              :style="{ opacity: scrimOpacity }"
-              @click="close"
+          <DialogOverlay v-if="props.modal !== false" as-child
+            ><div ref="scrim" class="sheet-scrim" @click="close"
           /></DialogOverlay>
-          <motion.section
+          <section
             :ref="setPanel"
             class="elastic-sheet"
             :class="{ 'is-bottom-sheet': props.motion === 'bottom' }"
             :style="{
-              x,
-              y,
-              scaleX,
-              scaleY,
-              opacity,
               transformOrigin: 'top left',
+              willChange: phase === 'open' ? 'auto' : 'transform',
             }"
           >
             <div
@@ -295,9 +345,31 @@ onBeforeUnmount(() => {
               </button>
             </header>
             <div class="sheet-content"><slot /></div>
-          </motion.section>
+          </section>
         </div>
       </DialogContent>
     </DialogPortal>
   </DialogRoot>
 </template>
+
+<style scoped>
+.sheet-scrim {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: #0003;
+}
+.sheet-layer.is-nonmodal {
+  pointer-events: none;
+}
+.is-nonmodal :deep(.van-dialog),
+.is-nonmodal :deep(.van-overlay) {
+  pointer-events: auto;
+}
+.is-nonmodal > .elastic-sheet {
+  pointer-events: auto;
+  max-height: min(55dvh, 460px);
+  width: calc(100% - 24px);
+  margin-bottom: calc(74px + env(safe-area-inset-bottom));
+  border-radius: 24px;
+}
+</style>

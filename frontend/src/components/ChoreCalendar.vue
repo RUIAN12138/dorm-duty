@@ -12,8 +12,15 @@ const props = defineProps<{
   records: ChoreRecord[];
   members: ChoreMember[];
   loading?: boolean;
+  memberId?: number;
+  busy?: boolean;
+  undoError?: string;
 }>();
-const emit = defineEmits<{ change: [month: string]; closed: [] }>();
+const emit = defineEmits<{
+  change: [month: string];
+  closed: [];
+  undo: [id: number];
+}>();
 const selected = ref("");
 const view = ref<"calendar" | "list">("calendar");
 const viewOptions = [
@@ -260,6 +267,9 @@ watch(
           data-testid="calendar-day-details"
           aria-live="polite"
         >
+          <p v-if="undoError" class="chore-inline-error" role="alert">
+            {{ undoError }}
+          </p>
           <p v-if="!selectedRecords.length">暂无完成记录</p>
           <div
             v-for="record in selectedRecords"
@@ -273,7 +283,16 @@ watch(
               ><small>{{ record.name }}</small></span
             ><time :datetime="record.completed_at">{{
               time(record.completed_at)
-            }}</time>
+            }}</time
+            ><button
+              v-if="record.assignee_id === memberId"
+              class="record-undo"
+              :disabled="busy"
+              :data-testid="`calendar-undo-${record.id}`"
+              @click="emit('undo', record.id)"
+            >
+              撤销
+            </button>
           </div>
         </div>
       </ElasticSheet>
@@ -297,6 +316,17 @@ watch(
   </TabsRoot>
 </template>
 <style scoped>
+.record-undo {
+  flex-shrink: 0;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: #f4f4f4;
+  color: #444;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+}
 .chore-calendar {
   padding: 0;
 }
