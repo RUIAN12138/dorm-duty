@@ -2,7 +2,7 @@
 import { motion } from "motion-v";
 import { motionAllowed, motionTokens } from "../interaction/motion";
 import type { ChoreTask } from "../api/chores";
-const props = defineProps<{
+defineProps<{
   task: ChoreTask;
   busy: boolean;
   disabled: boolean;
@@ -11,94 +11,90 @@ const props = defineProps<{
 defineEmits<{ complete: [task: ChoreTask]; undo: [task: ChoreTask] }>();
 </script>
 <template>
-  <motion.div
+  <motion.button
     class="completion-surface"
     :class="{ 'is-done': task.status === 'completed' }"
-    layout
+    :data-testid="
+      task.status === 'completed'
+        ? `undo-${task.id}`
+        : `complete-${task.key}-${task.id}`
+    "
+    :aria-label="
+      task.status === 'completed'
+        ? `${task.key === 'water' ? '已抬水' : '已完成'}，再次点击撤销打卡`
+        : undefined
+    "
+    :aria-pressed="task.status === 'completed'"
+    :disabled="busy || disabled"
     :animate="{
-      backgroundColor: task.status === 'completed' ? '#f4f4f4' : '#111111',
-      borderRadius: task.status === 'completed' ? 23 : 18,
+      backgroundColor: task.status === 'completed' ? '#efefef' : '#111111',
+      color: task.status === 'completed' ? '#111111' : '#ffffff',
+      borderRadius: task.status === 'completed' ? 24 : 20,
     }"
+    :while-press="motionAllowed() ? { scaleX: 1.025, scaleY: 0.94 } : {}"
     :transition="
       motionAllowed()
-        ? { ...motionTokens.layout, backgroundColor: { duration: 0.16 } }
+        ? {
+            ...motionTokens.layout,
+            backgroundColor: { duration: 0.16 },
+            color: { duration: 0.16 },
+          }
         : { duration: 0 }
     "
+    @click="
+      task.status === 'completed'
+        ? $emit('undo', task)
+        : $emit('complete', task)
+    "
   >
-    <div v-if="task.status === 'completed'" class="completion-receipt">
-      <van-icon name="passed" aria-hidden="true" /><span>已完成</span
-      ><button
-        :data-testid="`undo-${task.id}`"
-        :disabled="busy || disabled"
-        @click="$emit('undo', task)"
-      >
-        {{ busy ? "正在撤销…" : "撤销" }}
-      </button>
-    </div>
-    <motion.button
-      v-else
-      class="chore-complete-button"
-      :data-testid="`complete-${task.key}-${task.id}`"
-      :disabled="busy || disabled"
-      :while-press="motionAllowed() ? { scale: 0.97 } : {}"
-      @click="$emit('complete', task)"
-      >{{
-        busy ? "正在记录…" : task.key === "water" ? "我已抬水" : "我已完成"
-      }}</motion.button
-    >
-  </motion.div>
+    <van-icon
+      v-if="task.status === 'completed'"
+      name="success"
+      aria-hidden="true"
+    />
+    <span>{{
+      busy
+        ? "正在处理…"
+        : task.status === "completed"
+          ? task.key === "water"
+            ? "已抬水"
+            : "已完成"
+          : task.key === "water"
+            ? "我已抬水"
+            : "我已完成"
+    }}</span>
+  </motion.button>
 </template>
 <style scoped>
 .completion-surface {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   width: min(100%, 300px);
-  border-radius: 18px;
-  overflow: hidden;
-  background: #111;
-}
-.completion-surface.is-done {
-  background: #f4f4f4;
-  border-radius: 23px;
-}
-.chore-complete-button {
-  width: 100%;
-  min-height: 56px;
+  min-height: 60px;
+  padding: 15px 24px;
   border: 0;
+  border-radius: 20px;
   background: #111;
   color: #fff;
+  font: inherit;
   font-size: 20px;
   font-weight: 600;
-  padding: 14px 20px;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-button:disabled {
+.completion-surface.is-done {
+  background: #efefef;
+  color: #111;
+}
+.completion-surface:disabled {
   opacity: 0.5;
   cursor: default;
 }
-.completion-receipt {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 64px;
-  padding: 9px 12px 9px 20px;
-  color: #111;
-  font-size: 18px;
-}
-.completion-receipt > .van-icon {
-  font-size: 23px;
-}
-.completion-receipt > span {
-  flex: 1;
-  text-align: left;
-}
-.completion-receipt button {
-  font: inherit;
-  font-size: 16px;
-  min-height: 44px;
-  padding: 8px 13px;
-  border: 0;
-  border-radius: 16px;
-  background: #fff;
-  color: #333;
-  cursor: pointer;
+.completion-surface:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 4px;
 }
 </style>

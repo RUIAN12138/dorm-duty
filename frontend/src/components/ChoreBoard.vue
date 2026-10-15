@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { showToast } from "vant";
+import { showToast as showVantToast } from "vant";
+function showToast(message: string) {
+  showVantToast({
+    message,
+    position: "top",
+    className: "chore-notice",
+    duration: 1600,
+  });
+}
 import { useRouter } from "vue-router";
 import { ApiError } from "../api";
 import { completeChore } from "../api/completion";
@@ -12,7 +20,10 @@ import {
   type ChoreReminder,
   type ChoreCompletion,
   type ChoreTask,
+  type ChoreCategory,
 } from "../api/chores";
+import HintPopover from "./HintPopover.vue";
+import SortableMembers from "./SortableMembers.vue";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
 import CompletionAction from "./CompletionAction.vue";
@@ -255,6 +266,53 @@ const activeRound = computed(
       (round) => round.key === activeDutyTask.value?.key,
     ) || null,
 );
+const roundOrder = ref<number[]>([]),
+  roundSaving = ref(false),
+  roundError = ref("");
+let roundVersion = 0,
+  roundCategory: ChoreCategory | undefined;
+watch(roundOpen, (open) => {
+  if (!open || !board.value || !activeRound.value) return;
+  const category = board.value.categories.find(
+    (c) => c.key === activeRound.value?.key,
+  );
+  if (!category) return;
+  roundCategory = JSON.parse(JSON.stringify(category));
+  roundOrder.value = [...category.rotation_order];
+  roundVersion = board.value.version;
+  roundError.value = "";
+});
+async function saveRoundOrder() {
+  if (
+    roundSaving.value ||
+    !roundCategory ||
+    !board.value?.is_creator ||
+    props.demo
+  )
+    return;
+  roundSaving.value = true;
+  roundError.value = "";
+  try {
+    await choreRequest("/chores/settings", props.token, {
+      method: "PATCH",
+      body: JSON.stringify({
+        version: roundVersion,
+        categories: [{ ...roundCategory, rotation_order: roundOrder.value }],
+      }),
+    });
+    if (!alive) return;
+    roundOpen.value = false;
+    await load();
+  } catch (e) {
+    if (alive)
+      roundError.value =
+        e instanceof ApiError && e.status === 409
+          ? "排列已被更新，请关闭后重新打开再调整。"
+          : (e as Error).message;
+  } finally {
+    if (alive) roundSaving.value = false;
+  }
+}
 const roundProgressCircumference = 2 * Math.PI * 50;
 const roundAnimatedProgress = ref(0);
 const roundAnimatedCompleted = ref(0);
@@ -345,7 +403,7 @@ const nudgeCaption = computed(() => {
     if (nudgeSentAt.value)
       return waterNudgeTime(nudgeSentAt.value, new Date(nudgeNow.value));
   }
-  return status || "点名字，催他抬水";
+  return status || "";
 });
 let nudgeController: AbortController | null = null;
 watch(
@@ -594,11 +652,6 @@ async function complete(task: ChoreTask) {
       (receipt) => {
         if (!alive) return;
         acceptCompletion(receipt);
-        showToast(
-          task.key === "water"
-            ? "抬水已记录，轮到下一位了。"
-            : "值日已完成，标记已留在日历上。",
-        );
       },
       () => (alive ? load() : Promise.resolve(false)),
     );
@@ -647,7 +700,6 @@ async function undo(id: number) {
     else selectedTaskId.value = id;
     board.value.version = receipt.version;
     completionSyncPending.value = true;
-    showToast("已撤销打卡");
     await load();
   } catch (e) {
     if (alive) actionError.value = (e as Error).message;
@@ -1030,17 +1082,14 @@ onUnmounted(() => {
                   @complete="complete"
                   @undo="undo($event.id)"
                 />
-                <button
+                <CompletionAction
                   v-if="recentUndo && recentUndo.id !== activeDutyTask.id"
-                  class="undo-last"
-                  :disabled="!!busy || completionSyncPending"
-                  :data-testid="`undo-${recentUndo.id}`"
-                  @click="undo(recentUndo.id)"
-                >
-                  <van-icon name="revoke" aria-hidden="true" /> 撤销刚才的{{
-                    recentUndo.name
-                  }}打卡
-                </button>
+                  :task="recentUndo"
+                  :busy="!!busy"
+                  :disabled="completionSyncPending"
+                  :demo="demo"
+                  @undo="undo($event.id)"
+                />
                 <button
                   v-if="activeRound"
                   class="round-progress"
@@ -1132,16 +1181,14 @@ onUnmounted(() => {
                   <p v-else class="hero-date">
                     {{ dateText(water.duty_date) }} 开始
                   </p>
-                  <button
+                  <CompletionAction
                     v-if="recentUndo"
-                    class="undo-last"
-                    :disabled="!!busy || completionSyncPending"
-                    :data-testid="`undo-${recentUndo.id}`"
-                    @click="undo(recentUndo.id)"
-                  >
-                    <van-icon name="revoke" aria-hidden="true" />
-                    撤销刚才的抬水打卡
-                  </button>
+                    :task="recentUndo"
+                    :busy="!!busy"
+                    :disabled="completionSyncPending"
+                    :demo="demo"
+                    @undo="undo($event.id)"
+                  />
                 </section>
               </template>
               <div v-else class="water-empty" data-testid="water-empty">
@@ -1347,11 +1394,44 @@ onUnmounted(() => {
               <span>人已完成</span>
             </div>
           </div>
-          <p class="round-summary">
-            已完成 {{ activeRound.completed }}/{{ activeRound.total }} · 还差
-            {{ Math.max(0, activeRound.total - activeRound.completed) }} 人
-          </p>
+          <div class="round-summary-line">
+            <p class="round-summary">
+              已完成 {{ activeRound.completed }}/{{ activeRound.total }} · 还差
+              {{ Math.max(0, activeRound.total - activeRound.completed) }} 人
+            </p>
+            <HintPopover
+              v-if="board.is_creator && !demo"
+              title="调整排列"
+              text="按住室友拖动，松手后点保存排列。自由轮次仍可随时打卡，排列不会改变已有完成记录。"
+            />
+          </div>
+          <template v-if="board.is_creator && !demo">
+            <SortableMembers
+              v-model="roundOrder"
+              :members="activeRound.members"
+              :active="roundOpen"
+              :disabled="roundSaving"
+              :category-key="activeRound.key"
+              :completed-ids="
+                activeRound.members
+                  .filter((m) => m.completed)
+                  .map((m) => m.user_id)
+              "
+            />
+            <p v-if="roundError" class="chore-inline-error" role="alert">
+              {{ roundError }}
+            </p>
+            <button
+              class="guest-primary round-save"
+              :disabled="roundSaving"
+              data-testid="round-order-save"
+              @click="saveRoundOrder"
+            >
+              {{ roundSaving ? "正在保存…" : "保存排列" }}
+            </button>
+          </template>
           <div
+            v-else
             v-for="person in activeRound.members"
             :key="person.user_id"
             class="round-member"
@@ -1611,23 +1691,6 @@ onUnmounted(() => {
 }
 .menu-section + .menu-section {
   margin-top: 12px;
-}
-.undo-last {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  color: #666;
-  font: inherit;
-  font-size: 14px;
-  padding: 8px 12px;
-  border-radius: 14px;
-}
-.undo-last:active {
-  background: #f3f3f3;
 }
 .water-title-stage {
   display: grid;
@@ -2308,5 +2371,104 @@ onUnmounted(() => {
     transform: scale(0.97);
     box-shadow: inset 0 2px 5px #0005;
   }
+}
+</style>
+
+<style scoped>
+.water-title-stage {
+  width: min(100%, 300px);
+}
+.water-title-stage h2 {
+  width: 100%;
+}
+.water-nudge-actions {
+  gap: 8px;
+}
+.water-nudge-actions .hero-date {
+  min-height: 24px;
+  font-size: 16px;
+  color: #777;
+}
+
+.water-remind:active,
+.round-progress:active {
+  transform: scaleX(1.02) scaleY(0.94);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .water-remind,
+  .round-progress {
+    transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+@media (max-height: 730px) {
+  .water-pane {
+    gap: 18px;
+    padding: 8px 0 24px;
+  }
+  .water-pane .focus-hero {
+    gap: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .water-remind:active,
+  .round-progress:active {
+    transform: none;
+  }
+}
+</style>
+
+<style>
+.chore-notice.van-toast {
+  top: calc(env(safe-area-inset-top) + 78px);
+  width: max-content;
+  max-width: calc(100vw - 40px);
+  min-height: 44px;
+  padding: 12px 18px;
+  border: 1px solid #e8e8e8;
+  border-radius: 18px;
+  color: #222;
+  background: #fff;
+  box-shadow: 0 8px 28px #0000000c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+</style>
+<style scoped>
+.round-save {
+  margin-top: 18px;
+}
+.round-save:active,
+.task-selector button:active {
+  transform: scaleX(1.02) scaleY(0.94);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .round-save {
+    transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .round-save:active,
+  .task-selector button:active {
+    transform: none;
+  }
+}
+</style>
+
+<style scoped>
+.round-members :deep(.sort-hint) {
+  display: none;
+}
+</style>
+
+<style scoped>
+.round-summary-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.round-summary-line .round-summary {
+  margin: 0;
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from "vue";
+import { motionAllowed } from "../interaction/motion";
 defineProps<{ name: string }>();
 const emit = defineEmits<{ tap: [] }>();
 const button = ref<HTMLButtonElement | null>(null);
@@ -10,7 +11,7 @@ function tap(event: MouseEvent) {
   const target = button.value;
   if (!target) return;
   emit("tap");
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!event.detail || !motionAllowed()) return;
   const bounds = target.getBoundingClientRect();
   const x = event.detail
     ? Math.min(bounds.width - 12, Math.max(12, event.clientX - bounds.left))
@@ -27,8 +28,8 @@ function tap(event: MouseEvent) {
   bounce = target.animate(
     [
       { transform: current === "none" ? "scale(1)" : current },
-      { transform: "scale(.94)", offset: 0.18 },
-      { transform: "scale(1.025)", offset: 0.58 },
+      { transform: "scaleX(1.025) scaleY(.94)", offset: 0.18 },
+      { transform: "scaleX(.995) scaleY(1.015)", offset: 0.58 },
       { transform: "scale(1)" },
     ],
     { duration: 260, easing: "cubic-bezier(.22,1,.36,1)" },
@@ -83,7 +84,7 @@ onUnmounted(() => bounce?.cancel());
   transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .nudge-name:active {
-  transform: scale(0.96);
+  transform: scaleX(1.02) scaleY(0.94);
 }
 .nudge-name:focus-visible {
   outline: 2px solid #111;

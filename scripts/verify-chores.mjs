@@ -495,6 +495,7 @@ async function join(page, code, userId, mark) {
   await pane(page, "duty");
   return result.access_token;
 }
+let checkedCompletionPress = false;
 async function complete(page, task) {
   const card = page.getByTestId(`chore-task-${task.key}-${task.id}`);
   if (!(await card.count()) && task.key !== "water") {
@@ -514,7 +515,31 @@ async function complete(page, task) {
       (value) => ({ value }),
       (error) => ({ error }),
     );
-  await page.getByTestId(`complete-${task.key}-${task.id}`).click();
+  const completeButton = page.getByTestId(`complete-${task.key}-${task.id}`);
+  if (!checkedCompletionPress) {
+    await page.waitForFunction((id) => {
+      const b = document.querySelector(`[data-testid="complete-${id}"]`);
+      return b && !b.disabled;
+    }, `${task.key}-${task.id}`);
+    await completeButton.scrollIntoViewIfNeeded();
+    const before = await completeButton.boundingBox();
+    await page.mouse.move(
+      before.x + before.width / 2,
+      before.y + before.height / 2,
+    );
+    await page.mouse.down();
+    await page.waitForTimeout(120);
+    const pressed = await completeButton.boundingBox();
+    assert(
+      pressed.height < before.height - 1 && pressed.width > before.width + 0.5,
+      "completion button compresses vertically and gently expands horizontally while held",
+    );
+    await page.mouse.up();
+    checkedCompletionPress = true;
+    checks.push(
+      "completion button has real press deformation and returns on release",
+    );
+  } else await completeButton.click();
   const result = await response;
   if (result.error) throw result.error;
   const actual = result.value;
@@ -570,6 +595,31 @@ try {
     }
     await noNavigation(entry.page);
     await snapshot(entry.page, `entry-${width}`);
+    await entry.page.getByTestId("guest-join-dorm").click();
+    await entry.page.getByTestId("guest-invite").waitFor();
+    const inviteBounds = await entry.page
+      .getByTestId("guest-invite")
+      .boundingBox();
+    assert(
+      inviteBounds.y > 844 * 0.25 &&
+        inviteBounds.y + inviteBounds.height < 844 * 0.72,
+      "invite input stays around visual center",
+    );
+    await snapshot(entry.page, `join-centered-${width}`);
+    await entry.page
+      .getByRole("button", { name: "邀请码帮助", exact: true })
+      .click();
+    await entry.page
+      .getByRole("dialog", { name: "邀请码帮助", exact: true })
+      .waitFor();
+    await snapshot(entry.page, `invite-help-${width}`);
+    await entry.page
+      .getByRole("button", { name: "关闭提示", exact: true })
+      .click();
+    await entry.page
+      .getByRole("dialog", { name: "邀请码帮助", exact: true })
+      .waitFor({ state: "hidden" });
+    await noNavigation(entry.page);
     await entry.context.close();
   }
   checks.push(
@@ -724,6 +774,40 @@ try {
   checks.push(
     "independent header order control persists a reorder while keeping the current water assignee",
   );
+  await a.page.getByTestId("round-progress").click();
+  await a.page.getByTestId("round-members").waitFor();
+  await a.page.getByRole("button", { name: "调整排列", exact: true }).click();
+  await a.page.getByRole("dialog", { name: "调整排列", exact: true }).waitFor();
+  await a.page.getByRole("button", { name: "关闭提示", exact: true }).click();
+  await a.page
+    .getByRole("dialog", { name: "调整排列", exact: true })
+    .waitFor({ state: "hidden" });
+  assert.equal(await a.page.getByTestId("round-members").isVisible(), true);
+  const initialRound = (await board(ownerId, ownerToken)).rounds.find(
+    (r) => r.key === "floor",
+  );
+  await a.page.getByTestId(`order-down-floor-${ownerId}`).click();
+  await a.page.waitForTimeout(600);
+  await snapshot(a.page, "round-order-390");
+  await a.page.getByTestId("round-order-save").click();
+  await a.page.getByTestId("round-members").waitFor({ state: "hidden" });
+  const reorderedRound = (await board(ownerId, ownerToken)).rounds.find(
+    (r) => r.key === "floor",
+  );
+  assert.notDeepEqual(
+    reorderedRound.members.map((m) => m.user_id),
+    initialRound.members.map((m) => m.user_id),
+  );
+  assert.equal(reorderedRound.sequence, initialRound.sequence);
+  assert.equal(reorderedRound.completed, initialRound.completed);
+  assert.deepEqual(
+    (await board(otherId, memberToken)).rounds.find((r) => r.key === "floor")
+      .members,
+    reorderedRound.members,
+  );
+  checks.push(
+    "creator reorders roommates in the round panel; member sees the same order and completed counts/round number stay unchanged",
+  );
   await snapshot(a.page, "duty-polished-390");
   // During rapid task changes there must always be a readable outgoing/incoming title.
   for (let i = 0; i < 12; i++) {
@@ -798,6 +882,24 @@ try {
   );
   phase = "complete_categories_calendar";
   await complete(a.page, floor);
+  await a.page.waitForFunction((id) => {
+    const button = document.querySelector(`[data-testid="undo-${id}"]`);
+    return button && !button.disabled;
+  }, floor.id);
+  assert.equal(
+    await a.page.getByTestId(`undo-${floor.id}`).innerText(),
+    "已完成",
+  );
+  assert.equal(
+    await a.page.getByRole("button", { name: "撤销", exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await a.page
+      .getByText("值日已完成，标记已留在日历上。", { exact: true })
+      .count(),
+    0,
+  );
   await snapshot(a.page, "undo-receipt-390");
   await a.page.getByTestId(`undo-${floor.id}`).click();
   await a.page.getByTestId(`complete-floor-${floor.id}`).waitFor();
@@ -809,12 +911,21 @@ try {
   );
   await complete(a.page, floor);
   checks.push(
-    "visible undo receipt restores a mistakenly completed chore and permits a correct re-completion",
+    "tapping the completed button itself restores a mistaken check-in without a separate undo control or success toast",
   );
   ownerBoard = await board(ownerId, ownerToken);
   await navigate(a.page, "water");
   await complete(a.page, ownerBoard.water_task);
   const originalWater = ownerBoard.water_task;
+  await a.page.waitForFunction((id) => {
+    const button = document.querySelector(`[data-testid="undo-${id}"]`);
+    return button && !button.disabled;
+  }, originalWater.id);
+  assert.equal(
+    await a.page.getByTestId(`undo-${originalWater.id}`).innerText(),
+    "已抬水",
+  );
+  await snapshot(a.page, "water-nudge-focus-390");
   await a.page.getByTestId(`undo-${originalWater.id}`).click();
   await a.page.getByTestId(`complete-water-${originalWater.id}`).waitFor();
   await complete(a.page, originalWater);
@@ -850,6 +961,34 @@ try {
   assert.equal(await day.locator(".member-mark").count(), 2);
   assert.match(await details.textContent(), /创建者/);
   assert.match(await details.textContent(), /室友甲/);
+  await a.page.getByTestId(`calendar-undo-${floor.id}`).click();
+  await a.page.waitForFunction(
+    () =>
+      document.querySelectorAll(".calendar-details .calendar-record").length ===
+      4,
+  );
+  assert.equal(
+    (await board(ownerId, ownerToken)).calendar.some((t) => t.id === floor.id),
+    false,
+  );
+  await a.page
+    .getByRole("dialog")
+    .getByRole("button", { name: "关闭详情", exact: true })
+    .click();
+  await details.waitFor({ state: "hidden" });
+  await navigate(a.page, "duty");
+  await complete(a.page, floor);
+  await navigate(a.page, "calendar");
+  await day.click();
+  await a.page.waitForFunction(
+    () =>
+      document.querySelectorAll(".calendar-details .calendar-record").length ===
+      5,
+  );
+  checks.push(
+    "clicking the own completed calendar row restores that task without a separate undo button; completing again restores the calendar",
+  );
+  ownerBoard = await board(ownerId, ownerToken);
   await snapshot(a.page, "calendar-completed-390");
   for (const width of [320, 430]) {
     await a.page.setViewportSize({ width, height: 844 });
@@ -1020,7 +1159,9 @@ try {
       const navigation = await a.page
         .getByTestId("chore-bottom-nav")
         .boundingBox();
-      for (const record of await a.page.locator(".calendar-list li").all()) {
+      for (const record of await a.page
+        .locator(".calendar-list .record-row")
+        .all()) {
         const bounds = await record.boundingBox();
         assert(
           bounds && bounds.y >= 0 && bounds.y + bounds.height <= navigation.y,

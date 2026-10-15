@@ -764,13 +764,19 @@ async function board(request, db, env, now, url) {
       total: members.length,
       completed: current.active.filter((row) => row.status === "completed")
         .length,
-      members: members.map((member) => ({
-        ...member,
-        completed: current.active.some(
-          (row) =>
-            row.assignee_id === member.user_id && row.status === "completed",
-        ),
-      })),
+      members: [...members]
+        .sort(
+          (a, b) =>
+            category.rotation_order.indexOf(a.user_id) -
+            category.rotation_order.indexOf(b.user_id),
+        )
+        .map((member) => ({
+          ...member,
+          completed: current.active.some(
+            (row) =>
+              row.assignee_id === member.user_id && row.status === "completed",
+          ),
+        })),
     });
   }
   const member = {

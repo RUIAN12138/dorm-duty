@@ -3,12 +3,17 @@ import { computed, ref, watch } from "vue";
 import { Reorder } from "motion-v";
 import type { ChoreMember } from "../api/chores";
 import SortableMemberRow from "./SortableMemberRow.vue";
-const props = defineProps<{
-  modelValue: number[];
-  members: ChoreMember[];
-  active: boolean;
-  disabled?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: number[];
+    members: ChoreMember[];
+    active: boolean;
+    disabled?: boolean;
+    categoryKey?: string;
+    completedIds?: number[];
+  }>(),
+  { categoryKey: "water" },
+);
 const emit = defineEmits<{ "update:modelValue": [order: number[]] }>();
 const order = ref([...props.modelValue]);
 const dragging = ref<number | null>(null);
@@ -113,7 +118,7 @@ watch(
       axis="y"
       :values="order"
       @update:values="preview"
-      aria-label="抬水轮换顺序"
+      :aria-label="categoryKey === 'water' ? '抬水轮换顺序' : '值日成员排列'"
       class="sort-list"
       :layout-scroll="true"
     >
@@ -121,6 +126,8 @@ watch(
         v-for="(id, index) in order"
         :key="id"
         :member="person(id)"
+        :category-key="categoryKey"
+        :completed="completedIds ? completedIds.includes(id) : undefined"
         :index="index"
         :count="order.length"
         :active="active"

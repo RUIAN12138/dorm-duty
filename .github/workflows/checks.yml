@@ -39,6 +39,7 @@ jobs:
           node site/scripts/check-cloud-backend.mjs
           node site/scripts/check-chores.mjs
           node site/scripts/check-rounds.mjs
+          node site/scripts/check-round-order.mjs
           node site/scripts/check-member-push.mjs
           node site/scripts/check-native-push.mjs
           node site/scripts/check-water-nudge.mjs
