@@ -2,7 +2,15 @@
 
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
-## 最新发布（2026-10-15，v18）
+## 最新发布（2026-10-15，v20）
+
+正式版本为 `20261015-interaction-foundation-v20`。本轮升级 Motion / Reka 交互基础，保持原黑白大字 UI。Worker SHA-256：`03220355316151b9e3088bfea77beabb0f216fb38a75a40fa5269bf5a2047d6f`。
+
+发布前在线备份 `/opt/dorm-duty/backups/dorm-20261015T080537Z.sqlite` 并校验完整性与外键。原子切换后服务健康正常，44 条既有完成记录逐条摘要一致；未更改数据库结构及通知凭据。旧目录 `20261015-mobile-motion-v19` 保留用于回退。
+
+公网全部 JS / CSS（含新的共享模块）、首页 / 两页路由、Manifest 与 SW 共 27 个资源逐字节一致；独立验收宿舍 API 8 组 / 337 项通过。本地 37 项移动视口组件检查及两身份业务流程通过，覆盖慢响应和版本冲突保留草稿。证据：`docs/evidence/interaction-foundation/`、`docs/evidence/ui-focus/regression/`、`docs/evidence/server/2026-10-15T08-06-05-616Z_mv998do0_809af00e/api.json`。实体三端触摸与帧率仍需单独验收。
+
+## 历史发布（2026-10-15，v18）
 
 正式版本为 `20261015-washbasin-web-v18`，对应 PR #13。Worker SHA-256：`49a271bfdd83678bbfa526abb276a78658f4a044f4eed74c68b42affd6a644f0`。洗手池独立轮次、创建者自定义、定时提醒与日历订阅已加入；抬水轮序拖动、三页标题滑动和页面动效同时上线。修复自由轮次改按日排班后首页重复显示旧完成任务的问题。
 
@@ -40,7 +48,7 @@
 
 ## 发布与回滚边界
 
-业务文件：`/opt/dorm-duty/releases/20261015-washbasin-web-v18`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
+业务文件：`/opt/dorm-duty/releases/20261015-interaction-foundation-v20`，`/opt/dorm-duty/current` 指向该版本。持久化数据库：`/var/lib/dorm-duty/dorm.sqlite`，不会随源码更新重建。
 
 IP 虚拟主机配置：`deploy/nginx-ip.conf`，安装到 `/opt/dorm-duty/nginx-ip.conf`。首次证书验证先使用 `deploy/nginx-ip-acme.conf`，仅开放 ACME 验证文件，其余 IP HTTP 请求返回 503。
 

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
+import { motion } from "motion-v";
+import { TabsList, TabsTrigger } from "reka-ui";
+import { useSelectionMotion } from "../interaction/motion";
 
 type SegmentOption = {
   value: string;
@@ -22,27 +25,20 @@ const selectedIndex = computed(() => {
 });
 const previewIndex = ref<number | null>(null);
 const dragging = ref(false);
-const stretch = ref(1);
-const origin = ref("right");
-const progress = computed(
-  () => previewIndex.value ?? selectedIndex.value,
+const selection = useSelectionMotion(
+  selectedIndex.value,
+  () => props.options.length,
+  4,
 );
-const indicatorStyle = computed(() => ({
-  "--segment-progress": progress.value,
-  "--segment-stretch": stretch.value,
-  "--segment-origin": origin.value,
-  "--segment-count": props.options.length,
-}));
 let pointerId: number | null = null;
 let startX = 0;
 let startY = 0;
-let lastX = 0;
 let suppressClickUntil = 0;
 
 function down(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || pointerId !== null) return;
   pointerId = event.pointerId;
-  startX = lastX = event.clientX;
+  startX = event.clientX;
   startY = event.clientY;
   window.addEventListener("pointermove", move, { passive: false });
   window.addEventListener("pointerup", up);
@@ -64,33 +60,40 @@ function move(event: PointerEvent) {
   event.preventDefault();
   const rect = track.value?.getBoundingClientRect();
   if (!rect || props.options.length < 2) return;
-  const fraction = Math.max(
+  const cell =
+    (rect.width - 8 - (props.options.length - 1) * 4) / props.options.length;
+  previewIndex.value = Math.max(
     0,
-    Math.min(1, (event.clientX - rect.left - 4) / Math.max(1, rect.width - 8)),
+    Math.min(
+      props.options.length - 1,
+      (event.clientX - rect.left - 4 - cell / 2) / (cell + 4),
+    ),
   );
-  previewIndex.value = fraction * (props.options.length - 1);
-  stretch.value = 1 + Math.min(0.18, Math.abs(event.clientX - lastX) * 0.012);
-  origin.value = event.clientX >= lastX ? "right" : "left";
-  lastX = event.clientX;
+  selection.track(previewIndex.value);
 }
 function up(event: PointerEvent) {
   if (event.pointerId !== pointerId) return;
   if (dragging.value && previewIndex.value !== null) {
     const index = Math.round(previewIndex.value);
     const option = props.options[index];
-    if (option) emit("update:modelValue", option.value);
+    if (option) {
+      selection.move(index);
+      emit("update:modelValue", option.value);
+    }
     suppressClickUntil = performance.now() + 500;
   }
   reset();
 }
 function cancel(event: PointerEvent) {
-  if (event.pointerId === pointerId) reset();
+  if (event.pointerId === pointerId) {
+    selection.move(selectedIndex.value);
+    reset();
+  }
 }
 function reset() {
   pointerId = null;
   dragging.value = false;
   previewIndex.value = null;
-  stretch.value = 1;
   window.removeEventListener("pointermove", move);
   window.removeEventListener("pointerup", up);
   window.removeEventListener("pointercancel", cancel);
@@ -107,36 +110,43 @@ function suppressClick(event: MouseEvent) {
 watch(
   () => props.modelValue,
   () => {
-    if (!dragging.value) previewIndex.value = null;
+    if (!dragging.value) {
+      previewIndex.value = null;
+      selection.move(selectedIndex.value);
+    }
   },
 );
 onUnmounted(reset);
 </script>
 
 <template>
-  <div
-    ref="track"
-    class="calendar-view-selector"
-    role="group"
-    :aria-label="groupLabel"
-    :class="{ 'is-dragging': dragging }"
-    :style="indicatorStyle"
-    @pointerdown="down"
-    @click.capture="suppressClick"
-    @dragstart.prevent
-  >
-    <span class="segment-indicator" aria-hidden="true"></span>
-    <button
-      v-for="option in options"
-      :key="option.value"
-      type="button"
-      :aria-pressed="modelValue === option.value"
-      :data-testid="option.testId"
-      @click="select(option.value)"
+  <TabsList as-child :aria-label="groupLabel">
+    <div
+      ref="track"
+      class="calendar-view-selector"
+      :class="{ 'is-dragging': dragging }"
+      :style="{ '--segment-count': options.length }"
+      @pointerdown="down"
+      @mousedown.capture.prevent
+      @click.capture="suppressClick"
+      @dragstart.prevent
     >
-      {{ option.label }}
-    </button>
-  </div>
+      <motion.span
+        class="segment-indicator"
+        aria-hidden="true"
+        :style="{ transform: selection.transform }"
+      />
+      <TabsTrigger
+        v-for="option in options"
+        :key="option.value"
+        :value="option.value"
+        :data-testid="option.testId"
+        @click="select(option.value)"
+      >
+        {{ option.label }}
+      </TabsTrigger>
+    </div>
+  </TabsList>
 </template>
 
 <style scoped>
@@ -160,19 +170,13 @@ onUnmounted(reset);
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 12px) / 2);
+  width: calc(
+    (100% - 8px - (var(--segment-count) - 1) * 4px) / var(--segment-count)
+  );
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 1px 3px #00000012;
   pointer-events: none;
-  transform-origin: var(--segment-origin, right);
-  transform:
-    translateX(calc(var(--segment-progress) * (100% + 4px)))
-    scaleX(var(--segment-stretch));
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.is-dragging .segment-indicator {
-  transition: none;
 }
 .calendar-view-selector button {
   position: relative;
@@ -190,7 +194,7 @@ onUnmounted(reset);
     color 160ms ease,
     transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.calendar-view-selector button[aria-pressed="true"] {
+.calendar-view-selector button[data-state="active"] {
   color: #111;
 }
 .calendar-view-selector button:active {

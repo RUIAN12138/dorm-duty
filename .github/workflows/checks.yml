@@ -46,14 +46,17 @@ jobs:
           node site/scripts/check-native-back.mjs
           node site/scripts/check-native-bridge.mjs
           node site/scripts/check-push-settings.mjs
-          node site/scripts/check-water-order.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs
           node site/scripts/check-task-swipe.mjs
-          node site/scripts/check-navigation-motion.mjs
           node site/scripts/check-scheduled-reminders.mjs
           node site/scripts/check-reminder-runtime.mjs
           node site/scripts/check-creator-recovery.mjs
+      - name: Install browser for interaction checks
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Verify mobile interaction foundation
+        run: node scripts/check-interaction-foundation.mjs
       - name: Build server website
         env:
           DORM_WEB_BASE: /dorm-duty/
