@@ -607,7 +607,7 @@ try {
     );
     await snapshot(entry.page, `join-centered-${width}`);
     await entry.page
-      .getByRole("button", { name: "邀请码在哪里？", exact: true })
+      .getByRole("button", { name: "邀请码帮助", exact: true })
       .click();
     await entry.page
       .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
