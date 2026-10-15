@@ -889,6 +889,35 @@ try {
   checks.push(
     "ordinary member switches between two real dorms, reloads and returns with the original scoped identity without another invite",
   );
+  const memberOrderBefore = (await board(otherId, memberToken)).water_order;
+  await b.page.getByTestId("open-water-order").click();
+  await b.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
+  assert.equal(await b.page.getByTestId("water-order-save").count(), 1);
+  assert.equal(await b.page.getByTestId("order-recover-owner").count(), 0);
+  await b.page.getByTestId(`order-down-water-${ownerId}`).focus();
+  await b.page.keyboard.press("Enter");
+  await snapshot(b.page, "member-water-order-390");
+  await b.page.getByTestId("water-order-save").click();
+  await b.page
+    .getByRole("dialog", { name: "抬水轮序", exact: true })
+    .waitFor({ state: "hidden" });
+  const memberOrderAfter = await board(otherId, memberToken);
+  assert.notDeepEqual(memberOrderAfter.water_order, memberOrderBefore);
+  assert.equal(memberOrderAfter.water_task.assignee_id, ownerId);
+  await api("/chores/order", {
+    method: "PATCH",
+    token: memberToken,
+    data: {
+      version: memberOrderAfter.version,
+      key: "water",
+      rotation_order: memberOrderBefore,
+    },
+  });
+  await a.page.reload();
+  await pane(a.page, "duty");
+  checks.push(
+    "ordinary scoped member reorders and saves without creator recovery; current water assignee stays fixed",
+  );
   await a.page.getByTestId("open-water-order").click();
   await a.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   await snapshot(a.page, "independent-water-order-390");

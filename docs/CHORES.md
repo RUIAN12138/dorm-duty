@@ -51,6 +51,7 @@
 | --- | --- | --- |
 | POST | `/chores/claim` | 邀请码及成员 ID 领取限定成员身份 |
 | GET | `/chores/board` | `invite_code`、`member_id`、可选 `month`，任务、进度、日历及自己的提醒 |
+| PATCH | `/chores/order` | `version`、`key`、完整 `rotation_order`；所有正式成员可改同宿舍轮序，游客禁止；不赋予其他任务设置权限 |
 | PATCH | `/chores/settings` | `version` 和 `categories`，仅创建者 |
 | PATCH | `/chores/tasks/{id}/complete` | 本人完成任务，返回服务器时间、新版本、下一抬水任务 |
 | POST | `/chores/remind` | `target_member_id`、`task_id` |
@@ -95,3 +96,7 @@ node scripts/verify-local-persistence.mjs
 当前三页截图可查看 [值日](evidence/chores/pages/final-duty-390.jpg)、[抬水](evidence/chores/pages/final-water-390.jpg)、[日历](evidence/chores/pages/final-calendar-390.jpg)、[三类自定义](evidence/chores/pages/custom-settings-390.jpg)、[站内提醒](evidence/chores/pages/received-reminder-390.jpg)。此前单页截图仍保留在 `evidence/chores/`，作为历史记录。
 
 这些结果验证 Node / SQLite 和 Chrome 手机尺寸模拟；真实 Cloudflare Worker / D1、两台实体手机、iPhone Safari、安全区 / 键盘、HTTPS 主屏幕与锁屏通知仍按 [MOBILE_ACCEPTANCE](MOBILE_ACCEPTANCE.md) 和 [完整验收矩阵](ACCEPTANCE.md) 执行，不能由桌面构建结果替代。
+
+## 成员轮序权限（v30）
+
+所有正式宿舍成员可在顶部「轮序」选择地板、厕所、洗手池或抬水，长按姓名拖动并显式保存。`PATCH /chores/order` 只接收版本、任务类别和完整成员排列；未知字段、缺失 / 重复 / 外宿舍成员均被拒绝。服务器使用现有成员权限守卫和版本 CAS，两个相同版本的并发保存仅一个成功。创建者的 `/chores/settings` 权限保持独立。轮序调整保留已完成记录；自由值日不改轮数 / 完成人，抬水保留当前负责人，在之后的完成推进中使用新顺序。

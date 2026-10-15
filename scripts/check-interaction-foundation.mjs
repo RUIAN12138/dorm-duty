@@ -45,7 +45,7 @@ const route=useRoute();const section=computed(()=>route.path==='/water'?'water':
 const view=ref('calendar'),open=ref(false),nested=ref(false),mode=ref<'bottom'|'shared'>('bottom'),origin=ref<DOMRect|null>(null),closed=ref(0),draft=ref('保留输入');
 const make=(n:number)=>Array.from({length:n},(_,i)=>({user_id:i+1,nickname:'室友'+(i+1),marker_id:'pixel-01',role:'member',rotation_order:i}));
 const members=ref(make(6)),order=ref([1,2,3,4,5,6]),disabled=ref(false),active=ref(true),mounted=ref(true);
-const feedbackFixture=ref(false),feedbackBusy=ref(false),feedbackFailure=ref(false);const feedbackTask=ref({id:999,key:'floor',name:'地板',status:'pending'});function feedbackSubmit(){feedbackBusy.value=true;const bounds=document.querySelector('[data-testid=complete-floor-999]')?.getBoundingClientRect();setTimeout(()=>{if(feedbackFailure.value){feedbackBusy.value=false;return;}feedbackTask.value.status='completed';feedbackBusy.value=false;completionFeedback(bounds);},100);};const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);const calendarFixture=ref(false),calendarMonth=ref('2026-10'),calendarLoading=ref(false);const calendarRecords=make(6).map((m,i)=>({id:i+1,key:i===5?'water':'floor',name:i===5?'抬水':'地板',assignee_id:m.user_id,assignee_name:m.nickname,marker_id:m.marker_id,completed_at:'2026-10-15T'+String(i+8).padStart(2,'0')+':00:00Z',completed_date:'2026-10-15'}));
+const feedbackFixture=ref(false),feedbackBusy=ref(false),feedbackFailure=ref(false);const feedbackTask=ref({id:999,key:'floor',name:'地板',status:'pending'});function feedbackSubmit(){feedbackBusy.value=true;const bounds=document.querySelector('[data-testid=complete-floor-999]')?.getBoundingClientRect();setTimeout(()=>{if(feedbackFailure.value){feedbackBusy.value=false;return;}feedbackTask.value.status='completed';feedbackBusy.value=false;},100);};const confirmed=ref(0),previewOpen=ref(false),backgroundClicks=ref(0);const calendarFixture=ref(false),calendarMonth=ref('2026-10'),calendarLoading=ref(false);const calendarRecords=make(6).map((m,i)=>({id:i+1,key:i===5?'water':'floor',name:i===5?'抬水':'地板',assignee_id:m.user_id,assignee_name:m.nickname,marker_id:m.marker_id,completed_at:'2026-10-15T'+String(i+8).padStart(2,'0')+':00:00Z',completed_date:'2026-10-15'}));
 function show(event:MouseEvent){origin.value=(event.currentTarget as HTMLElement).getBoundingClientRect();open.value=true;}
 async function confirm(){try{await confirmInSheet({title:'确认操作',message:'确认后仍保留抽屉'});confirmed.value++;}catch{}}
 (window as any).qa={failFeedback:()=>feedbackFailure.value=true,feedback:()=>{calendarFixture.value=false;feedbackFixture.value=true;feedbackTask.value.status='pending';},calendar:()=>calendarFixture.value=true,calendarMonth:()=>calendarMonth.value,calendarLoading:(value:boolean)=>calendarLoading.value=value,preview:()=>previewOpen.value=true,backgroundClicks:()=>backgroundClicks.value,tick:nextTick,open:()=>open.value=true,close:()=>open.value=false,mode:(v:any)=>mode.value=v,order:()=>[...order.value],view:()=>view.value,route:()=>route.path,closed:()=>closed.value,confirmed:()=>confirmed.value,long:()=>{members.value=make(24);order.value=members.value.map(m=>m.user_id)},reset:()=>{members.value=make(6);order.value=[1,2,3,4,5,6]},disable:()=>disabled.value=true,enable:()=>disabled.value=false,active:(value:boolean)=>active.value=value,mounted:(value:boolean)=>mounted.value=value};
@@ -809,9 +809,14 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
     scrollTo(0, 0);
   });
   await page.getByTestId("complete-floor-999").click();
-  eq(await page.locator('.completion-surface.is-round').count(),1,'completion immediately starts the circle morph without moving its hit area');
+  eq(
+    await page.locator(".completion-surface.is-round").count(),
+    1,
+    "completion immediately starts the circle morph without moving its hit area",
+  );
 
   await page.getByTestId("undo-999").waitFor();
+  await page.locator(".completion-particles").waitFor({ state: "attached" });
   eq(
     await page.locator(".completion-particles i").count(),
     8,
@@ -844,12 +849,27 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   );
 
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.evaluate(() => {window.qa.feedback();window.qa.failFeedback();});
+  await page.evaluate(() => {
+    window.qa.feedback();
+    window.qa.failFeedback();
+  });
   await page.getByTestId("complete-floor-999").click();
   await page.waitForTimeout(220);
-  eq(await page.locator('.completion-surface.is-round').count(),0,'failed request restores the capsule');
-  eq(await page.locator('.completion-particles').count(),0,'failed request never draws success particles');
-  eq(await page.getByTestId("complete-floor-999").isEnabled(),true,'failed request leaves completion retryable');
+  eq(
+    await page.locator(".completion-surface.is-round").count(),
+    0,
+    "failed request restores the capsule",
+  );
+  eq(
+    await page.locator(".completion-particles").count(),
+    0,
+    "failed request never draws success particles",
+  );
+  eq(
+    await page.getByTestId("complete-floor-999").isEnabled(),
+    true,
+    "failed request leaves completion retryable",
+  );
   await page.screenshot({ path: path.join(evidence, "rest.png") });
   eq(errors, [], "no browser runtime exceptions");
   await fs.writeFile(

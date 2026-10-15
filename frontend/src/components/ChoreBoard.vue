@@ -48,7 +48,6 @@ import {
   navigationOrigin,
   motionAllowed,
 } from "../interaction/motion";
-import { completionFeedback } from "../interaction/completionFeedback";
 const props = defineProps<{
   invite: string;
   dormName: string;
@@ -72,6 +71,7 @@ const board = ref<ChoreBoardData | null>(null),
   actionError = ref(""),
   busy = ref("");
 const completionReceipt = ref<ChoreTask | null>(null);
+const completionEpoch = ref(0);
 const completionMorphId = ref<number | null>(null);
 let completionMorphTimer: ReturnType<typeof setTimeout> | undefined;
 function settleCompletion(id: number) {
@@ -380,21 +380,16 @@ watch(roundOpen, (open) => {
   roundError.value = "";
 });
 async function saveRoundOrder() {
-  if (
-    roundSaving.value ||
-    !roundCategory ||
-    !board.value?.is_creator ||
-    props.demo
-  )
-    return;
+  if (roundSaving.value || !roundCategory || !board.value || props.demo) return;
   roundSaving.value = true;
   roundError.value = "";
   try {
-    await choreRequest("/chores/settings", props.token, {
+    await choreRequest("/chores/order", props.token, {
       method: "PATCH",
       body: JSON.stringify({
         version: roundVersion,
-        categories: [{ ...roundCategory, rotation_order: roundOrder.value }],
+        key: roundCategory.key,
+        rotation_order: roundOrder.value,
       }),
     });
     if (!alive) return;
@@ -656,10 +651,14 @@ function acceptCompletion(receipt: ChoreCompletion) {
   if (!board.value) return;
   const finished = receipt.task;
   completionReceipt.value = finished;
+  completionEpoch.value++;
   if (motionAllowed()) {
     completionMorphId.value = finished.id;
     clearTimeout(completionMorphTimer);
-    completionMorphTimer = setTimeout(() => settleCompletion(finished.id), 800);
+    completionMorphTimer = setTimeout(
+      () => settleCompletion(finished.id),
+      1300,
+    );
   }
   if (finished.key === "water") waterReceipt.value = finished;
   const existed = board.value.today_tasks.find(
@@ -716,10 +715,6 @@ async function complete(task: ChoreTask) {
   syncAction.value = "打卡";
   busy.value = `complete-${task.id}`;
   actionError.value = "";
-  const feedbackBounds = document
-    .querySelector(`[data-testid="complete-${task.key}-${task.id}"]`)
-    ?.getBoundingClientRect();
-  const feedbackSection = props.section;
   try {
     const syncStatus = await completeChore(
       task.id,
@@ -727,8 +722,6 @@ async function complete(task: ChoreTask) {
       (receipt) => {
         if (!alive) return;
         acceptCompletion(receipt);
-        if (props.section === feedbackSection)
-          completionFeedback(feedbackBounds);
       },
       () => (alive ? load() : Promise.resolve(false)),
     );
@@ -1010,7 +1003,7 @@ onUnmounted(() => {
         <div class="identity-actions">
           <button
             class="order-trigger"
-            aria-label="抬水轮序"
+            aria-label="任务轮序"
             data-testid="open-water-order"
             @click="orderOpen = true"
           >
@@ -1190,6 +1183,7 @@ onUnmounted(() => {
                     v-if="displayRound"
                     :round="displayRound"
                     :active="true"
+                    :celebrate="completionEpoch"
                     compact
                   />
                   第 {{ displayRound?.sequence }} 轮
@@ -1426,7 +1420,7 @@ onUnmounted(() => {
         :members="board.members"
         :category="board.categories.find((c) => c.key === 'water')!"
         :current-id="water?.assignee_id"
-        :creator="board.is_creator && !demo"
+        :editable="!demo"
         :categories="board.categories"
         @recover="
           queuedTool = () => emit('recover-owner');
@@ -1483,7 +1477,7 @@ onUnmounted(() => {
           <template v-if="!roundEditing && displayRound">
             <RoundProgress :round="displayRound" :active="roundOpen" />
             <button
-              v-if="board.is_creator && !demo"
+              v-if="!demo"
               class="round-edit-entry"
               data-testid="edit-round-order"
               @click="roundEditing = true"
@@ -1493,10 +1487,10 @@ onUnmounted(() => {
             <HintPopover
               v-else
               title="调整轮序"
-              text="仅宿舍创建者可以更改排列。若你是创建者，请在更多操作中恢复创建者管理身份。"
+              text="游客模式仅可查看，加入正式宿舍后可以长按名字调整轮序。"
             />
           </template>
-          <template v-if="roundEditing && board.is_creator && !demo">
+          <template v-if="roundEditing && !demo">
             <SortableMembers
               v-model="roundOrder"
               :members="activeRound.members"

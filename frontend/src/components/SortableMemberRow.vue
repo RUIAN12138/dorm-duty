@@ -23,7 +23,8 @@ const emit = defineEmits<{
   step: [id: number, direction: number, keyboard: boolean];
 }>();
 const controls = useDragControls();
-const held = ref(false);
+const held = ref(false),
+  introDone = ref(false);
 let pointer: PointerEvent | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let finishFrame = 0,
@@ -105,6 +106,7 @@ function down(event: PointerEvent) {
   window.addEventListener("pointercancel", cancelled);
   timer = setTimeout(() => {
     if (!pointer) return;
+    introDone.value = true;
     held.value = true;
     emit("start", props.member.user_id);
     // Keep the pointer on the whole row after lifting, including when the
@@ -148,7 +150,7 @@ onBeforeUnmount(() => {
     :ref="element"
     :value="member.user_id"
     class="sort-row"
-    :class="{ lifted: held }"
+    :class="{ lifted: held, 'intro-finished': introDone }"
     layout="position"
     :drag-listener="false"
     :drag-controls="controls"
@@ -166,90 +168,102 @@ onBeforeUnmount(() => {
     @contextmenu.prevent
     @click.capture="suppress"
   >
-    <span class="sort-position">{{ index + 1 }}</span>
-    <button
-      type="button"
-      class="sort-person"
-      :disabled="disabled"
-      :aria-label="`长按${member.nickname}拖动`"
-      :data-testid="`order-person-${categoryKey}-${member.user_id}`"
-      @contextmenu.prevent
-      @keydown.up.prevent="emit('step', member.user_id, -1, true)"
-      @keydown.down.prevent="emit('step', member.user_id, 1, true)"
-    >
-      <MemberMark :id="member.marker_id" :size="24" /><strong
-        ><span>{{ member.nickname }}</span
-        ><small v-if="completed !== undefined">{{
-          completed ? "已完成" : "待完成"
-        }}</small></strong
+    <div class="sort-card" :style="{ '--entry-index': index }">
+      <span class="sort-position">{{ index + 1 }}</span>
+      <button
+        type="button"
+        class="sort-person"
+        :disabled="disabled"
+        :aria-label="`长按${member.nickname}拖动`"
+        :data-testid="`order-person-${categoryKey}-${member.user_id}`"
+        @contextmenu.prevent
+        @keydown.up.prevent="emit('step', member.user_id, -1, true)"
+        @keydown.down.prevent="emit('step', member.user_id, 1, true)"
       >
-    </button>
-    <button
-      type="button"
-      class="sort-step"
-      :disabled="disabled || index === 0"
-      :aria-label="`${member.nickname}上移`"
-      :data-testid="`order-up-${categoryKey}-${member.user_id}`"
-      @click="emit('step', member.user_id, -1, false)"
-    >
-      ↑
-    </button>
-    <button
-      type="button"
-      class="sort-step"
-      :disabled="disabled || index === count - 1"
-      :aria-label="`${member.nickname}下移`"
-      :data-testid="`order-down-${categoryKey}-${member.user_id}`"
-      @click="emit('step', member.user_id, 1, false)"
-    >
-      ↓
-    </button>
-    <button
-      type="button"
-      class="sort-handle"
-      :disabled="disabled"
-      :aria-label="`拖动${member.nickname}调整轮序`"
-      :data-testid="`order-drag-${categoryKey}-${member.user_id}`"
-      @contextmenu.prevent
-      @keydown.up.prevent="emit('step', member.user_id, -1, true)"
-      @keydown.down.prevent="emit('step', member.user_id, 1, true)"
-    >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        aria-hidden="true"
+        <MemberMark :id="member.marker_id" :size="24" /><strong
+          ><span>{{ member.nickname }}</span
+          ><small v-if="completed !== undefined">{{
+            completed ? "已完成" : "待完成"
+          }}</small></strong
+        >
+      </button>
+      <button
+        type="button"
+        class="sort-step"
+        :disabled="disabled || index === 0"
+        :aria-label="`${member.nickname}上移`"
+        :data-testid="`order-up-${categoryKey}-${member.user_id}`"
+        @click="emit('step', member.user_id, -1, false)"
       >
-        <path
-          d="M4 6h12M4 10h12M4 14h12"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-        />
-      </svg>
-    </button>
+        ↑
+      </button>
+      <button
+        type="button"
+        class="sort-step"
+        :disabled="disabled || index === count - 1"
+        :aria-label="`${member.nickname}下移`"
+        :data-testid="`order-down-${categoryKey}-${member.user_id}`"
+        @click="emit('step', member.user_id, 1, false)"
+      >
+        ↓
+      </button>
+      <button
+        type="button"
+        class="sort-handle"
+        :disabled="disabled"
+        :aria-label="`拖动${member.nickname}调整轮序`"
+        :data-testid="`order-drag-${categoryKey}-${member.user_id}`"
+        @contextmenu.prevent
+        @keydown.up.prevent="emit('step', member.user_id, -1, true)"
+        @keydown.down.prevent="emit('step', member.user_id, 1, true)"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M4 6h12M4 10h12M4 14h12"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
   </Reorder.Item>
 </template>
 <style scoped>
 .sort-row {
   position: relative;
   width: 100%;
-  height: 64px;
+  height: 72px;
+  margin-bottom: 8px;
+}
+.sort-card {
+  position: relative;
+  width: 100%;
+  height: 72px;
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 0 6px 0 12px;
-  margin-bottom: 8px;
   border: 1px solid #e9e9e9;
-  border-radius: 14px;
-  background: #fafafa;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 3px 7px #00000005;
+  animation: order-unfold 520ms cubic-bezier(0.22, 0.8, 0.3, 1)
+    calc(min(var(--entry-index), 6) * 45ms) both;
   transition:
     box-shadow 160ms ease,
     background-color 160ms ease;
 }
 .sort-row.lifted {
   z-index: 10;
+}
+.sort-row.lifted .sort-card {
   background: #fff;
   box-shadow:
     0 12px 30px #0000001c,
@@ -370,5 +384,40 @@ strong small {
   .sort-handle:active:not(:disabled) {
     transform: none;
   }
+}
+</style>
+
+<style scoped>
+.sort-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 5px -4px;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  background: #f5f5f5;
+  transform: scale(0.98);
+  z-index: -1;
+}
+@keyframes order-unfold {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, calc(min(var(--entry-index), 6) * -54px), 0)
+      scale(0.96) rotate(-0.8deg);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sort-card {
+    animation: none;
+  }
+}
+</style>
+
+<style scoped>
+.intro-finished .sort-card {
+  animation: none;
 }
 </style>

@@ -7,7 +7,6 @@ import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 import ElasticSegments from "./ElasticSegments.vue";
 import RecordTimeline from "./RecordTimeline.vue";
-import { motionAllowed } from "../interaction/motion";
 import { useMonthCarousel, shiftMonth } from "../interaction/monthCarousel";
 const props = defineProps<{
   month: string;
@@ -309,49 +308,20 @@ watch(
           <p v-if="!listRecords.length" class="calendar-list-empty">
             本月还没有完成记录
           </p>
-          <section
+          <RecordTimeline
             v-for="group in groups"
             v-else
             :key="group.date"
-            class="record-group"
-            :class="{
-              'is-stacked': !isExpanded(group.date) && group.records.length > 1,
-            }"
-          >
-            <button
-              class="records-heading"
-              :aria-expanded="isExpanded(group.date)"
-              :aria-controls="`records-${group.date}`"
-              :data-testid="`record-group-${group.date}`"
-              @click="toggleGroup(group.date)"
-            >
-              <h2>{{ dateLabel(group.date) }}</h2>
-              <span
-                >{{ group.records.length }}<van-icon name="arrow-down"
-              /></span>
-            </button>
-            <div
-              :id="`records-${group.date}`"
-              class="record-group-body"
-              :class="{
-                'is-expanded': isExpanded(group.date),
-                'quiet-motion': !motionAllowed(),
-              }"
-              :inert="!isExpanded(group.date) ? true : undefined"
-              :aria-hidden="!isExpanded(group.date)"
-            >
-              <div class="record-group-clip">
-                <RecordTimeline
-                  :records="group.records"
-                  :member-id="memberId"
-                  :busy="busy"
-                  :expanded="isExpanded(group.date)"
-                  list
-                  @undo="emit('undo', $event)"
-                />
-              </div>
-            </div>
-          </section>
+            :date="group.date"
+            :label="dateLabel(group.date)"
+            :records="group.records"
+            :member-id="memberId"
+            :busy="busy"
+            :expanded="isExpanded(group.date)"
+            list
+            @toggle="toggleGroup(group.date)"
+            @undo="emit('undo', $event)"
+          />
         </div>
       </TabsContent>
       <ElasticSheet
@@ -549,116 +519,6 @@ h1 > span {
   color: #888;
   font-size: 12px;
 }
-.records-heading {
-  width: 100%;
-  border: 0;
-  background: none;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 20px 0;
-  border-bottom: 1px solid #eee;
-}
-.records-heading h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #222;
-  letter-spacing: -0.5px;
-}
-.records-heading > span {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #999;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.records-heading[aria-expanded="true"] .van-icon {
-  transform: rotate(180deg);
-}
-.records-heading .van-icon {
-  transition: transform 200ms ease;
-}
-.record-group-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.record-group-body.is-expanded {
-  grid-template-rows: 1fr;
-}
-.record-group-clip {
-  min-height: 0;
-  overflow: hidden;
-}
-.record-stagger {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.985);
-  transition:
-    opacity 130ms ease,
-    transform 180ms ease;
-}
-.is-expanded .record-stagger {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition:
-    opacity 190ms ease var(--record-delay),
-    transform 320ms cubic-bezier(0.22, 1.3, 0.36, 1) var(--record-delay);
-}
-.quiet-motion,
-.quiet-motion .record-stagger {
-  transition: none !important;
-  transform: none !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  .record-group-body,
-  .record-stagger,
-  .records-heading .van-icon {
-    transition: none !important;
-    transform: none !important;
-  }
-}
-.record-group {
-  position: relative;
-  isolation: isolate;
-  margin-top: 10px;
-  margin-bottom: 16px;
-}
-.record-group::before,
-.record-group::after {
-  content: "";
-  position: absolute;
-  inset: 0 4px;
-  z-index: -1;
-  border: 1px solid #eee;
-  border-radius: 18px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(0) scale(1);
-  transition:
-    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 160ms ease;
-}
-.record-group.is-stacked::before {
-  transform: translateY(5px) scale(0.98);
-  opacity: 1;
-}
-.record-group.is-stacked::after {
-  transform: translateY(10px) scale(0.95);
-  opacity: 1;
-}
-.record-group.is-stacked .records-heading {
-  background: #fff;
-  border: 1px solid #eee;
-  border-radius: 18px;
-  padding: 18px 16px;
-}
-
 .calendar-list-empty {
   display: grid;
   place-items: center;
