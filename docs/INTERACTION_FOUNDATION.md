@@ -50,4 +50,4 @@ macOS 默认使用本机 Google Chrome；可用 `BROWSER_EXECUTABLE` 指定，Li
 
 官方 API 参考：[Motion Values](https://motion.dev/docs/vue-motion-value)、[Reorder](https://motion.dev/docs/vue-reorder)、[Reka Dialog](https://www.reka-ui.com/docs/components/dialog)、[Reka Tabs](https://www.reka-ui.com/docs/components/tabs)。
 
-当前正式版本为 `20261015-tactile-focus-v25`。28 个公网资源与构建一致，当前相同后端已通过 386 项独立宿舍 API 检查，最后切换时 59 条既有完成记录保留。v20 为交互基础首次升级；当前发布详情见 `SERVER_DEPLOYMENT.md`。
+当前正式版本为 `20261015-tactile-dim-v26`。28 个公网资源与构建一致，当前相同后端已通过 386 项独立宿舍 API 检查，最后切换时 59 条既有完成记录保留。v20 为交互基础首次升级；当前发布详情见 `SERVER_DEPLOYMENT.md`。

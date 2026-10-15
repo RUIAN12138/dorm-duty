@@ -102,7 +102,7 @@ onBeforeUnmount(() => removeBack?.());
   padding: 22px;
   border: 1px solid rgb(255 255 255 / 90%);
   border-radius: 28px;
-  background: rgb(255 255 255 / 97%);
+  background: #fff;
   color: #222;
   box-shadow:
     0 20px 70px #00000014,
