@@ -282,9 +282,12 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
         sink: "云端验收：刷洗池面与龙头",
         water: "云端验收：抬一桶饮用水",
       }[category.key],
-      deadline_time: { floor: "20:15", toilet: "21:20", sink: "21:40", water: "18:35" }[
-        category.key
-      ],
+      deadline_time: {
+        floor: "20:15",
+        toilet: "21:20",
+        sink: "21:40",
+        water: "18:35",
+      }[category.key],
       start_date: ownerBoard.today,
       weekdays: [1, 2, 3, 4, 5, 6, 7],
       rotation_days: 2,
@@ -407,7 +410,7 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
       });
     await complete(roommate, floor, 403);
     await complete(null, floor, 401);
-    const completedFloor = (await complete(ownerMember, floor)).task;
+    let completedFloor = (await complete(ownerMember, floor)).task;
     equal(completedFloor.status, "completed");
     await complete(ownerMember, floor, 409);
     await api("/chores/remind", {
@@ -416,6 +419,27 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
       data: reminderData,
       status: 409,
     });
+    const undo = (person, task, status = 200) =>
+      api(`/chores/tasks/${task.id}/undo`, {
+        method: "PATCH",
+        token: person?.token,
+        data: {},
+        status,
+      });
+    await undo(roommate, floor, 403);
+    await undo(null, floor, 401);
+    equal((await undo(ownerMember, floor)).task.status, "pending");
+    const restoredFloor = await board(ownerMember);
+    equal(
+      restoredFloor.today_tasks.find((t) => t.id === floor.id)?.status,
+      "pending",
+    );
+    equal(
+      restoredFloor.calendar.some((t) => t.id === floor.id),
+      false,
+    );
+    await undo(ownerMember, floor, 409);
+    completedFloor = (await complete(ownerMember, floor)).task;
     const toilet = (await board(roommate)).today_tasks.find(
       (task) => task.key === "toilet",
     );
@@ -446,7 +470,7 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
       [200, 409],
       "并发抬水应只有一次成功",
     );
-    const completedWater = simultaneousWater.find(
+    let completedWater = simultaneousWater.find(
       (response) => response.status === 200,
     ).body.task;
     const afterWater = await board(ownerMember);
@@ -460,10 +484,18 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
       "另一成员刷新看到同一新轮次",
     );
     equal(nextFromRoommate.can_complete, true);
+    await undo(ownerMember, water);
+    equal((await board(ownerMember)).water_task.id, water.id);
+    completedWater = (await complete(ownerMember, water)).task;
+    equal((await board(roommate)).water_task.id, nextFromRoommate.id);
     const secondWater = (await complete(roommate, nextFromRoommate)).task;
     const secondAdvance = (await board(ownerMember)).water_task;
     equal(secondAdvance.sequence, water.sequence + 2);
     equal(secondAdvance.assignee_id, owner.id);
+    await undo(ownerMember, water, 409);
+    checks.push(
+      "公网本人撤销恢复待办与日历，再完成可重开；抬水回退保留下一轮任务，后续有人完成拒绝倒退",
+    );
     checks.push(
       "实际后端抬水并发仅一次完成、序号仅加一；下一成员同步领取，第二轮完成后回到创建者",
     );
