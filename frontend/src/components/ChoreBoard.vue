@@ -2193,14 +2193,14 @@ onUnmounted(() => {
 .board-loading {
   padding-top: 16px;
 }
-.board-loading span {
+.board-loading span:not(.galaxy-spinner) {
   display: block;
   border-radius: 8px;
   background: #f0f0f0;
   height: 92px;
   margin: 18px 0;
 }
-.board-loading span:first-child {
+.board-loading span:first-child:not(.galaxy-spinner) {
   height: 28px;
   width: 55%;
 }
