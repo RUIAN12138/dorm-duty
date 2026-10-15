@@ -13,6 +13,11 @@ import {
   type ChoreCompletion,
   type ChoreTask,
 } from "../api/chores";
+import WaterOrderSheet from "./WaterOrderSheet.vue";
+import TaskTitle from "./TaskTitle.vue";
+import CompletionAction from "./CompletionAction.vue";
+import ActionItem from "./ActionItem.vue";
+import { tilt as vTilt } from "../interactions/tilt";
 import WaterNudge from "./WaterNudge.vue";
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import ChoreCalendar from "./ChoreCalendar.vue";
@@ -47,7 +52,8 @@ const board = ref<ChoreBoardData | null>(null),
   error = ref(""),
   actionError = ref(""),
   busy = ref("");
-const completionSyncPending = ref(false);
+const completionSyncPending = ref(false),
+  syncAction = ref("打卡");
 const month = ref(
   new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -69,7 +75,10 @@ const messagesOpen = ref(false),
   reminderOpen = ref(false),
   markerOpen = ref(false),
   markerDraft = ref("");
-const toolsOpen = ref(false);
+const toolsOpen = ref(false),
+  preferencesOpen = ref(false),
+  orderOpen = ref(false);
+let alive = true;
 const roundOpen = ref(false);
 const pushOpen = ref(false);
 const recoveryOpen = ref(false);
@@ -77,6 +86,10 @@ let queuedTool: (() => void) | null = null;
 function fromTools(action: () => void) {
   queuedTool = action;
   toolsOpen.value = false;
+}
+function fromPreferences(action: () => void) {
+  queuedTool = action;
+  preferencesOpen.value = false;
 }
 function runQueuedTool() {
   const action = queuedTool;
@@ -199,6 +212,10 @@ function openTask(task: ChoreTask, event: MouseEvent) {
   detailTask.value = task;
   detailOpen.value = true;
 }
+function showEntered(element: Element) {
+  element.removeAttribute("aria-hidden");
+  element.removeAttribute("inert");
+}
 function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
   element.setAttribute("inert", "");
@@ -256,11 +273,7 @@ watch(
     const boundedTotal = Math.max(0, total);
     const boundedCompleted = Math.min(boundedTotal, Math.max(0, completed));
     const targetProgress = boundedTotal ? boundedCompleted / boundedTotal : 0;
-    if (!open) {
-      roundAnimatedProgress.value = 0;
-      roundAnimatedCompleted.value = 0;
-      return;
-    }
+    if (!open) return;
     if (
       matchMedia("(prefers-reduced-motion: reduce)").matches ||
       document.documentElement.dataset.interaction === "keyboard"
@@ -269,15 +282,18 @@ watch(
       roundAnimatedCompleted.value = boundedCompleted;
       return;
     }
-    roundAnimatedProgress.value = 0;
-    roundAnimatedCompleted.value = 0;
+    const startProgress = roundAnimatedProgress.value,
+      startCompleted = roundAnimatedCompleted.value;
     const startedAt = performance.now();
     const animate = (now: number) => {
       if (animationId !== roundProgressAnimation) return;
-      const progress = Math.min(1, (now - startedAt) / 560);
+      const progress = Math.min(1, (now - startedAt) / 280);
       const eased = 1 - Math.pow(1 - progress, 3);
-      roundAnimatedProgress.value = targetProgress * eased;
-      roundAnimatedCompleted.value = Math.round(boundedCompleted * eased);
+      roundAnimatedProgress.value =
+        startProgress + (targetProgress - startProgress) * eased;
+      roundAnimatedCompleted.value = Math.round(
+        startCompleted + (boundedCompleted - startCompleted) * eased,
+      );
       if (progress < 1) roundProgressFrame = requestAnimationFrame(animate);
       else roundProgressFrame = 0;
     };
@@ -399,6 +415,8 @@ function presentNewReminders() {
     reminderOpen.value ||
     markerOpen.value ||
     toolsOpen.value ||
+    preferencesOpen.value ||
+    orderOpen.value ||
     roundOpen.value ||
     pushOpen.value ||
     recoveryOpen.value ||
@@ -419,6 +437,8 @@ watch(
     reminderOpen,
     markerOpen,
     toolsOpen,
+    preferencesOpen,
+    orderOpen,
     roundOpen,
     pushOpen,
     recoveryOpen,
@@ -564,6 +584,7 @@ async function complete(task: ChoreTask) {
   )
     return;
   if (task.key !== "water") selectedTaskId.value = task.id;
+  syncAction.value = "打卡";
   busy.value = `complete-${task.id}`;
   actionError.value = "";
   try {
@@ -571,6 +592,7 @@ async function complete(task: ChoreTask) {
       task.id,
       props.token,
       (receipt) => {
+        if (!alive) return;
         acceptCompletion(receipt);
         showToast(
           task.key === "water"
@@ -578,13 +600,59 @@ async function complete(task: ChoreTask) {
             : "值日已完成，标记已留在日历上。",
         );
       },
-      load,
+      () => (alive ? load() : Promise.resolve(false)),
     );
     if (syncStatus === "pending") error.value = "";
   } catch (e) {
     actionError.value = (e as Error).message;
   } finally {
     busy.value = "";
+  }
+}
+const recentUndo = computed(
+  () =>
+    board.value?.undo_tasks?.find((task) =>
+      sectionIsWater()
+        ? task.key === "water"
+        : task.key === activeDutyTask.value?.key,
+    ) || null,
+);
+function sectionIsWater() {
+  return props.section === "water";
+}
+async function undo(id: number) {
+  if (props.demo) {
+    demoNotice();
+    return;
+  }
+  if (busy.value || completionSyncPending.value) return;
+  busy.value = `undo-${id}`;
+  actionError.value = "";
+  syncAction.value = "撤销";
+  try {
+    const receipt = await choreRequest<{ task: ChoreTask; version: number }>(
+      `/chores/tasks/${id}/undo`,
+      props.token,
+      { method: "PATCH", body: "{}" },
+    );
+    if (!alive || !board.value) return;
+    board.value.today_tasks = board.value.today_tasks.map((t) =>
+      t.id === id ? receipt.task : t,
+    );
+    board.value.undo_tasks = (board.value.undo_tasks || []).filter(
+      (t) => t.id !== id,
+    );
+    board.value.calendar = board.value.calendar.filter((t) => t.id !== id);
+    if (receipt.task.key === "water") board.value.water_task = receipt.task;
+    else selectedTaskId.value = id;
+    board.value.version = receipt.version;
+    completionSyncPending.value = true;
+    showToast("已撤销打卡");
+    await load();
+  } catch (e) {
+    if (alive) actionError.value = (e as Error).message;
+  } finally {
+    if (alive) busy.value = "";
   }
 }
 async function nudgeWater() {
@@ -745,6 +813,8 @@ function visibleRefresh() {
     !reminderOpen.value &&
     !markerOpen.value &&
     !toolsOpen.value &&
+    !preferencesOpen.value &&
+    !orderOpen.value &&
     !roundOpen.value &&
     !pushOpen.value &&
     !recoveryOpen.value &&
@@ -765,6 +835,7 @@ onMounted(() => {
   window.addEventListener("online", visibleRefresh);
 });
 onUnmounted(() => {
+  alive = false;
   removeNativeReady();
   resetSectionSwipe();
   ++requestId;
@@ -793,7 +864,9 @@ onUnmounted(() => {
       role="status"
       data-testid="completion-sync-pending"
     >
-      <span>打卡已记录，{{ loading ? "正在同步…" : "等待同步" }}</span>
+      <span
+        >{{ syncAction }}已记录，{{ loading ? "正在同步…" : "等待同步" }}</span
+      >
       <button :disabled="loading" @click="load">
         {{ loading ? "同步中" : "重试同步" }}
       </button>
@@ -804,19 +877,36 @@ onUnmounted(() => {
     <template v-if="board">
       <div class="board-identity">
         <span class="identity-name">{{ board.member.nickname }}</span>
-        <button
-          class="tools-button"
-          :aria-label="
-            unread.length ? `更多操作，${unread.length} 条未读消息` : '更多操作'
-          "
-          data-testid="open-tools"
-          @click="toolsOpen = true"
-        >
-          <van-icon name="ellipsis" aria-hidden="true" />
-          <span v-if="unread.length" class="tools-unread" aria-hidden="true">{{
-            unread.length > 9 ? "9+" : unread.length
-          }}</span>
-        </button>
+        <div class="identity-actions">
+          <button
+            class="order-trigger"
+            aria-label="抬水轮序"
+            data-testid="open-water-order"
+            @click="orderOpen = true"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 6h12M8 12h12M8 18h12M3 5v2M3 11v2M3 17v2" /></svg
+            ><span>轮序</span>
+          </button>
+          <button
+            class="tools-button"
+            :aria-label="
+              unread.length
+                ? `更多操作，${unread.length} 条未读消息`
+                : '更多操作'
+            "
+            data-testid="open-tools"
+            @click="toolsOpen = true"
+          >
+            <van-icon name="ellipsis" aria-hidden="true" />
+            <span
+              v-if="unread.length"
+              class="tools-unread"
+              aria-hidden="true"
+              >{{ unread.length > 9 ? "9+" : unread.length }}</span
+            >
+          </button>
+        </div>
       </div>
       <div
         class="board-focus"
@@ -831,6 +921,7 @@ onUnmounted(() => {
         <Transition
           :name="direction > 0 ? 'focus-next' : 'focus-prev'"
           @before-leave="hideLeaving"
+          @before-enter="showEntered"
         >
           <div :key="section" class="focus-pane">
             <section
@@ -843,6 +934,10 @@ onUnmounted(() => {
                 :today="board.today"
                 :records="board.calendar"
                 :members="board.members"
+                :member-id="memberId"
+                :busy="!!busy || completionSyncPending"
+                :undo-error="actionError"
+                @undo="undo"
                 :loading="loading"
                 @change="month = $event"
                 @closed="presentNewReminders"
@@ -903,47 +998,48 @@ onUnmounted(() => {
                   @lostpointercapture="taskSwipe.cancel"
                   @keydown.esc="taskSwipe.cancel"
                 >
-                  <Transition
-                    name="hero-task"
-                    mode="out-in"
-                    :css="titleAnimation"
-                    @before-leave="hideLeaving"
+                  <TaskTitle
+                    :value="activeDutyTask.id"
+                    :animated="titleAnimation"
                   >
-                    <h2 :key="activeDutyTask.id">
-                      <button
-                        class="task-title-button"
-                        :aria-label="`查看${activeDutyTask.name}详情`"
-                        @click="openTask(activeDutyTask, $event)"
-                      >
-                        {{ activeDutyTask.name }}
-                      </button>
-                    </h2>
-                  </Transition>
+                    <button
+                      class="task-title-button"
+                      :aria-label="`查看${activeDutyTask.name}详情`"
+                      @click="openTask(activeDutyTask, $event)"
+                    >
+                      {{ activeDutyTask.name }}
+                    </button>
+                  </TaskTitle>
                 </div>
                 <p v-if="!hasToday && !activeRound" class="hero-date">
                   {{ dateText(activeDutyTask.duty_date) }}
                 </p>
-                <p v-if="activeDutyTask.completed_at" class="chore-completed">
-                  <van-icon name="success" aria-hidden="true" />{{
-                    activeRound ? "本轮已完成" : "已完成"
-                  }}
-                </p>
-                <button
-                  v-else-if="activeDutyTask.can_complete || demo"
-                  :data-testid="`complete-${activeDutyTask.key}-${activeDutyTask.id}`"
-                  class="chore-complete-button"
+                <CompletionAction
+                  v-if="
+                    activeDutyTask.status === 'completed' ||
+                    activeDutyTask.can_complete ||
+                    demo
+                  "
+                  :task="activeDutyTask"
+                  :busy="!!busy"
                   :disabled="
-                    !!busy ||
                     completionSyncPending ||
                     (!demo && activeDutyTask.duty_date > board.today)
                   "
-                  @click="complete(activeDutyTask)"
+                  :demo="demo"
+                  @complete="complete"
+                  @undo="undo($event.id)"
+                />
+                <button
+                  v-if="recentUndo && recentUndo.id !== activeDutyTask.id"
+                  class="undo-last"
+                  :disabled="!!busy || completionSyncPending"
+                  :data-testid="`undo-${recentUndo.id}`"
+                  @click="undo(recentUndo.id)"
                 >
-                  {{
-                    busy === `complete-${activeDutyTask.id}`
-                      ? "正在记录…"
-                      : "我已完成"
-                  }}
+                  <van-icon name="revoke" aria-hidden="true" /> 撤销刚才的{{
+                    recentUndo.name
+                  }}打卡
                 </button>
                 <button
                   v-if="activeRound"
@@ -980,9 +1076,9 @@ onUnmounted(() => {
                   aria-labelledby="water-title"
                   data-testid="water-task"
                 >
-                  <Transition name="hero-task" mode="out-in">
-                    <h2
-                      :key="water.assignee_id"
+                  <div class="water-title-stage">
+                    <TaskTitle
+                      :value="water.assignee_id"
                       id="water-title"
                       :style="
                         water.assignee_id !== memberId &&
@@ -1005,22 +1101,20 @@ onUnmounted(() => {
                       >
                         {{ water.name }}
                       </button>
-                    </h2>
-                  </Transition>
-                  <button
+                    </TaskTitle>
+                  </div>
+                  <CompletionAction
                     v-if="
                       water.can_complete ||
                       (demo && water.assignee_id === memberId)
                     "
-                    class="chore-complete-button"
-                    :data-testid="`complete-water-${water.id}`"
-                    :disabled="!!busy || completionSyncPending"
-                    @click="complete(water)"
-                  >
-                    {{
-                      busy === `complete-${water.id}` ? "正在记录…" : "我已抬水"
-                    }}
-                  </button>
+                    :task="water"
+                    :busy="!!busy"
+                    :disabled="completionSyncPending"
+                    :demo="demo"
+                    @complete="complete"
+                    @undo="undo($event.id)"
+                  />
                   <div
                     v-else-if="water.assignee_id !== memberId"
                     class="water-nudge-actions"
@@ -1038,6 +1132,16 @@ onUnmounted(() => {
                   <p v-else class="hero-date">
                     {{ dateText(water.duty_date) }} 开始
                   </p>
+                  <button
+                    v-if="recentUndo"
+                    class="undo-last"
+                    :disabled="!!busy || completionSyncPending"
+                    :data-testid="`undo-${recentUndo.id}`"
+                    @click="undo(recentUndo.id)"
+                  >
+                    <van-icon name="revoke" aria-hidden="true" />
+                    撤销刚才的抬水打卡
+                  </button>
                 </section>
               </template>
               <div v-else class="water-empty" data-testid="water-empty">
@@ -1063,111 +1167,140 @@ onUnmounted(() => {
       </p>
       <ElasticSheet
         v-model="toolsOpen"
-        :title="dormName || '宿舍操作'"
+        :title="dormName || '宿舍'"
+        motion="bottom"
         @closed="runQueuedTool"
       >
-        <div class="board-tools">
-          <button
-            data-testid="guest-change-member"
-            @click="fromTools(() => emit('switch-member'))"
-          >
-            切换室友<van-icon name="arrow" aria-hidden="true" />
-          </button>
-          <button
-            data-testid="guest-change-dorm"
-            @click="fromTools(() => emit('join-dorm'))"
-          >
-            加入其他宿舍<van-icon name="arrow" aria-hidden="true" />
-          </button>
-          <button
-            data-testid="guest-create-dorm"
-            @click="fromTools(() => emit('create-dorm'))"
-          >
-            创建宿舍<van-icon name="arrow" aria-hidden="true" />
-          </button>
-          <button data-testid="open-marker" @click="fromTools(openMarker)">
-            更换标记<van-icon name="arrow" aria-hidden="true" />
-          </button>
-          <button
-            v-if="section !== 'calendar'"
+        <div class="menu-profile">
+          <MemberMark :id="board.member.marker_id" :size="34" />
+          <div>
+            <strong>{{ board.member.nickname }}</strong
+            ><span>{{
+              demo ? "游客体验" : board.is_creator ? "宿舍创建者" : "宿舍成员"
+            }}</span>
+          </div>
+        </div>
+        <div class="menu-quick">
+          <ActionItem
+            tile
+            label="提醒室友"
+            icon="chat-o"
             data-testid="open-reminder"
             @click="fromTools(openReminder)"
-          >
-            提醒室友<van-icon name="arrow" aria-hidden="true" /></button
-          ><button
+          />
+          <ActionItem
+            tile
+            :delay="0.02"
+            label="室友消息"
+            icon="comment-o"
+            :badge="unread.length"
+            data-testid="open-messages"
+            @click="fromTools(() => (messagesOpen = true))"
+          />
+          <ActionItem
+            tile
+            :delay="0.04"
+            label="切换宿舍"
+            icon="exchange"
+            data-testid="guest-change-dorm"
+            @click="fromTools(() => emit('join-dorm'))"
+          />
+          <ActionItem
+            tile
+            :delay="0.06"
+            label="系统通知"
+            icon="bell"
+            data-testid="open-system-notifications"
+            @click="fromTools(() => (pushOpen = true))"
+          />
+        </div>
+        <div class="menu-section">
+          <ActionItem
+            v-if="board.is_creator && !demo"
+            label="任务设置"
+            icon="setting-o"
+            data-testid="open-chore-settings"
+            @click="fromTools(() => (settingsOpen = true))"
+          />
+          <ActionItem
+            label="个人与更多"
+            icon="contact-o"
+            data-testid="open-preferences"
+            @click="fromTools(() => (preferencesOpen = true))"
+          />
+        </div>
+      </ElasticSheet>
+      <ElasticSheet
+        v-model="preferencesOpen"
+        title="个人与更多"
+        motion="bottom"
+        @closed="runQueuedTool"
+      >
+        <div class="menu-section">
+          <ActionItem
+            label="切换室友"
+            icon="friends-o"
+            data-testid="guest-change-member"
+            @click="fromPreferences(() => emit('switch-member'))"
+          />
+          <ActionItem
+            label="更换标记"
+            icon="smile-o"
+            data-testid="open-marker"
+            @click="fromPreferences(openMarker)"
+          />
+        </div>
+        <div class="menu-section">
+          <ActionItem
+            label="创建宿舍"
+            icon="plus"
+            data-testid="guest-create-dorm"
+            @click="fromPreferences(() => emit('create-dorm'))"
+          />
+          <ActionItem
             v-if="!demo"
+            :label="board.is_creator ? '管理恢复码' : '恢复管理权限'"
+            icon="shield-o"
             data-testid="open-creator-recovery"
             @click="
-              fromTools(() =>
+              fromPreferences(() =>
                 board?.is_creator
                   ? (recoveryOpen = true)
                   : emit('recover-owner'),
               )
             "
-          >
-            {{ board.is_creator ? "管理恢复码" : "恢复管理权限"
-            }}<van-icon name="arrow" aria-hidden="true" /></button
-          ><button
-            v-if="board.is_creator && !demo && section !== 'calendar'"
-            data-testid="open-chore-settings"
-            @click="fromTools(() => (settingsOpen = true))"
-          >
-            任务设置<van-icon name="setting-o" aria-hidden="true" /></button
-          ><button
-            v-if="!demo"
-            data-testid="open-system-notifications"
-            @click="fromTools(() => (pushOpen = true))"
-          >
-            系统通知<van-icon name="bell" aria-hidden="true" /></button
-          ><button
-            data-testid="open-messages"
-            @click="fromTools(() => (messagesOpen = true))"
-          >
-            室友消息<span v-if="unread.length" class="message-count">{{
-              unread.length
-            }}</span></button
-          ><button
+          />
+          <ActionItem
+            label="刷新安排"
+            icon="replay"
             :disabled="loading || !!busy"
             data-testid="chore-refresh"
-            aria-label="刷新安排"
-            @click="fromTools(() => void load())"
-          >
-            刷新安排<van-icon
-              name="replay"
-              :class="{ 'refresh-spinning': loading }"
-              aria-hidden="true"
-            />
-          </button>
+            @click="fromPreferences(() => void load())"
+          />
         </div>
-        <details v-if="section === 'water' && water" class="water-order">
-          <summary>
-            <span>轮换顺序</span
-            ><strong v-if="nextWaterPerson"
-              >下一位 · {{ nextWaterPerson.nickname }}</strong
-            ><van-icon name="arrow-down" aria-hidden="true" />
-          </summary>
-          <div>
-            <span
-              v-for="personId in board.water_order"
-              :key="personId"
-              :class="{ current: personId === water.assignee_id }"
-              ><MemberMark
-                :id="currentMember(personId)?.marker_id"
-                :size="18"
-              /><span>{{ currentMember(personId)?.nickname }}</span></span
-            >
-          </div>
-        </details>
       </ElasticSheet>
+      <WaterOrderSheet
+        v-if="board.categories.find((c) => c.key === 'water')"
+        v-model="orderOpen"
+        :members="board.members"
+        :category="board.categories.find((c) => c.key === 'water')!"
+        :current-id="water?.assignee_id"
+        :creator="board.is_creator && !demo"
+        :version="board.version"
+        :token="token"
+        @saved="load"
+        @closed="presentNewReminders"
+      />
       <ElasticSheet
         v-model="detailOpen"
         :title="detailTask?.name || '任务详情'"
         :origin="detailOrigin"
         :motion="detailMotion"
+        :modal="detailMotion !== 'bottom'"
         @closed="detailTask = null"
       >
-        <template v-if="detailTask"
-          ><p class="task-full-content">{{ detailTask.content }}</p>
+        <div v-if="detailTask" v-tilt class="task-detail-card">
+          <p class="task-full-content">{{ detailTask.content }}</p>
           <div class="task-detail-meta">
             <span>{{ statusText(detailTask) }}</span>
             <span>{{ detailTask.assignee_name }}</span
@@ -1178,8 +1311,8 @@ onUnmounted(() => {
           </div>
           <p v-if="detailTask.completed_at" class="chore-completed">
             {{ clock(detailTask.completed_at) }} 已完成
-          </p></template
-        >
+          </p>
+        </div>
       </ElasticSheet>
       <ElasticSheet
         v-model="roundOpen"
@@ -1385,6 +1518,127 @@ onUnmounted(() => {
   </div>
 </template>
 <style scoped>
+.task-detail-card {
+  position: relative;
+  isolation: isolate;
+  padding: 20px;
+  margin: 2px 0;
+  border: 1px solid #e8e8e8;
+  border-radius: 22px;
+  background: #f8f8f8;
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg))
+    rotateY(var(--tilt-y, 0deg));
+}
+.task-detail-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--shine-opacity, 0);
+  background: radial-gradient(
+    circle at var(--shine-x, 50%) var(--shine-y, 50%),
+    #fff 0,
+    transparent 65%
+  );
+  z-index: -1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-card {
+    transform: none;
+  }
+  .task-detail-card::after {
+    display: none;
+  }
+}
+.identity-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.order-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 16px;
+  padding: 8px 11px;
+  background: #f5f5f5;
+  color: #222;
+  font-size: 14px;
+  cursor: pointer;
+}
+.order-trigger svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+.order-trigger:active {
+  transform: scale(0.96);
+}
+.menu-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 4px 24px;
+}
+.menu-profile > div {
+  display: grid;
+  gap: 5px;
+}
+.menu-profile strong {
+  font-size: 20px;
+  font-weight: 600;
+}
+.menu-profile span {
+  font-size: 14px;
+  color: #777;
+}
+.menu-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.menu-section {
+  padding: 7px;
+  margin-top: 16px;
+  border-radius: 22px;
+  background: #fafafa;
+}
+.menu-section + .menu-section {
+  margin-top: 12px;
+}
+.undo-last {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #666;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+.undo-last:active {
+  background: #f3f3f3;
+}
+.water-title-stage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 84px;
+}
+.water-title-stage h2 {
+  grid-area: 1 / 1;
+}
+
 .round-progress {
   display: flex;
   align-items: center;
@@ -1907,24 +2161,6 @@ onUnmounted(() => {
   }
   .chore-completed {
     animation: task-arrive 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .hero-task-enter-active {
-    transition:
-      opacity 180ms ease,
-      transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .hero-task-leave-active {
-    transition:
-      opacity 90ms ease,
-      transform 120ms ease;
-  }
-  .hero-task-enter-from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  .hero-task-leave-to {
-    opacity: 0;
-    transform: translateY(-6px);
   }
   .board-loading {
     animation: skeleton-pulse 1.2s ease-in-out infinite alternate;

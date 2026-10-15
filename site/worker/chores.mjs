@@ -448,7 +448,7 @@ async function planDaily(
 async function roundState(db, room, category, members) {
   const latest = await first(
     db,
-    "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL",
+    "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL AND status<>'cancelled'",
     [room.id, category.key],
   );
   const sequence = Number(latest?.sequence || 0);
@@ -714,7 +714,7 @@ async function board(request, db, env, now, url) {
     db,
     `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
     WHERE t.dorm_id=? AND t.key<>'water' AND t.assignee_id=? AND t.status<>'cancelled' AND c.enabled=1
-    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode='self_round' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.key`,
+    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode='self_round' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`,
     [room.id, uid, today],
   );
   const nextRows = await all(
@@ -736,8 +736,21 @@ async function board(request, db, env, now, url) {
     who?.user_id === uid
       ? await all(
           db,
-          "SELECT * FROM chore_reminders WHERE dorm_id=? AND target_member_id=? ORDER BY created_at DESC,id DESC LIMIT 100",
+          "SELECT r.* FROM chore_reminders r WHERE r.dorm_id=? AND r.target_member_id=? AND NOT EXISTS(SELECT 1 FROM chore_tasks t WHERE t.id=r.task_id AND t.status='cancelled') ORDER BY r.created_at DESC,r.id DESC LIMIT 100",
           [room.id, uid],
+        )
+      : [];
+  const undoRows =
+    who?.user_id === uid && !room.is_demo
+      ? await all(
+          db,
+          `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
+     WHERE t.dorm_id=? AND t.assignee_id=? AND t.status='completed' AND t.completed_at>=?
+     AND t.id=(SELECT own.id FROM chore_tasks own WHERE own.dorm_id=t.dorm_id AND own.key=t.key AND own.assignee_id=t.assignee_id AND own.status='completed' ORDER BY own.completed_at DESC,own.id DESC LIMIT 1)
+     AND c.enabled=1 AND ((t.sequence IS NULL AND c.mode='scheduled') OR (t.sequence IS NOT NULL AND c.mode IN ('self_round','completion')))
+     AND NOT EXISTS(SELECT 1 FROM chore_tasks later WHERE later.dorm_id=t.dorm_id AND later.key=t.key AND later.sequence>t.sequence AND later.status='completed')
+     ORDER BY t.completed_at DESC,t.id DESC LIMIT 4`,
+          [room.id, uid, new Date(now.getTime() - DAY).toISOString()],
         )
       : [];
   const rounds = [];
@@ -787,6 +800,9 @@ async function board(request, db, env, now, url) {
       taskView(task, now, actorForTasks, settings, members),
     ),
     water_task: taskView(water, now, actorForTasks, settings, members),
+    undo_tasks: undoRows.map((task) =>
+      taskView(task, now, actorForTasks, settings, members),
+    ),
     water_order: settings.find((entry) => entry.key === "water").rotation_order,
     calendar: calendarRows.map((row) => ({
       id: row.id,
@@ -1130,18 +1146,22 @@ async function completeOnce(db, room, who, now, id) {
     const next =
       (category.rotation_order.indexOf(who.user_id) + 1) %
       category.rotation_order.length;
-    appendRows(mutation, [
-      plannedRow(
-        room,
-        category,
-        localDate(now) > category.start_date
-          ? localDate(now)
-          : category.start_date,
-        category.rotation_order[next],
-        members,
-        task.sequence + 1,
-      ),
-    ]);
+    appendRows(
+      mutation,
+      [
+        plannedRow(
+          room,
+          category,
+          localDate(now) > category.start_date
+            ? localDate(now)
+            : category.start_date,
+          category.rotation_order[next],
+          members,
+          task.sequence + 1,
+        ),
+      ],
+      true,
+    );
   }
   if (category.mode === "self_round")
     await planRound(db, mutation, room, category, members, now, task.id);
@@ -1164,6 +1184,89 @@ async function completeOnce(db, room, who, now, id) {
   return json({
     task: taskView(finished, now, who, settings, members),
     next_water: taskView(nextWater, now, who, settings, members),
+    version: state.version + 1,
+  });
+}
+// Undo only the actor's completion. A later completed turn is never rewound.
+async function undo(db, room, who, now, id) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      return await undoOnce(db, room, who, now, id);
+    } catch (error) {
+      if (
+        !(error instanceof ChoreError && error.code === "stale_version") ||
+        attempt === 7
+      )
+        throw error;
+    }
+  }
+}
+async function undoOnce(db, room, who, now, id) {
+  const { state, settings, members } = await maintain(db, room, now),
+    task = await taskInRoom(db, room, id);
+  if (task.assignee_id !== who.user_id)
+    fail(403, "not_assignee", "只能撤销自己的打卡");
+  if (task.status !== "completed")
+    fail(409, "not_completed", "这条打卡已撤销或尚未完成");
+  const category = settings.find((c) => c.key === task.key);
+  if (
+    !category?.enabled ||
+    (task.sequence === null
+      ? category.mode !== "scheduled"
+      : !["self_round", "completion"].includes(category.mode))
+  )
+    fail(409, "mode_changed", "任务安排已调整，请联系创建者处理这条记录");
+  if (
+    task.sequence !== null &&
+    (await first(
+      db,
+      "SELECT id FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence>? AND status='completed'",
+      [room.id, task.key, task.sequence],
+    ))
+  )
+    fail(
+      409,
+      "following_turn_completed",
+      "后续轮次已有室友打卡，不能直接回退。请联系创建者核对。",
+    );
+  const mutation = new Mutation(
+    db,
+    room,
+    state.version,
+    who,
+    false,
+    "EXISTS(SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND assignee_id=? AND status='completed')",
+    [id, who.user_id],
+  );
+  if (task.sequence !== null) {
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "dorm_id=? AND key=? AND sequence>? AND status='pending'",
+      [room.id, task.key, task.sequence],
+    );
+    mutation.update(
+      "chore_push_jobs",
+      { status: "cancelled" },
+      "dorm_id=? AND status='pending' AND reminder_id IN (SELECT r.id FROM chore_reminders r JOIN chore_tasks t ON t.id=r.task_id WHERE t.dorm_id=? AND t.key=? AND t.sequence>? AND t.status='cancelled')",
+      [room.id, room.id, task.key, task.sequence],
+    );
+  }
+  mutation.update(
+    "chore_tasks",
+    { status: "pending", completed_at: null },
+    "id=? AND assignee_id=? AND status='completed'",
+    [id, who.user_id],
+  );
+  await mutation.finish();
+  return json({
+    task: taskView(
+      { ...task, status: "pending", completed_at: null },
+      now,
+      who,
+      settings,
+      members,
+    ),
     version: state.version + 1,
   });
 }
@@ -1714,6 +1817,9 @@ export async function handleChores(request, env, now) {
       { state } = await maintain(db, room, now);
     return json(await setMarker(db, room, who, marker, state));
   }
+  const undoMatch = /^\/chores\/tasks\/(\d+)\/undo$/.exec(path);
+  if (undoMatch && method === "PATCH")
+    return undo(db, room, who, now, integer(Number(undoMatch[1])));
   const completeMatch = /^\/chores\/tasks\/(\d+)\/complete$/.exec(path);
   if (completeMatch && method === "PATCH")
     return complete(db, room, who, now, integer(Number(completeMatch[1])));

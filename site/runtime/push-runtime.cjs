@@ -7522,7 +7522,7 @@ function notifyUser(userId, message, { db, env, guard = "1=1", values = [] }) {
 var dailyReminderTasksSql = `SELECT t.id,t.name,t.content,t.key FROM chore_tasks t
   JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
   WHERE t.dorm_id=? AND t.assignee_id=? AND t.key IN ('floor','toilet','sink') AND t.status='pending' AND c.enabled=1
-  AND ((c.mode='scheduled' AND t.duty_date=?) OR (c.mode='self_round' AND t.duty_date<=? AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.key`;
+  AND ((c.mode='scheduled' AND t.duty_date=?) OR (c.mode='self_round' AND t.duty_date<=? AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`;
 var SCHEDULE_CATCH_UP_MS = 30 * 60 * 1e3;
 
 // ../scripts/reminder-scheduler.mjs
@@ -7797,7 +7797,7 @@ async function planDaily(db, mutation, room, settings, members, now, replaceKeys
 async function roundState(db, room, category, members) {
   const latest = await first(
     db,
-    "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL",
+    "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL AND status<>'cancelled'",
     [room.id, category.key]
   );
   const sequence = Number(latest?.sequence || 0);

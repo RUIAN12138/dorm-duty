@@ -77,6 +77,7 @@ export interface ChoreBoardData {
   today_tasks: ChoreTask[];
   next_tasks: ChoreTask[];
   water_task: ChoreTask | null;
+  undo_tasks: ChoreTask[];
   water_order: number[];
   calendar: ChoreRecord[];
   reminders: ChoreReminder[];
