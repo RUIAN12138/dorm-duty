@@ -56,7 +56,15 @@ async function close() {
   emit("update:modelValue", false);
 }
 function down(e: PointerEvent) {
-  if (!panel.value || closing || dragging || !e.isPrimary || e.button !== 0)
+  if (
+    !panel.value ||
+    closing ||
+    dragging ||
+    !e.isPrimary ||
+    e.button !== 0 ||
+    (e.target instanceof Element &&
+      e.target.closest("button, input, textarea, select, a, [contenteditable='true']"))
+  )
     return;
   dragBaseline = bottomOnly.value
     ? new DOMMatrixReadOnly(getComputedStyle(panel.value).transform).m42
@@ -70,6 +78,34 @@ function down(e: PointerEvent) {
   speed = 0;
   offset = dragBaseline;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+}
+async function closeByDrag() {
+  if (closing) return;
+  closing = true;
+  if (panel.value && !reduce()) {
+    animation?.cancel();
+    exitAnimating = true;
+    const from = getComputedStyle(panel.value).transform;
+    animation = panel.value.animate(
+      [
+        { transform: from, offset: 0 },
+        {
+          transform: "translateY(102%)",
+          offset: 0.82,
+          easing: "cubic-bezier(.4,0,.7,.2)",
+        },
+        { transform: "translateY(96%)", offset: 0.92 },
+        { transform: "translateY(100%)", offset: 1 },
+      ],
+      {
+        duration: 280,
+        easing: "cubic-bezier(.22,1,.36,1)",
+        fill: "forwards",
+      },
+    );
+    await animation.finished.catch(() => {});
+  }
+  emit("update:modelValue", false);
 }
 function move(e: PointerEvent) {
   if (!dragging || !panel.value) return;
@@ -86,7 +122,8 @@ function up(cancelled = false) {
   dragging = false;
   if (performance.now() - lastTime > 80) speed = 0;
   if (!cancelled && (offset > 130 || (offset > 35 && speed > 0.6))) {
-    close();
+    if (bottomOnly.value) close();
+    else void closeByDrag();
     return;
   }
   if (!reduce())
@@ -121,13 +158,24 @@ function bottomTransition(
   animation?.cancel();
   scrimAnimation?.cancel();
   animation = sheet.animate(
-    [
-      { transform: from },
-      { transform: entering ? "translate3d(0,0,0)" : "translate3d(0,100%,0)" },
-    ],
+    entering
+      ? [
+          { transform: from },
+          { transform: "translate3d(0,0,0)" },
+        ]
+      : [
+          { transform: from, offset: 0 },
+          {
+            transform: "translate3d(0,102%,0)",
+            offset: 0.82,
+            easing: "cubic-bezier(.4,0,.7,.2)",
+          },
+          { transform: "translate3d(0,96%,0)", offset: 0.92 },
+          { transform: "translate3d(0,100%,0)", offset: 1 },
+        ],
     {
-      duration: entering ? 300 : 220,
-      easing: entering ? "cubic-bezier(.32,.72,0,1)" : "cubic-bezier(.4,0,1,1)",
+      duration: entering ? 300 : 280,
+      easing: entering ? "cubic-bezier(.32,.72,0,1)" : "cubic-bezier(.22,1,.36,1)",
       fill: "both",
     },
   );
@@ -269,6 +317,7 @@ onUnmounted(() => {
         <section
           ref="panel"
           class="elastic-sheet"
+          :class="{ 'is-bottom-sheet': bottomOnly }"
           role="dialog"
           aria-modal="true"
           :aria-label="title"
@@ -283,7 +332,13 @@ onUnmounted(() => {
           >
             <span></span>
           </div>
-          <header class="sheet-heading">
+          <header
+            class="sheet-heading"
+            @pointerdown="down"
+            @pointermove="move"
+            @pointerup="up(false)"
+            @pointercancel="up(true)"
+          >
             <div>
               <h2>{{ title }}</h2>
             </div>

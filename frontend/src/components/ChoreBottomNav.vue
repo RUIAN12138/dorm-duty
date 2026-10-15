@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch, nextTick, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 const router = useRouter();
 const props = defineProps<{
@@ -12,11 +12,41 @@ const items = [
 ] as const;
 const dragging = ref(false);
 const preview = ref(0);
-const navIndex = computed(() =>
-  dragging.value
-    ? preview.value
-    : items.findIndex((item) => item.section === props.section),
+const currentIndex = computed(() =>
+  items.findIndex((item) => item.section === props.section),
 );
+const navIndex = computed(() =>
+  dragging.value ? preview.value : currentIndex.value,
+);
+const flowFrom = ref(currentIndex.value);
+const flowDirection = ref(1);
+const flowing = ref(false);
+let flowTimer = 0;
+let flowFrame = 0;
+watch(currentIndex, async (next, previous) => {
+  if (next === previous) return;
+  if (dragging.value) {
+    flowFrom.value = next;
+    flowing.value = false;
+    return;
+  }
+  flowFrom.value = previous;
+  flowDirection.value = next > previous ? 1 : -1;
+  flowing.value = false;
+  await nextTick();
+  cancelAnimationFrame(flowFrame);
+  flowFrame = requestAnimationFrame(() => {
+    flowing.value = true;
+    window.clearTimeout(flowTimer);
+    flowTimer = window.setTimeout(() => {
+      flowing.value = false;
+    }, 460);
+  });
+});
+onUnmounted(() => {
+  cancelAnimationFrame(flowFrame);
+  window.clearTimeout(flowTimer);
+});
 let gesture: { id: number; x: number; y: number; nav: HTMLElement } | null =
   null;
 let suppressClickUntil = 0;
@@ -87,7 +117,7 @@ function click(event: MouseEvent) {
     class="chore-bottom-nav"
     aria-label="宿舍导航"
     data-testid="chore-bottom-nav"
-    :class="{ 'is-dragging': dragging }"
+    :class="{ 'is-dragging': dragging, 'is-flowing': flowing }"
     @pointerdown="down"
     @pointermove="move"
     @pointerup="finish($event)"
@@ -97,6 +127,8 @@ function click(event: MouseEvent) {
     @dragstart.prevent
     :style="{
       '--nav-index': navIndex,
+      '--nav-from': flowFrom,
+      '--nav-origin': flowDirection > 0 ? 'right' : 'left',
     }"
   >
     <span class="nav-selection" aria-hidden="true"></span>
@@ -165,7 +197,43 @@ function click(event: MouseEvent) {
   border-radius: 14px;
   background: #f3f3f3;
   transform: translateX(calc(var(--nav-index) * 100%));
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.is-flowing .nav-selection {
+  transform-origin: var(--nav-origin, center);
+  animation: nav-water-flow 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.is-flowing a.active svg {
+  animation: nav-icon-bounce 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes nav-water-flow {
+  from {
+    transform: translateX(calc(var(--nav-from) * 100%)) scaleX(0.82);
+    border-radius: 14px;
+  }
+  56% {
+    transform: translateX(calc(var(--nav-index) * 100%)) scaleX(0.9);
+    border-radius: 50% 14px 14px 50%;
+  }
+  76% {
+    transform: translateX(calc(var(--nav-index) * 100%)) scaleX(1.28);
+    border-radius: 50% 14px 14px 50%;
+  }
+  to {
+    transform: translateX(calc(var(--nav-index) * 100%)) scaleX(1);
+    border-radius: 14px;
+  }
+}
+@keyframes nav-icon-bounce {
+  0%,
+  52% {
+    transform: translateY(0) scale(1);
+  }
+  72% {
+    transform: translateY(-3px) scale(1.12);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
 }
 a {
   display: flex;
@@ -188,6 +256,12 @@ a:active {
 a.active {
   color: #111;
   font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-flowing .nav-selection,
+  .is-flowing a.active svg {
+    animation: none;
+  }
 }
 svg {
   width: 21px;
