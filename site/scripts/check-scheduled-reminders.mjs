@@ -155,7 +155,7 @@ test("one combined reminder per slot, two native devices, repeated and concurren
   await Promise.all([a.drain(), b.drain(), a.drain()]);
   eq(records(h).length, 1);
   eq(jobs(h).length, 2);
-  ok(records(h)[0].task_content_snapshot.includes("地板、厕所"));
+  ok(records(h)[0].task_content_snapshot.includes("洗手池"));
   eq(records(h)[0].task_id, null);
   const view = await board(h, r);
   eq(view.reminders[0].source, "scheduled");
@@ -236,7 +236,7 @@ test("delivery rechecks completion and does not transfer an old reminder into th
   ok(next.today_tasks.every((task) => task.status === "pending"));
   eq(
     next.rounds.map((round) => round.sequence),
-    [2, 2],
+    [2, 2, 2],
   );
   let sends = 0;
   const delivery = createPushDelivery(

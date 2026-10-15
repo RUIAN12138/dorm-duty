@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { showToast } from "vant";
+import { useRouter } from "vue-router";
 import { ApiError } from "../api";
 import { completeChore } from "../api/completion";
 import {
@@ -32,6 +33,7 @@ const props = defineProps<{
   demo: boolean;
   section: "duty" | "water" | "calendar";
 }>();
+const router = useRouter();
 const emit = defineEmits<{
   expired: [];
   member: [value: ChoreMember];
@@ -112,6 +114,73 @@ const detailMotion = ref<"shared" | "bottom">("shared");
 const detailOrigin = ref<DOMRect | null>(null);
 const direction = ref(1);
 const sectionOrder = ["duty", "water", "calendar"];
+const sectionPaths = ["/", "/water", "/calendar"];
+const sectionSwipeOffset = ref(0);
+const sectionSwipeDragging = ref(false);
+let sectionPointer: {
+  id: number;
+  x: number;
+  y: number;
+  horizontal: boolean;
+  surface: HTMLElement;
+} | null = null;
+function resetSectionSwipe() {
+  const active = sectionPointer;
+  sectionPointer = null;
+  sectionSwipeDragging.value = false;
+  sectionSwipeOffset.value = 0;
+  if (active?.surface.hasPointerCapture(active.id))
+    active.surface.releasePointerCapture(active.id);
+}
+function sectionSwipeDown(event: PointerEvent) {
+  if (!event.isPrimary || event.button !== 0 || sectionPointer) return;
+  if (
+    !(event.target instanceof Element) ||
+    !event.target.closest("[data-section-swipe-handle]")
+  )
+    return;
+  sectionPointer = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    horizontal: false,
+    surface: event.currentTarget as HTMLElement,
+  };
+}
+function sectionSwipeMove(event: PointerEvent) {
+  const active = sectionPointer;
+  if (!active || active.id !== event.pointerId) return;
+  const x = event.clientX - active.x;
+  const y = event.clientY - active.y;
+  if (!active.horizontal) {
+    if (Math.abs(y) > 8 && Math.abs(y) >= Math.abs(x)) {
+      resetSectionSwipe();
+      return;
+    }
+    if (Math.abs(x) < 8 || Math.abs(x) <= Math.abs(y) * 1.2) return;
+    active.horizontal = true;
+    active.surface.setPointerCapture(event.pointerId);
+  }
+  event.preventDefault();
+  sectionSwipeDragging.value = true;
+  sectionSwipeOffset.value = Math.max(-36, Math.min(36, x * 0.24));
+}
+function sectionSwipeUp(event: PointerEvent) {
+  const active = sectionPointer;
+  if (!active || active.id !== event.pointerId) return;
+  const x = event.clientX - active.x;
+  const commit = active.horizontal && Math.abs(x) >= 56;
+  resetSectionSwipe();
+  if (!commit) return;
+  const index = sectionOrder.indexOf(props.section);
+  const next = index + (x < 0 ? 1 : -1);
+  const path = sectionPaths[next];
+  if (path) void router.push(path);
+  else showToast(x < 0 ? "已经是最后一页" : "已经是第一页");
+}
+function sectionSwipeCancel(event: PointerEvent) {
+  if (sectionPointer?.id === event.pointerId) resetSectionSwipe();
+}
 watch(
   () => props.section,
   (next, previous) => {
@@ -185,13 +254,8 @@ watch(
     roundProgressFrame = 0;
     const animationId = ++roundProgressAnimation;
     const boundedTotal = Math.max(0, total);
-    const boundedCompleted = Math.min(
-      boundedTotal,
-      Math.max(0, completed),
-    );
-    const targetProgress = boundedTotal
-      ? boundedCompleted / boundedTotal
-      : 0;
+    const boundedCompleted = Math.min(boundedTotal, Math.max(0, completed));
+    const targetProgress = boundedTotal ? boundedCompleted / boundedTotal : 0;
     if (!open) {
       roundAnimatedProgress.value = 0;
       roundAnimatedCompleted.value = 0;
@@ -702,6 +766,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   removeNativeReady();
+  resetSectionSwipe();
   ++requestId;
   controller?.abort();
   targetController?.abort();
@@ -753,7 +818,16 @@ onUnmounted(() => {
           }}</span>
         </button>
       </div>
-      <div class="board-focus">
+      <div
+        class="board-focus"
+        :class="{ 'section-swipe-dragging': sectionSwipeDragging }"
+        :style="{ '--section-swipe-offset': `${sectionSwipeOffset}px` }"
+        @pointerdown="sectionSwipeDown"
+        @pointermove="sectionSwipeMove"
+        @pointerup="sectionSwipeUp"
+        @pointercancel="sectionSwipeCancel"
+        @lostpointercapture="sectionSwipeCancel"
+      >
         <Transition
           :name="direction > 0 ? 'focus-next' : 'focus-prev'"
           @before-leave="hideLeaving"
@@ -780,7 +854,12 @@ onUnmounted(() => {
               aria-labelledby="personal-title"
               data-testid="pane-duty"
             >
-              <h1 id="personal-title" class="hero-caption">
+              <h1
+                id="personal-title"
+                class="hero-caption"
+                data-section-swipe-handle
+                data-testid="page-swipe-title"
+              >
                 {{ dutyCaption }}
               </h1>
               <div
@@ -885,7 +964,11 @@ onUnmounted(() => {
               data-testid="pane-water"
             >
               <template v-if="water">
-                <h1 class="hero-caption">
+                <h1
+                  class="hero-caption"
+                  data-section-swipe-handle
+                  data-testid="page-swipe-title"
+                >
                   {{
                     water.assignee_id === memberId
                       ? "没水时轮到你："
@@ -958,7 +1041,13 @@ onUnmounted(() => {
                 </section>
               </template>
               <div v-else class="water-empty" data-testid="water-empty">
-                <h1 class="hero-caption">抬水已暂停</h1>
+                <h1
+                  class="hero-caption"
+                  data-section-swipe-handle
+                  data-testid="page-swipe-title"
+                >
+                  抬水已暂停
+                </h1>
                 <h2>休息</h2>
               </div>
             </section>
@@ -999,7 +1088,11 @@ onUnmounted(() => {
           <button data-testid="open-marker" @click="fromTools(openMarker)">
             更换标记<van-icon name="arrow" aria-hidden="true" />
           </button>
-          <button data-testid="open-reminder" @click="fromTools(openReminder)">
+          <button
+            v-if="section !== 'calendar'"
+            data-testid="open-reminder"
+            @click="fromTools(openReminder)"
+          >
             提醒室友<van-icon name="arrow" aria-hidden="true" /></button
           ><button
             v-if="!demo"
@@ -1015,7 +1108,7 @@ onUnmounted(() => {
             {{ board.is_creator ? "管理恢复码" : "恢复管理权限"
             }}<van-icon name="arrow" aria-hidden="true" /></button
           ><button
-            v-if="board.is_creator && !demo"
+            v-if="board.is_creator && !demo && section !== 'calendar'"
             data-testid="open-chore-settings"
             @click="fromTools(() => (settingsOpen = true))"
           >
@@ -1104,12 +1197,7 @@ onUnmounted(() => {
             data-testid="round-progress-ring"
           >
             <svg viewBox="0 0 120 120">
-              <circle
-                class="round-progress-track"
-                cx="60"
-                cy="60"
-                r="50"
-              />
+              <circle class="round-progress-track" cx="60" cy="60" r="50" />
               <circle
                 class="round-progress-value"
                 cx="60"
@@ -1443,6 +1531,24 @@ onUnmounted(() => {
 }
 .board-focus {
   position: relative;
+}
+.board-focus :deep([data-section-swipe-handle]) {
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.board-focus.section-swipe-dragging :deep([data-section-swipe-handle]) {
+  transform: translateX(var(--section-swipe-offset));
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-focus :deep([data-section-swipe-handle]) {
+    transition: none;
+  }
+  .board-focus.section-swipe-dragging :deep([data-section-swipe-handle]) {
+    transform: none;
+  }
 }
 .focus-pane {
   width: 100%;

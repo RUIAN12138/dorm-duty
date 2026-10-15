@@ -254,7 +254,7 @@ export async function calendarFeed(request, { db, now, maintain }) {
     await stmt(
       db,
       `SELECT t.*,c.mode FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-    WHERE t.dorm_id=? AND t.assignee_id=? AND t.status='pending' AND t.key IN ('floor','toilet') AND c.enabled=1
+    WHERE t.dorm_id=? AND t.assignee_id=? AND t.status='pending' AND t.key IN ('floor','toilet','sink') AND c.enabled=1
     AND ((c.mode='scheduled' AND t.duty_date BETWEEN ? AND ?) OR (c.mode='self_round' AND t.duty_date<=? AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.duty_date,t.key LIMIT 64`,
       [subscription.dorm_id, subscription.user_id, today, end, today],
     ).all()

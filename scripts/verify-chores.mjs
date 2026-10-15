@@ -19,13 +19,16 @@ const checks = [],
 let service,
   browser,
   origin,
-  phase = "start";
+  diagnosticPage,
+  phase = "start",
+  navigationStep = "";
+let expectedPane = "none";
 function safe(value) {
   let text = String(value);
   for (const secret of secrets) text = text.split(secret).join("[redacted]");
   return text
     .replace(/Bearer\s+[^\s"']+/gi, "Bearer [redacted]")
-    .split("\n")[0]
+    .replace(/\s*\n\s*/g, " / ")
     .slice(0, 500);
 }
 async function start(port = 0) {
@@ -169,13 +172,39 @@ async function identity(page) {
   }));
 }
 async function openMenu(page) {
+  diagnosticPage = page;
   await page.getByTestId("open-tools").click();
-  await page.getByRole("dialog", { name: "宿舍操作", exact: true }).waitFor();
+  await page.locator(".elastic-sheet").waitFor();
 }
 async function closeMenu(page) {
-  const menu = page.getByRole("dialog", { name: "宿舍操作", exact: true });
+  const menu = page.locator(".elastic-sheet");
   await menu.getByRole("button", { name: "关闭详情", exact: true }).click();
   await menu.waitFor({ state: "hidden" });
+}
+async function closePresentedReminder(page) {
+  const panel = page.getByTestId("chore-reminders");
+  if (!(await panel.isVisible().catch(() => false))) return;
+  const read = panel.locator('[data-testid^="reminder-read-"]').first();
+  if (await read.count()) {
+    const testId = await read.getAttribute("data-testid");
+    const id = Number(testId?.slice("reminder-read-".length));
+    const response = page
+      .waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname === `/chores/reminders/${id}/read` &&
+          r.request().method() === "PATCH",
+      )
+      .then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+    await read.click();
+    const result = await response;
+    if (result.error) throw result.error;
+    assert.equal(result.value.status(), 200);
+  }
+  await page.getByTestId("messages-close").click();
+  await panel.waitFor({ state: "hidden" });
 }
 async function openTool(page, id) {
   await openMenu(page);
@@ -190,7 +219,11 @@ async function openTool(page, id) {
 }
 async function pane(page, key) {
   const wanted = panes[key];
-  await page.waitForURL((url) => url.pathname === wanted.path);
+  expectedPane = key;
+  await page.waitForFunction(
+    (path) => window.location.pathname === path,
+    wanted.path,
+  );
   await page.locator(wanted.selector).waitFor();
   await page
     .locator('.focus-pane[aria-hidden="true"]')
@@ -199,9 +232,10 @@ async function pane(page, key) {
     assert.equal(
       await page.locator(item.selector).count(),
       name === key ? 1 : 0,
+      `${key} page content is isolated while showing ${name}`,
     );
     const tab = page.getByTestId(`nav-${name}`);
-    assert.equal(await tab.count(), 1);
+    assert.equal(await tab.count(), 1, `${name} navigation tab exists`);
     const bounds = await tab.boundingBox();
     const viewport = page.viewportSize();
     assert(
@@ -213,35 +247,80 @@ async function pane(page, key) {
     assert.equal(
       new URL(await tab.getAttribute("href"), origin).pathname,
       item.path,
+      `${name} navigation target is correct`,
     );
     assert.equal(
       await tab.getAttribute("aria-current"),
       name === key ? "page" : null,
+      `${name} active tab matches ${key} page`,
     );
   }
   assert.equal(
     await page.locator(".chore-personal").count(),
     key === "duty" ? 1 : 0,
+    `duty content visibility on ${key}`,
   );
   assert.equal(
     await page.getByTestId("water-task").count(),
     key === "water" ? 1 : 0,
+    `water content visibility on ${key}`,
   );
   assert.equal(
     await page.getByTestId("chore-calendar").count(),
     key === "calendar" ? 1 : 0,
+    `calendar content visibility on ${key}`,
   );
   await openMenu(page);
   assert.equal(
     await page.getByTestId("open-reminder").count(),
     key === "calendar" ? 0 : 1,
+    `reminder action visibility on ${key}`,
   );
-  assert.equal(await page.getByTestId("open-messages").count(), 1);
+  assert.equal(
+    await page.getByTestId("open-messages").count(),
+    1,
+    `message action remains available on ${key}`,
+  );
   await closeMenu(page);
 }
 async function navigate(page, key) {
-  await page.getByTestId(`nav-${key}`).click();
+  expectedPane = key;
+  navigationStep = `tap-navigation:${key}`;
+  await page.getByTestId(`nav-${key}`).tap();
   await pane(page, key);
+}
+async function swipeSection(page, deltaX) {
+  navigationStep = `heading-swipe:${deltaX}`;
+  const title = page.getByTestId("page-swipe-title");
+  const bounds = await title.boundingBox();
+  assert(bounds, "page heading should be visible for horizontal navigation");
+  const x = bounds.x + bounds.width / 2,
+    y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + deltaX, y, { steps: 8 });
+  await page.mouse.up();
+}
+async function dragBottomNav(page, from, to) {
+  navigationStep = `drag-navigation:${from}:${to}`;
+  const source = await page.getByTestId(`nav-${from}`).boundingBox();
+  const destination = await page.getByTestId(`nav-${to}`).boundingBox();
+  assert(source && destination, "bottom navigation tabs should be visible");
+  const y = source.y + source.height / 2;
+  await page.mouse.move(source.x + source.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(destination.x + destination.width / 2, y, {
+    steps: 8,
+  });
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-testid="chore-bottom-nav"]')
+        ?.classList.contains("is-dragging"),
+    null,
+    { timeout: 3000 },
+  );
+  await page.mouse.up();
 }
 async function stableIdentity(page, before) {
   const after = await identity(page);
@@ -255,11 +334,13 @@ async function pageMatrix(page, role) {
   for (const width of [320, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     for (const key of Object.keys(panes)) {
+      navigationStep = `matrix:${role}:${width}:${key}`;
       await navigate(page, key);
       await openMenu(page);
       assert.equal(
         await page.getByTestId("open-chore-settings").count(),
         role === "creator" && key !== "calendar" ? 1 : 0,
+        `${role} task settings visibility on ${key}`,
       );
       await closeMenu(page);
       await stableIdentity(page, before);
@@ -267,27 +348,53 @@ async function pageMatrix(page, role) {
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  navigationStep = `history:${role}:seed-duty`;
   await navigate(page, "duty");
+  navigationStep = `history:${role}:seed-water`;
   await navigate(page, "water");
+  navigationStep = `history:${role}:seed-calendar`;
   await navigate(page, "calendar");
   for (const [operation, key] of [
-    ["goBack", "water"],
-    ["goBack", "duty"],
-    ["goForward", "water"],
-    ["goForward", "calendar"],
+    ["back", "water"],
+    ["back", "duty"],
+    ["forward", "water"],
+    ["forward", "calendar"],
   ]) {
-    await page[operation]();
+    navigationStep = `history:${role}:${operation}:${key}`;
+    if (operation === "back") await page.goBack();
+    else await page.goForward();
     await pane(page, key);
     await stableIdentity(page, before);
   }
   for (const key of ["water", "calendar"]) {
+    navigationStep = `direct-route:${role}:${key}`;
     await page.goto(origin + panes[key].path);
     await pane(page, key);
+    navigationStep = `reload:${role}:${key}`;
     await page.reload();
     await pane(page, key);
     await stableIdentity(page, before);
   }
   await navigate(page, "duty");
+  await dragBottomNav(page, "duty", "water");
+  await pane(page, "water");
+  await stableIdentity(page, before);
+  await swipeSection(page, -90);
+  await pane(page, "calendar");
+  await stableIdentity(page, before);
+  await swipeSection(page, -90);
+  await page.getByText("已经是最后一页", { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).pathname, panes.calendar.path);
+  await swipeSection(page, 90);
+  await pane(page, "water");
+  await stableIdentity(page, before);
+  await swipeSection(page, 90);
+  await pane(page, "duty");
+  await stableIdentity(page, before);
+  await swipeSection(page, 90);
+  await page.getByText("已经是第一页", { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).pathname, panes.duty.path);
+  await page.waitForTimeout(300);
   await stableIdentity(page, before);
 }
 async function join(page, code, userId, mark) {
@@ -312,13 +419,28 @@ async function join(page, code, userId, mark) {
   return result.access_token;
 }
 async function complete(page, task) {
-  const response = page.waitForResponse(
-    (r) =>
-      new URL(r.url()).pathname === `/chores/tasks/${task.id}/complete` &&
-      r.request().method() === "PATCH",
-  );
+  const card = page.getByTestId(`chore-task-${task.key}-${task.id}`);
+  if (!(await card.count()) && task.key !== "water") {
+    await page
+      .locator(".task-selector")
+      .getByRole("button", { name: task.name, exact: true })
+      .click();
+    await card.waitFor();
+  }
+  const response = page
+    .waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === `/chores/tasks/${task.id}/complete` &&
+        r.request().method() === "PATCH",
+    )
+    .then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
   await page.getByTestId(`complete-${task.key}-${task.id}`).click();
-  const actual = await response;
+  const result = await response;
+  if (result.error) throw result.error;
+  const actual = result.value;
   assert.equal(actual.status(), 200);
   const body = await actual.json();
   assert.equal(body.task.status, "completed");
@@ -350,7 +472,25 @@ try {
   for (const width of [320, 390, 430]) {
     const entry = await phone(width);
     await entry.page.goto(origin + "/");
-    await entry.page.getByTestId("guest-create-dorm").waitFor();
+    navigationStep = `entry:${width}`;
+    try {
+      await entry.page.getByTestId("guest-create-dorm").waitFor();
+    } catch (error) {
+      const pageState = await entry.page
+        .evaluate(() => ({
+          url: location.href,
+          title: document.title,
+          body: document.body.innerText.slice(0, 1000),
+          ready: document.readyState,
+          testIds: [...document.querySelectorAll("[data-testid]")]
+            .map((node) => node.getAttribute("data-testid"))
+            .slice(0, 40),
+        }))
+        .catch((diagnostic) => ({ diagnostic: safe(diagnostic) }));
+      throw new Error(
+        `${safe(error)}; entry state: ${JSON.stringify(pageState)}`,
+      );
+    }
     await noNavigation(entry.page);
     await snapshot(entry.page, `entry-${width}`);
     await entry.context.close();
@@ -436,11 +576,14 @@ try {
   await pageMatrix(b.page, "member");
   checks.push(
     "creator and member each have isolated duty, water and calendar pages without horizontal overflow at 320, 390 and 430 pixels",
-    "tab changes, browser back/forward and direct water/calendar reloads keep both browser identities and device credentials",
+    "bottom navigation, page-heading swipes, boundary hints, browser back/forward and reloads preserve both browser identities and device credentials",
   );
   phase = "reminder";
   const floor = ownerBoard.today_tasks.find((t) => t.key === "floor");
   assert(floor, "creator must have initial floor task");
+  // A reminder delivered during the long page matrix is intentionally shown
+  // immediately; acknowledge it before opening another sheet in this flow.
+  await closePresentedReminder(b.page);
   await openTool(b.page, "open-reminder");
   await b.page.getByTestId(`reminder-member-${ownerId}`).click();
   await b.page.getByTestId(`reminder-task-${floor.id}`).click();
@@ -454,9 +597,12 @@ try {
   assert.equal(sent.status(), 201);
   const reminder = await sent.json();
   await a.page.reload();
-  await pane(a.page, "duty");
-  await openTool(a.page, "open-messages");
-  await a.page.getByTestId(`reminder-read-${reminder.id}`).waitFor();
+  await a.page.getByTestId("pane-duty").waitFor();
+  await a.page.getByTestId("chore-reminders").waitFor();
+  assert.match(
+    await a.page.getByTestId("chore-reminders").textContent(),
+    /提醒你[\s\S]*地板/,
+  );
   await snapshot(a.page, "received-reminder-390");
   const readResponse = a.page.waitForResponse(
     (r) =>
@@ -483,17 +629,20 @@ try {
   const toilet = memberBoard.today_tasks.find((t) => t.key === "toilet");
   assert(toilet, "second member must have initial toilet task");
   await complete(b.page, toilet);
+  const sink = memberBoard.today_tasks.find((t) => t.key === "sink");
+  assert(sink, "second member must have initial washbasin task");
+  await complete(b.page, sink);
   await navigate(b.page, "water");
   await complete(b.page, memberBoard.water_task);
   await a.page.reload();
   await pane(a.page, "water");
   await navigate(a.page, "calendar");
   ownerBoard = await board(ownerId, ownerToken);
-  assert.equal(ownerBoard.calendar.length, 4);
+  assert.equal(ownerBoard.calendar.length, 5);
   const day = a.page.getByTestId(`calendar-day-${ownerBoard.today}`);
   await day.click();
   const details = a.page.getByTestId("calendar-day-details");
-  assert.equal(await details.locator(".calendar-record").count(), 4);
+  assert.equal(await details.locator(".calendar-record").count(), 5);
   assert.equal(await day.locator(".member-mark").count(), 2);
   assert.match(await details.textContent(), /创建者/);
   assert.match(await details.textContent(), /室友甲/);
@@ -513,24 +662,34 @@ try {
     await snapshot(a.page, `completed-${key}-390`);
   }
   checks.push(
-    "floor, toilet and two successive water turns record server completion times and show both personal marks with four calendar detail rows",
+    "floor, toilet, washbasin and two successive water turns record server completion times and show both personal marks with five calendar detail rows",
   );
   phase = "customize";
   await navigate(a.page, "duty");
   await openTool(a.page, "open-chore-settings");
+  await a.page.getByTestId("settings-select-floor").click();
+  await a.page.getByTestId("mode-scheduled-floor").click();
   await a.page
     .getByTestId("settings-content-floor")
     .fill("地板：先扫再拖，床下也要清洁");
   await a.page.getByTestId("settings-time-floor").fill("20:15");
+  await a.page.getByTestId("settings-rotation-floor").fill("2");
+  await a.page.getByTestId("settings-select-toilet").click();
+  await a.page.getByTestId("mode-scheduled-toilet").click();
   await a.page
     .getByTestId("settings-content-toilet")
     .fill("厕所：刷洗便池、台面和地漏");
   await a.page.getByTestId("settings-time-toilet").fill("21:20");
+  await a.page.getByTestId("settings-select-sink").click();
+  await a.page.getByTestId("mode-scheduled-sink").click();
+  await a.page
+    .getByTestId("settings-content-sink")
+    .fill("洗手池：刷洗池面、龙头和排水口");
+  await a.page.getByTestId("settings-time-sink").fill("21:40");
+  await a.page.getByTestId("settings-select-water").click();
   await a.page
     .getByTestId("settings-content-water")
     .fill("抬水：从一楼运一桶饮用水");
-  await a.page.getByTestId("settings-time-water").fill("18:35");
-  await a.page.getByTestId("settings-rotation-floor").fill("2");
   await a.page.getByTestId(`order-up-water-${otherId}`).click();
   await snapshot(a.page, "custom-settings-390");
   const settingsResponse = a.page.waitForResponse(
@@ -541,10 +700,19 @@ try {
   await a.page.getByTestId("settings-save").click();
   assert.equal((await settingsResponse).status(), 200);
   const customized = await board(ownerId, ownerToken);
+  assert.equal(
+    new Set(customized.today_tasks.map((task) => task.key)).size,
+    customized.today_tasks.length,
+    "switching to scheduled chores must not duplicate completed round tasks on the home page",
+  );
+  const originalWaterDeadline = ownerBoard.categories.find(
+    (category) => category.key === "water",
+  ).deadline_time;
   const expected = {
     floor: ["地板：先扫再拖，床下也要清洁", "20:15"],
     toilet: ["厕所：刷洗便池、台面和地漏", "21:20"],
-    water: ["抬水：从一楼运一桶饮用水", "18:35"],
+    sink: ["洗手池：刷洗池面、龙头和排水口", "21:40"],
+    water: ["抬水：从一楼运一桶饮用水", originalWaterDeadline],
   };
   for (const category of customized.categories)
     assert.deepEqual(
@@ -561,7 +729,7 @@ try {
   );
   assert.deepEqual(customized.calendar, ownerBoard.calendar);
   checks.push(
-    "creator changes the content and time of all three categories, adjusts continuity/order, and keeps completed calendar history",
+    "creator changes the content and time of all four categories, adjusts continuity/order, and keeps completed calendar history",
   );
   phase = "restart";
   await stop();
@@ -589,11 +757,24 @@ try {
           .getByTestId("calendar-day-details")
           .locator(".calendar-record")
           .count(),
-        4,
+        restored.calendar.filter(
+          (record) => record.completed_date === restored.today,
+        ).length,
       );
     }
     await snapshot(a.page, `final-${key}-390`);
     if (key === "calendar") {
+      await a.page
+        .locator(".sheet-layer .elastic-sheet")
+        .getByRole("button", { name: "关闭详情", exact: true })
+        .click();
+      await a.page.locator(".sheet-layer").waitFor({ state: "detached" });
+      await a.page.getByTestId("calendar-view-list").click();
+      await a.page.getByTestId("calendar-list").waitFor();
+      assert.equal(
+        await a.page.locator('[data-testid^="calendar-list-record-"]').count(),
+        restored.calendar.length,
+      );
       await a.page.evaluate(() => {
         window.scrollTo({
           top: document.documentElement.scrollHeight,
@@ -603,11 +784,11 @@ try {
       const navigation = await a.page
         .getByTestId("chore-bottom-nav")
         .boundingBox();
-      for (const record of await a.page.locator(".calendar-record").all()) {
+      for (const record of await a.page.locator(".calendar-list li").all()) {
         const bounds = await record.boundingBox();
         assert(
           bounds && bounds.y >= 0 && bounds.y + bounds.height <= navigation.y,
-          "all completion rows must be reachable above the fixed bottom navigation",
+          "all calendar list records must be reachable above the fixed bottom navigation",
         );
       }
       await a.page.screenshot({
@@ -620,7 +801,7 @@ try {
   }
   checks.push(
     "restart of the temporary persistent server restores custom rules, water turn, member marks and completed records in both browser contexts",
-    "calendar detail rows remain reachable by scrolling above the fixed bottom navigation",
+    "calendar list shows person, task and time; its rows remain reachable above the fixed bottom navigation",
   );
   assert.deepEqual(issues, [], "browser JavaScript errors");
   Object.assign(result, {
@@ -631,10 +812,54 @@ try {
     database: "temporary SQLite file removed after verification",
   });
 } catch (error) {
+  let uiState;
+  if (diagnosticPage && !diagnosticPage.isClosed()) {
+    uiState = await diagnosticPage
+      .evaluate(async () => {
+        const button = document.querySelector('[data-testid="open-tools"]');
+        const bounds = [];
+        for (let i = 0; i < 6; i++) {
+          await new Promise(requestAnimationFrame);
+          const rect = button?.getBoundingClientRect();
+          bounds.push(rect && [rect.x, rect.y, rect.width, rect.height]);
+        }
+        return {
+          path: location.pathname,
+          historyLength: history.length,
+          historyState: history.state,
+          navTabs: [...document.querySelectorAll("[data-testid^='nav-']")].map(
+            (node) => ({
+              id: node.getAttribute("data-testid"),
+              rect: (() => {
+                const { x, y, width, height } = node.getBoundingClientRect();
+                return [x, y, width, height];
+              })(),
+            }),
+          ),
+          bounds,
+          scrollY,
+          nav: document
+            .querySelector('[data-testid="chore-bottom-nav"]')
+            ?.getAttribute("style"),
+          sheets: [...document.querySelectorAll(".sheet-layer")].map((node) =>
+            node.textContent?.trim().slice(0, 120),
+          ),
+          animations: document.getAnimations().map((animation) => ({
+            name: animation.animationName || animation.constructor.name,
+            state: animation.playState,
+          })),
+        };
+      })
+      .catch((e) => safe(e));
+    if (uiState && typeof uiState === "object")
+      Object.assign(uiState, { expectedPane });
+  }
   Object.assign(result, {
     status: "failed",
     phase,
+    ...(navigationStep ? { navigationStep } : {}),
     reason: safe(error),
+    ...(uiState ? { uiState } : {}),
     checks,
     browserErrors: issues,
   });

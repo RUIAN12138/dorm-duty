@@ -64,6 +64,13 @@
       "when": 1792028220115,
       "tag": "0008_calendar_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792041192343,
+      "tag": "0009_washbasin_categories",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@
 本目录复用原 Sites 站点身份，将 Vue 资源和业务 API 打包为单个 Worker ESM。业务直接访问 `env.DB`，不再调用 Mac、FastAPI 或临时隧道，也不读取 `API_ORIGIN`。迁移代码已完成本地验收，尚未发布；步骤见 [CLOUDFLARE_DEPLOYMENT](../docs/CLOUDFLARE_DEPLOYMENT.md)。
 
 - `worker/backend.mjs`：排班、宿舍、匿名创建、本人打卡、历史、消息与管理权限。
-- `worker/chores.mjs`：地板、厕所、抬水、专用成员身份、创建者配置、定向提醒及完成日历。
+- `worker/chores.mjs`：地板、厕所、洗手池、抬水、专用成员身份、创建者配置、定向提醒及完成日历。
 - `db/schema.ts`：原六张业务表加 `sessions`，以及六张新 chores / 成员身份表；令牌只保存 SHA-256 哈希。
 - `drizzle/`：不可改写的 `0000` 初始结构及新增 `0001` 迁移；迁移仅含结构，演示数据另行初始化。
 - `.openai/hosting.json`：原 project_id，`d1: "DB"`、`r2: null`。

@@ -44,7 +44,7 @@ async function room(h, label = "三项值日验收") {
   secrets.push(created.access_token);
   const initial = await api(h, `/chores/board?invite_code=${created.invite_code}&member_id=${created.member_id}`, { token: created.access_token });
   await api(h, "/chores/settings", { method:"PATCH", token:created.access_token,
-    data:{version:initial.version,categories:[{key:"floor",mode:"scheduled"},{key:"toilet",mode:"scheduled"}]} });
+    data:{version:initial.version,categories:[{key:"floor",mode:"scheduled"},{key:"toilet",mode:"scheduled"},{key:"sink",enabled:false}]} });
   return {
     ...created,
     token: created.access_token,
@@ -131,10 +131,57 @@ export async function runChoreChecks() {
           db.sqlite.prepare(`SELECT * FROM ${table}`).all(),
         ]),
       );
-      for (const name of files.slice(1))
+      for (const name of files.slice(1, -1))
         db.sqlite.exec(
           await fs.readFile(path.join(migrationRoot, name), "utf8"),
         );
+      db.sqlite.exec(`
+        INSERT INTO chore_settings(dorm_id) VALUES (1);
+        INSERT INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode)
+          VALUES (1,'floor','地板','旧地板','22:00','2026-10-01','[1]','self_round'),(1,'water','抬水','旧抬水','20:00','2026-10-01','[1]','completion');
+        INSERT INTO chore_tasks(id,dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,status,completed_at,sequence)
+          VALUES (1,1,'floor','round-1-1','地板','旧完成记录','2026-10-02',1,'旧创建者','pixel-01','','completed','2026-10-02T12:00:00Z',1);
+        INSERT INTO chore_reminders(id,dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key)
+          VALUES (1,1,1,'旧创建者',1,1,'地板','旧提醒内容','2026-10-02T11:00:00Z','old-chore-reminder');
+        INSERT INTO chore_reminder_preferences(id,dorm_id,user_id,enabled,times,version,updated_at)
+          VALUES (1,1,1,1,'["08:00"]',1,'2026-10-02T00:00:00Z');
+        INSERT INTO chore_scheduled_reminders(id,preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids)
+          VALUES (1,1,1,1,'2026-10-02','08:00','2026-10-02T00:00:00Z','[1]');
+        INSERT INTO chore_push_subscriptions(id,dorm_id,user_id,endpoint,p256dh,auth,updated_at)
+          VALUES (1,1,1,'https://push.example/old','old-p256dh','old-auth','2026-10-02T00:00:00Z');
+        INSERT INTO chore_push_jobs(id,dorm_id,user_id,subscription_id,subscription_revision,reminder_id,next_attempt_at)
+          VALUES (1,1,1,1,1,1,'2026-10-02T00:00:00Z');
+      `);
+      const choreTables = [
+        "chore_categories",
+        "chore_tasks",
+        "chore_reminders",
+        "chore_scheduled_reminders",
+        "chore_push_jobs",
+      ];
+      const choreBefore = Object.fromEntries(
+        choreTables.map((table) => [
+          table,
+          db.sqlite.prepare(`SELECT * FROM ${table}`).all(),
+        ]),
+      );
+      db.sqlite.exec("BEGIN IMMEDIATE");
+      db.sqlite.exec(
+        await fs.readFile(path.join(migrationRoot, files.at(-1)), "utf8"),
+      );
+      db.sqlite.exec("COMMIT");
+      for (const table of choreTables)
+        equal(
+          db.sqlite.prepare(`SELECT * FROM ${table}`).all(),
+          choreBefore[table],
+          `migration preserves ${table} rows and ids`,
+        );
+      db.sqlite.exec(`
+        INSERT INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode)
+          VALUES (1,'sink','洗手池','清洁洗手池','22:00','2026-10-02','[1]','self_round');
+        INSERT INTO chore_tasks(dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,status,sequence)
+          VALUES (1,'sink','round-1-1','洗手池','清洁洗手池','2026-10-02',1,'旧创建者','pixel-01','','pending',1);
+      `);
       for (const table of tables) {
         const oldFields = Object.keys(before[table][0]);
         equal(
@@ -318,10 +365,10 @@ export async function runChoreChecks() {
     const current = await board(h, r, creator);
     const changes = current.categories.map((category, i) => ({
       ...category,
-      content: ["地板：清扫并拖地", "厕所：刷洗便池与地漏", "抬水：从一楼抬水"][
+      content: ["地板：清扫并拖地", "厕所：刷洗便池与地漏", "洗手池：清洁池面与龙头", "抬水：从一楼抬水"][
         i
       ],
-      deadline_time: ["20:15", "21:20", "18:35"][i],
+      deadline_time: ["20:15", "21:20", "21:40", "18:35"][i],
       weekdays: [1, 3, 5],
       rotation_days: 2,
       rotation_order: [...r.ids].reverse(),
@@ -747,7 +794,7 @@ export async function runChoreChecks() {
     equal(new Set(view.members.map((m) => m.marker_id)).size, 100);
     equal(
       view.categories.map((c) => c.rotation_order.length),
-      [100, 100, 100],
+      [100, 100, 100, 100],
     );
     const person = await claim(h, r, ids.at(-1), "pixel-100");
     equal(person.marker_id, "pixel-100");

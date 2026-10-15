@@ -84,7 +84,14 @@ async function fixture(h) {
 const create = (h, who, version = 0, alarms = false, status = 200) =>
   json(h, path, who.token, { version, include_alarms: alarms }, "POST", status);
 const update = (h, who, version, alarms, status = 200) =>
-  json(h, path, who.token, { version, include_alarms: alarms }, "PATCH", status);
+  json(
+    h,
+    path,
+    who.token,
+    { version, include_alarms: alarms },
+    "PATCH",
+    status,
+  );
 async function feed(h, subscription, status = 200) {
   const response = await api(h, subscription.path, null, null, "GET", status);
   return { response, text: await response.text() };
@@ -151,7 +158,11 @@ try {
     ok(response.headers.get("cache-control").includes("no-store"));
     eq(response.headers.get("referrer-policy"), "no-referrer");
     const list = events(text);
-    eq(list.length, 2);
+    eq(list.length, 3);
+    eq(
+      list.map((event) => event.getFirstPropertyValue("summary")).sort(),
+      ["地板 · 本轮待办", "厕所 · 本轮待办", "洗手池 · 本轮待办"].sort(),
+    );
     ok(
       list.every((e) =>
         e.getFirstPropertyValue("uid").includes("-" + r.owner.id + "-"),
@@ -186,7 +197,7 @@ try {
     );
     const sub = await create(h, r.owner, 0, true);
     let list = events((await feed(h, sub)).text);
-    eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 4);
+    eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 6);
     eq(
       list[0]
         .getAllSubcomponents("valarm")
@@ -195,7 +206,7 @@ try {
     );
     clock = new RealDate("2026-10-15T08:05:00+08:00").getTime();
     list = events((await feed(h, sub)).text);
-    eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 2);
+    eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 3);
     await json(
       h,
       "/chores/reminder-plan",
@@ -227,13 +238,20 @@ try {
     await update(h, r.owner, 1, false, 409);
     advance();
     let list = events((await feed(h, sub)).text);
-    eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 4);
+    eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 6);
     const disabled = await update(h, r.owner, 2, false);
     eq(disabled.version, 3);
     advance();
     list = events((await feed(h, sub)).text);
     eq(list.flatMap((e) => e.getAllSubcomponents("valarm")).length, 0);
-    await api(h, path, r.member.token, { version: 0, include_alarms: true }, "PATCH", 409);
+    await api(
+      h,
+      path,
+      r.member.token,
+      { version: 0, include_alarms: true },
+      "PATCH",
+      409,
+    );
   });
   await test("completion removes original work, next-day free tasks keep stable UIDs, date projection does not create rounds", async (h) => {
     const r = await fixture(h),
@@ -250,18 +268,28 @@ try {
     );
     advance();
     const list = events((await feed(h, sub)).text);
-    eq(list.length, 1);
-    eq(list[0].getFirstPropertyValue("summary"), "厕所 · 本轮待办");
-    const uid = list[0].getFirstPropertyValue("uid"),
-      sequence = list[0].getFirstPropertyValue("sequence");
+    eq(list.length, 2);
+    eq(
+      list.map((event) => event.getFirstPropertyValue("summary")).sort(),
+      ["厕所 · 本轮待办", "洗手池 · 本轮待办"].sort(),
+    );
+    const previous = new Map(
+      list.map((event) => [
+        event.getFirstPropertyValue("uid"),
+        event.getFirstPropertyValue("sequence"),
+      ]),
+    );
     const count = h.db.sqlite
       .prepare("SELECT count(*) AS n FROM chore_tasks")
       .get().n;
     advance(86400000);
     const next = events((await feed(h, sub)).text);
-    eq(next.length, 1);
-    eq(next[0].getFirstPropertyValue("uid"), uid);
-    ok(next[0].getFirstPropertyValue("sequence") > sequence);
+    eq(next.length, 2);
+    for (const event of next) {
+      const uid = event.getFirstPropertyValue("uid");
+      ok(previous.has(uid));
+      ok(event.getFirstPropertyValue("sequence") > previous.get(uid));
+    }
     ok(next[0].getFirstPropertyValue("dtstart").isDate);
     eq(
       next[0].getFirstPropertyValue("dtstart").toString(),
@@ -277,7 +305,7 @@ try {
         .get(floor.id).status,
       "completed",
     );
-    ok(old.some((e) => e.getFirstPropertyValue("uid") !== uid));
+    ok(old.some((e) => !previous.has(e.getFirstPropertyValue("uid"))));
   });
   await test("scheduled export uses real assignees and dates, setting disable removes events, UTF-8 injection stays text", async (h) => {
     const r = await fixture(h),
@@ -423,7 +451,14 @@ try {
       [],
     ])
       await api(h, path, r.owner.token, data, "POST", 422);
-    await api(h, path, r.owner.token, { version: 0, include_alarms: "yes" }, "PATCH", 422);
+    await api(
+      h,
+      path,
+      r.owner.token,
+      { version: 0, include_alarms: "yes" },
+      "PATCH",
+      422,
+    );
     const sub = await create(h, r.owner);
     await feed(h, sub);
     const limited = await api(h, sub.path, null, null, "GET", 429);

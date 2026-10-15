@@ -1,8 +1,8 @@
 # 排班与值日内容自定义
 
-2026-10-12 更新。当前主页的地板、厕所、抬水在「自定义任务」分别配置，详细规则见 [CHORES](CHORES.md)：每类内容与时间独立，地板 / 厕所按日期轮换，抬水完成后轮换；正式成员领取限定身份后可以完成本人任务与定向提醒。只有持完整管理令牌的创建者可以修改设置。
+2026-10-15 更新。当前主页的地板、厕所、洗手池、抬水在「自定义任务」分别配置，详细规则见 [CHORES](CHORES.md)：每类内容与时间独立，地板 / 厕所 / 洗手池分别按自由轮次或日期排班，抬水完成后轮换；正式成员领取限定身份后可以完成本人任务与定向提醒。只有持完整管理令牌的创建者可以修改设置。
 
-下文保留原 `/duties` 排班的任务模板、休息日、单日修改和接口，适用于原管理路由，不会自动修改新版三类任务。创建者可从主页页脚「宿舍成员管理」进入原管理页面；成员限定令牌不能调用这些管理接口。
+下文保留原 `/duties` 排班的任务模板、休息日、单日修改和接口，适用于原管理路由，不会自动修改新版四类任务。创建者可从主页页脚「宿舍成员管理」进入原管理页面；成员限定令牌不能调用这些管理接口。
 
 ## 可配置内容
 
@@ -50,7 +50,7 @@ Alembic `0002` 仅给宿舍表增加 JSON 规则列，已有宿舍保留默认�
 
 ## 复现检查
 
-当前三类任务运行 `node site/scripts/check-chores.mjs` 与 `node scripts/verify-chores.mjs`，结果见 [后端](evidence/chores/backend.json) 和 [手机尺寸 / 重启](evidence/chores/mobile.json)。下面命令针对原 FastAPI 管理功能，须使用其隔离 QA 数据库，不能用于宣称新增 `/chores` 已验收。
+当前四类任务运行 `node site/scripts/check-chores.mjs` 与 `node scripts/verify-chores.mjs`，结果见 [后端](evidence/chores/backend.json) 和 [手机尺寸 / 重启](evidence/ui-focus/regression/mobile.json)。下面命令针对原 FastAPI 管理功能，须使用其隔离 QA 数据库，不能用于宣称新增 `/chores` 已验收。
 
 - `./scripts/check.sh`：后端与前端检查。
 - `cd frontend && npm run test:custom`：只对运行中的隔离 QA 数据库执行，会创建独立测试账号和宿舍。

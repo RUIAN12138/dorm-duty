@@ -8,7 +8,7 @@ export interface ChoreMember {
   marker_id: string;
 }
 export interface ChoreCategory {
-  key: "floor" | "toilet" | "water";
+  key: "floor" | "toilet" | "sink" | "water";
   name: string;
   content: string;
   deadline_time: string;
@@ -21,7 +21,7 @@ export interface ChoreCategory {
 }
 export interface ChoreTask {
   id: number;
-  key: "floor" | "toilet" | "water";
+  key: "floor" | "toilet" | "sink" | "water";
   name: string;
   content: string;
   duty_date: string;
@@ -68,7 +68,7 @@ export interface ChoreBoardData {
   members: ChoreMember[];
   categories: ChoreCategory[];
   rounds: {
-    key: "floor" | "toilet";
+    key: "floor" | "toilet" | "sink";
     sequence: number;
     completed: number;
     total: number;

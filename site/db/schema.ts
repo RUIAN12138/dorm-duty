@@ -241,7 +241,7 @@ export const choreCategories = sqliteTable(
     ),
     check(
       "chore_category_key_check",
-      sql`${table.key} IN ('floor','toilet','water')`,
+      sql`${table.key} IN ('floor','toilet','sink','water')`,
     ),
     check(
       "chore_rotation_days_check",
@@ -285,7 +285,7 @@ export const choreTasks = sqliteTable(
       .where(sql`${table.key}='water' AND ${table.status}='pending'`),
     check(
       "chore_task_key_check",
-      sql`${table.key} IN ('floor','toilet','water')`,
+      sql`${table.key} IN ('floor','toilet','sink','water')`,
     ),
     check(
       "chore_task_status_check",

@@ -6,7 +6,7 @@ import { notifyUser } from "../shared/notifications.mjs";
 import { calendarSettings, calendarFeed } from "./calendar.mjs";
 
 const DAY = 86_400_000;
-const KEYS = ["floor", "toilet", "water"];
+const KEYS = ["floor", "toilet", "sink", "water"];
 const encoder = new TextEncoder();
 const markerIds = new Set(MARK_IDS);
 export class ChoreError extends Error {
@@ -217,6 +217,7 @@ async function initialize(db, room, now) {
   const defaults = [
     ["floor", "地板", "扫地、拖地", "22:00", order],
     ["toilet", "厕所", "清洗便池、冲洗地面", "22:00", shift],
+    ["sink", "洗手池", "清洁洗手池、台面和水渍", "22:00", order],
     ["water", "抬水", "将饮用水送到宿舍", "20:00", order],
   ];
   await db.batch([
@@ -436,7 +437,7 @@ async function planDaily(
     }
   }
   // Each replacement only touches future rows. Historical / completed rows remain immutable.
-  for (const key of ["floor", "toilet"])
+  for (const key of KEYS.filter((entry) => entry !== "water"))
     appendRows(
       mutation,
       rows.filter((row) => row[1] === key),
@@ -713,7 +714,7 @@ async function board(request, db, env, now, url) {
     db,
     `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
     WHERE t.dorm_id=? AND t.key<>'water' AND t.assignee_id=? AND t.status<>'cancelled' AND c.enabled=1
-    AND ((c.mode='scheduled' AND t.duty_date=?) OR (c.mode='self_round' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.key`,
+    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode='self_round' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key))) ORDER BY t.key`,
     [room.id, uid, today],
   );
   const nextRows = await all(
@@ -934,7 +935,7 @@ async function configure(request, db, room, who, now) {
   if (
     !Array.isArray(input.categories) ||
     !input.categories.length ||
-    input.categories.length > 3 ||
+    input.categories.length > 4 ||
     new Set(input.categories.map((entry) => entry?.key)).size !==
       input.categories.length
   )
