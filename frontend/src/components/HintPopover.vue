@@ -86,8 +86,8 @@ onBeforeUnmount(() => removeBack?.());
   inset: 0;
   z-index: 3999;
   background: transparent;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   pointer-events: auto;
 }
 .hint-popover {
