@@ -331,6 +331,32 @@ export const choreReminders = sqliteTable(
   ],
 );
 
+export const choreCalendarSubscriptions = sqliteTable(
+  "chore_calendar_subscriptions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    dormId: integer("dorm_id")
+      .notNull()
+      .references(() => dormitories.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    tokenHash: text("token_hash"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    includeAlarms: integer("include_alarms", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    version: integer("version").notNull().default(1),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    lastFetchedAt: text("last_fetched_at"),
+  },
+  (table) => [
+    uniqueIndex("chore_calendar_member_unique").on(table.dormId, table.userId),
+    uniqueIndex("chore_calendar_token_unique").on(table.tokenHash),
+  ],
+);
+
 export const choreReminderPreferences = sqliteTable(
   "chore_reminder_preferences",
   {

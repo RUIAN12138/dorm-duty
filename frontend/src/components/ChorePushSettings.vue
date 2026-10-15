@@ -5,6 +5,7 @@ import ElasticSheet from "./ElasticSheet.vue";
 import { pushCapability } from "../api/push";
 import { onNativePushReady } from "../api/nativePush";
 import TimedReminderSettings from "./TimedReminderSettings.vue";
+import CalendarSubscriptionSettings from "./CalendarSubscriptionSettings.vue";
 import {
   getMemberPushConfig,
   enableMemberPush,
@@ -187,6 +188,7 @@ async function test() {
       </p>
       <p v-if="error" class="push-error" role="alert">{{ error }}</p>
       <TimedReminderSettings :active="modelValue" :token="token" />
+      <CalendarSubscriptionSettings :active="modelValue" :token="token" />
       <details v-if="!cap.native && cap.ios" class="push-preview-help">
         <summary>通知没有正文？</summary>
         <p>

@@ -8,7 +8,7 @@ Node 每 30 秒检查一次，即使不打开网页也生成站内提醒；重�
 
 `GET /chores/reminder-plan` 和 `PATCH /chores/reminder-plan` 需正式成员凭据。修改传 `{enabled, times, version}`，`times` 是 1–3 个不重复的 `HH:mm`。版本冲突返回 409，重新读取后再保存。时间固定 Asia/Shanghai。用户可见的最近发送状态区分待投递、服务接受、失败和取消；接受不是送达回执。
 
-调度与提醒 / 发件箱在 SQLite 事务中提交。自动提醒通过 `site/shared/notifications.mjs` 的 `notifyUser` 与室友即时提醒共用现有 Web Push / 极光通道；没有配置平台、设备未开启时仍保留站内消息。微信、ICS、原生系统本地闹钟尚未实现。Worker 托管模式未接入这个 Node 定时器，不能把本地调度检查当作 Cloudflare Cron 已交付。
+调度与提醒 / 发件箱在 SQLite 事务中提交。自动提醒通过 `site/shared/notifications.mjs` 的 `notifyUser` 与室友即时提醒共用现有 Web Push / 极光通道；没有配置平台、设备未开启时仍保留站内消息。个人 ICS 日历订阅已实现，可选择沿用这些时间在系统日历显示事件提醒；ICS 的刷新由日历客户端决定，不能代替即时通知。原生系统本地闹钟仍未实现。Worker 托管模式未接入这个 Node 定时器，不能把本地调度检查当作 Cloudflare Cron 已交付。
 
 抬水轮序位于「宿舍任务设置 → 抬水」。按住室友名字或右侧拖动柄约四分之一秒，上下拖动，松手后点击保存。支持跨多位插入、边缘滚动、取消恢复、上下按钮和键盘方向键；关闭不保存。权限继续仅限创建者，保存使用现有版本校验。当前抬水者保持不变，下一次完成后按新顺序轮换。已完成记录不改写。
 

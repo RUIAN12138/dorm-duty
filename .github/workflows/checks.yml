@@ -47,6 +47,9 @@ jobs:
           node site/scripts/check-native-bridge.mjs
           node site/scripts/check-push-settings.mjs
           node site/scripts/check-water-order.mjs
+          node site/scripts/check-calendar-subscription.mjs
+          node site/scripts/check-calendar-settings.mjs
+          node site/scripts/check-task-swipe.mjs
           node site/scripts/check-scheduled-reminders.mjs
           node site/scripts/check-reminder-runtime.mjs
           node site/scripts/check-creator-recovery.mjs

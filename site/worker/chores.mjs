@@ -3,6 +3,7 @@
 import { MARK_IDS } from "../shared/member-marks.mjs";
 import { validPushEndpoint } from "../shared/push-endpoint.mjs";
 import { notifyUser } from "../shared/notifications.mjs";
+import { calendarSettings, calendarFeed } from "./calendar.mjs";
 
 const DAY = 86_400_000;
 const KEYS = ["floor", "toilet", "water"];
@@ -1691,9 +1692,13 @@ export async function handleChores(request, env, now) {
     return claim(request, db, env, now);
   if (path === "/chores/board" && method === "GET")
     return board(request, db, env, now, url);
+  if (path.startsWith("/chores/calendar/"))
+    return calendarFeed(request, { db, now, maintain });
   const who = await actor(request, db, now, true);
   assertWrite(who);
   const room = await roomByActor(db, who);
+  if (path === "/chores/calendar-subscription")
+    return calendarSettings(request, { db, room, who, now });
   if (path === "/chores/reminder-plan")
     return reminderPlan(request, db, room, who, now);
   if (path.startsWith("/chores/native/"))
