@@ -83,6 +83,8 @@ node site/scripts/check-native-push.mjs
 node site/scripts/check-water-nudge.mjs
 node site/scripts/check-completion.mjs
 node site/scripts/check-native-back.mjs
+node site/scripts/check-native-bridge.mjs
+node site/scripts/check-push-settings.mjs
 node site/scripts/check-creator-recovery.mjs
 ```
 

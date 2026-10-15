@@ -44,6 +44,8 @@ jobs:
           node site/scripts/check-water-nudge.mjs
           node site/scripts/check-completion.mjs
           node site/scripts/check-native-back.mjs
+          node site/scripts/check-native-bridge.mjs
+          node site/scripts/check-push-settings.mjs
           node site/scripts/check-creator-recovery.mjs
       - name: Build server website
         env:
@@ -60,4 +62,11 @@ jobs:
           java-version: "17"
       - name: Build and lint Android preview
         working-directory: native/android
-        run: ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+      - name: Keep Android preview package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lundao-android-preview
+          path: native/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

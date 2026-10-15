@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onUnmounted, ref, watch } from "vue";
 import { showToast } from "vant";
 import ElasticSheet from "./ElasticSheet.vue";
 import { pushCapability } from "../api/push";
+import { onNativePushReady } from "../api/nativePush";
 import {
   getMemberPushConfig,
   enableMemberPush,
@@ -26,62 +27,90 @@ const config = ref<MemberPushConfig | null>(null),
   loading = ref(false),
   error = ref("");
 const cap = ref(pushCapability());
+let requestId = 0;
+async function refresh() {
+  const id = ++requestId;
+  cap.value = pushCapability();
+  error.value = "";
+  config.value = null;
+  enabled.value = false;
+  loading.value = true;
+  const token = props.token;
+  try {
+    const next = await getMemberPushConfig(token);
+    if (id !== requestId || !props.modelValue || token !== props.token) return;
+    const active = await syncMemberPush(token);
+    if (id !== requestId || !props.modelValue || token !== props.token) return;
+    config.value = next;
+    enabled.value = active;
+  } catch (e) {
+    if (id === requestId) error.value = (e as Error).message;
+  } finally {
+    if (id === requestId) loading.value = false;
+  }
+}
+const removeNativeReady = onNativePushReady(() => {
+  cap.value = pushCapability();
+  if (props.modelValue && !busy.value) void refresh();
+});
 watch(
-  () => props.modelValue,
-  async (open) => {
-    if (!open) return;
-    cap.value = pushCapability();
-    error.value = "";
-    loading.value = true;
-    try {
-      config.value = await getMemberPushConfig(props.token);
-      enabled.value = await syncMemberPush(props.token);
-    } catch (e) {
-      error.value = (e as Error).message;
-    } finally {
-      loading.value = false;
-    }
+  () => [props.modelValue, props.token] as const,
+  ([open]) => {
+    ++requestId;
+    busy.value = false;
+    if (open) void refresh();
   },
+  { immediate: true },
 );
+onUnmounted(() => {
+  ++requestId;
+  removeNativeReady();
+});
 async function enable() {
-  if (busy.value || !config.value) return;
+  if (busy.value || loading.value || !config.value) return;
+  const id = requestId;
   busy.value = true;
   error.value = "";
   try {
     await enableMemberPush(props.token, config.value);
+    if (id !== requestId) return;
     enabled.value = true;
     showToast("这台设备已开启通知");
   } catch (e) {
-    error.value = (e as Error).message;
+    if (id === requestId) error.value = (e as Error).message;
   } finally {
-    busy.value = false;
+    if (id === requestId) busy.value = false;
   }
 }
 async function disable() {
-  if (busy.value) return;
+  if (busy.value || loading.value) return;
+  const id = requestId;
   busy.value = true;
   error.value = "";
   try {
     await disableMemberPush(props.token);
+    if (id !== requestId) return;
     enabled.value = false;
     showToast("这台设备已关闭通知");
   } catch (e) {
-    error.value = (e as Error).message;
+    if (id === requestId) error.value = (e as Error).message;
   } finally {
-    busy.value = false;
+    if (id === requestId) busy.value = false;
   }
 }
 async function test() {
-  if (busy.value) return;
+  if (busy.value || loading.value) return;
+  const id = requestId;
   busy.value = true;
   error.value = "";
   try {
     await testMemberPush(props.token);
+    if (id !== requestId) return;
     showToast("测试已提交，请查看系统通知");
   } catch (e) {
-    error.value = (e as Error).message;
+    if (id === requestId) error.value = (e as Error).message;
   } finally {
-    busy.value = false;
+    if (id === requestId) busy.value = false;
   }
 }
 </script>

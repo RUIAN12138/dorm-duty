@@ -16,6 +16,13 @@ export interface NativePushResult {
 }
 let sequence = 0;
 export const hasNativePush = () => Boolean(window.DormNativePush);
+export function onNativePushReady(callback: () => void) {
+  const ready = () => {
+    if (hasNativePush()) callback();
+  };
+  window.addEventListener("dorm-native-ready", ready);
+  return () => window.removeEventListener("dorm-native-ready", ready);
+}
 const waiting = new Map<
   string,
   {

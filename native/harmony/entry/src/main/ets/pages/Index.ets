@@ -6,6 +6,7 @@ import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { JPushInterface } from '@jg/push';
 import { JPUSH_APP_KEY, WEB_ORIGIN, WEB_BASE } from '../PushConfig';
+import { PageLoadState } from '../PageLoadState';
 interface BridgeRequest { id: string; command: string; token?: string; }
 interface BridgeResult { id: string; ok: boolean; enabled: boolean; configured: boolean; message: string; platform: string; }
 interface DeviceBody { platform: string; device_id: string; device_secret: string; registration_id?: string; }
@@ -17,14 +18,64 @@ struct Index {
   context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
   pending: boolean = false;
   @State initialURL: string = AppStorage.get<string>('launchURL') || WEB_BASE;
-  onBackPress(): boolean { if (this.controller.accessBackward()) { this.controller.backward(); return true; } return false; }
+  @State connectionFailed: boolean = false;
+  private page: PageLoadState = new PageLoadState(WEB_BASE);
+  private loadTimer: number = -1;
+  private handlingBack: boolean = false;
+  private alive: boolean = false;
+  onBackPress(): boolean {
+    if (this.handlingBack) return true;
+    this.handlingBack = true;
+    let url: string = '';
+    try {
+      url = this.controller.getUrl();
+      if (!this.validURL(url)) { this.navigateBack(); this.handlingBack = false; return true; }
+      this.controller.runJavaScript("typeof window.DormNativeBack === 'function' && window.DormNativeBack()")
+        .then((handled: string) => {
+          if (this.alive && this.controller.getUrl() === url && handled !== 'true') this.navigateBack();
+        }).catch(() => { if (this.alive) this.navigateBack(); })
+        .finally(() => { this.handlingBack = false; });
+    } catch (_) { this.handlingBack = false; this.navigateBack(); }
+    return true;
+  }
+  private navigateBack(): void {
+    try {
+      if (this.controller.accessBackward()) { this.controller.backward(); return; }
+    } catch (_) { /* A failed first navigation has no Web history. */ }
+    this.context.terminateSelf().catch(() => {});
+  }
   private validURL(url: string): boolean { return /^https:\/\/8\.148\.190\.114\/dorm-duty\//.test(url); }
   aboutToAppear(): void {
-    this.context.eventHub.on('notification-route', (url: string) => { if (this.validURL(url)) this.controller.loadUrl(url); });
+    this.alive = true;
+    this.context.eventHub.on('notification-route', (url: string) => {
+      if (this.validURL(url)) {
+        try { this.controller.loadUrl(url); } catch (_) { this.initialURL = url; }
+      }
+    });
   }
   aboutToDisappear(): void {
+    this.alive = false;
+    clearTimeout(this.loadTimer);
     this.context.eventHub.off('notification-route');
     this.ports.forEach((port: webview.WebMessagePort) => port.close());
+  }
+  private beginLoad(url: string): void {
+    if (!this.validURL(url)) return;
+    this.page.begin(url); this.connectionFailed = false;
+    clearTimeout(this.loadTimer);
+    this.loadTimer = setTimeout(() => {
+      if (this.alive && this.page.fail(url)) {
+        this.connectionFailed = true;
+        try { this.controller.stop(); } catch (_) { /* Retry remains available. */ }
+      }
+    }, 20000);
+  }
+  private failLoad(url: string): void {
+    if (this.page.fail(url)) { clearTimeout(this.loadTimer); this.connectionFailed = true; }
+  }
+  private retryLoad(): void {
+    this.beginLoad(this.page.url);
+    try { this.controller.loadUrl(this.page.url); } catch (_) { this.failLoad(this.page.url); }
   }
   private value(key: string): string {
     const prefs = preferences.getPreferencesSync(this.context, { name: 'install' });
@@ -53,7 +104,7 @@ struct Index {
     try { request = JSON.parse(raw) as BridgeRequest; } catch (_) { return; }
     const prefs = preferences.getPreferencesSync(this.context, { name: 'install' });
     const result: BridgeResult = { id: request.id, ok: false, enabled: false, configured: JPUSH_APP_KEY.length === 24, message: '', platform: 'harmony' };
-    if (this.pending) { result.message = '请等待当前通知操作完成'; port.postMessageEvent(JSON.stringify(result)); return; }
+    if (this.pending) { result.message = '请等待当前通知操作完成'; this.respond(port, result); return; }
     this.pending = true;
     try {
       if (request.command === 'status') {
@@ -86,7 +137,10 @@ struct Index {
         if (!result.enabled) JPushInterface.stopPush();
       }
     } catch (error) { result.message = (error as Error).message || '通知操作失败，请重试'; }
-    finally { this.pending = false; port.postMessageEvent(JSON.stringify(result)); }
+    finally { this.pending = false; this.respond(port, result); }
+  }
+  private respond(port: webview.WebMessagePort, result: BridgeResult): void {
+    try { port.postMessageEvent(JSON.stringify(result)); } catch (_) { /* The initiating document may already be closed. */ }
   }
   private connect(): void {
     if (!this.validURL(this.controller.getUrl())) return;
@@ -101,14 +155,28 @@ struct Index {
       .then(() => this.controller.postMessage('lundao-native-port', [this.ports[1]], WEB_ORIGIN)).catch(() => {});
   }
   build() {
-    Column() {
+    Stack() {
     Web({ src: this.initialURL, controller: this.controller })
       .javaScriptAccess(true).domStorageAccess(true).fileAccess(false)
       .mixedMode(MixedMode.None)
       .onLoadIntercept((event) => event ? event.data.isMainFrame() && !this.validURL(event.data.getRequestUrl()) : false)
-      .onPageEnd(() => this.connect())
+      .onPageBegin((event) => { if (event) this.beginLoad(event.url); })
+      .onPageEnd((event) => {
+        if (event && this.page.finish(event.url)) {
+          clearTimeout(this.loadTimer); this.connectionFailed = false; this.connect();
+        }
+      })
+      .onErrorReceive((event) => { if (event?.request.isMainFrame()) this.failLoad(event.request.getRequestUrl()); })
+      .onHttpErrorReceive((event) => { if (event?.request.isMainFrame()) this.failLoad(event.request.getRequestUrl()); })
       .onSslErrorEventReceive((event) => event?.handler.handleCancel())
       .width('100%').height('100%')
+    if (this.connectionFailed) {
+      Column({ space: 28 }) {
+        Text('暂时连接不上').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#111111')
+        Button('重新连接').width('100%').height(56).fontSize(18).fontColor('#FFFFFF')
+          .backgroundColor('#111111').onClick(() => this.retryLoad())
+      }.padding(28).justifyContent(FlexAlign.Center).width('100%').height('100%').backgroundColor('#FFFFFF')
+    }
     }.width('100%').height('100%')
   }
 }
