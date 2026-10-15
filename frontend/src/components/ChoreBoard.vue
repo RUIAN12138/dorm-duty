@@ -757,6 +757,8 @@ onUnmounted(() => {
                 <div
                   class="task-title-stage"
                   data-testid="task-title-swipe"
+                  aria-live="polite"
+                  aria-atomic="true"
                   :class="{ 'title-dragging': titleDragging }"
                   :style="{ transform: `translate3d(${titleOffset}px,0,0)` }"
                   @pointerdown="taskSwipe.down"

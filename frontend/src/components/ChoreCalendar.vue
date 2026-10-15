@@ -4,6 +4,7 @@ import type { ChoreMember, ChoreRecord } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
+import ElasticSegments from "./ElasticSegments.vue";
 const props = defineProps<{
   month: string;
   today: string;
@@ -14,6 +15,10 @@ const props = defineProps<{
 const emit = defineEmits<{ change: [month: string]; closed: [] }>();
 const selected = ref("");
 const view = ref<"calendar" | "list">("calendar");
+const viewOptions = [
+  { value: "calendar", label: "日历", testId: "calendar-view-grid" },
+  { value: "list", label: "列表", testId: "calendar-view-list" },
+];
 try {
   if (sessionStorage.getItem("dorm-calendar-view-v1") === "list")
     view.value = "list";
@@ -135,28 +140,11 @@ watch(
         </button>
       </div>
     </header>
-    <div
-      class="calendar-view-selector"
-      role="group"
+    <ElasticSegments
+      v-model="view"
+      :options="viewOptions"
       aria-label="完成记录显示方式"
-    >
-      <button
-        type="button"
-        :aria-pressed="view === 'calendar'"
-        @click="view = 'calendar'"
-        data-testid="calendar-view-grid"
-      >
-        日历
-      </button>
-      <button
-        type="button"
-        :aria-pressed="view === 'list'"
-        @click="view = 'list'"
-        data-testid="calendar-view-list"
-      >
-        列表
-      </button>
-    </div>
+    />
     <div v-if="view === 'calendar'" class="calendar-mode">
       <div class="chore-weekdays" aria-hidden="true">
         <span v-for="name in weekNames" :key="name">{{ name }}</span>
@@ -284,35 +272,6 @@ watch(
 .chore-calendar {
   padding: 0;
 }
-.calendar-view-selector {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
-  background: #f3f3f3;
-  border-radius: 14px;
-  margin-bottom: 24px;
-}
-.calendar-view-selector button {
-  border: 0;
-  border-radius: 10px;
-  min-height: 40px;
-  background: transparent;
-  color: #666;
-  font-size: 16px;
-  cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.calendar-view-selector button[aria-pressed="true"] {
-  background: #fff;
-  color: #111;
-}
-.calendar-view-selector button:active {
-  transform: scale(0.97);
-}
 .calendar-list ol {
   list-style: none;
   margin: 0;
@@ -349,11 +308,6 @@ watch(
   font-size: 17px;
   padding: 32px 0;
   text-align: center;
-}
-@media (prefers-reduced-motion: reduce) {
-  .calendar-view-selector button {
-    transition: none;
-  }
 }
 header {
   display: flex;
