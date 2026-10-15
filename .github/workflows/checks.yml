@@ -50,6 +50,7 @@ jobs:
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs
           node site/scripts/check-task-swipe.mjs
+          node site/scripts/check-navigation-motion.mjs
           node site/scripts/check-scheduled-reminders.mjs
           node site/scripts/check-reminder-runtime.mjs
           node site/scripts/check-creator-recovery.mjs

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onUnmounted } from "vue";
+import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { createNavMotion } from "../interaction/navMotion";
 const router = useRouter();
 const props = defineProps<{
   section: "duty" | "water" | "calendar";
@@ -11,45 +12,38 @@ const items = [
   { section: "calendar", path: "/calendar", label: "日历" },
 ] as const;
 const dragging = ref(false);
-const preview = ref(0);
 const currentIndex = computed(() =>
   items.findIndex((item) => item.section === props.section),
 );
-const navIndex = computed(() =>
-  dragging.value ? preview.value : currentIndex.value,
+const navIndex = ref(currentIndex.value);
+const speed = ref(0);
+const moving = ref(false);
+const pressedIndex = ref(-1);
+const motion = createNavMotion(
+  currentIndex.value,
+  (position, velocity, settled) => {
+    navIndex.value = position;
+    speed.value = velocity;
+    moving.value = !settled;
+  },
 );
-const flowFrom = ref(currentIndex.value);
-const flowDirection = ref(1);
-const flowing = ref(false);
-let flowTimer = 0;
-let flowFrame = 0;
-watch(currentIndex, async (next, previous) => {
-  if (next === previous) return;
-  if (dragging.value) {
-    flowFrom.value = next;
-    flowing.value = false;
-    return;
-  }
-  flowFrom.value = previous;
-  flowDirection.value = next > previous ? 1 : -1;
-  flowing.value = false;
-  await nextTick();
-  cancelAnimationFrame(flowFrame);
-  flowFrame = requestAnimationFrame(() => {
-    flowing.value = true;
-    window.clearTimeout(flowTimer);
-    flowTimer = window.setTimeout(() => {
-      flowing.value = false;
-    }, 460);
-  });
+const stretch = computed(() =>
+  dragging.value ? 0.015 : Math.min(0.055, Math.abs(speed.value) * 0.008),
+);
+function animateMotion() {
+  return (
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+    document.documentElement.dataset.interaction !== "keyboard"
+  );
+}
+watch(currentIndex, (next) => {
+  if (!dragging.value) motion.move(next, animateMotion());
 });
-onUnmounted(() => {
-  cancelAnimationFrame(flowFrame);
-  window.clearTimeout(flowTimer);
-});
+onUnmounted(() => motion.dispose());
 let gesture: { id: number; x: number; y: number; nav: HTMLElement } | null =
   null;
 let suppressClickUntil = 0;
+let navigationRequest = 0;
 function position(x: number, nav: HTMLElement) {
   const rect = nav.getBoundingClientRect();
   const width = Math.max(1, rect.width - 32);
@@ -64,6 +58,7 @@ function down(event: PointerEvent) {
   if (!(event.target instanceof Element) || !event.target.closest("a")) return;
   const nav = event.currentTarget as HTMLElement;
   gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, nav };
+  pressedIndex.value = position(event.clientX, nav).index;
   suppressClickUntil = 0;
   nav.setPointerCapture(event.pointerId);
 }
@@ -75,13 +70,15 @@ function move(event: PointerEvent) {
   )
     return;
   dragging.value = true;
-  preview.value = position(event.clientX, gesture.nav).progress;
+  pressedIndex.value = -1;
+  motion.track(position(event.clientX, gesture.nav).progress, event.timeStamp);
 }
 function finish(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
   const nav = gesture.nav;
   gesture = null;
-  const wasDragging = dragging.value;
+  pressedIndex.value = -1;
+  dragging.value = false;
   if (nav.hasPointerCapture(event.pointerId))
     nav.releasePointerCapture(event.pointerId);
   suppressClickUntil = performance.now() + 500;
@@ -91,18 +88,20 @@ function finish(event: PointerEvent, cancelled = false) {
     event.clientY < rect.top - 24 ||
     event.clientY > rect.bottom + 24
   ) {
-    dragging.value = false;
+    motion.move(currentIndex.value, animateMotion());
     return;
   }
   const index = position(event.clientX, nav).index;
-  if (wasDragging) preview.value = index;
+  motion.move(index, animateMotion());
   const item = items[index]!;
+  const request = ++navigationRequest;
   void router
     .push({
       path: item.path,
     })
     .finally(() => {
-      dragging.value = false;
+      if (request === navigationRequest && !gesture)
+        motion.move(currentIndex.value, animateMotion());
     });
 }
 function click(event: MouseEvent) {
@@ -117,7 +116,7 @@ function click(event: MouseEvent) {
     class="chore-bottom-nav"
     aria-label="宿舍导航"
     data-testid="chore-bottom-nav"
-    :class="{ 'is-dragging': dragging, 'is-flowing': flowing }"
+    :class="{ 'is-dragging': dragging, 'is-moving': moving }"
     @pointerdown="down"
     @pointermove="move"
     @pointerup="finish($event)"
@@ -127,16 +126,19 @@ function click(event: MouseEvent) {
     @dragstart.prevent
     :style="{
       '--nav-index': navIndex,
-      '--nav-from': flowFrom,
-      '--nav-origin': flowDirection > 0 ? 'right' : 'left',
+      '--nav-scale-x': 1 + stretch,
+      '--nav-scale-y': 1 - stretch * 0.4,
     }"
   >
     <span class="nav-selection" aria-hidden="true"></span>
     <router-link
-      v-for="item in items"
+      v-for="(item, index) in items"
       :key="item.section"
       :to="{ path: item.path }"
-      :class="{ active: section === item.section }"
+      :class="{
+        active: section === item.section,
+        pressed: pressedIndex === index,
+      }"
       :aria-current="section === item.section ? 'page' : undefined"
       :data-testid="`nav-${item.section}`"
     >
@@ -184,9 +186,6 @@ function click(event: MouseEvent) {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.is-dragging .nav-selection {
-  transition: none;
-}
 .nav-selection {
   position: absolute;
   z-index: -1;
@@ -196,44 +195,11 @@ function click(event: MouseEvent) {
   height: 54px;
   border-radius: 14px;
   background: #f3f3f3;
-  transform: translateX(calc(var(--nav-index) * 100%));
+  transform: translate3d(calc(var(--nav-index) * 100%), 0, 0)
+    scale(var(--nav-scale-x, 1), var(--nav-scale-y, 1));
 }
-.is-flowing .nav-selection {
-  transform-origin: var(--nav-origin, center);
-  animation: nav-water-flow 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.is-flowing a.active svg {
-  animation: nav-icon-bounce 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes nav-water-flow {
-  from {
-    transform: translateX(calc(var(--nav-from) * 100%)) scaleX(0.82);
-    border-radius: 14px;
-  }
-  56% {
-    transform: translateX(calc(var(--nav-index) * 100%)) scaleX(0.9);
-    border-radius: 50% 14px 14px 50%;
-  }
-  76% {
-    transform: translateX(calc(var(--nav-index) * 100%)) scaleX(1.28);
-    border-radius: 50% 14px 14px 50%;
-  }
-  to {
-    transform: translateX(calc(var(--nav-index) * 100%)) scaleX(1);
-    border-radius: 14px;
-  }
-}
-@keyframes nav-icon-bounce {
-  0%,
-  52% {
-    transform: translateY(0) scale(1);
-  }
-  72% {
-    transform: translateY(-3px) scale(1.12);
-  }
-  to {
-    transform: translateY(0) scale(1);
-  }
+.is-moving .nav-selection {
+  will-change: transform;
 }
 a {
   display: flex;
@@ -250,7 +216,8 @@ a {
     color 180ms ease,
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-a:active {
+a:active,
+a.pressed {
   transform: scale(0.96);
 }
 a.active {
@@ -258,9 +225,12 @@ a.active {
   font-weight: 600;
 }
 @media (prefers-reduced-motion: reduce) {
-  .is-flowing .nav-selection,
-  .is-flowing a.active svg {
-    animation: none;
+  a {
+    transition: none;
+  }
+  a:active,
+  a.pressed {
+    transform: none;
   }
 }
 svg {
