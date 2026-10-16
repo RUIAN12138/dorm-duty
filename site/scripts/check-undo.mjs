@@ -29,6 +29,7 @@ async function room(h) {
       method: "POST",
       data: {
         invite_code: r.invite_code,
+        nickname: r.dorm.members.find(m => m.user_id !== r.member_id).nickname,
         member_id: r.dorm.members.find((m) => m.user_id !== r.member_id)
           .user_id,
       },

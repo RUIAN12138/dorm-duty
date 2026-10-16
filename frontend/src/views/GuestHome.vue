@@ -16,6 +16,7 @@ import MemberMark from "../components/MemberMark.vue";
 import ChoreBottomNav from "../components/ChoreBottomNav.vue";
 import CreatorRecovery from "../components/CreatorRecovery.vue";
 import { showToast } from "vant";
+import { ApiError } from "../api";
 import { useSession } from "../stores/session";
 import {
   guestApi,
@@ -36,6 +37,8 @@ const loading = ref(false),
   choosingMember = ref(false);
 const choreToken = ref(""),
   pendingPerson = ref<GuestMember | null>(null),
+  enteredName = ref(""),
+  pendingClaimToken = ref(""),
   choiceMarker = ref(""),
   createMarker = ref("pixel-01");
 const error = ref(""),
@@ -192,20 +195,33 @@ async function loadDorm(
 ) {
   const { id, signal } = startRequest();
   try {
-    const result = await guestApi<GuestDorm>(
-      "/guest/dorm",
-      { invite_code: code || undefined },
-      signal,
-    );
+    let token =
+      code && restoreId
+        ? knownOwnerToken ||
+          (await creatorToken({ user_id: restoreId, nickname: "" }, code)) ||
+          savedChoreToken(code, restoreId)
+        : "";
+    let result: GuestDorm;
+    try {
+      result = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: code || undefined },
+        signal,
+        token,
+      );
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 401 || !token) throw e;
+      if (restoreId) saveChoreToken(code, restoreId, "");
+      token = "";
+      result = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: code },
+        signal,
+      );
+    }
     if (!code && result.is_demo !== true) throw new Error("请先输入宿舍邀请码");
     const restored =
       result.members.find((m) => m.user_id === restoreId) || null;
-    const token =
-      restored && code
-        ? knownOwnerToken ||
-          (await creatorToken(restored, code)) ||
-          savedChoreToken(code, restored.user_id)
-        : "";
     if (!isCurrent(id, signal)) return false;
     // Commit only after the room is valid. Opening/cancelling a switch never logs out.
     dorm.value = result;
@@ -215,13 +231,10 @@ async function loadDorm(
     choreToken.value = token;
     choosingMember.value = false;
     pendingPerson.value = null;
+    pendingClaimToken.value = "";
+    enteredName.value = "";
     notice.value =
-      restoreId && !restored ? "这位室友已不在当前宿舍，请重新选择。" : "";
-    if (restored && code && !token) {
-      pendingPerson.value = restored;
-      choiceMarker.value = restored.marker_id || "pixel-01";
-      member.value = null;
-    }
+      restoreId && !restored ? "请输入你的名字，重新确认身份。" : "";
     remember();
     return true;
   } catch (e) {
@@ -241,41 +254,73 @@ async function choose(person: GuestMember) {
     remember();
     return;
   }
-  pendingPerson.value = person;
-  choiceMarker.value = person.marker_id || "pixel-01";
+}
+async function submitName() {
+  if (loading.value || !enteredName.value.trim()) return;
+  const { id, signal } = startRequest();
+  try {
+    const result = await claimChoreIdentity(
+      { invite_code: inviteCode.value, nickname: enteredName.value.trim() },
+      signal,
+    );
+    if (!isCurrent(id, signal)) return;
+    const owner = await creatorToken(result.member);
+    if (!isCurrent(id, signal)) return;
+    let token = owner || result.access_token;
+    let room: GuestDorm;
+    try {
+      room = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: inviteCode.value },
+        signal,
+        token,
+      );
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 401 || !owner) throw e;
+      token = result.access_token;
+      room = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: inviteCode.value },
+        signal,
+        token,
+      );
+    }
+    if (!isCurrent(id, signal)) return;
+    dorm.value = room;
+    pendingClaimToken.value = token;
+    pendingPerson.value = result.member;
+    choiceMarker.value = result.member.marker_id;
+    notice.value = "";
+  } catch (e) {
+    if (isCurrent(id, signal)) error.value = (e as Error).message;
+  } finally {
+    if (isCurrent(id, signal)) loading.value = false;
+  }
 }
 async function confirmChoice() {
-  if (!pendingPerson.value || loading.value || !choiceMarker.value) return;
+  if (
+    !pendingPerson.value ||
+    loading.value ||
+    !choiceMarker.value ||
+    !pendingClaimToken.value
+  )
+    return;
   const person = pendingPerson.value;
   const { id, signal } = startRequest();
   try {
-    const owner = await creatorToken(person);
-    if (!isCurrent(id, signal)) return;
-    if (owner) {
-      if (choiceMarker.value !== person.marker_id)
-        await choreRequest("/chores/marker", owner, {
-          method: "PATCH",
-          body: JSON.stringify({ marker_id: choiceMarker.value }),
-          signal,
-        });
-      if (!isCurrent(id, signal)) return;
-      member.value = { ...person, marker_id: choiceMarker.value };
-      choreToken.value = owner;
-    } else {
-      const result = await claimChoreIdentity(
-        {
-          invite_code: inviteCode.value,
-          member_id: person.user_id,
-          marker_id: choiceMarker.value,
-        },
+    const token = pendingClaimToken.value;
+    if (choiceMarker.value !== person.marker_id)
+      await choreRequest("/chores/marker", token, {
+        method: "PATCH",
+        body: JSON.stringify({ marker_id: choiceMarker.value }),
         signal,
-      );
-      if (!isCurrent(id, signal)) return;
-      member.value = result.member;
-      choreToken.value = result.access_token;
-      saveChoreToken(inviteCode.value, person.user_id, result.access_token);
-    }
+      });
+    if (!isCurrent(id, signal)) return;
+    member.value = { ...person, marker_id: choiceMarker.value };
+    choreToken.value = token;
+    saveChoreToken(inviteCode.value, person.user_id, token);
     pendingPerson.value = null;
+    pendingClaimToken.value = "";
     choosingMember.value = false;
     remember();
   } catch (e) {
@@ -292,6 +337,8 @@ function cancelSelection() {
   changingDorm.value = false;
   creatingRoom.value = false;
   pendingPerson.value = null;
+  pendingClaimToken.value = "";
+  enteredName.value = "";
   error.value = "";
 }
 function identityExpired() {
@@ -299,7 +346,7 @@ function identityExpired() {
   cancelSelection();
   member.value = null;
   choreToken.value = "";
-  notice.value = "这台设备的身份已失效，请重新选择你的名字。";
+  notice.value = "这台设备的身份已失效，请重新输入你的名字。";
 }
 function changeMember() {
   cancelSelection();
@@ -634,7 +681,7 @@ onUnmounted(() => {
         <HintPopover
           title="邀请码在哪里？"
           label="邀请码帮助"
-          text="向宿舍创建者索取邀请码。输入后，再选择自己的名字即可进入。"
+          text="向宿舍创建者索取邀请码，再输入名单中你的完整名字即可进入。"
         />
       </div>
       <JoinedDorms
@@ -677,7 +724,7 @@ onUnmounted(() => {
       <div v-if="loading" class="guest-loading" role="status">
         <van-loading size="20px" color="#111111" />正在查看安排
       </div>
-      <div v-if="error && !pendingPerson" class="guest-error" role="alert">
+      <div v-if="error && !dorm" class="guest-error" role="alert">
         <h1>暂时无法查看</h1>
         <p>{{ error }}</p>
         <button class="guest-primary" :disabled="loading" @click="refresh">
@@ -758,7 +805,9 @@ onUnmounted(() => {
             {{
               pendingPerson
                 ? `你好，${pendingPerson.nickname}`
-                : "你是哪位室友？"
+                : viewMode === "demo"
+                  ? "你是哪位室友？"
+                  : "输入你的名字"
             }}
           </h1>
           <template v-if="pendingPerson">
@@ -783,15 +832,46 @@ onUnmounted(() => {
               :disabled="loading"
               @click="
                 pendingPerson = null;
+                pendingClaimToken = '';
+                enteredName = '';
                 error = '';
               "
             >
-              重新选择名字
+              重新输入名字
             </button>
           </template>
           <p v-if="notice" class="guest-notice" role="status">{{ notice }}</p>
+          <form
+            v-if="!pendingPerson && viewMode === 'dorm'"
+            class="name-entry"
+            data-testid="guest-name-form"
+            @submit.prevent="submitName"
+          >
+            <label for="member-name">你在宿舍名单中的名字</label>
+            <input
+              id="member-name"
+              v-model="enteredName"
+              data-testid="guest-member-name"
+              autocomplete="off"
+              autocapitalize="off"
+              maxlength="32"
+              placeholder="输入完整名字"
+              required
+              :disabled="loading"
+            />
+            <p v-if="error" class="guest-create-error" role="alert">
+              {{ error }}
+            </p>
+            <button
+              class="guest-primary"
+              data-testid="guest-name-submit"
+              :disabled="loading || !enteredName.trim()"
+            >
+              {{ loading ? "正在确认…" : "确认身份" }}
+            </button>
+          </form>
           <div
-            v-if="!pendingPerson && dorm.members.length"
+            v-if="!pendingPerson && viewMode === 'demo' && dorm.members.length"
             class="guest-member-list"
           >
             <button
@@ -809,7 +889,9 @@ onUnmounted(() => {
             </button>
           </div>
           <p
-            v-else-if="!pendingPerson && !dorm.members.length"
+            v-else-if="
+              !pendingPerson && viewMode === 'demo' && !dorm.members.length
+            "
             class="guest-notice"
           >
             这个宿舍还没有成员，可以先进入宿舍管理添加。
@@ -887,6 +969,34 @@ onUnmounted(() => {
 .guest-chooser h1,
 .guest-entry h1 {
   margin-top: 0;
+}
+.name-entry {
+  margin: 28px auto 0;
+  max-width: 340px;
+}
+.name-entry label {
+  display: block;
+  margin-bottom: 12px;
+  color: #555;
+  font-size: 15px;
+}
+.name-entry input {
+  width: 100%;
+  min-height: 60px;
+  padding: 14px 18px;
+  border: 1px solid #ddd;
+  border-radius: 18px;
+  background: #f7f7f7;
+  color: #111;
+  font: inherit;
+  font-size: 21px;
+}
+.name-entry input:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 3px;
+}
+.name-entry .guest-primary {
+  margin-top: 18px;
 }
 .guest-chooser .guest-member-list {
   margin-top: 24px;

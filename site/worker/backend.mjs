@@ -3,6 +3,7 @@
 import { CalendarError } from "./calendar.mjs";
 import {
   ChoreError,
+  choreGuestAccess,
   choreGuestMemberMarks,
   handleChores,
   validateMarker,
@@ -652,6 +653,8 @@ async function guestCreate(request, db, now) {
   if (!Array.isArray(others) || others.length > 11)
     invalid("一个宿舍最多填写 12 位成员");
   const nicknames = [nickname, ...others.map((value) => str(value, 1, 32))];
+  if (new Set(nicknames).size !== nicknames.length)
+    invalid("室友名字不能重复，请使用能区分彼此的名字");
   const prefix = `guest_${random(9)}`;
   const usernames = nicknames.map(
     (_, index) => `${prefix}_${String(index).padStart(2, "0")}`,
@@ -1486,7 +1489,22 @@ async function dispatch(request, env, ctx) {
     return recoverCreator(request, db, now);
   if ((path === "/guest/dorm" || path === "/guest/tasks") && method === "GET") {
     const room = await guestRoom(db, env, url);
-    if (path === "/guest/dorm") return json(await guestView(db, room));
+    const who = room.is_demo
+      ? null
+      : await choreGuestAccess(request, db, now, room.id);
+    if (path === "/guest/dorm")
+      return json(
+        room.is_demo || who
+          ? await guestView(db, room)
+          : {
+              id: room.id,
+              name: room.name,
+              is_demo: false,
+              members: [],
+            },
+      );
+    if (!room.is_demo && !who)
+      fail(401, "member_required", "请先输入正确的名字进入宿舍");
     const uid = queryInt(url, "member_id"),
       members = await roomMembers(db, room.id),
       member = members.find((entry) => entry.user_id === uid);

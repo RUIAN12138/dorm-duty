@@ -19,7 +19,7 @@ else {
  const created=await api('/guest/create',{method:'POST',status:201,data:{name:'自由轮次云端验收_'+Date.now(),nickname:'验收小林',members:['验收小陈','验收小王','验收小李','验收小刘','验收小赵']}});
  fixture={invite:created.invite_code,dormId:created.dorm.id,people:[{id:created.member_id,token:created.access_token}]};
  for(const member of created.dorm.members.filter(m=>m.user_id!==created.member_id)){
-  const claim=await api('/chores/claim',{method:'POST',status:201,data:{invite_code:fixture.invite,member_id:member.user_id}});
+  const claim=await api('/chores/claim',{method:'POST',status:201,data:{invite_code:fixture.invite,member_id:member.user_id,nickname:member.nickname}});
   fixture.people.push({id:member.user_id,token:claim.access_token});
  }
  const boards=await Promise.all(fixture.people.map(board));

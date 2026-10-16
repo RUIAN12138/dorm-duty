@@ -30,6 +30,8 @@ import GalaxySpinner from "./GalaxySpinner.vue";
 import ActionItem from "./ActionItem.vue";
 import { tilt as vTilt } from "../interactions/tilt";
 import WaterNudge from "./WaterNudge.vue";
+import WaterHandoffName from "./WaterHandoffName.vue";
+import { baselineWaterHandoff } from "../interaction/waterHandoff";
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import ChoreCalendar from "./ChoreCalendar.vue";
 import ChoreSettings from "./ChoreSettings.vue";
@@ -565,6 +567,10 @@ async function load(): Promise<boolean> {
     if (id !== requestId || requestController.signal.aborted) return false;
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
+    baselineWaterHandoff(
+      `${props.invite}:${props.memberId}`,
+      result.water_handoff,
+    );
     board.value = result;
     if (
       waterReceipt.value &&
@@ -587,6 +593,10 @@ async function load(): Promise<boolean> {
   } finally {
     if (id === requestId) loading.value = false;
   }
+}
+async function refreshArrangements() {
+  const success = await load();
+  if (success) showToast("安排已更新");
 }
 function acceptCompletion(receipt: ChoreCompletion) {
   if (!board.value) return;
@@ -611,7 +621,15 @@ function acceptCompletion(receipt: ChoreCompletion) {
   board.value.next_tasks = board.value.next_tasks.map((task) =>
     task.id === finished.id ? finished : task,
   );
-  if (finished.key === "water") board.value.water_task = receipt.next_water;
+  if (finished.key === "water") {
+    board.value.water_task = receipt.next_water;
+    board.value.water_handoff = {
+      id: finished.id,
+      sequence: finished.sequence || 0,
+      from_member_id: finished.assignee_id,
+      completed_at: finished.completed_at!,
+    };
+  }
   if (detailTask.value?.id === finished.id) detailTask.value = finished;
   const round = board.value.rounds.find(
     (item) => item.key === finished.key && item.sequence === finished.sequence,
@@ -1132,7 +1150,13 @@ onUnmounted(() => {
                     :celebrate="completionEpoch"
                     compact
                   />
-                  第 {{ displayRound?.sequence }} 轮
+                  <span
+                    >第 {{ displayRound?.sequence }} 轮 ·
+                    {{ displayRound?.completed }}/{{
+                      displayRound?.total
+                    }}
+                    人</span
+                  >
                   <van-icon name="arrow" aria-hidden="true" />
                 </button>
               </article>
@@ -1171,20 +1195,41 @@ onUnmounted(() => {
                           : undefined
                       "
                     >
-                      <WaterNudge
-                        v-if="water.assignee_id !== memberId"
-                        :key="water.id"
-                        :name="water.assignee_name"
-                        @tap="nudgeWater"
-                      />
-                      <button
-                        v-else
-                        class="task-title-button"
-                        :aria-label="`查看${water.name}详情`"
-                        @click="openTask(water, $event)"
+                      <WaterHandoffName
+                        :scope="`${invite}:${memberId}`"
+                        :event="board.water_handoff"
+                        :members="board.members"
+                        :target-id="water.assignee_id"
+                        :target-name="water.assignee_name"
+                        :active="
+                          !messagesOpen &&
+                          !orderOpen &&
+                          !toolsOpen &&
+                          !preferencesOpen &&
+                          !pushOpen &&
+                          !settingsOpen &&
+                          !recoveryOpen &&
+                          !reminderOpen &&
+                          !markerOpen &&
+                          !detailTask &&
+                          !roundOpen
+                        "
                       >
-                        {{ water.name }}
-                      </button>
+                        <WaterNudge
+                          v-if="water.assignee_id !== memberId"
+                          :key="water.id"
+                          :name="water.assignee_name"
+                          @tap="nudgeWater"
+                        />
+                        <button
+                          v-else
+                          class="task-title-button"
+                          :aria-label="`查看${water.name}详情`"
+                          @click="openTask(water, $event)"
+                        >
+                          {{ water.name }}
+                        </button>
+                      </WaterHandoffName>
                     </TaskTitle>
                   </div>
                   <CompletionAction
@@ -1319,7 +1364,7 @@ onUnmounted(() => {
       >
         <div class="menu-section">
           <ActionItem
-            label="切换室友"
+            label="切换我的身份"
             icon="friends-o"
             data-testid="guest-change-member"
             @click="fromPreferences(() => emit('switch-member'))"
@@ -1356,7 +1401,7 @@ onUnmounted(() => {
             icon="replay"
             :disabled="loading || !!busy"
             data-testid="chore-refresh"
-            @click="fromPreferences(() => void load())"
+            @click="fromPreferences(() => void refreshArrangements())"
           />
         </div>
       </ElasticSheet>
@@ -1365,7 +1410,9 @@ onUnmounted(() => {
         v-model="orderOpen"
         :members="board.members"
         :category="board.categories.find((c) => c.key === 'water')!"
+        :initial-key="section === 'duty' ? activeDutyTask?.key : 'water'"
         :current-id="water?.assignee_id"
+        :last-water-id="board.water_handoff?.from_member_id"
         :editable="!demo"
         :categories="board.categories"
         :version="board.version"
@@ -1428,7 +1475,7 @@ onUnmounted(() => {
               }}
             </p>
             <button data-testid="messages-close" @click="messagesOpen = false">
-              关闭消息
+              收起消息
             </button>
           </div>
           <p v-if="!board.reminders.length" class="messages-empty">

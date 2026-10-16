@@ -37,9 +37,11 @@ jobs:
       - name: Verify business and notification behavior
         run: |
           node site/scripts/check-cloud-backend.mjs
+          node site/scripts/check-name-entry.mjs
           node site/scripts/check-chores.mjs
           node site/scripts/check-rounds.mjs
           node site/scripts/check-round-order.mjs
+          node site/scripts/check-water-reassign.mjs
           node site/scripts/check-polling-cost.mjs
           node site/scripts/check-member-push.mjs
           node site/scripts/check-native-push.mjs
@@ -63,6 +65,7 @@ jobs:
           node scripts/check-interaction-foundation.mjs
           node scripts/check-round-calendar-motion.mjs
           node scripts/check-order-boundaries.mjs
+          node scripts/check-entry-handoff.mjs
       - name: Keep interaction failure screenshot
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

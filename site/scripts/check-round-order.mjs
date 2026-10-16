@@ -27,7 +27,7 @@ try {
     "/chores/claim",
     {
       method: "POST",
-      data: { invite_code: r.invite_code, member_id: other.user_id },
+      data: { invite_code: r.invite_code, member_id: other.user_id, nickname: other.nickname },
     },
     201,
   );
@@ -128,12 +128,12 @@ try {
       rotation_order,
     );
     eq(after.calendar, before.calendar);
-    eq(
-      h.db.sqlite
-        .prepare("SELECT * FROM chore_tasks WHERE dorm_id=? ORDER BY id")
-        .all(r.dorm.id),
-      tasks,
-    );
+    const afterTasks = h.db.sqlite.prepare("SELECT * FROM chore_tasks WHERE dorm_id=? ORDER BY id").all(r.dorm.id);
+    if(key === "water") {
+      eq(after.water_task.assignee_id, rotation_order[0]);
+      eq(after.water_task.id, before.water_task.id);
+      eq(afterTasks.filter(t=>t.key!=="water" || t.status!=="pending"), tasks.filter(t=>t.key!=="water" || t.status!=="pending"));
+    } else eq(afterTasks,tasks);
     eq(
       after.categories.map((c) => ({ ...c, rotation_order: [] })),
       before.categories.map((c) => ({ ...c, rotation_order: [] })),

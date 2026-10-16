@@ -50,6 +50,12 @@ export interface ChoreCompletion {
   next_water: ChoreTask | null;
   version: number;
 }
+export interface WaterHandoff {
+  id: number;
+  sequence: number;
+  from_member_id: number;
+  completed_at: string;
+}
 export interface ChoreReminder {
   id: number;
   title?: string;
@@ -78,6 +84,7 @@ export interface ChoreBoardData {
   today_tasks: ChoreTask[];
   next_tasks: ChoreTask[];
   water_task: ChoreTask | null;
+  water_handoff?: WaterHandoff | null;
   undo_tasks: ChoreTask[];
   water_order: number[];
   calendar: ChoreRecord[];
@@ -156,7 +163,12 @@ export async function choreRequest<T>(
   }
 }
 export function claimChoreIdentity(
-  values: { invite_code: string; member_id: number; marker_id?: string },
+  values: {
+    invite_code: string;
+    nickname: string;
+    member_id?: number;
+    marker_id?: string;
+  },
   signal?: AbortSignal,
 ) {
   return choreRequest<ChoreClaim>("/chores/claim", "", {

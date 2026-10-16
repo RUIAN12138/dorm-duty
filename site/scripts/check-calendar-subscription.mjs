@@ -71,7 +71,7 @@ async function fixture(h) {
     h,
     "/chores/claim",
     null,
-    { invite_code: room.invite_code, member_id: other.user_id },
+    { invite_code: room.invite_code, member_id: other.user_id, nickname: other.nickname },
     "POST",
     201,
   );

@@ -30,7 +30,7 @@ try {
     await api(
       "/chores/claim",
       null,
-      { invite_code: room.invite_code, member_id: mid },
+      { invite_code: room.invite_code, member_id: mid, nickname: room.dorm.members.find(m => m.user_id === mid).nickname },
       201,
     )
   ).access_token;

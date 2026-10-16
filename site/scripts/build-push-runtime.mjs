@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs/promises";
 await build({
+  absWorkingDir: fileURLToPath(new URL("../", import.meta.url)),
   entryPoints: [
     fileURLToPath(new URL("../../scripts/push-runtime.mjs", import.meta.url)),
   ],

@@ -128,7 +128,7 @@ onUnmounted(() => {
             type="checkbox"
             data-testid="reminder-plan-enabled"
         /></label>
-        <div v-if="enabled" class="plan-times">
+        <div class="plan-times">
           <label v-for="(_, index) in times" :key="index" class="plan-time"
             ><span>时间 {{ index + 1 }}</span>
             <input
@@ -154,7 +154,13 @@ onUnmounted(() => {
           >
             加一个时间
           </button>
-          <p>北京时间。只提醒未完成的值日任务。</p>
+          <p>
+            {{
+              enabled
+                ? "北京时间。只提醒未完成的值日任务。"
+                : "提醒尚未开启，以上为开启后的提醒时间。"
+            }}
+          </p>
         </div>
         <button
           type="submit"
