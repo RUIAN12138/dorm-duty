@@ -1111,16 +1111,24 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         updated.find((entry) => entry.key === category.key) || category,
     ),
     mutation = new Mutation(db, room, state.version, who, !orderOnly);
-  const changedWater = updated.find(
+  const waterToReorder = updated.find(
     (c) =>
       c.key === "water" &&
-      JSON.stringify(c.rotation_order) !==
-        JSON.stringify(
-          settings.find((old) => old.key === "water").rotation_order,
-        ),
+      (orderOnly ||
+        JSON.stringify(c.rotation_order) !==
+          JSON.stringify(
+            settings.find((old) => old.key === "water").rotation_order,
+          )),
   );
-  if (changedWater)
-    await reassignPendingWater(db, mutation, room, changedWater, members, now);
+  if (waterToReorder)
+    await reassignPendingWater(
+      db,
+      mutation,
+      room,
+      waterToReorder,
+      members,
+      now,
+    );
   if (orderOnly) {
     for (const category of updated)
       mutation.update(

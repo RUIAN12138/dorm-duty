@@ -36,7 +36,7 @@
 ## 验收
 
 - `site/scripts/check-name-entry.mjs`：姓名、名单隐私、旧 ID 领取、创建者隔离、失效成员、重名，25 项。
-- `site/scripts/check-water-reassign.mjs`：无历史起点、最近完成者后的新序、过期按钮、版本冲突、完成历史、提醒、并发单一待办，29 项。
+- `site/scripts/check-water-reassign.mjs`：无历史起点、最近完成者后的新序、过期按钮、版本冲突、完成历史、提醒、并发单一待办、撤销后再次保存同序，45 项。
 - `scripts/check-entry-handoff.mjs`：真实 Chromium / WebKit 各 20 项检查，验证连续滚动、最终姓名、普通轮询不打断、切页 / 刷新不重播、减少动态、任务上下文、下一位预览、关闭提醒仍可见时间。
 - `scripts/verify-chores.mjs`：两个独立浏览器配置、临时 HTTP / 文件 SQLite，31 组流程通过，含错误姓名再重试、已加入宿舍恢复、三类详情可点、轮序保存、真实完成、本人撤销、提醒、跨页手势和服务重启。
 - 79 项交互基础、轮序边界 Chromium / WebKit 各 30 项、21 组业务 / 轮次 / 系统推送 / 定时提醒 / 日历订阅脚本本地全部通过；必需 CI 仍需通过后再合并。

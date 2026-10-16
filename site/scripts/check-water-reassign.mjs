@@ -148,6 +148,77 @@ try {
     "concurrent reorder/complete leaves exactly one pending turn",
   );
   eq(h.db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  // A real undo may restore its original actor. Explicitly saving even the
+  // same order must honor the preview's latest-completion rule again.
+  const x = await api(
+    "/guest/create",
+    null,
+    { name: "撤销后重排", nickname: "一", members: ["二", "三"] },
+    201,
+  );
+  const xp = [];
+  for (const m of x.dorm.members)
+    xp.push({
+      ...m,
+      ...(await api(
+        "/chores/claim",
+        null,
+        { invite_code: x.invite_code, nickname: m.nickname },
+        201,
+      )),
+    });
+  const xb = () =>
+    api(
+      `/chores/board?invite_code=${x.invite_code}&member_id=${x.member_id}`,
+      x.access_token,
+    );
+  let v = await xb();
+  await api(
+    `/chores/tasks/${v.water_task.id}/complete`,
+    x.access_token,
+    {},
+    200,
+    "PATCH",
+  );
+  v = await xb();
+  const secondId = v.water_task.id;
+  await api(
+    `/chores/tasks/${secondId}/complete`,
+    xp[1].access_token,
+    {},
+    200,
+    "PATCH",
+  );
+  v = await xb();
+  const order = [xp[0].user_id, xp[2].user_id, xp[1].user_id];
+  await api(
+    "/chores/order",
+    x.access_token,
+    { version: v.version, key: "water", rotation_order: order },
+    200,
+    "PATCH",
+  );
+  await api(
+    `/chores/tasks/${secondId}/undo`,
+    xp[1].access_token,
+    {},
+    200,
+    "PATCH",
+  );
+  v = await xb();
+  eq(v.water_task.assignee_id, xp[1].user_id);
+  await api(
+    "/chores/order",
+    x.access_token,
+    { version: v.version, key: "water", rotation_order: order },
+    200,
+    "PATCH",
+  );
+  eq(
+    (await xb()).water_task.assignee_id,
+    xp[2].user_id,
+    "same-order save after undo matches draft preview",
+  );
   console.log(
     JSON.stringify({
       status: "passed",
