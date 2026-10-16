@@ -30,15 +30,15 @@ try {
   await fs.writeFile(
     vue,
     `<script setup lang="ts">
- import {ref} from 'vue';import Round from './src/components/RoundProgress.vue';import Calendar from './src/components/ChoreCalendar.vue';import Sort from './src/components/SortableMembers.vue';import TimeWheel from './src/components/TimeWheel.vue';
- const order=ref([3,1,2]),deadline=ref("22:00"),epoch=ref(0);
+ import {ref} from 'vue';import Round from './src/components/RoundProgress.vue';import Timeline from './src/components/RecordTimeline.vue';import Calendar from './src/components/ChoreCalendar.vue';import Sort from './src/components/SortableMembers.vue';import TimeWheel from './src/components/TimeWheel.vue';
+ const pastOpen=ref(false),todayOpen=ref(true);const order=ref([3,1,2]),deadline=ref("22:00"),epoch=ref(0);
  const today=ref('2026-10-15'),month=ref('2026-10'),active=ref(true);
  const people=[3,1,2].map((id,i)=>({id,user_id:id,nickname:'室友'+id,marker_id:'pixel-01',completed_at:'2026-10-15T0'+i+':00:00Z'}));
  const round=ref({key:'floor',sequence:1,total:4,completed:3,members:[],completions:people});
  const records=people.map(p=>({id:p.id,key:'floor',name:'地板',assignee_id:p.user_id,assignee_name:p.nickname,marker_id:p.marker_id,completed_at:p.completed_at,completed_date:'2026-10-15'}));
  const past=[...records,...records.map(r=>({...r,id:r.id+20}))].map(r=>({...r,id:r.id+10,completed_at:r.completed_at.replace('15T','14T'),completed_date:'2026-10-14'}));
- (window as any).qa={own:()=>{epoch.value++;(window as any).qa.full()},nextDay:()=>today.value='2026-10-16',full:()=>{round.value={...round.value,completed:4,completions:[...people,{...people[0]!,id:4,user_id:4,nickname:'室友4',completed_at:'2026-10-15T04:00:00Z'}]}},undo:()=>{round.value={...round.value,completed:3,completions:people}},reopen:async()=>{active.value=false;await new Promise(r=>setTimeout(r,30));active.value=true},deadline:()=>deadline.value,order:()=>order.value,month:()=>month.value};
- </script><template><main style="max-width:430px;padding:24px;margin:auto"><div data-testid="large-round"><Round :round="round" :active="active"/></div><div data-testid="mini-round"><Round :round="round" :active="active" :celebrate="epoch" compact/></div><Calendar v-model:month="month" :month="month" :today="today" :records="[...records,...past]" :members="people" @change="month=$event"/><Sort v-model="order" :members="people" :active="true"/><TimeWheel v-model="deadline" test-id="wheel-input"/></main></template>`,
+ (window as any).qa={own:()=>{epoch.value++;(window as any).qa.full()},nextDay:()=>{today.value='2026-10-16';todayOpen.value=false},full:()=>{round.value={...round.value,completed:4,completions:[...people,{...people[0]!,id:4,user_id:4,nickname:'室友4',completed_at:'2026-10-15T04:00:00Z'}]}},undo:()=>{round.value={...round.value,completed:3,completions:people}},reopen:async()=>{active.value=false;await new Promise(r=>setTimeout(r,30));active.value=true},deadline:()=>deadline.value,order:()=>order.value,month:()=>month.value};
+ </script><template><main style="max-width:430px;padding:24px;margin:auto"><div data-testid="large-round"><Round :round="round" :active="active"/></div><div data-testid="mini-round"><Round :round="round" :active="active" :celebrate="epoch" compact/></div><Calendar v-model:month="month" :month="month" :today="today" :records="[...records,...past]" :members="people" @change="month=$event"/><Timeline date="2026-10-15" label="今天" :records="records" :expanded="todayOpen" list @toggle="todayOpen=!todayOpen"/><Timeline date="2026-10-14" label="10月14日" :records="past" :expanded="pastOpen" list @toggle="pastOpen=!pastOpen"/><Sort v-model="order" :members="people" :active="true"/><TimeWheel v-model="deadline" test-id="wheel-input"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));

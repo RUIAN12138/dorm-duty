@@ -638,7 +638,7 @@ async function complete(page, task) {
       const sample = () => {
         const header = document.querySelector(".board-identity"),
           title = document.querySelector(
-            ".quiet-task-card",
+            ".task-title-stage, .water-title-stage",
           );
         window.__completionFrames.push({
           header: header?.getBoundingClientRect().top,
@@ -1044,7 +1044,7 @@ try {
       .click();
     assert(
       await a.page
-        .locator(".quiet-task-title").last()
+        .locator(".task-title-stage h2").last()
         .evaluate((el) =>
           Number(getComputedStyle(el).opacity)>0.1,
         ),
@@ -1129,20 +1129,18 @@ try {
   );
   phase = "complete_categories_calendar";
   await complete(a.page, floor);
-  await a.page.locator('.p0-completed summary').click();
   await a.page.getByTestId(`undo-${floor.id}`).click();
   await a.page.getByTestId(`complete-floor-${floor.id}`).waitFor();
   assert.equal((await board(ownerId,ownerToken)).today_tasks.find(t=>t.id===floor.id).status,'pending');
   await complete(a.page,floor);
   await a.page.waitForTimeout(850);
-  assert.equal(await a.page.locator('.p0-completed').getAttribute('open'),null);
+  assert.equal(await a.page.getByTestId(`undo-${floor.id}`).innerText(),'已完成');
   await snapshot(a.page,'undo-receipt-390');
-  checks.push('completed duty moves into a default-collapsed group; receipt toast undo restores the actual pending task');
+  checks.push('completed duty keeps the familiar button; tapping it again restores the actual pending task');
   ownerBoard = await board(ownerId, ownerToken);
   await navigate(a.page, "water");
   await complete(a.page, ownerBoard.water_task);
   const originalWater = ownerBoard.water_task;
-  await a.page.locator('.p0-completed summary').click();
   await a.page.getByTestId(`undo-${originalWater.id}`).click();
   await a.page.getByTestId(`complete-water-${originalWater.id}`).waitFor();
   await complete(a.page,originalWater);
@@ -1367,29 +1365,20 @@ try {
       await a.page.locator(".sheet-layer").waitFor({ state: "detached" });
       await a.page.getByTestId("calendar-view-list").click();
       await a.page.getByTestId("calendar-list").waitFor();
-      assert.equal(
-        await a.page.locator('[data-testid^="calendar-list-record-"]').count(),
-        restored.calendar.length,
-      );
-      await a.page.evaluate(() => {
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: "instant",
-        });
-      });
-      const navigation = await a.page
-        .getByTestId("chore-bottom-nav")
-        .boundingBox();
-      for (const record of await a.page
-        .locator(".calendar-list .record-row")
-        .all()) {
-        await record.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
-        const bounds = await record.boundingBox();
-        assert(
-          bounds && bounds.y >= 0 && bounds.y + bounds.height <= navigation.y,
-          "all calendar list records must be reachable above the fixed bottom navigation",
-        );
+      const seenRecords=new Set();
+      while(true){
+        await a.page.waitForTimeout(200);
+        const navigation=await a.page.getByTestId('chore-bottom-nav').boundingBox();
+        for(const record of await a.page.locator('.compact-record-row').all()){
+          seenRecords.add(await record.getAttribute('data-testid'));
+          const bounds=await record.boundingBox();
+          assert(bounds && bounds.y>=0 && bounds.y+bounds.height<=navigation.y,'every paginated list record is visible without scrolling');
+        }
+        const next=a.page.getByRole('button',{name:'下一页记录',exact:true});
+        if(!(await next.isEnabled()))break;
+        await next.click();
       }
+      assert.equal(seenRecords.size,restored.calendar.length,'all completed records remain available through pagination');
       await a.page.screenshot({
         path: path.join(evidence, "final-calendar-records-390.jpg"),
         type: "jpeg",

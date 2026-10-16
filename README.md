@@ -57,6 +57,8 @@ dorm-duty/
 
 ## 文档
 
+- [聚焦任务与一屏日历](docs/FOCUS_COMPACT_UI.md) —— 恢复大字任务、交接动画、合并热度与分页叠卡
+
 - [P0 界面与历史修正](docs/P0_INTERFACE.md) —— 统一代币、简约任务卡、三月统计、补改记录及动效边界
 
 - [协作开发](CONTRIBUTING.md) —— Issue、任务分支、PR 与审查流程

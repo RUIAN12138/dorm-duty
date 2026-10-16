@@ -21,9 +21,11 @@ const button = ref<HTMLElement>(),
   ready = ref(false);
 let started = 0,
   pressed: number | null = null,
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: ReturnType<typeof setTimeout> | undefined,
+  resetTimer: ReturnType<typeof setTimeout> | undefined;
 function click() {
   if (props.task.status === "completed") {
+    settle();
     emit("undo", props.task);
     return;
   }
@@ -44,6 +46,7 @@ watch(
           () => {
             ready.value = true;
             completionFeedback(button.value?.getBoundingClientRect());
+            resetTimer = setTimeout(settle, 620);
           },
           Math.max(0, 300 - (performance.now() - started)),
         );
@@ -55,6 +58,7 @@ watch(
 );
 function settle() {
   clearTimeout(timer);
+  clearTimeout(resetTimer);
   timer = undefined;
   round.value = false;
   ready.value = false;
@@ -84,10 +88,10 @@ onBeforeUnmount(() => {
     :aria-busy="busy"
     :aria-label="
       task.status === 'completed'
-        ? '撤销完成'
+        ? `${task.key === 'water' ? '已抬水' : '已完成'}，再次点击撤销打卡`
         : task.key === 'water'
           ? '我已抬水'
-          : '标记完成'
+          : '我已完成'
     "
     :data-testid="
       task.status === 'completed'
@@ -111,10 +115,12 @@ onBeforeUnmount(() => {
         <path d="m6 12 4 4 8-8" /></svg
       ><span>{{
         task.status === "completed"
-          ? "撤销完成"
+          ? task.key === "water"
+            ? "已抬水"
+            : "已完成"
           : task.key === "water"
             ? "我已抬水"
-            : "标记完成"
+            : "我已完成"
       }}</span></span
     >
     <span v-if="round" class="round-feedback" aria-hidden="true"
@@ -167,7 +173,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: -1;
   left: calc(50% - 25px);
-  top: 0;
+  top: calc((100% - 50px) / 2);
   width: 50px;
   height: 50px;
   border-radius: 50%;

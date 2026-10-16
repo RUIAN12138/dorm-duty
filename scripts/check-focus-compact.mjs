@@ -12,7 +12,7 @@ import { createHarness } from "../site/scripts/check-cloud-backend.mjs";
 const root = new URL("../", import.meta.url).pathname,
   front = path.join(root, "frontend"),
   name = `p0-qa-${process.pid}`;
-const evidence = path.join(root, "docs/evidence/p0-interface"),
+const evidence = path.join(root, "docs/evidence/focus-compact"),
   h = await createHarness();
 let server, browser;
 const checks = [],
@@ -37,6 +37,24 @@ try {
     assert.equal(r.status, 200);
     return r.json();
   };
+  const seedDay = new Date();
+  seedDay.setUTCDate(seedDay.getUTCDate() - 2);
+  const seedDate = seedDay.toISOString().slice(0, 10);
+  for (let i = 0; i < 7; i++) {
+    const b = await board();
+    const result = await h.request("/chores/history", {
+      token: room.access_token,
+      method: "POST",
+      data: {
+        version: b.version,
+        member_id: room.member_id,
+        key: "floor",
+        completed_at: `${seedDate}T12:0${i}:00+08:00`,
+        reason: "隔离界面验收数据",
+      },
+    });
+    assert.equal(result.status, 201);
+  }
   const initial = await board(),
     waterId = initial.water_task.id;
   const html = path.join(front, name + ".html"),
@@ -47,7 +65,7 @@ try {
   );
   await fs.writeFile(
     vue,
-    `<script setup lang="ts">import{computed}from'vue';import{useRoute}from'vue-router';import Board from './src/components/ChoreBoard.vue';import Nav from './src/components/ChoreBottomNav.vue';import{activityStreak}from'./src/interaction/activity';const route=useRoute();const section=computed(()=>route.path==='/water'?'water':route.path==='/calendar'?'calendar':'duty');(window as any).qa={streak:activityStreak};</script><template><main class="guest-page" style="max-width:520px;padding:24px 24px 120px;margin:auto;background:#fff;min-height:100vh"><Board :invite='${JSON.stringify(room.invite_code)}' dorm-name="视觉验收宿舍" :member-id="${room.member_id}" token="${room.access_token}" :demo="false" :section="section"/><Nav :section="section"/></main></template>`,
+    `<script setup lang="ts">import{computed}from'vue';import{useRoute}from'vue-router';import Board from './src/components/ChoreBoard.vue';import Nav from './src/components/ChoreBottomNav.vue';import{activityStreak}from'./src/interaction/activity';const route=useRoute();const section=computed(()=>route.path==='/water'?'water':route.path==='/calendar'?'calendar':'duty');(window as any).qa={streak:activityStreak};</script><template><main class="guest-page" style="max-width:520px;padding:12px 20px 0;margin:auto;background:#fff;min-height:100svh;box-sizing:border-box"><Board :invite='${JSON.stringify(room.invite_code)}' dorm-name="视觉验收宿舍" :member-id="${room.member_id}" token="${room.access_token}" :demo="false" :section="section"/><Nav :section="section"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -136,72 +154,52 @@ try {
   const main = page.getByTestId("pane-duty");
   check(
     await main.locator(".quiet-task-card").count(),
-    1,
-    "one focused task card",
-  );
-  check(
-    await main.locator(".quiet-task-copy>p,.quiet-task-copy>button").count(),
-    3,
-    "three fixed rows",
-  );
-  check(
-    await main.locator("h1").evaluate((e) => getComputedStyle(e).fontSize),
-    "32px",
-    "heading uses type token",
-  );
-  check(
-    await main.locator(".completion-surface").evaluate((e) => e.offsetHeight),
-    50,
-    "full-width action is 50px tall",
+    0,
+    "duty restores the plain large-type layout",
   );
   check(
     await main
-      .locator(".quiet-task-card")
-      .evaluate((e) => getComputedStyle(e).boxShadow),
-    "none",
-    "task card has no shadow",
+      .locator(".task-title-stage h2")
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize) >= 48),
+    true,
+    "task remains the large visual focus",
   );
+  check(
+    await main.locator(".completion-surface").evaluate((el) => el.offsetHeight),
+    56,
+    "restored focused action is 56px tall",
+  );
+  await page.waitForTimeout(120);
   await page.screenshot({
     path: path.join(evidence, `${safari ? "webkit" : "chromium"}-duty.png`),
   });
   const task = initial.today_tasks[0];
   failComplete = true;
-  await page.getByTestId(`complete-circle-${task.id}`).click();
+  await page.getByTestId(`complete-${task.key}-${task.id}`).click();
   await page.getByRole("alert").getByText("任务已变化，请刷新").waitFor();
   check(
     await page.locator(".completion-particles").count(),
     0,
     "failed completion never celebrates",
   );
-  await page.getByTestId(`complete-circle-${task.id}`).click();
+  await page.getByTestId(`complete-${task.key}-${task.id}`).click();
   await page.getByTestId("completion-toast").waitFor();
   await page.waitForTimeout(850);
   check(
     (await board()).today_tasks.find((t) => t.id === task.id).status,
     "completed",
-    "circle directly persists completion",
+    "main action persists completion",
   );
   check(
-    await page.locator(".p0-completed").getAttribute("open"),
-    null,
-    "completed group starts collapsed",
-  );
-  await page.locator(".p0-completed summary").click();
-  await page.locator(".p0-completed .is-completed .quiet-task-title").waitFor();
-  check(
-    await page
-      .locator(".p0-completed .quiet-task-title")
-      .evaluate((e) =>
-        getComputedStyle(e).textDecorationLine.includes("line-through"),
-      ),
+    await page.getByTestId(`undo-${task.id}`).isVisible(),
     true,
-    "completed title struck through",
+    "completed task keeps its reversible button",
   );
   await page
     .getByTestId("completion-toast")
     .getByRole("button", { name: "撤销", exact: true })
     .click();
-  await page.getByTestId(`complete-circle-${task.id}`).waitFor();
+  await page.getByTestId(`complete-${task.key}-${task.id}`).waitFor();
   check(
     (await board()).today_tasks.find((t) => t.id === task.id).status,
     "pending",
@@ -212,14 +210,136 @@ try {
   await page.getByTestId("activity-summary").waitFor();
   check(
     await page.locator(".activity-month").count(),
-    3,
-    "three actual calendar months in heatmap",
+    0,
+    "heatmap is no longer a separate tall section",
   );
   check(
     await page.locator(".stat-card").count(),
     4,
-    "four category statistics cards",
+    "four statistics cards retained in the deck",
   );
+  check(
+    await page.locator(".deck-card:not([inert])").count(),
+    1,
+    "only one statistics card accepts interaction",
+  );
+  await page
+    .getByRole("button", { name: "下一张统计卡片", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector(".deck-card.is-front")
+        ?.getAttribute("data-card-index") === "1",
+  );
+  check(
+    await page.locator(".deck-card.is-front h2").innerText(),
+    "厕所",
+    "next control changes the focused statistics card",
+  );
+  await page.waitForTimeout(400);
+  const bounds = await page.locator(".deck-stage").boundingBox();
+  await page.mouse.move(
+    bounds.x + bounds.width * 0.7,
+    bounds.y + bounds.height * 0.4,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    bounds.x + bounds.width * 0.3,
+    bounds.y + bounds.height * 0.4,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector(".deck-card.is-front")
+        ?.getAttribute("data-card-index") === "2",
+  );
+  check(
+    new URL(page.url()).pathname,
+    "/calendar",
+    "statistics card swipe never changes the bottom page",
+  );
+
+  for (const [width, height] of [
+    [320, 568],
+    [390, 667],
+    [390, 844],
+    [430, 932],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(80);
+    for (const [testId, label] of [
+      ["calendar-view-grid", "calendar"],
+      ["calendar-view-list", "list"],
+      ["calendar-view-stats", "stats"],
+    ]) {
+      await page.getByTestId(testId).click();
+      await page.waitForTimeout(80);
+      const fit = await page.evaluate(() => {
+        const root = document
+            .querySelector(".compact-calendar")
+            .getBoundingClientRect(),
+          nav = document
+            .querySelector(".chore-bottom-nav")
+            .getBoundingClientRect();
+        return {
+          bottom: root.bottom,
+          nav: nav.top,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      check(
+        fit.bottom <= fit.nav + 1 && !fit.overflow,
+        true,
+        `${label} fits ${width}x${height} above navigation`,
+      );
+      if (width === 390 && height === 844 && label === "calendar") {
+        await page.waitForTimeout(350);
+        await page.screenshot({
+          path: path.join(
+            evidence,
+            `${safari ? "webkit" : "chromium"}-calendar.png`,
+          ),
+        });
+      }
+      if (width === 320 && height === 568) {
+        await page.waitForTimeout(150);
+        await page.screenshot({
+          path: path.join(
+            evidence,
+            `${safari ? "webkit" : "chromium"}-${label}-small.png`,
+          ),
+        });
+      }
+      if (label === "stats")
+        check(
+          await page
+            .locator(".deck-card.is-front .stat-card")
+            .evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
+          true,
+          `all statistics metrics fit ${width}x${height}`,
+        );
+      if (label === "calendar")
+        check(
+          await page
+            .locator(
+              `.month-page[data-month="${initial.today.slice(0, 7)}"] .chore-calendar-grid`,
+            )
+            .evaluate(
+              (el) =>
+                el.getBoundingClientRect().bottom <=
+                document
+                  .querySelector(".calendar-surface")
+                  .getBoundingClientRect().bottom,
+            ),
+          true,
+          `six calendar rows fit ${width}x${height}`,
+        );
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   check(
     await page.evaluate(() =>
       window.qa.streak(
@@ -252,15 +372,35 @@ try {
     waterId,
     "historical water backfill preserves live water turn",
   );
-  const record = after.calendar.find((r) => r.id < 0);
+  const record = after.calendar.find((r) => r.id < 0 && r.key === "water");
   assert(record);
   await page.getByTestId("calendar-view-list").click();
   check(
-    await page.locator(".recent-days button").count(),
-    5,
-    "five day activity strip",
+    await page.locator(".recent-days").count(),
+    0,
+    "list removes the top count strip",
   );
-  await page.getByTestId(`record-group-${day}`).click();
+  const seen = new Set();
+  while (true) {
+    await page.waitForTimeout(170);
+    for (const row of await page.locator(".compact-record-row").all())
+      seen.add(await row.getAttribute("data-testid"));
+    const next = page.getByRole("button", { name: "下一页记录", exact: true });
+    if (!(await next.isEnabled())) break;
+    await next.click();
+  }
+  check(
+    seen.size,
+    after.calendar.length,
+    "pagination exposes every historical record without truncation",
+  );
+  while (
+    await page
+      .getByRole("button", { name: "上一页记录", exact: true })
+      .isEnabled()
+  )
+    await page.getByRole("button", { name: "上一页记录", exact: true }).click();
+  await page.getByTestId(`calendar-list-record-${record.id}`).click();
   await page
     .getByRole("button", { name: "修正小林的抬水记录", exact: true })
     .click();
@@ -297,7 +437,7 @@ try {
   await page.getByTestId("pane-duty").waitFor();
   check(
     await page
-      .locator(".p0-task-page")
+      .getByTestId("pane-duty")
       .evaluate((el) => el.getAnimations({ subtree: true }).length),
     0,
     "reduced motion renders final state",
