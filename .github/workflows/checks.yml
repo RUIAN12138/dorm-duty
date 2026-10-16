@@ -100,6 +100,7 @@ jobs:
           DORM_JPUSH_APPKEY: ${{ vars.DORM_ANDROID_JPUSH_APPKEY }}
         run: |
           ./gradlew --no-daemon :app:checkReleaseReadiness :app:testDebugUnitTest :app:assembleDebug :app:lintDebug "-PJPUSH_APPKEY=$DORM_JPUSH_APPKEY"
+          python3 ../../scripts/check-android-push-manifest.py app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml
           if ./gradlew --no-daemon :app:assembleRelease > "$RUNNER_TEMP/dorm-release-gate.log" 2>&1; then
             echo "Release unexpectedly built without the fixed signing configuration" >&2
             exit 1
