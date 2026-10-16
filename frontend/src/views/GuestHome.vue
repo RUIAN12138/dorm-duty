@@ -20,7 +20,7 @@ import EmailAccountPanel from "../components/EmailAccountPanel.vue";
 import {
   emailAccount,
   refreshEmailAccount,
-  emailPost,
+  enterEmailRoom,
   type EmailEntry,
 } from "../api/email";
 import { showToast } from "vant";
@@ -73,7 +73,7 @@ function needsEmail() {
 function openRecovery() {
   if (!needsEmail()) recoveryOpen.value = true;
 }
-async function acceptEmailEntry(entry: EmailEntry) {
+async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   migrationToken.value = "";
   migrationOwnerToken.value = "";
   migrationMemberId.value = undefined;
@@ -85,7 +85,7 @@ async function acceptEmailEntry(entry: EmailEntry) {
     await session.refresh().catch(() => {});
   }
   saveChoreToken(entry.invite_code, entry.member_id, entry.access_token);
-  await loadDorm(entry.invite_code, entry.member_id, entry.access_token);
+  await loadDorm(entry.invite_code, entry.member_id, entry.access_token, quiet);
 }
 function emailLogout() {
   emailOpen.value = false;
@@ -204,10 +204,10 @@ function remember() {
     /* Viewing still works with browser storage disabled. */
   }
 }
-function startRequest() {
+function startRequest(quiet = false) {
   controller?.abort();
   controller = new AbortController();
-  loading.value = true;
+  if (!quiet) loading.value = true;
   error.value = "";
   return { id: ++requestId, signal: controller.signal };
 }
@@ -243,8 +243,9 @@ async function loadDorm(
   code: string,
   restoreId?: number,
   knownOwnerToken = "",
+  quiet = false,
 ) {
-  const { id, signal } = startRequest();
+  const { id, signal } = startRequest(quiet);
   try {
     let token =
       code && restoreId
@@ -399,24 +400,60 @@ function cancelSelection() {
   enteredName.value = "";
   error.value = "";
 }
+let identityRecovery: Promise<void> | null = null;
 function identityExpired() {
+  if (identityRecovery) return identityRecovery;
   if (emailAccount.required) {
-    migrationMemberId.value = member.value?.user_id;
-    migrationToken.value = choreToken.value;
-    migrationOwnerToken.value = localStorage.getItem("dorm-owner-token") || "";
-  } else if (member.value)
-    saveChoreToken(inviteCode.value, member.value.user_id, "");
+    const code = inviteCode.value,
+      shownMember = member.value?.user_id,
+      previousMember = shownMember ?? storedChoice().member_id;
+    const epoch = requestId;
+    const current = () =>
+      epoch === requestId &&
+      inviteCode.value === code &&
+      member.value?.user_id === shownMember;
+    identityRecovery = (async () => {
+      await refreshEmailAccount();
+      if (!current()) return;
+      const linked = emailAccount.rooms.find(
+        (room) =>
+          room.invite_code === code && room.member_id === previousMember,
+      );
+      if (emailAccount.loggedIn && linked) {
+        const entry = await enterEmailRoom(linked.id);
+        if (current()) await acceptEmailEntry(entry, true);
+        return;
+      }
+      // Expired email login goes straight to verification. Preserve proof for
+      // migration, but do not send a legacy token through a public room reload.
+      migrationMemberId.value = previousMember;
+      migrationToken.value =
+        choreToken.value ||
+        (previousMember ? savedChoreToken(code, previousMember) : "");
+      migrationOwnerToken.value =
+        localStorage.getItem("dorm-owner-token") || "";
+      cancelSelection();
+      member.value = null;
+      choreToken.value = "";
+      viewMode.value = "entry";
+      dorm.value = null;
+    })()
+      .catch(() => {
+        // A transient connection failure keeps the current screen and identity.
+        // Foreground/online or the next poll will retry without forcing a reload.
+      })
+      .finally(() => {
+        identityRecovery = null;
+      });
+    return identityRecovery;
+  }
+  if (member.value) saveChoreToken(inviteCode.value, member.value.user_id, "");
   cancelSelection();
   member.value = null;
   choreToken.value = "";
   notice.value = emailAccount.required
     ? "请用邮箱重新进入宿舍。"
     : "这台设备的身份已失效，请重新输入你的名字。";
-  if (emailAccount.required) {
-    viewMode.value = "entry";
-    dorm.value = null;
-    void refreshEmailAccount().catch(() => {});
-  }
 }
 function changeMember() {
   cancelSelection();
@@ -608,6 +645,7 @@ async function returnToDorm(room: JoinedDorm) {
 function visibleRefresh() {
   if (
     document.visibilityState === "visible" &&
+    viewMode.value !== "entry" &&
     !member.value &&
     !pendingPerson.value
   )
@@ -656,11 +694,11 @@ onMounted(async () => {
     const linked = emailAccount.rooms.find((room) => room.invite_code === code);
     if (emailAccount.loggedIn && linked) {
       try {
-        await acceptEmailEntry(
-          await emailPost<EmailEntry>("enter", { dorm_id: linked.id }),
-        );
+        await acceptEmailEntry(await enterEmailRoom(linked.id));
       } catch (e) {
-        error.value = (e as Error).message;
+        if (e instanceof ApiError && [401, 403, 428].includes(e.status))
+          await identityExpired();
+        else error.value = (e as Error).message;
       }
     } else {
       // Keep original credentials privately for this one-time migration. Do not
@@ -683,6 +721,7 @@ onMounted(async () => {
   window.addEventListener("online", visibleRefresh);
 });
 onUnmounted(() => {
+  ++requestId;
   controller?.abort();
   document.removeEventListener("visibilitychange", visibleRefresh);
   window.removeEventListener("focus", visibleRefresh);
@@ -1034,7 +1073,7 @@ onUnmounted(() => {
         </section>
         <section v-else-if="member" class="guest-personal">
           <ChoreBoard
-            :key="`${inviteCode}:${member.user_id}:${choreToken}`"
+            :key="`${inviteCode}:${member.user_id}`"
             :section="section"
             :invite="inviteCode"
             :dorm-name="dorm.name"

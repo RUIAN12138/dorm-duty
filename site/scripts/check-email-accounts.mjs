@@ -123,6 +123,28 @@ try {
     (await h.request("/dorms/current", { token: entered.access_token })).status,
     200,
   );
+  const anotherWindow = await api("/email/enter", { dorm_id: room.dorm.id });
+  eq(
+    (await h.request("/dorms/current", { token: entered.access_token })).status,
+    200,
+  );
+  eq(
+    (await h.request("/dorms/current", { token: anotherWindow.access_token }))
+      .status,
+    200,
+  );
+  const grantCount = h.db.sqlite
+    .prepare("SELECT COUNT(*) AS n FROM email_grants")
+    .get().n;
+  const reused = await api("/email/enter", {
+    dorm_id: room.dorm.id,
+    member_token: anotherWindow.access_token,
+  });
+  eq(reused.access_token, anotherWindow.access_token);
+  eq(
+    h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM email_grants").get().n,
+    grantCount,
+  );
   await api("/email/enter", { dorm_id: room.dorm.id + 100 }, 403);
   const creator = await api(
     "/chores/claim",
