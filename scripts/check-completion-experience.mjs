@@ -181,6 +181,21 @@ try {
             : null,
           particles: document.querySelectorAll(".completion-particles i")
             .length,
+          progressArc: Number(
+            document
+              .querySelector(".board-focus .round-progress-value")
+              ?.getAttribute("stroke-dashoffset"),
+          ),
+          progressPlus: [
+            ...document.querySelectorAll(".board-focus .round-plus"),
+          ].some((e) => Number(getComputedStyle(e).opacity) > 0.1),
+          progressScale:
+            document.querySelector(".board-focus .round-ring-visual") &&
+            new DOMMatrix(
+              getComputedStyle(
+                document.querySelector(".board-focus .round-ring-visual"),
+              ).transform,
+            ).a,
           praiseTransform: bubble && getComputedStyle(bubble).transform,
           praiseScale:
             bubble && new DOMMatrix(getComputedStyle(bubble).transform).a,
@@ -287,6 +302,25 @@ try {
       `${label}: popup never covers task controls`,
     );
     stable(rows, label);
+    if (task.key !== "water") {
+      check(
+        new Set(rows.map((r) => r.progressArc.toFixed(2))).size > 12,
+        true,
+        `${label}: the actual page ring fills continuously after a server receipt`,
+      );
+      check(
+        rows.some((r) => r.progressPlus),
+        true,
+        `${label}: a visible +1 reaches the actual page ring`,
+      );
+      check(
+        rows.some(
+          (r) => r.progressScale && Math.abs(r.progressScale - 1) > 0.005,
+        ),
+        true,
+        `${label}: only the ring absorbs with a local elastic deformation`,
+      );
+    }
     return rows;
   }
   for (const [width, height] of [
@@ -300,6 +334,16 @@ try {
     await page.waitForTimeout(400);
     const b = await board();
     const task = b.today_tasks.find((t) => t.key === "floor");
+    check(
+      await page.getByTestId("round-progress").getByRole("progressbar").count(),
+      1,
+      `${width}px actual duty page has the circular progress component`,
+    );
+    check(
+      await page.getByTestId("round-progress").locator(".round-plus").count(),
+      0,
+      `${width}px initial page never replays old completions`,
+    );
     await completeAndInspect(task, `${width}px duty`);
     await page.screenshot({
       path: path.join(
@@ -307,6 +351,82 @@ try {
         `${safari ? "webkit" : "chromium"}-${width}-praise.png`,
       ),
     });
+    if (width === 390) {
+      await page.getByTestId("round-progress").tap();
+      const details = page.getByTestId("round-members");
+      await details.waitFor();
+      check(
+        await details
+          .locator(".round-progress-ring, .round-progress-display")
+          .count(),
+        1,
+        "the real round drawer restores its full ring instead of a horizontal bar",
+      );
+      const detailFrames = await details.evaluate(async (el) => {
+        const samples = [],
+          start = performance.now();
+        while (performance.now() - start < 1400) {
+          await new Promise(requestAnimationFrame);
+          const row = el.querySelector(".round-ranking li");
+          samples.push({
+            arc: Number(
+              el
+                .querySelector(".round-progress-value")
+                .getAttribute("stroke-dashoffset"),
+            ),
+            plus: [...el.querySelectorAll(".round-plus")].some(
+              (e) => Number(getComputedStyle(e).opacity) > 0.1,
+            ),
+            rankOpacity: row && Number(getComputedStyle(row).opacity),
+            rankX: row && new DOMMatrix(getComputedStyle(row).transform).m41,
+          });
+        }
+        return samples;
+      });
+      traces.push({ label: "real round drawer", rows: detailFrames });
+      check(
+        new Set(detailFrames.map((r) => r.arc.toFixed(2))).size > 12,
+        true,
+        "expanded ring visibly accumulates with continuous intermediate arc values",
+      );
+      check(
+        detailFrames.some((r) => r.plus),
+        true,
+        "expanded ring visibly absorbs +1",
+      );
+      check(
+        detailFrames.some(
+          (r) => r.rankOpacity > 0 && r.rankOpacity < 1 && r.rankX > 0,
+        ),
+        true,
+        "completed names independently fade and slide in from the right",
+      );
+      check(
+        await details.locator(".round-ranking li").count(),
+        1,
+        "expanded ranking lists actual finishers only",
+      );
+      check(
+        await details
+          .locator("progress,[data-testid=sortable-members]")
+          .count(),
+        0,
+        "round completion details contain neither the replacement bar nor sorting controls",
+      );
+      await details.screenshot({
+        path: path.join(
+          evidence,
+          `${safari ? "webkit" : "chromium"}-restored-round.png`,
+        ),
+      });
+      await page.getByRole("button", { name: "关闭详情" }).tap();
+      await details.waitFor({ state: "hidden" });
+      check(
+        await page.getByTestId("round-progress").locator(".round-plus").count(),
+        0,
+        "closing round details never replays the compact ring",
+      );
+    }
     const undo = page.getByTestId(`undo-${task.id}`);
     await undo.waitFor();
     const reversing = frames(650);
@@ -317,6 +437,11 @@ try {
       rows.every((r) => !r.round && r.particles === 0),
       true,
       `${width}px undo never contracts or celebrates`,
+    );
+    check(
+      rows.every((r) => !r.progressPlus),
+      true,
+      `${width}px undo never sends +1 into the ring`,
     );
     check(
       rows.some((r) => r.pendingOpacity > 0 && r.pendingOpacity < 1),

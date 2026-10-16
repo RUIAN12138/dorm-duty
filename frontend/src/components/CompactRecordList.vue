@@ -76,7 +76,7 @@ function settleLayout() {
           { transform: `translate3d(0,${delta}px,0)` },
           { transform: "translate3d(0,0,0)" },
         ],
-        { duration: 180, easing: "cubic-bezier(.22,1,.36,1)" },
+        { duration: 280, easing: "cubic-bezier(.22,1,.36,1)" },
       );
   }
 }

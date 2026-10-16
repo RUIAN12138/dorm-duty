@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import type { ChoreBoardData } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import { motionAllowed } from "../interaction/motion";
@@ -97,8 +97,13 @@ watch(
       props.round.sequence,
       completed.value,
       props.celebrate,
+      props.round.total,
     ] as const,
   (next, previous) => {
+    // The receipt is followed by a board refresh. Equal server values must not
+    // cancel the animation already in flight just because round was replaced.
+    if (previous && next.every((value, index) => value === previous[index]))
+      return;
     const from = count.value;
     stop();
     if (!next[0]) return;
@@ -116,7 +121,24 @@ watch(
   },
   { immediate: true, flush: "post" },
 );
-onBeforeUnmount(stop);
+// A preference or visibility change must finish an in-flight count immediately.
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function finishWhenMotionUnavailable() {
+  if (motionAllowed()) return;
+  stop();
+  count.value = completed.value;
+}
+onMounted(() => {
+  document.addEventListener("visibilitychange", finishWhenMotionUnavailable);
+  reducedMotion.addEventListener("change", finishWhenMotionUnavailable);
+  window.addEventListener("ui-motion-change", finishWhenMotionUnavailable);
+});
+onBeforeUnmount(() => {
+  stop();
+  document.removeEventListener("visibilitychange", finishWhenMotionUnavailable);
+  reducedMotion.removeEventListener("change", finishWhenMotionUnavailable);
+  window.removeEventListener("ui-motion-change", finishWhenMotionUnavailable);
+});
 </script>
 <template>
   <div

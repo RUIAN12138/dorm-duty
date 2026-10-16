@@ -58,6 +58,7 @@ function leaving(el: Element) {
   if (!(el instanceof HTMLElement) || !at) return;
   el.style.top = `${at.top}px`;
   el.style.width = `${at.width}px`;
+  el.style.setProperty("--record-fold-y", `${-Math.min(72, at.top + 12)}px`);
 }
 function finishLeaving(el: Element) {
   leavingElements.delete(el);
@@ -74,6 +75,7 @@ function entering(el: Element) {
   if (!(el instanceof HTMLElement)) return;
   el.style.removeProperty("top");
   el.style.removeProperty("width");
+  el.style.removeProperty("--record-fold-y");
 }
 </script>
 <template>
@@ -84,6 +86,7 @@ function entering(el: Element) {
       'is-expanded': expanded,
       'is-collapsing': collapsing,
       'is-stacked': list && !expanded && !collapsing,
+      'is-list': list,
     }"
     data-testid="record-stack"
   >
@@ -117,7 +120,7 @@ function entering(el: Element) {
         class="record-stagger"
         :style="{
           '--record-delay': `${appearDelay + Math.min(index, 8) * (appearDelay ? 28 : 32)}ms`,
-          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 6) * 10}ms`,
+          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 5) * 18}ms`,
         }"
       >
         <ChoreRecordRow
@@ -194,8 +197,8 @@ function entering(el: Element) {
   font-size: var(--ui-small-size);
   color: var(--ui-text-muted);
 }
-.is-stacked::before,
-.is-stacked::after {
+.is-list::before,
+.is-list::after {
   content: "";
   position: absolute;
   inset: 0 6px -5px;
@@ -204,11 +207,29 @@ function entering(el: Element) {
   border: var(--ui-card-border);
   border-radius: var(--ui-card-radius);
   pointer-events: none;
+  opacity: 0;
+  transform: translate3d(0, -6px, 0) scaleX(0.985);
+  transition:
+    opacity 220ms var(--ui-ease-out),
+    transform 260ms var(--ui-ease-out);
 }
-.is-stacked::after {
+.is-list::after {
   inset: 0 12px -10px;
   z-index: -2;
   background: var(--ui-surface);
+}
+.is-list.is-collapsing::before,
+.is-list.is-collapsing::after,
+.is-list.is-stacked::before,
+.is-list.is-stacked::after {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scaleX(1);
+}
+.is-list.is-collapsing::before {
+  transition-delay: 70ms;
+}
+.is-list.is-collapsing::after {
+  transition-delay: 110ms;
 }
 .record-stack-body {
   box-sizing: border-box;
@@ -232,8 +253,8 @@ function entering(el: Element) {
 }
 .record-reveal-leave-active {
   transition:
-    transform 140ms var(--ui-ease-out) var(--record-exit-delay),
-    opacity 120ms var(--ui-ease-out) var(--record-exit-delay);
+    transform 260ms var(--ui-ease-out) var(--record-exit-delay),
+    opacity 220ms var(--ui-ease-out) var(--record-exit-delay);
   position: absolute;
   left: 0;
   right: 0;
@@ -245,7 +266,7 @@ function entering(el: Element) {
 }
 .record-reveal-leave-to {
   opacity: 0;
-  transform: translate3d(28px, -4px, 0) scale(0.985);
+  transform: translate3d(32px, var(--record-fold-y, -12px), 0) scale(0.985);
 }
 .record-reveal-move {
   transition: transform 300ms var(--ui-ease-out);
