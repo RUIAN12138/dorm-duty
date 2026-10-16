@@ -201,7 +201,9 @@ function entering(el: Element) {
 .is-list::after {
   content: "";
   position: absolute;
-  inset: 0 6px -5px;
+  inset: 5px 6px auto;
+  height: 60px;
+  box-sizing: border-box;
   z-index: -1;
   background: var(--ui-surface-muted);
   border: var(--ui-card-border);
@@ -214,7 +216,7 @@ function entering(el: Element) {
     transform 260ms var(--ui-ease-out);
 }
 .is-list::after {
-  inset: 0 12px -10px;
+  inset: 10px 12px auto;
   z-index: -2;
   background: var(--ui-surface);
 }
