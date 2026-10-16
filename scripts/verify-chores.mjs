@@ -1383,6 +1383,7 @@ try {
       for (const record of await a.page
         .locator(".calendar-list .record-row")
         .all()) {
+        await record.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
         const bounds = await record.boundingBox();
         assert(
           bounds && bounds.y >= 0 && bounds.y + bounds.height <= navigation.y,
