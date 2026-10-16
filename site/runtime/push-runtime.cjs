@@ -7467,6 +7467,14 @@ function createNativeSender(config, transport = fetch) {
         audience: { registration_id: [match[2]] },
         notification: { [platform]: notification },
         options: {
+          // This release uses JPush's own connection on both platforms. Never
+          // silently switch to a vendor channel that has not been configured.
+          third_party_channel: Object.fromEntries(
+            (platform === "hmos" ? ["hmos"] : ["xiaomi", "huawei", "honor", "meizu", "oppo", "vivo", "fcm"]).map((channel) => [channel, {
+              distribution: "jpush",
+              ...platform === "android" && channel !== "fcm" ? { distribution_fcm: "jpush" } : {}
+            }])
+          ),
           time_to_live: Number.isInteger(options.TTL) && options.TTL >= 1 && options.TTL <= 86400 ? options.TTL : 86400
         }
       })

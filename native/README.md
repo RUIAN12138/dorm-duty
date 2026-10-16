@@ -1,6 +1,6 @@
 # 轮到 · 安装版通知接入
 
-2026-10-16：网页已到 v40r1，Android AppKey 已由项目所有者提供。服务器只读核对仍缺原生推送配置，厂商插件未接入，adb 暂无连接设备。本轮增加服务器私密配置工具与固定 release 签名接入，均不等于真实通知或发布包已交付。最小发布路径和 Issues 见 [Android 发布清单](../docs/ANDROID_RELEASE.md)。
+2026-10-16 当前范围：按用户选择只做 Android / HarmonyOS 极光基础通知，暂不接厂商通道。Android 1.2.1 的基础测试通知已在模拟器实际显示并验证点击恢复宿舍；HarmonyOS 1.2.1 补齐基础连接初始化、注册等待与点击回调，构建和专用模拟器安装通过，真实送达单独记录。详见 [基础通知说明](../docs/BASIC_NOTIFICATIONS.md) 和 [Android 发布清单](../docs/ANDROID_RELEASE.md)。
 
 2026-10-14 历史记录：安卓 APK、鸿蒙未签名 HAP 和原生设备绑定接口已实现。当时尚未创建推送应用、未配置厂商通道、未在安卓或鸿蒙真机验收。iPhone PWA 继续使用已验收的 Web Push。
 

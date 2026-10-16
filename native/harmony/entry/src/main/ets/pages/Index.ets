@@ -7,6 +7,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { JPushInterface } from '@jg/push';
 import { JPUSH_APP_KEY, WEB_ORIGIN, WEB_BASE } from '../PushConfig';
 import { PageLoadState } from '../PageLoadState';
+import { BasicPush } from '../BasicPush';
 interface BridgeRequest { id: string; command: string; token?: string; }
 interface BridgeResult { id: string; ok: boolean; enabled: boolean; configured: boolean; message: string; platform: string; }
 interface DeviceBody { platform: string; device_id: string; device_secret: string; registration_id?: string; }
@@ -47,6 +48,7 @@ struct Index {
   private validURL(url: string): boolean { return /^https:\/\/8\.148\.190\.114\/dorm-duty\//.test(url); }
   aboutToAppear(): void {
     this.alive = true;
+    BasicPush.attach(this.context);
     this.context.eventHub.on('notification-route', (url: string) => {
       if (this.validURL(url)) {
         try { this.controller.loadUrl(url); } catch (_) { this.initialURL = url; }
@@ -120,13 +122,7 @@ struct Index {
         if (request.command === 'enable' || request.command === 'sync') {
           if (request.command === 'enable') await notificationManager.requestEnableNotification(this.context);
           if (!(await notificationManager.isNotificationEnabled())) throw new Error('请在系统设置中允许轮到的通知');
-          JPushInterface.setSmartPushEnable(this.context.getApplicationContext(), false);
-          await JPushInterface.setDataInsightsEnable(this.context.getApplicationContext(), false);
-          JPushInterface.setAppKey(JPUSH_APP_KEY); JPushInterface.setDebug(false);
-          await JPushInterface.init(this.context);
-          JPushInterface.resumePush();
-          body.registration_id = await JPushInterface.getRegistrationId();
-          if (!body.registration_id) throw new Error('推送设备还未注册，请稍后重试');
+          body.registration_id = await BasicPush.registration(this.context);
           op = 'subscribe';
         } else if (request.command === 'disable') op = 'unsubscribe';
         else if (request.command === 'test') op = 'test';
