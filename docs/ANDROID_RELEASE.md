@@ -56,6 +56,8 @@ DORM_ANDROID_SIGNING_PROPERTIES="$HOME/.config/dorm-duty/android-release.propert
 
 未设置签名配置时仍可执行 debug 构建、lint 和单元测试；输出 release 包的任务会在执行前明确拒绝。配置文件或 keystore 放在仓库内同样拒绝。成功签名后核对 APK 包名、versionCode 和签名 SHA-256，下一版递增 versionCode 并用同一证书覆盖安装，检查宿舍身份保留。当前 CI 不存放发布私钥，只验证 debug 与缺少签名时的拒绝行为。
 
+CI 通过仓库 Actions 变量 `DORM_ANDROID_JPUSH_APPKEY` 注入公开 Android AppKey，源码保持空默认值。变量为空时仍能构建界面体验包，但不能开启原生推送；配置变量后，CI 体验包才包含相应应用标识。Master Secret 和签名密码不能放在这个变量中。临时 runner 的调试签名问题仍然存在，因此这些包用于验收，不用于长期覆盖升级。
+
 ## 4. 设备证据
 
 按 Issue #39 记录机型 / 系统 / WebView / 包名 / 签名指纹，以及身份恢复、通知正文与跳转、返回、输入键盘、系统栏、横屏和网络恢复。每条通知记录“服务器接受 / 设备显示 / 点击后目标页”三个结果。没有设备观察时标“待验收”，不能用编译通过替代。

@@ -96,8 +96,10 @@ jobs:
           java-version: "17"
       - name: Build and lint Android preview
         working-directory: native/android
+        env:
+          DORM_JPUSH_APPKEY: ${{ vars.DORM_ANDROID_JPUSH_APPKEY }}
         run: |
-          ./gradlew --no-daemon :app:checkReleaseReadiness :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+          ./gradlew --no-daemon :app:checkReleaseReadiness :app:testDebugUnitTest :app:assembleDebug :app:lintDebug "-PJPUSH_APPKEY=$DORM_JPUSH_APPKEY"
           if ./gradlew --no-daemon :app:assembleRelease > "$RUNNER_TEMP/dorm-release-gate.log" 2>&1; then
             echo "Release unexpectedly built without the fixed signing configuration" >&2
             exit 1
