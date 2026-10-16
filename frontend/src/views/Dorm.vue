@@ -2,7 +2,8 @@
 import { ref, watch, nextTick } from "vue";
 import { useRoute } from "vue-router";
 const route = useRoute();
-import { showToast, showConfirmDialog } from "vant";
+import { showConfirmDialog } from "vant";
+import { showToast } from "../interaction/notice";
 import { useSession } from "../stores/session";
 import { api, post } from "../api";
 import { useLoad } from "../components/useLoad";

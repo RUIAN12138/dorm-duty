@@ -194,9 +194,9 @@ async function save() {
   border: 1px solid #eee;
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 3px 7px #00000005;
-  animation: order-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1)
-    calc(var(--entry-index) * 45ms) both;
+  box-shadow: none;
+  animation: order-arrive 240ms cubic-bezier(0.22, 1, 0.36, 1)
+    calc(min(var(--entry-index), 8) * 40ms) both;
 }
 .order-number {
   width: 16px;

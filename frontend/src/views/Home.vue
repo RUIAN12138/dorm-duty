@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onActivated, computed } from "vue";
-import { showToast } from "vant";
+import { showToast } from "../interaction/notice";
 import { useSession } from "../stores/session";
 import { api, patch, post } from "../api";
 import type { Today } from "../api/types";

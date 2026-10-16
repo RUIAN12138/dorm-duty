@@ -15,7 +15,7 @@ export const navigationOrigin = ref<{
 } | null>(null);
 
 export const motionTokens = {
-  press: { scaleX: 1.025, scaleY: 0.94 },
+  press: { scaleX: 1.02, scaleY: 0.94 },
   selection: {
     type: "spring" as const,
     stiffness: 620,
@@ -38,6 +38,7 @@ export const motionTokens = {
 
 export function motionAllowed() {
   return (
+    !document.hidden &&
     !matchMedia("(prefers-reduced-motion: reduce)").matches &&
     document.documentElement.dataset.interaction !== "keyboard"
   );
@@ -95,15 +96,17 @@ export function useSelectionMotion(
     if (document.hidden) jump();
   };
   const preference = () => {
-    if (media.matches) jump();
+    if (!motionAllowed()) jump();
   };
   onMounted(() => {
     document.addEventListener("visibilitychange", visibility);
     media.addEventListener("change", preference);
+    window.addEventListener("ui-motion-change", preference);
   });
   onScopeDispose(() => {
     document.removeEventListener("visibilitychange", visibility);
     media.removeEventListener("change", preference);
+    window.removeEventListener("ui-motion-change", preference);
     position.destroy();
   });
   return { position, transform, moving, move, track, jump };

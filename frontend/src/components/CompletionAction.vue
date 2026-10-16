@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
-import GalaxySpinner from "./GalaxySpinner.vue";
-import GalaxyCheck from "./GalaxyCheck.vue";
+import { ref, watch, onBeforeUnmount } from "vue";
 import type { ChoreTask } from "../api/chores";
+import GalaxySpinner from "./GalaxySpinner.vue";
 import { completionFeedback } from "../interaction/completionFeedback";
 import { motionAllowed } from "../interaction/motion";
 const props = defineProps<{
@@ -17,78 +16,59 @@ const emit = defineEmits<{
   undo: [task: ChoreTask];
   settled: [id: number];
 }>();
-const ready = ref(false),
-  button = ref<HTMLButtonElement>();
-const round = ref(false),
-  confirmed = ref<ChoreTask | null>(null);
-let pressedAt = 0;
-let pressedId: number | null = null,
-  timer: ReturnType<typeof setTimeout> | undefined,
-  revealTimer: ReturnType<typeof setTimeout> | undefined;
-const visualTask = computed(() =>
-  round.value && confirmed.value ? confirmed.value : props.task,
-);
-function reset() {
-  if (confirmed.value) emit("settled", confirmed.value.id);
-  clearTimeout(timer);
-  clearTimeout(revealTimer);
-  ready.value = false;
-  round.value = false;
-  confirmed.value = null;
-  pressedId = null;
-}
+const button = ref<HTMLElement>(),
+  round = ref(false),
+  ready = ref(false);
+let started = 0,
+  pressed: number | null = null,
+  timer: ReturnType<typeof setTimeout> | undefined;
 function click() {
-  if (visualTask.value.status === "completed") {
-    const task = visualTask.value;
-    reset();
-    emit("undo", task);
+  if (props.task.status === "completed") {
+    emit("undo", props.task);
     return;
   }
   if (!props.demo && motionAllowed()) {
-    pressedAt = performance.now();
-    pressedId = props.task.id;
+    started = performance.now();
+    pressed = props.task.id;
     round.value = true;
   }
   emit("complete", props.task);
 }
 watch(
-  () => [props.task.id, props.task.status, props.receipt, props.busy] as const,
+  () => [props.receipt, props.task.status, props.busy],
   () => {
-    const receipt =
-      props.receipt?.id === pressedId
-        ? props.receipt
-        : props.task.id === pressedId && props.task.status === "completed"
-          ? props.task
-          : null;
-    if (receipt && round.value && !confirmed.value) {
-      confirmed.value = receipt;
-      revealTimer = setTimeout(
-        () => {
-          ready.value = true;
-          const bounds = button.value?.getBoundingClientRect();
-          if (bounds)
-            completionFeedback(
-              new DOMRect(
-                bounds.x + (bounds.width - 60) / 2,
-                bounds.y,
-                60,
-                bounds.height,
-              ),
-            );
-          timer = setTimeout(reset, 620);
-        },
-        Math.max(0, 300 - (performance.now() - pressedAt)),
-      );
-    } else if (
-      !confirmed.value &&
-      pressedId !== null &&
-      !props.busy &&
-      props.task.status === "pending"
-    )
-      reset();
+    if (pressed === null) return;
+    if (props.receipt?.id === pressed || props.task.status === "completed") {
+      if (!timer)
+        timer = setTimeout(
+          () => {
+            ready.value = true;
+            completionFeedback(button.value?.getBoundingClientRect());
+          },
+          Math.max(0, 300 - (performance.now() - started)),
+        );
+    } else if (!props.busy) {
+      round.value = false;
+      pressed = null;
+    }
   },
 );
-onBeforeUnmount(reset);
+function settle() {
+  clearTimeout(timer);
+  timer = undefined;
+  round.value = false;
+  ready.value = false;
+  pressed = null;
+}
+const media = matchMedia("(prefers-reduced-motion: reduce)");
+function preference() {
+  if (media.matches) settle();
+}
+media.addEventListener("change", preference);
+onBeforeUnmount(() => {
+  settle();
+  media.removeEventListener("change", preference);
+});
 </script>
 <template>
   <button
@@ -96,152 +76,180 @@ onBeforeUnmount(reset);
     type="button"
     class="completion-surface"
     :class="{
-      'is-done': visualTask.status === 'completed',
+      'is-done': task.status === 'completed',
       'is-round': round,
       'is-ready': ready,
     }"
-    :data-testid="
-      visualTask.status === 'completed'
-        ? `undo-${visualTask.id}`
-        : `complete-${visualTask.key}-${visualTask.id}`
-    "
-    :aria-label="
-      visualTask.status === 'completed'
-        ? `${visualTask.key === 'water' ? '已抬水' : '已完成'}，再次点击撤销打卡`
-        : undefined
-    "
-    :aria-pressed="visualTask.status === 'completed'"
-    :aria-busy="busy"
     :disabled="busy || disabled"
+    :aria-busy="busy"
+    :aria-label="
+      task.status === 'completed'
+        ? '撤销完成'
+        : task.key === 'water'
+          ? '我已抬水'
+          : '标记完成'
+    "
+    :data-testid="
+      task.status === 'completed'
+        ? `undo-${task.id}`
+        : `complete-${task.key}-${task.id}`
+    "
     @click="click"
   >
-    <span class="completion-fill" aria-hidden="true"></span>
+    <span class="completion-fill" aria-hidden="true" /><span
+      class="completion-circle"
+      aria-hidden="true"
+    />
     <span class="completion-label"
-      ><GalaxyCheck
-        v-if="visualTask.status === 'completed' && (!round || ready)"
-      /><span class="completion-word">{{
-        visualTask.status === "completed"
-          ? visualTask.key === "water"
-            ? "已抬水"
-            : "已完成"
-          : visualTask.key === "water"
+      ><svg
+        v-if="task.status === 'completed'"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+      >
+        <path d="m6 12 4 4 8-8" /></svg
+      ><span>{{
+        task.status === "completed"
+          ? "撤销完成"
+          : task.key === "water"
             ? "我已抬水"
-            : "我已完成"
+            : "标记完成"
       }}</span></span
     >
-    <GalaxySpinner
-      v-if="round ? !ready : busy && visualTask.status !== 'completed'"
-      class="completion-spinner"
-    />
+    <span v-if="round" class="round-feedback" aria-hidden="true"
+      ><svg
+        v-if="ready"
+        class="completion-check"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+      >
+        <path d="m6 12 4 4 8-8" /></svg
+      ><GalaxySpinner v-else /></span
+    ><GalaxySpinner v-else-if="busy" />
   </button>
 </template>
 <style scoped>
 .completion-surface {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: min(100%, 300px);
-  height: 60px;
-  flex-shrink: 0;
-  padding: 0 24px;
-  border: 1px solid transparent;
-  border-radius: 20px;
+  isolation: isolate;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--ui-card-gap);
+  width: 100%;
+  height: var(--ui-action-height);
+  padding: 0 var(--ui-space-sm);
+  border: 0;
+  border-radius: var(--ui-control-radius);
   background: transparent;
-  color: #fff;
+  color: var(--ui-surface);
   font: inherit;
-  font-size: 20px;
+  font-size: var(--ui-body-size);
   font-weight: 600;
   cursor: pointer;
+  transition: transform var(--ui-release-time) var(--ui-ease-overshoot);
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  isolation: isolate;
 }
 .completion-fill {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: #111;
-  clip-path: inset(0 0 round 20px);
+  background: var(--ui-ink);
+  border-radius: var(--ui-control-radius);
   transition:
-    clip-path 320ms cubic-bezier(0.22, 0.8, 0.3, 1),
-    background-color 180ms ease;
+    transform 320ms var(--ui-ease-soft),
+    opacity 180ms var(--ui-ease-out);
+}
+.completion-circle {
+  position: absolute;
+  z-index: -1;
+  left: calc(50% - 25px);
+  top: 0;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--ui-ink);
+  opacity: 0;
+  transition: opacity 180ms var(--ui-ease-out);
 }
 .completion-label {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  transition: gap 180ms ease;
-}
-.completion-word {
-  transition: opacity 120ms ease;
-  white-space: nowrap;
+  gap: var(--ui-card-gap);
+  transition: opacity 120ms var(--ui-ease-out);
 }
 .is-done {
-  color: #111;
+  color: var(--ui-ink);
 }
 .is-done .completion-fill {
-  background: #efefef;
+  background: var(--ui-surface-muted);
 }
 .is-round .completion-fill {
-  clip-path: inset(0 calc((100% - 60px) / 2) round 30px);
-  background: #111;
-}
-.is-round {
-  color: #fff;
-}
-.is-round .completion-word {
-  position: absolute;
+  transform: scaleX(0.15);
   opacity: 0;
-  pointer-events: none;
+}
+.is-round .completion-circle {
+  opacity: 1;
 }
 .is-round .completion-label {
-  gap: 0;
+  opacity: 0;
 }
-.is-round .galaxy-check {
-  width: 27px;
-  height: 27px;
+.is-round {
+  color: var(--ui-surface);
+}
+.round-feedback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.completion-surface:active:not(:disabled) {
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
 }
 .completion-surface:disabled {
   cursor: default;
-  opacity: 1;
 }
-.completion-surface[aria-busy="true"]:not(.is-round) {
-  color: #aaa;
-}
-.is-round:not(.is-ready)[aria-busy="true"] .completion-label {
-  opacity: 0;
-}
-.completion-spinner {
-  position: absolute;
-  right: 18px;
-  width: 15px;
-  height: 15px;
-}
-.is-round .completion-spinner {
-  right: calc(50% - 10px);
-  width: 20px;
-  height: 20px;
+.completion-surface:disabled:not(.is-round) {
+  opacity: 0.55;
 }
 .completion-surface:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--ui-ink);
   outline-offset: 4px;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .completion-surface {
-    transition:
-      transform 160ms var(--ui-ease-out),
-      color 160ms ease;
+svg {
+  width: 24px;
+  height: 24px;
+}
+.completion-check {
+  animation: quiet-check 220ms var(--ui-ease-out);
+}
+@keyframes quiet-check {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
   }
-  .completion-surface:active:not(:disabled) {
-    transform: scale(0.99);
-    transition-duration: 70ms;
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .completion-surface,
   .completion-fill,
-  .completion-word,
+  .completion-circle,
   .completion-label {
     transition: none;
+  }
+  .completion-check {
+    animation: none;
+  }
+  .completion-surface:active:not(:disabled) {
+    transform: none;
   }
 }
 </style>

@@ -241,9 +241,7 @@ async function pane(page, key) {
     wanted.path,
   );
   await page.locator(wanted.selector).waitFor();
-  await page
-    .locator('.focus-pane[aria-hidden="true"]')
-    .waitFor({ state: "detached" });
+  await page.waitForFunction(()=>document.querySelectorAll('.focus-pane[aria-hidden="true"]').length===0);
   for (const [name, item] of Object.entries(panes)) {
     assert.equal(
       await page.locator(item.selector).count(),
@@ -272,7 +270,7 @@ async function pane(page, key) {
     );
   }
   assert.equal(
-    await page.locator(".chore-personal").count(),
+    await page.getByTestId("pane-duty").count(),
     key === "duty" ? 1 : 0,
     `duty content visibility on ${key}`,
   );
@@ -640,7 +638,7 @@ async function complete(page, task) {
       const sample = () => {
         const header = document.querySelector(".board-identity"),
           title = document.querySelector(
-            ".task-title-stage, .water-title-stage",
+            ".quiet-task-card",
           );
         window.__completionFrames.push({
           header: header?.getBoundingClientRect().top,
@@ -657,8 +655,8 @@ async function complete(page, task) {
     assert(
       pressed.height < before.height - 0.2 &&
         pressed.width < before.width - 0.5 &&
-        pressed.width > before.width * 0.98,
-      "completion button uses a subtle one-percent press without elastic expansion",
+        pressed.width > before.width * 0.94,
+      "completion button uses the shared 0.96 press without scaling the page",
     );
     await page.mouse.up();
     checkedCompletionPress = true;
@@ -1046,11 +1044,9 @@ try {
       .click();
     assert(
       await a.page
-        .locator(".task-title-stage")
+        .locator(".quiet-task-title").last()
         .evaluate((el) =>
-          [...el.querySelectorAll("h2")].some(
-            (h) => Number(getComputedStyle(h).opacity) > 0.1,
-          ),
+          Number(getComputedStyle(el).opacity)>0.1,
         ),
     );
   }
@@ -1133,53 +1129,25 @@ try {
   );
   phase = "complete_categories_calendar";
   await complete(a.page, floor);
-  await a.page.waitForFunction((id) => {
-    const button = document.querySelector(`[data-testid="undo-${id}"]`);
-    return button && !button.disabled;
-  }, floor.id);
-  assert.equal(
-    await a.page.getByTestId(`undo-${floor.id}`).innerText(),
-    "已完成",
-  );
-  assert.equal(
-    await a.page.getByRole("button", { name: "撤销", exact: true }).count(),
-    0,
-  );
-  assert.equal(
-    await a.page
-      .getByText("值日已完成，标记已留在日历上。", { exact: true })
-      .count(),
-    0,
-  );
-  await snapshot(a.page, "undo-receipt-390");
+  await a.page.locator('.p0-completed summary').click();
   await a.page.getByTestId(`undo-${floor.id}`).click();
   await a.page.getByTestId(`complete-floor-${floor.id}`).waitFor();
-  assert.equal(
-    (await board(ownerId, ownerToken)).today_tasks.find(
-      (t) => t.id === floor.id,
-    ).status,
-    "pending",
-  );
-  await complete(a.page, floor);
-  checks.push(
-    "tapping the completed button itself restores a mistaken check-in without a separate undo control or success toast",
-  );
+  assert.equal((await board(ownerId,ownerToken)).today_tasks.find(t=>t.id===floor.id).status,'pending');
+  await complete(a.page,floor);
+  await a.page.waitForTimeout(850);
+  assert.equal(await a.page.locator('.p0-completed').getAttribute('open'),null);
+  await snapshot(a.page,'undo-receipt-390');
+  checks.push('completed duty moves into a default-collapsed group; receipt toast undo restores the actual pending task');
   ownerBoard = await board(ownerId, ownerToken);
   await navigate(a.page, "water");
   await complete(a.page, ownerBoard.water_task);
   const originalWater = ownerBoard.water_task;
-  await a.page.waitForFunction((id) => {
-    const button = document.querySelector(`[data-testid="undo-${id}"]`);
-    return button && !button.disabled;
-  }, originalWater.id);
-  assert.equal(
-    await a.page.getByTestId(`undo-${originalWater.id}`).innerText(),
-    "已抬水",
-  );
-  await snapshot(a.page, "water-nudge-focus-390");
+  await a.page.locator('.p0-completed summary').click();
   await a.page.getByTestId(`undo-${originalWater.id}`).click();
   await a.page.getByTestId(`complete-water-${originalWater.id}`).waitFor();
-  await complete(a.page, originalWater);
+  await complete(a.page,originalWater);
+  await a.page.waitForTimeout(850);
+  await snapshot(a.page,'water-nudge-focus-390');
   await a.page.getByRole("button", { name: "查看任务", exact: true }).click();
   await a.page.locator(".sheet-layer.is-nonmodal").waitFor();
   assert.equal(await a.page.locator(".sheet-scrim").count(), 0);
@@ -1237,7 +1205,7 @@ try {
       5,
   );
   checks.push(
-    "clicking the own completed calendar row restores that task without a separate undo button; completing again restores the calendar",
+    "explicit Undo in an eligible own calendar record restores the task; completing again restores the calendar",
   );
   ownerBoard = await board(ownerId, ownerToken);
   await snapshot(a.page, "calendar-completed-390");

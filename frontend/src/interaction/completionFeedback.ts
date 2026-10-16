@@ -52,12 +52,20 @@ export function completionFeedback(bounds: DOMRect | undefined) {
       { duration: 360, easing: "cubic-bezier(.22,1,.36,1)" },
     );
   });
+  const media = matchMedia("(prefers-reduced-motion: reduce)");
+  const preference = () => {
+    if (!motionAllowed()) remove();
+  };
   const remove = () => {
     animations.forEach((animation) => animation.cancel());
     layer.remove();
     document.removeEventListener("visibilitychange", remove);
+    media.removeEventListener("change", preference);
+    window.removeEventListener("ui-motion-change", preference);
   };
   document.addEventListener("visibilitychange", remove);
+  media.addEventListener("change", preference);
+  window.addEventListener("ui-motion-change", preference);
   void Promise.allSettled(
     animations.map((animation) => animation.finished),
   ).then(remove);

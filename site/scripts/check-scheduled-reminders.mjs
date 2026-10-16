@@ -507,7 +507,8 @@ test("migration from the previous release retains tasks, sessions, reminders and
         ),
     };
     const r = await fixture(h);
-    const b = await board(h, r);
+    // Seed old-schema records without invoking the new projection before migration.
+    const b = {today_tasks:old.sqlite.prepare("SELECT * FROM chore_tasks WHERE assignee_id=? AND key='floor' AND status='pending' ORDER BY id LIMIT 1").all(r.owner.id)};
     await complete(h, r.owner, b.today_tasks[0]);
     await api(
       h,
@@ -515,7 +516,7 @@ test("migration from the previous release retains tasks, sessions, reminders and
       r.owner.token,
       {
         target_member_id: r.member.id,
-        task_id: (await board(h, r, r.member)).today_tasks[0].id,
+        task_id: old.sqlite.prepare("SELECT id FROM chore_tasks WHERE assignee_id=? AND key='floor' AND status='pending' ORDER BY id LIMIT 1").get(r.member.id).id,
       },
       201,
       "POST",

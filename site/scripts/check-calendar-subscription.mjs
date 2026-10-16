@@ -533,8 +533,9 @@ try {
           );
         },
       };
+      // Seed the old schema through its task rows; the current board requires migration 0010.
       const r = await fixture(h),
-        initial = await board(h, r);
+        initial = {today_tasks:db.sqlite.prepare("SELECT * FROM chore_tasks WHERE assignee_id=? AND key='floor' AND status='pending' ORDER BY id LIMIT 1").all(r.member_id)};
       await api(
         h,
         `/chores/tasks/${initial.today_tasks[0].id}/complete`,

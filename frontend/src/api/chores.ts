@@ -36,6 +36,8 @@ export interface ChoreTask {
   mode: ChoreCategory["mode"];
 }
 export interface ChoreRecord {
+  revision?: number;
+  corrected?: boolean;
   id: number;
   key: string;
   name: string;
@@ -189,4 +191,12 @@ export function getChoreBoard(
     token,
     { signal },
   );
+}
+
+export interface ChoreActivity {
+  start: string;
+  today: string;
+  daily: { date: string; key: string; count: number }[];
+  recent_records: ChoreRecord[];
+  recent_truncated: boolean;
 }

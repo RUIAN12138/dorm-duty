@@ -238,7 +238,7 @@ function restoreFocus(event: Event) {
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function settleWhenInactive() {
-  if (!present.value || (!document.hidden && !media.matches)) return;
+  if (!present.value || motionAllowed()) return;
   resetGesture();
   void go(
     props.modelValue ? opened : hiddenGoal(),
@@ -247,6 +247,7 @@ function settleWhenInactive() {
 }
 onMounted(() => {
   media.addEventListener("change", settleWhenInactive);
+  window.addEventListener("ui-motion-change", settleWhenInactive);
   document.addEventListener("visibilitychange", settleWhenInactive);
 });
 watch(
@@ -282,6 +283,7 @@ onBeforeUnmount(() => {
   stop();
   removeBack?.();
   media.removeEventListener("change", settleWhenInactive);
+  window.removeEventListener("ui-motion-change", settleWhenInactive);
   document.removeEventListener("visibilitychange", settleWhenInactive);
 });
 </script>
