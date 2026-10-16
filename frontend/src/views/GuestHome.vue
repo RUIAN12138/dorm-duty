@@ -590,6 +590,7 @@ onUnmounted(() => {
     class="guest-page"
     :class="{
       'has-chore-nav': navVisible,
+      'has-compact-calendar': navVisible && section === 'calendar',
       'is-entry-flow':
         !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
     }"
@@ -952,6 +953,10 @@ onUnmounted(() => {
 }
 .guest-page.has-chore-nav {
   padding-bottom: calc(104px + env(safe-area-inset-bottom));
+}
+.guest-page.has-compact-calendar {
+  /* The calendar already measures and reserves the actual fixed navigation. */
+  padding-bottom: 0;
 }
 .guest-brand-line {
   display: flex;

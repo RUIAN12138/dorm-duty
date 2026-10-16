@@ -1379,6 +1379,16 @@ try {
         await next.click();
       }
       assert.equal(seenRecords.size,restored.calendar.length,'all completed records remain available through pagination');
+      for (const [width, height] of [[320, 568], [390, 667], [390, 844], [430, 932]]) {
+        await a.page.setViewportSize({width, height});
+        for (const mode of ['grid', 'list', 'stats']) {
+          await a.page.getByTestId(`calendar-view-${mode}`).click();
+          await a.page.waitForTimeout(240);
+          assert(await a.page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `${mode} full application has no redundant vertical scrolling at ${width}x${height}`);
+        }
+      }
+      await a.page.setViewportSize({width:390,height:844});
+      await a.page.getByTestId('calendar-view-list').click();
       await a.page.screenshot({
         path: path.join(evidence, "final-calendar-records-390.jpg"),
         type: "jpeg",
@@ -1390,6 +1400,7 @@ try {
   checks.push(
     "restart of the temporary persistent server restores custom rules, water turn, member marks and completed records in both browser contexts",
     "calendar list shows person, task and time; its rows remain reachable above the fixed bottom navigation",
+    "all three full-application calendar modes fit four portrait viewports without redundant vertical scrolling",
   );
   assert.deepEqual(issues, [], "browser JavaScript errors");
   Object.assign(result, {
