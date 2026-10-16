@@ -45,6 +45,14 @@ const emit = defineEmits<{
   settings: [key: ChoreCategory["key"]];
 }>();
 const selected = ref("");
+const detailDate = ref("");
+watch(
+  selected,
+  (value) => {
+    if (value) detailDate.value = value;
+  },
+  { flush: "sync" },
+);
 const calendarRoot = ref<HTMLElement>(),
   roomHeight = ref(600);
 function fitViewport() {
@@ -249,9 +257,9 @@ const months = computed(() =>
 );
 const selectedRecords = computed(
   () =>
-    recordsByDate.value.get(selected.value) ||
+    recordsByDate.value.get(detailDate.value) ||
     activity.value?.recent_records.filter(
-      (r) => r.completed_date === selected.value,
+      (r) => r.completed_date === detailDate.value,
     ) ||
     [],
 );
@@ -466,12 +474,18 @@ watch(
       />
       <ElasticSheet
         :model-value="!!selected"
-        :title="`${Number(selected.slice(5, 7))}月${Number(selected.slice(8))}日`"
+        motion="bottom"
+        :contained="selectedRecords.length > 4"
+        sticky-header
+        :title="`${Number(detailDate.slice(5, 7))}月${Number(detailDate.slice(8))}日`"
         @update:model-value="selected = $event ? selected : ''"
-        @closed="emit('closed')"
+        @closed="
+          detailDate = '';
+          emit('closed');
+        "
       >
         <div
-          v-if="selected"
+          v-if="detailDate"
           class="calendar-details"
           data-testid="calendar-day-details"
           aria-live="polite"
@@ -490,6 +504,8 @@ watch(
           </button>
           <RecordTimeline
             v-if="selectedRecords.length"
+            :key="detailDate"
+            :appear-delay="48"
             :records="selectedRecords"
             :member-id="memberId"
             :busy="busy"

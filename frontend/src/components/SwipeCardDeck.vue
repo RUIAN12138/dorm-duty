@@ -3,7 +3,6 @@ import { ref, onBeforeUnmount } from "vue";
 import {
   horizontalIntent,
   createVelocityTracker,
-  rubberBand,
 } from "../interaction/gestures";
 import { motionAllowed } from "../interaction/motion";
 // React Bits Stack: overlapping cards with depth; Carousel: velocity and snap.
@@ -29,7 +28,10 @@ let gesture: {
 let timer: ReturnType<typeof setTimeout> | undefined;
 const width = () => stage.value?.clientWidth || 300;
 function target() {
-  return props.modelValue + (offset.value > 0 ? -1 : 1);
+  return (
+    (props.modelValue + (offset.value > 0 ? -1 : 1) + props.labels.length) %
+    props.labels.length
+  );
 }
 function depth(index: number) {
   if (index === props.modelValue) return 0;
@@ -54,19 +56,19 @@ function pose(index: number) {
     return {
       zIndex: 10,
       opacity: 1,
-      transform: `translate3d(${offset.value}px,0,0) rotate(${offset.value / 55}deg)`,
+      transform: `translate3d(${offset.value}px,0,0) rotateZ(${offset.value / 65}deg) rotateY(${-offset.value / 110}deg)`,
     };
   if (d === 1)
     return {
       zIndex: 9,
       opacity: 1,
-      transform: `translate3d(${8 * (1 - p)}px,${-14 * (1 - p)}px,0) rotate(${2.8 * (1 - p)}deg) scale(${0.96 + 0.04 * p})`,
+      transform: `translate3d(${9 * (1 - p)}px,${-18 * (1 - p)}px,${-12 * (1 - p)}px) rotateZ(${2.8 * (1 - p)}deg) scale(${0.96 + 0.04 * p})`,
     };
   const layer = Math.min(2, d - 1);
   return {
     zIndex: 8 - layer,
     opacity: d < 5 ? 1 : 0,
-    transform: `translate3d(${-5 * layer}px,${-14 * layer}px,0) rotate(${-2 * layer}deg) scale(${1 - 0.04 * layer})`,
+    transform: `translate3d(${-6 * layer}px,${-18 * layer}px,${-12 * layer}px) rotateZ(${-2 * layer}deg) scale(${1 - 0.04 * layer})`,
   };
 }
 function release() {
@@ -76,13 +78,9 @@ function release() {
   if (old?.target.hasPointerCapture(old.id))
     old.target.releasePointerCapture(old.id);
 }
-function choose(index: number) {
-  if (
-    index < 0 ||
-    index >= props.labels.length ||
-    index === props.modelValue ||
-    settling.value
-  ) {
+function choose(requested: number) {
+  const index = (requested + props.labels.length) % props.labels.length;
+  if (props.labels.length < 2 || index === props.modelValue || settling.value) {
     offset.value = 0;
     return;
   }
@@ -93,7 +91,7 @@ function choose(index: number) {
     return;
   }
   settling.value = true;
-  offset.value = (index > props.modelValue ? -1 : 1) * (width() + 48);
+  offset.value = (requested > props.modelValue ? -1 : 1) * (width() + 48);
   clearTimeout(timer);
   timer = setTimeout(() => {
     emit("update:modelValue", index);
@@ -130,13 +128,18 @@ function move(e: PointerEvent) {
     gesture.target.setPointerCapture(e.pointerId);
   }
   e.preventDefault();
-  const blocked =
-    (x > 0 && props.modelValue === 0) ||
-    (x < 0 && props.modelValue === props.labels.length - 1);
-  offset.value = blocked ? rubberBand(x, 64) : x;
+  offset.value = x;
 }
 function up(e: PointerEvent, cancel = false) {
   if (!gesture || gesture.id !== e.pointerId) return;
+  // Touch implicitly captures the original text/face. Transferring capture to
+  // the stage emits a bubbling lostpointercapture from that child; it is not
+  // cancellation while the stage still owns this pointer.
+  if (
+    e.type === "lostpointercapture" &&
+    gesture.target.hasPointerCapture(e.pointerId)
+  )
+    return;
   const old = gesture,
     x = offset.value,
     projected = x + old.velocity.read(performance.now()) * 100;
@@ -148,10 +151,8 @@ function up(e: PointerEvent, cancel = false) {
       (Math.abs(x) > 24 && Math.abs(projected) > 90))
   ) {
     const next = props.modelValue + (x < 0 ? 1 : -1);
-    if (next >= 0 && next < props.labels.length) {
-      choose(next);
-      return;
-    }
+    choose(next);
+    return;
   }
   offset.value = 0;
 }
@@ -203,7 +204,9 @@ onBeforeUnmount(() => {
         :inert="index !== modelValue ? true : undefined"
         :data-card-index="index"
       >
-        <slot :index="index" :active="index === modelValue" />
+        <div class="deck-card-face">
+          <slot :index="index" :active="index === modelValue" />
+        </div>
       </article>
     </div>
     <div class="deck-dots" aria-hidden="true">
@@ -234,6 +237,10 @@ onBeforeUnmount(() => {
   touch-action: pan-y;
   outline: none;
   cursor: grab;
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .deck-stage:active {
   cursor: grabbing;
@@ -247,14 +254,41 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   min-width: 0;
-  border: var(--ui-card-border);
+  border: 0;
   border-radius: 24px;
-  overflow: hidden;
-  background: var(--ui-surface);
+  overflow: visible;
+  background: transparent;
+  transform-style: preserve-3d;
+  box-shadow: 0 10px 16px #1111110b;
   transform-origin: center bottom;
   transition:
     transform 280ms var(--ui-ease-out),
     opacity 180ms var(--ui-ease-out);
+}
+.deck-card::before,
+.deck-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid #d4d4d1;
+  background: #dfdfdc;
+  pointer-events: none;
+  transform: translate3d(0, 5px, -3px);
+}
+.deck-card::after {
+  background: #eeeeeb;
+  transform: translate3d(0, 2px, -1px);
+}
+.deck-card-face {
+  position: relative;
+  height: 100%;
+  border: var(--ui-card-border);
+  border-radius: inherit;
+  overflow: hidden;
+  background: var(--ui-surface);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 .is-dragging .deck-card {
   transition: none;

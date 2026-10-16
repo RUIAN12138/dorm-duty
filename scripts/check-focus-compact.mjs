@@ -38,7 +38,7 @@ try {
     return r.json();
   };
   const seedDay = new Date();
-  seedDay.setUTCDate(seedDay.getUTCDate() - 2);
+  seedDay.setUTCDate(seedDay.getUTCDate() - 3);
   const seedDate = seedDay.toISOString().slice(0, 10);
   for (let i = 0; i < 7; i++) {
     const b = await board();
@@ -57,7 +57,7 @@ try {
   }
   const initial = await board(),
     waterId = initial.water_task.id;
-  const configured=await h.request('/chores/settings',{token:room.access_token,method:'PATCH',data:{version:initial.version,categories:[{key:'floor',reminder_interval_days:1}]}});
+  const configured=await h.request('/chores/settings',{token:room.access_token,method:'PATCH',data:{version:initial.version,categories:[{key:'floor',reminder_interval_days:2}]}});
   assert.equal(configured.status,200);
   const html = path.join(front, name + ".html"),
     vue = path.join(front, name + ".vue");
@@ -131,6 +131,7 @@ try {
       body: await response.text(),
     });
   });
+  await page.route('**/marks/*.svg',route=>route.abort());
   await page.goto(origin + "/" + name + ".html");
   await page.getByTestId("pane-duty").waitFor();
   check(
@@ -238,18 +239,28 @@ try {
   await page.waitForFunction(()=>document.querySelector('[data-testid="stats-floor"]')?.getAttribute('data-tone')==='neutral');
   check((await board()).categories.find(c=>c.key==='floor').reminder_interval_days,365,'creator saves a per-task interval from statistics');
   await page.getByRole('button',{name:'设置间隔',exact:true}).click();
-  await page.getByTestId('settings-interval-floor').fill('1');
+  await page.getByTestId('settings-interval-floor').fill('2');
   await intervalSheet.getByRole('button',{name:'保存设置',exact:true}).click();
   await intervalSheet.waitFor({state:'hidden'});
   await page.waitForFunction(()=>document.querySelector('[data-testid="stats-floor"]')?.getAttribute('data-tone')==='warm');
-  async function swipeCard(){
+  const touchSession=process.env.DORM_TOUCH==='1'&&!safari?await page.context().newCDPSession(page):null;
+  async function swipeCard(direction=-1){
     const bounds=await page.locator('.deck-stage').boundingBox();
-    await page.mouse.move(bounds.x+bounds.width*.8,bounds.y+bounds.height*.5);
-    await page.mouse.down();
-    await page.mouse.move(bounds.x+bounds.width*.16,bounds.y+bounds.height*.5,{steps:12});
+    const x=bounds.x+bounds.width*(direction<0?.8:.2),y=bounds.y+bounds.height*.5;
+    if(touchSession){
+      await touchSession.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]});
+      for(let i=1;i<=12;i++){await touchSession.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+direction*bounds.width*.64*i/12,y,id:1}]});await page.waitForTimeout(16);}
+    }else{
+      await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+direction*bounds.width*.64,y,{steps:12});
+    }
     check(await page.locator('.deck-card.is-front').evaluate(e=>Math.abs(new DOMMatrix(getComputedStyle(e).transform).m41)>10),true,'stacked front card follows the pointer before release');
-    await page.mouse.up();await page.waitForTimeout(500);
+    if(touchSession)await touchSession.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});else await page.mouse.up();
+    await page.waitForTimeout(500);
   }
+  await swipeCard(1);
+  check(await page.locator('.deck-card.is-front h2').innerText(),'抬水','rightward gesture wraps from the first card');
+  await swipeCard(-1);
+  check(await page.locator('.deck-card.is-front h2').innerText(),'地板','leftward gesture wraps back to the first card');
   await swipeCard();
   check(await page.locator('.deck-card.is-front h2').innerText(),'厕所','swipe changes the focused card');
   await swipeCard();
@@ -259,6 +270,25 @@ try {
     "/calendar",
     "statistics card swipe never changes the bottom page",
   );
+
+  await page.getByTestId('calendar-view-grid').click();
+  await page.getByTestId(`calendar-day-${seedDate}`).click();
+  const detailLayer=page.locator('.sheet-layer');
+  check(await detailLayer.getAttribute('data-motion'),'bottom','date detail explicitly uses a bottom drawer');
+  const detail=page.getByTestId('calendar-day-details');
+  const incoming=await detail.locator('.record-stagger').evaluateAll(els=>els.slice(0,3).map(el=>({opacity:Number(getComputedStyle(el).opacity),x:new DOMMatrix(getComputedStyle(el).transform).m41,delay:parseFloat(getComputedStyle(el).transitionDelay)})));
+  check(incoming.some(r=>r.opacity<1&&r.x>0),true,'drawer cards appear with a fade and right-to-left movement');
+  check(incoming[2].delay>incoming[1].delay&&incoming[1].delay>incoming[0].delay,true,'drawer entrance is progressively staggered');
+  await page.waitForTimeout(600);
+  const finalRecord=detail.locator('.record-stagger').last();
+  await finalRecord.scrollIntoViewIfNeeded();
+  check(await detail.locator('img.member-mark').count(),0,'record markers never depend on image loads');
+  check(await detail.locator('svg.member-mark path').count(),7,'all markers survive deliberately blocked image requests');
+  check(await finalRecord.evaluate(el=>{const r=el.getBoundingClientRect(),b=el.closest('.sheet-content').getBoundingClientRect();return r.bottom<=b.bottom+1&&r.top>=b.top;}),true,'last record is fully visible inside the drawer scroll area');
+  await page.screenshot({path:path.join(evidence,`${safari?'webkit':'chromium'}-details-bottom.png`)});
+  await detailLayer.getByRole('button',{name:'关闭详情',exact:true}).click();
+  check(await detail.count(),1,'drawer retains its cards during the exit animation');
+  await detailLayer.waitFor({state:'detached'});
 
   for (const [width, height] of [
     [320, 568],
@@ -319,7 +349,7 @@ try {
           true,
           `all statistics metrics fit ${width}x${height}`,
         );
-      if(label==='stats')check(await page.locator('.deck-card.is-front footer').evaluate(el=>el.getBoundingClientRect().bottom<=el.closest('.deck-stage').getBoundingClientRect().bottom+1),true,`last-completion time is not clipped at ${width}x${height}`);
+      if(label==='stats')check(await page.locator('.deck-card.is-front footer').evaluate(el=>el.getBoundingClientRect().bottom<=el.closest('.deck-card-face').getBoundingClientRect().bottom+1),true,`last-completion time is not clipped at ${width}x${height}`);
       if (label === "calendar")
         check(
           await page
@@ -379,6 +409,19 @@ try {
     0,
     "list removes the top count strip",
   );
+  const seedHeading=page.getByTestId(`record-group-${seedDate}`);
+  await seedHeading.click();
+  const seedStack=seedHeading.locator('..');
+  const listEntrance=await seedStack.locator('.record-stagger').evaluateAll(els=>els.slice(0,3).map(el=>({opacity:Number(getComputedStyle(el).opacity),x:new DOMMatrix(getComputedStyle(el).transform).m41,delay:parseFloat(getComputedStyle(el).transitionDelay)})));
+  check(listEntrance.some(r=>r.opacity<1&&r.x>0),true,'expanded list cards fade in from right to left');
+  check(listEntrance[2].delay>listEntrance[1].delay,true,'expanded list cards enter progressively');
+  await page.waitForTimeout(600);
+  await seedHeading.click();
+  const exits=await seedStack.locator('.record-reveal-leave-active').evaluateAll(els=>els.map(el=>Number.parseFloat(el.style.top)));
+  check(exits.length,7,'collapse keeps each card for its exit animation');
+  check(exits.every((y,i)=>Number.isFinite(y)&&(i===0||y>exits[i-1])),true,'collapsing cards preserve distinct old positions');
+  await page.waitForTimeout(350);
+  check(await seedStack.locator('.record-stagger').count(),0,'collapse leaves no ghost cards');
   const seen = new Set();
   while(true){
     for(const heading of await page.locator('.records-heading').all()){

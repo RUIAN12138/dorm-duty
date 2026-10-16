@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { ref, watch } from "vue";
 import type { ChoreRecord } from "../api/chores";
 import ChoreRecordRow from "./ChoreRecordRow.vue";
-withDefaults(
+const props = withDefaults(
   defineProps<{
     records: ChoreRecord[];
     memberId?: number;
@@ -13,17 +14,46 @@ withDefaults(
     editable?: boolean;
     creator?: boolean;
     undoIds?: number[];
+    appearDelay?: number;
   }>(),
-  { expanded: true },
+  { expanded: true, appearDelay: 0 },
 );
 const emit = defineEmits<{
   undo: [id: number];
   toggle: [];
   edit: [record: ChoreRecord];
 }>();
+const root = ref<HTMLElement>();
+const positions = new WeakMap<Element, { top: number; width: number }>();
+watch(
+  () => props.expanded,
+  (next, previous) => {
+    if (!previous || next) return;
+    const body = root.value?.querySelector(".record-stack-body");
+    if (!body) return;
+    const top = body.getBoundingClientRect().top;
+    body.querySelectorAll(".record-stagger").forEach((el) => {
+      const box = el.getBoundingClientRect();
+      positions.set(el, { top: box.top - top, width: box.width });
+    });
+  },
+  { flush: "pre" },
+);
+function leaving(el: Element) {
+  const at = positions.get(el);
+  if (!(el instanceof HTMLElement) || !at) return;
+  el.style.top = `${at.top}px`;
+  el.style.width = `${at.width}px`;
+}
+function entering(el: Element) {
+  if (!(el instanceof HTMLElement)) return;
+  el.style.removeProperty("top");
+  el.style.removeProperty("width");
+}
 </script>
 <template>
   <section
+    ref="root"
     class="record-stack"
     :class="{ 'is-expanded': expanded, 'is-stacked': list && !expanded }"
     data-testid="record-stack"
@@ -46,12 +76,18 @@ const emit = defineEmits<{
       name="record-reveal"
       tag="div"
       class="record-stack-body"
+      appear
+      @before-leave="leaving"
+      @before-enter="entering"
     >
       <div
         v-for="(record, index) in expanded ? records : []"
         :key="record.id"
         class="record-stagger"
-        :style="{ '--record-delay': `${Math.min(index, 4) * 40}ms` }"
+        :style="{
+          '--record-delay': `${appearDelay + Math.min(index, 8) * (appearDelay ? 28 : 32)}ms`,
+          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 6) * 20}ms`,
+        }"
       >
         <ChoreRecordRow
           :class="{ 'calendar-record': !list }"
@@ -88,18 +124,36 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 64px;
+  min-height: 60px;
   padding: var(--ui-card-padding);
   border: var(--ui-card-border);
-  border-radius: var(--ui-card-radius);
+  border-radius: 18px;
   background: var(--ui-surface);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  animation: record-heading-arrive 280ms var(--ui-ease-out)
+    var(--group-delay, 0ms) both;
+}
+.records-heading .van-icon {
+  transition: transform 180ms var(--ui-ease-out);
+}
+.is-expanded .records-heading .van-icon {
+  transform: rotate(180deg);
+}
+@keyframes record-heading-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(32px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 .records-heading h2 {
   margin: 0;
-  font-size: var(--ui-card-title-size);
+  font-size: 18px;
   line-height: var(--ui-title-leading);
 }
 .records-heading span {
@@ -126,12 +180,13 @@ const emit = defineEmits<{
   background: var(--ui-surface);
 }
 .record-stack-body {
+  position: relative;
   display: grid;
   gap: var(--ui-card-gap);
 }
 .record-stagger {
   border: var(--ui-card-border);
-  border-radius: var(--ui-card-radius);
+  border-radius: 16px;
   background: var(--ui-surface);
   padding: 0 var(--ui-card-padding);
 }
@@ -140,11 +195,13 @@ const emit = defineEmits<{
 }
 .record-reveal-enter-active {
   transition:
-    transform 240ms var(--ui-ease-enter) var(--record-delay),
-    opacity 240ms var(--ui-ease-enter) var(--record-delay);
+    transform 300ms var(--ui-ease-out) var(--record-delay),
+    opacity 260ms var(--ui-ease-out) var(--record-delay);
 }
 .record-reveal-leave-active {
-  transition: opacity 180ms var(--ui-ease-out);
+  transition:
+    transform 180ms var(--ui-ease-out) var(--record-exit-delay),
+    opacity 160ms var(--ui-ease-out) var(--record-exit-delay);
   position: absolute;
   left: 0;
   right: 0;
@@ -152,15 +209,27 @@ const emit = defineEmits<{
 }
 .record-reveal-enter-from {
   opacity: 0;
-  transform: translate3d(12px, 8px, 0);
+  transform: translate3d(44px, 0, 0) scale(0.985);
 }
 .record-reveal-leave-to {
   opacity: 0;
+  transform: translate3d(28px, -4px, 0) scale(0.985);
 }
 .record-reveal-move {
   transition: transform 300ms var(--ui-ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
+  .records-heading {
+    animation: none;
+  }
+  .records-heading .van-icon {
+    transition: none;
+  }
+  .record-reveal-enter-from,
+  .record-reveal-leave-to {
+    transform: none;
+    opacity: 1;
+  }
   .record-reveal-enter-active,
   .record-reveal-leave-active,
   .record-reveal-move {

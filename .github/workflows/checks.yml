@@ -66,6 +66,7 @@ jobs:
         run: |
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
+          DORM_TOUCH=1 node scripts/check-focus-compact.mjs
           node scripts/check-round-calendar-motion.mjs
           node scripts/check-order-boundaries.mjs
           node scripts/check-entry-handoff.mjs
