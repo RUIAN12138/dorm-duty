@@ -429,12 +429,25 @@ try {
   const exits=await seedStack.locator('.record-reveal-leave-active').evaluateAll(els=>els.map(el=>Number.parseFloat(el.style.top)));
   check(exits.length,7,'collapse keeps each card for its exit animation');
   check(exits.every((y,i)=>Number.isFinite(y)&&(i===0||y>exits[i-1])),true,'collapsing cards preserve distinct old positions');
-  await page.waitForTimeout(350);
+  const foldingFrames = await seedStack.evaluate(async el => {
+    const frames=[],started=performance.now();
+    while(performance.now()-started<430){
+      await new Promise(requestAnimationFrame);
+      frames.push({rows:[...el.querySelectorAll('.record-stagger')].map(row=>{
+        const css=getComputedStyle(row),m=new DOMMatrix(css.transform);
+        return {opacity:Number(css.opacity),x:m.m41,y:m.m42};
+      }),depth:Number(getComputedStyle(el,'::after').opacity)});
+    }
+    return frames;
+  });
+  check(foldingFrames.some(f=>f.rows.some(r=>r.opacity>.05&&r.opacity<.95&&r.x>1&&r.y< -1)),true,'collapse visibly fades and moves cards back towards the stack');
+  check(foldingFrames.some(f=>f.rows.length>2&&Math.abs(f.rows[0].opacity-f.rows[f.rows.length-1].opacity)>.1),true,'collapse uses a progressive exit instead of removing every card together');
+  check(foldingFrames.some(f=>f.depth>0&&f.depth<1),true,'closed stack depth fades into place instead of popping in');
   check(await seedStack.locator('.record-stagger').count(),0,'collapse leaves no ghost cards');
   check(await seedStack.locator('.record-stack-body').evaluate(e=>e.style.minHeight),'','collapse releases its temporary scroll reservation');
   await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(600);
   check(await seedStack.locator('.record-stagger').evaluateAll(els=>els.length===7&&els.every(e=>getComputedStyle(e).opacity==='1'&&!e.style.top)),true,'interrupted collapse reopens all cards at their natural positions');
-  await seedHeading.click();await page.waitForTimeout(350);
+  await seedHeading.click();await seedStack.locator('.record-stagger').first().waitFor({state:'detached'});
   check(await seedStack.locator('.record-stagger').count(),0,'repeated collapse does not leave stale cards');
   const seen = new Set();
   while(true){

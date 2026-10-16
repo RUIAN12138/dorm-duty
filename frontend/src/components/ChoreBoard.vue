@@ -15,7 +15,7 @@ import {
   type ChoreCompletion,
   type ChoreTask,
 } from "../api/chores";
-import QuietRoundProgress from "./QuietRoundProgress.vue";
+import RoundProgress from "./RoundProgress.vue";
 import WaterNudge from "./WaterNudge.vue";
 import WaterHandoffName from "./WaterHandoffName.vue";
 import { baselineWaterHandoff } from "../interaction/waterHandoff";
@@ -1261,11 +1261,17 @@ onUnmounted(() => {
                   data-testid="round-progress"
                   @click="roundOpen = true"
                 >
-                  <QuietRoundProgress
+                  <RoundProgress
                     v-if="displayRound"
                     :round="displayRound"
+                    :active="section === 'duty'"
+                    :celebrate="completionEpoch"
                     compact
                   />
+                  <span v-if="displayRound" class="round-progress-label"
+                    >{{ displayRound.completed }}/{{ displayRound.total }} · 第
+                    {{ displayRound.sequence }} 轮</span
+                  >
                   <van-icon name="arrow" aria-hidden="true" />
                 </button>
               </article>
@@ -1595,7 +1601,11 @@ onUnmounted(() => {
           class="round-members"
           data-testid="round-members"
         >
-          <QuietRoundProgress :round="displayRound" />
+          <RoundProgress
+            :round="displayRound"
+            :active="roundOpen"
+            :celebrate="completionEpoch"
+          />
         </div>
       </ElasticSheet>
       <ElasticSheet
