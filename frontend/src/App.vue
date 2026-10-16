@@ -32,6 +32,14 @@ function network() {
 }
 function keyboardMode() {
   document.documentElement.dataset.interaction = "keyboard";
+  window.dispatchEvent(new Event("ui-motion-change"));
+  for (const animation of document.getAnimations()) {
+    try {
+      animation.finish();
+    } catch {
+      animation.cancel();
+    }
+  }
 }
 function pointerMode() {
   document.documentElement.dataset.interaction = "pointer";

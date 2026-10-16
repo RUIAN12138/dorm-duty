@@ -71,6 +71,13 @@
       "when": 1792041192343,
       "tag": "0009_washbasin_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792116000000,
+      "tag": "0010_history_corrections",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { ref, watch, onBeforeUnmount, type Ref } from "vue";
-import { motionAllowed } from "./motion";
+import { motionAllowed, motionTokens } from "./motion";
+import { animate } from "motion-v";
 export function shiftMonth(month: string, amount: number) {
   const [year = 2026, number = 1] = month.split("-").map(Number);
   const date = new Date(Date.UTC(year, number - 1 + amount, 1));
@@ -15,7 +16,7 @@ export function useMonthCarousel(
 ) {
   const offset = ref(0),
     dragging = ref(false);
-  let animation: Animation | undefined;
+  let animation: { stop: () => void } | undefined;
   let suppressUntil = 0;
   let pending: { month: string; offset: number } | null = null;
   let pointer: {
@@ -31,16 +32,16 @@ export function useMonthCarousel(
   } | null = null;
   const width = () => viewport.value?.clientWidth || 1;
   function interrupt() {
-    if (animation?.playState === "running" && track.value) {
+    if (animation && track.value) {
       offset.value =
         new DOMMatrixReadOnly(getComputedStyle(track.value).transform).m41 +
         width();
     }
-    animation?.cancel();
+    animation?.stop();
     animation = undefined;
   }
   function settle(from = offset.value) {
-    animation?.cancel();
+    animation?.stop();
     offset.value = 0;
     if (
       !track.value ||
@@ -49,13 +50,16 @@ export function useMonthCarousel(
       Math.abs(from) < 0.5
     )
       return;
-    animation = track.value.animate(
-      [
-        { transform: `translate3d(${-width() + from}px,0,0)` },
-        { transform: `translate3d(${-width()}px,0,0)` },
-      ],
-      { duration: 270, easing: "cubic-bezier(.22,1,.36,1)" },
+    track.value.style.transform = `translate3d(${-width() + from}px,0,0)`;
+    const running = animate(
+      track.value,
+      { transform: `translate3d(${-width()}px,0,0)` },
+      motionTokens.settle,
     );
+    animation = running;
+    void running.then(() => {
+      if (animation === running) animation = undefined;
+    });
   }
   function step(amount: number, from?: number) {
     if (loading()) {
@@ -162,15 +166,30 @@ export function useMonthCarousel(
   const hidden = () => {
     if (document.hidden) {
       cancel();
-      animation?.cancel();
+      animation?.stop();
       offset.value = 0;
     }
   };
+  const media = matchMedia("(prefers-reduced-motion: reduce)");
+  const preference = () => {
+    if (!motionAllowed()) {
+      release();
+      animation?.stop();
+      animation = undefined;
+      offset.value = 0;
+      if (track.value)
+        track.value.style.transform = `translate3d(${-width()}px,0,0)`;
+    }
+  };
+  media.addEventListener("change", preference);
+  window.addEventListener("ui-motion-change", preference);
   window.addEventListener("blur", cancel);
   document.addEventListener("visibilitychange", hidden);
   onBeforeUnmount(() => {
     release();
-    animation?.cancel();
+    animation?.stop();
+    media.removeEventListener("change", preference);
+    window.removeEventListener("ui-motion-change", preference);
     window.removeEventListener("blur", cancel);
     document.removeEventListener("visibilitychange", hidden);
   });

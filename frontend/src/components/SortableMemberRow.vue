@@ -253,21 +253,18 @@ onBeforeUnmount(() => {
   border: 1px solid #e9e9e9;
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 3px 7px #00000005;
-  animation: order-unfold 520ms cubic-bezier(0.22, 0.8, 0.3, 1)
-    calc(min(var(--entry-index), 6) * 45ms) both;
-  transition:
-    box-shadow 160ms ease,
-    background-color 160ms ease;
+  box-shadow: none;
+  animation: order-unfold 240ms cubic-bezier(0.22, 0.8, 0.3, 1)
+    calc(min(var(--entry-index), 8) * 40ms) both;
+  transition: opacity 160ms ease;
 }
 .sort-row.lifted {
   z-index: 10;
 }
 .sort-row.lifted .sort-card {
   background: #fff;
-  box-shadow:
-    0 12px 30px #0000001c,
-    0 2px 6px #0000000c;
+  outline: 1px solid var(--ui-ink);
+  box-shadow: none;
 }
 .sort-position {
   width: 14px;
@@ -372,7 +369,7 @@ strong small {
 }
 .sort-step:active:not(:disabled),
 .sort-handle:active:not(:disabled) {
-  transform: scaleX(1.04) scaleY(0.91);
+  transform: var(--ui-press-small);
   background: #eee;
   border-radius: 12px;
 }

@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { TabsRoot, TabsContent } from "reka-ui";
-import type { ChoreMember, ChoreRecord } from "../api/chores";
+import {
+  choreRequest,
+  type ChoreMember,
+  type ChoreRecord,
+  type ChoreActivity,
+  type ChoreBoardData,
+} from "../api/chores";
+import ActivitySummary from "./ActivitySummary.vue";
+import HistoryEditor from "./HistoryEditor.vue";
+import { shiftDay } from "../interaction/activity";
 import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
@@ -10,6 +19,12 @@ import RecordTimeline from "./RecordTimeline.vue";
 import { useMonthCarousel, shiftMonth } from "../interaction/monthCarousel";
 const props = defineProps<{
   month: string;
+  invite?: string;
+  token?: string;
+  version?: number;
+  rounds?: ChoreBoardData["rounds"];
+  creator?: boolean;
+  undoIds?: number[];
   today: string;
   records: ChoreRecord[];
   neighbors?: Record<string, ChoreRecord[]>;
@@ -23,8 +38,70 @@ const emit = defineEmits<{
   change: [month: string];
   closed: [];
   undo: [id: number];
+  refresh: [];
 }>();
 const selected = ref("");
+const activity = ref<ChoreActivity | null>(null),
+  activityError = ref(""),
+  activityLoading = ref(false);
+let activityController: AbortController | undefined;
+async function loadActivity() {
+  activityController?.abort();
+  const current = new AbortController();
+  activityController = current;
+  activityError.value = "";
+  activityLoading.value = true;
+  try {
+    const result = await choreRequest<ChoreActivity>(
+      `/chores/activity?invite_code=${encodeURIComponent(props.invite || "")}`,
+      props.token || "",
+      { signal: current.signal },
+    );
+    if (!current.signal.aborted) activity.value = result;
+  } catch (e) {
+    if (!current.signal.aborted) activityError.value = (e as Error).message;
+  } finally {
+    if (!current.signal.aborted) activityLoading.value = false;
+  }
+}
+watch(
+  () => [props.invite, props.token, props.version, props.today],
+  () => void loadActivity(),
+  { immediate: true },
+);
+onBeforeUnmount(() => activityController?.abort());
+const recentDays = computed(() =>
+  Array.from({ length: 5 }, (_, i) => {
+    const date = shiftDay(props.today, i - 4);
+    return {
+      date,
+      count:
+        activity.value?.daily
+          .filter((d) => d.date === date)
+          .reduce((n, d) => n + d.count, 0) || 0,
+    };
+  }),
+);
+const historyOpen = ref(false),
+  historyRecord = ref<ChoreRecord | null>(null),
+  historyDate = ref("");
+function editHistory(record: ChoreRecord | null = null) {
+  if (
+    !props.token ||
+    !props.memberId ||
+    (record && record.assignee_id !== props.memberId && !props.creator)
+  )
+    return;
+  historyRecord.value = record;
+  historyDate.value = selected.value || props.today;
+  selected.value = "";
+  historyOpen.value = true;
+}
+function historySaved() {
+  void loadActivity();
+  emit("refresh");
+}
+
 const monthViewport = ref<HTMLElement>(),
   monthTrack = ref<HTMLElement>();
 const carousel = useMonthCarousel(
@@ -56,10 +133,11 @@ watch(
     collapsedToday.value = "";
   },
 );
-const view = ref<"calendar" | "list">("calendar");
+const view = ref<"calendar" | "list" | "stats">("calendar");
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
   { value: "list", label: "列表", testId: "calendar-view-list" },
+  { value: "stats", label: "统计", testId: "calendar-view-stats" },
 ];
 try {
   if (sessionStorage.getItem("dorm-calendar-view-v1") === "list")
@@ -151,22 +229,34 @@ const months = computed(() =>
   }),
 );
 const selectedRecords = computed(
-  () => recordsByDate.value.get(selected.value) || [],
+  () =>
+    recordsByDate.value.get(selected.value) ||
+    activity.value?.recent_records.filter(
+      (r) => r.completed_date === selected.value,
+    ) ||
+    [],
 );
+function showDay(date: string) {
+  if (!date.startsWith(props.month)) emit("change", date.slice(0, 7));
+  selected.value = date;
+}
 function step(amount: number) {
   carousel.step(amount);
 }
 watch(
   () => props.month,
-  () => {
-    selected.value = "";
+  (next) => {
+    if (!selected.value.startsWith(next)) selected.value = "";
   },
 );
 </script>
 <template>
   <TabsRoot
     :model-value="view"
-    @update:model-value="view = $event === 'list' ? 'list' : 'calendar'"
+    @update:model-value="
+      view =
+        $event === 'list' ? 'list' : $event === 'stats' ? 'stats' : 'calendar'
+    "
     as-child
   >
     <section
@@ -295,8 +385,12 @@ watch(
                             ><MemberMark
                               :id="mark.marker_id"
                               :size="16" /><ChoreTypeIcon :type="mark.type"
-                          /></span>
-                        </span></button
+                          /></span> </span
+                        ><span class="day-record-dots" aria-hidden="true"
+                          ><i
+                            v-for="i in Math.min(cell.records.length, 4)"
+                            :key="i"
+                        /></span></button
                       ><span
                         v-else
                         class="calendar-blank"
@@ -320,6 +414,23 @@ watch(
           data-testid="calendar-list"
           :aria-busy="loading"
         >
+          <div class="recent-days" aria-label="近五天打卡">
+            <button
+              v-for="day in recentDays"
+              :key="day.date"
+              @click="showDay(day.date)"
+            >
+              <span>{{
+                day.date === today
+                  ? "今天"
+                  : `${Number(day.date.slice(5, 7))}/${Number(day.date.slice(8))}`
+              }}</span
+              ><strong>{{
+                activityLoading ? "…" : activityError ? "—" : day.count
+              }}</strong
+              ><span>次</span>
+            </button>
+          </div>
           <p v-if="!listRecords.length" class="calendar-list-empty">
             本月还没有完成记录
           </p>
@@ -335,10 +446,54 @@ watch(
             :expanded="isExpanded(group.date)"
             list
             @toggle="toggleGroup(group.date)"
+            :editable="!!token"
+            :creator="creator"
+            :undo-ids="undoIds"
+            @edit="editHistory"
             @undo="emit('undo', $event)"
           />
         </div>
       </TabsContent>
+      <TabsContent value="stats"
+        ><ActivitySummary
+          v-if="activity && !activityError"
+          :activity="activity"
+          :rounds="rounds || []"
+          @day="showDay"
+        />
+        <p v-if="activityLoading" role="status">正在读取统计…</p></TabsContent
+      >
+      <p v-if="activityError" role="alert" class="activity-error">
+        {{ activityError
+        }}<button class="calendar-ghost" @click="loadActivity">重试</button>
+      </p>
+      <p
+        v-if="view === 'list' && activity?.recent_truncated"
+        class="activity-error"
+      >
+        近五天明细超过500条，打卡条与统计仍按全部记录计算。
+      </p>
+      <button
+        v-if="token"
+        class="calendar-ghost"
+        data-testid="history-add"
+        @click="editHistory()"
+      >
+        补记完成记录
+      </button>
+      <HistoryEditor
+        v-if="token && memberId"
+        v-model="historyOpen"
+        :record="historyRecord"
+        :date="historyDate"
+        :today="today"
+        :version="version || 0"
+        :token="token"
+        :member-id="memberId"
+        :members="members"
+        :creator="!!creator"
+        @saved="historySaved"
+      />
       <ElasticSheet
         :model-value="!!selected"
         :title="`${Number(selected.slice(5, 7))}月${Number(selected.slice(8))}日`"
@@ -354,12 +509,24 @@ watch(
           <p v-if="undoError" class="chore-inline-error" role="alert">
             {{ undoError }}
           </p>
-          <p v-if="!selectedRecords.length">暂无完成记录</p>
+          <p v-if="loading" role="status">正在读取记录…</p>
+          <p v-else-if="!selectedRecords.length">暂无完成记录</p>
+          <button
+            v-if="token && selected <= today"
+            class="calendar-ghost"
+            @click="editHistory()"
+          >
+            补记这一天
+          </button>
           <RecordTimeline
             v-if="selectedRecords.length"
             :records="selectedRecords"
             :member-id="memberId"
             :busy="busy"
+            :editable="!!token"
+            :creator="creator"
+            :undo-ids="undoIds"
+            @edit="editHistory"
             @undo="emit('undo', $event)"
           />
         </div>
@@ -689,5 +856,98 @@ h1 > span {
   .chore-calendar-grid button:active {
     transform: none;
   }
+}
+</style>
+
+<style scoped>
+header {
+  padding-bottom: var(--ui-space-md);
+  gap: var(--ui-card-gap);
+}
+h1 {
+  font-size: var(--ui-title-size);
+  line-height: var(--ui-title-leading);
+}
+h1 > span {
+  font-size: var(--ui-title-size);
+}
+h1 small {
+  font-size: var(--ui-small-size);
+}
+.calendar-surface {
+  margin-top: var(--ui-space-md);
+  padding: var(--ui-card-padding);
+  border: var(--ui-card-border);
+  border-radius: var(--ui-card-radius);
+  box-shadow: none;
+  background: var(--ui-surface);
+}
+.chore-weekdays span {
+  font-size: var(--ui-caption-size);
+}
+.chore-calendar-grid button {
+  min-height: 68px;
+  transition: none !important;
+}
+.chore-calendar-grid button:active {
+  transform: none !important;
+}
+.day-record-dots {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  height: 4px;
+}
+.day-record-dots i {
+  width: 3px;
+  height: 3px;
+  background: var(--ui-ink);
+  border-radius: 50%;
+}
+.recent-days {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--ui-card-gap);
+  margin: var(--ui-space-md) 0;
+}
+.recent-days button {
+  display: grid;
+  gap: var(--ui-card-gap);
+  min-width: 0;
+  justify-items: center;
+  padding: var(--ui-space-sm) 0;
+  border: var(--ui-card-border);
+  border-radius: var(--ui-card-radius);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: var(--ui-caption-size);
+  color: var(--ui-text-muted);
+}
+.recent-days strong {
+  font-size: var(--ui-card-title-size);
+  color: var(--ui-ink);
+  font-variant-numeric: tabular-nums;
+}
+.calendar-ghost {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  padding: var(--ui-space-sm) 0;
+  font: inherit;
+  font-size: var(--ui-small-size);
+  color: var(--ui-ink);
+  cursor: pointer;
+}
+.activity-error {
+  font-size: var(--ui-small-size);
+  color: var(--ui-text-muted);
+  padding: var(--ui-space-sm) 0;
+}
+</style>
+
+<style scoped>
+.month-stage > .month-page {
+  box-shadow: none;
+  border-inline: var(--ui-card-border);
 }
 </style>

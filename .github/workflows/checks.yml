@@ -38,6 +38,7 @@ jobs:
         run: |
           node site/scripts/check-cloud-backend.mjs
           node site/scripts/check-name-entry.mjs
+          node site/scripts/check-history.mjs
           node site/scripts/check-chores.mjs
           node site/scripts/check-rounds.mjs
           node site/scripts/check-round-order.mjs
@@ -63,6 +64,7 @@ jobs:
       - name: Verify mobile interaction foundation
         run: |
           node scripts/check-interaction-foundation.mjs
+          node scripts/check-p0-interface.mjs
           node scripts/check-round-calendar-motion.mjs
           node scripts/check-order-boundaries.mjs
           node scripts/check-entry-handoff.mjs

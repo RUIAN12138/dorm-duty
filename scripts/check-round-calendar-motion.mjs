@@ -237,22 +237,10 @@ try {
   checks.push("expanded cards occupy separate readable rows");
   await page.getByTestId("record-group-2026-10-14").click();
   await page.waitForTimeout(850);
-  const layers = await stack.locator(".record-stagger").evaluateAll((els) =>
-    els.slice(0, 3).map((e) => ({
-      transform: getComputedStyle(e).transform,
-      width: e.getBoundingClientRect().width,
-      top: e.getBoundingClientRect().top,
-    })),
-  );
-  assert(
-    layers[0].width > layers[1].width && layers[1].width > layers[2].width,
-  );
-  check(
-    await stack.getAttribute("inert"),
-    "",
-    "collapsed stack never accepts hidden record actions",
-  );
-  checks.push("closed cards retain distinct scaled and angled depth");
+  check(await stack.locator('.record-stagger').count(),0,'collapsed records remove all hidden interactive rows');
+  const depth=await page.getByTestId('record-group-2026-10-14').locator('..').evaluate(el=>[getComputedStyle(el,'::before').content,getComputedStyle(el,'::after').content]);
+  assert(depth.every(value=>value!=='none'));
+  checks.push('closed day retains two static depth layers without animating height');
   await page
     .getByTestId("record-group-2026-10-14")
     .locator("..")

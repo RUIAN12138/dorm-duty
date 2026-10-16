@@ -719,6 +719,238 @@ function reminderView(row) {
     body: row.task_content_snapshot,
   };
 }
+// History is a projection. Corrections never update tasks, rounds or the water cursor.
+const historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
+ COALESCE(h.completed_at,t.completed_at) AS completed_at,COALESCE(h.revision,0) AS revision,
+ CASE WHEN h.id IS NULL THEN 0 ELSE 1 END AS corrected
+ FROM chore_tasks t LEFT JOIN chore_history_entries h ON h.task_id=t.id AND h.dorm_id=t.dorm_id
+ WHERE t.dorm_id=? AND t.status='completed' AND COALESCE(h.voided,0)=0
+ UNION ALL SELECT -h.id,h.key,h.name,h.assignee_id,h.assignee_name_snapshot,h.marker_id_snapshot,h.completed_at,h.revision,1
+ FROM chore_history_entries h WHERE h.dorm_id=? AND h.task_id IS NULL AND h.voided=0`;
+const historyView = (row) => ({
+  id: row.id,
+  key: row.key,
+  name: row.name,
+  assignee_id: row.assignee_id,
+  assignee_name: row.assignee_name_snapshot,
+  marker_id: row.marker_id_snapshot,
+  completed_at: row.completed_at,
+  completed_date: localDate(row.completed_at),
+  revision: row.revision || 0,
+  corrected: !!row.corrected,
+});
+async function activity(request, db, env, now, url) {
+  const who = await actor(request, db, now),
+    room = await roomByInvite(db, env, url.searchParams.get("invite_code"));
+  if (!room.is_demo && !who) fail(401, "member_required", "请先进入宿舍");
+  if (who && who.dorm_id !== room.id)
+    fail(403, "wrong_dorm", "只能查看自己的宿舍");
+  const today = localDate(now),
+    firstMonth = new Date(today.slice(0, 7) + "-01T00:00:00Z");
+  firstMonth.setUTCMonth(firstMonth.getUTCMonth() - 2);
+  const start = firstMonth.toISOString().slice(0, 10),
+    from = deadline(start, "00:00"),
+    end = deadline(addDate(today, 1), "00:00");
+  const daily = await all(
+    db,
+    `SELECT strftime('%Y-%m-%d',completed_at,'+8 hours') AS date,key,COUNT(*) AS count FROM (${historySQL}) WHERE completed_at>=? AND completed_at<? GROUP BY date,key ORDER BY date,key`,
+    [room.id, room.id, from, end],
+  );
+  const rows = await all(
+    db,
+    `SELECT * FROM (${historySQL}) WHERE completed_at>=? AND completed_at<? ORDER BY completed_at DESC,id DESC LIMIT 501`,
+    [room.id, room.id, deadline(addDate(today, -4), "00:00"), end],
+  );
+  return json({
+    start,
+    today,
+    daily,
+    recent_records: rows.slice(0, 500).map(historyView),
+    recent_truncated: rows.length > 500,
+  });
+}
+async function historyChange(request, db, room, who, now) {
+  if (request.method === "GET") {
+    const url = new URL(request.url),
+      id = Number(url.searchParams.get("id"));
+    if (!Number.isSafeInteger(id) || !id) invalid();
+    const row = await first(db, `SELECT * FROM (${historySQL}) WHERE id=?`, [
+      room.id,
+      room.id,
+      id,
+    ]);
+    if (!row) fail(404, "record_missing", "记录不存在");
+    if (row.assignee_id !== who.user_id && !who.is_creator)
+      fail(403, "not_owner", "只能修正自己的记录");
+    const entry = await first(
+      db,
+      id > 0
+        ? "SELECT id FROM chore_history_entries WHERE dorm_id=? AND task_id=?"
+        : "SELECT id FROM chore_history_entries WHERE dorm_id=? AND id=?",
+      [room.id, Math.abs(id)],
+    );
+    const audit = entry
+      ? await all(
+          db,
+          "SELECT actor_name,before_json,after_json,reason,created_at FROM chore_history_audit WHERE dorm_id=? AND entry_id=? ORDER BY id DESC",
+          [room.id, entry.id],
+        )
+      : [];
+    return json({
+      record: historyView(row),
+      audit: audit.map((a) => ({
+        ...a,
+        before: a.before_json ? JSON.parse(a.before_json) : null,
+        after: JSON.parse(a.after_json),
+        before_json: undefined,
+        after_json: undefined,
+      })),
+    });
+  }
+  if (!["POST", "PATCH", "DELETE"].includes(request.method))
+    fail(404, "not_found", "接口不存在");
+  const input = await body(
+    request,
+    request.method === "POST"
+      ? ["version", "member_id", "key", "completed_at", "reason"]
+      : request.method === "PATCH"
+        ? ["id", "revision", "version", "completed_at", "reason"]
+        : ["id", "revision", "version", "reason"],
+    request.method === "POST"
+      ? ["version", "member_id", "key", "completed_at", "reason"]
+      : request.method === "PATCH"
+        ? ["id", "revision", "version", "completed_at", "reason"]
+        : ["id", "revision", "version", "reason"],
+  );
+  const reason = str(input.reason, 1, 200),
+    version = integer(input.version, 0),
+    id = input.id;
+  const { state, settings, members } = await maintain(db, room, now);
+  if (state.version !== version)
+    fail(409, "stale_version", "记录或轮次已变化，请刷新后重试");
+  let original = null,
+    entry = null,
+    target,
+    key,
+    name,
+    marker,
+    nickname;
+  if (request.method !== "POST") {
+    if (!Number.isSafeInteger(id) || !id) invalid();
+    integer(input.revision, 0);
+    original = await first(db, `SELECT * FROM (${historySQL}) WHERE id=?`, [
+      room.id,
+      room.id,
+      id,
+    ]);
+    if (!original) fail(404, "record_missing", "记录不存在或已撤销");
+    if (original.revision !== input.revision)
+      fail(409, "history_changed", "这条记录已被修正，请重新打开");
+    entry = await first(
+      db,
+      id > 0
+        ? "SELECT * FROM chore_history_entries WHERE dorm_id=? AND task_id=?"
+        : "SELECT * FROM chore_history_entries WHERE dorm_id=? AND id=?",
+      [room.id, Math.abs(id)],
+    );
+    target = original.assignee_id;
+    key = original.key;
+    name = original.name;
+    marker = original.marker_id_snapshot;
+    nickname = original.assignee_name_snapshot;
+  } else {
+    target = integer(input.member_id);
+    key = input.key;
+    if (!KEYS.includes(key)) invalid();
+    const member = members.find((m) => m.user_id === target),
+      category = settings.find((c) => c.key === key);
+    if (!member || !category) invalid("请选择宿舍成员和任务");
+    name = category.name;
+    marker = member.marker_id;
+    nickname = member.nickname;
+  }
+  if (target !== who.user_id && !who.is_creator)
+    fail(403, "not_owner", "只能补记或修正自己的记录");
+  let timestamp = original?.completed_at;
+  if (request.method !== "DELETE") {
+    if (
+      typeof input.completed_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+08:00$/.test(input.completed_at)
+    )
+      invalid("请选择完成日期和时间");
+    date(input.completed_at.slice(0, 10));
+    time(input.completed_at.slice(11, 16));
+    const parsed = new Date(input.completed_at);
+    if (
+      !Number.isFinite(parsed.getTime()) ||
+      parsed > now ||
+      localDate(parsed) < "2020-01-01"
+    )
+      invalid("完成时间不能在未来，且不能早于2020年");
+    timestamp = parsed.toISOString();
+  }
+  const after = {
+      completed_at: timestamp,
+      voided: request.method === "DELETE",
+    },
+    op = random(),
+    stamp = now.toISOString();
+  const mutation = new Mutation(db, room, version, who, target !== who.user_id);
+  if (entry)
+    mutation.update(
+      "chore_history_entries",
+      {
+        completed_at: timestamp,
+        voided: after.voided ? 1 : 0,
+        revision: entry.revision + 1,
+        operation_key: op,
+        updated_at: stamp,
+      },
+      "id=? AND dorm_id=?",
+      [entry.id, room.id],
+    );
+  else
+    mutation.raw(
+      `INSERT INTO chore_history_entries(dorm_id,task_id,assignee_id,key,name,assignee_name_snapshot,marker_id_snapshot,completed_at,voided,revision,operation_key,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,1,?,?,? WHERE ${mutation.guard}`,
+      [
+        room.id,
+        id > 0 ? id : null,
+        target,
+        key,
+        name,
+        nickname,
+        marker,
+        timestamp,
+        after.voided ? 1 : 0,
+        op,
+        stamp,
+        stamp,
+        ...mutation.guardValues,
+      ],
+    );
+  mutation.raw(
+    `INSERT INTO chore_history_audit(entry_id,dorm_id,actor_id,actor_name,before_json,after_json,reason,created_at) SELECT id,?,?,?,?,?,?,? FROM chore_history_entries WHERE dorm_id=? AND operation_key=? AND ${mutation.guard}`,
+    [
+      room.id,
+      who.user_id,
+      who.nickname,
+      original
+        ? JSON.stringify({ completed_at: original.completed_at, voided: false })
+        : null,
+      JSON.stringify(after),
+      reason,
+      stamp,
+      room.id,
+      op,
+      ...mutation.guardValues,
+    ],
+  );
+  await mutation.finish();
+  return json(
+    { ok: true, version: version + 1 },
+    request.method === "POST" ? 201 : 200,
+  );
+}
 async function board(request, db, env, now, url) {
   const who = await actor(request, db, now),
     room = await roomByInvite(db, env, url.searchParams.get("invite_code"));
@@ -766,8 +998,8 @@ async function board(request, db, env, now, url) {
   };
   const calendarRows = await all(
     db,
-    "SELECT id,key,name,assignee_id,assignee_name_snapshot,marker_id_snapshot,completed_at FROM chore_tasks WHERE dorm_id=? AND status='completed' AND strftime('%Y-%m',completed_at,'+8 hours')>=? AND strftime('%Y-%m',completed_at,'+8 hours')<? ORDER BY completed_at,id",
-    [room.id, adjacentMonth(-1), adjacentMonth(2)],
+    `SELECT * FROM (${historySQL}) WHERE strftime('%Y-%m',completed_at,'+8 hours')>=? AND strftime('%Y-%m',completed_at,'+8 hours')<? ORDER BY completed_at,id`,
+    [room.id, room.id, adjacentMonth(-1), adjacentMonth(2)],
   );
   const reminders =
     who?.user_id === uid
@@ -878,6 +1110,8 @@ async function board(request, db, env, now, url) {
         marker_id: row.marker_id_snapshot,
         completed_at: row.completed_at,
         completed_date: localDate(row.completed_at),
+        revision: row.revision || 0,
+        corrected: !!row.corrected,
       })),
     calendar_neighbors: Object.fromEntries(
       [-1, 1].map((delta) => {
@@ -895,6 +1129,8 @@ async function board(request, db, env, now, url) {
               marker_id: row.marker_id_snapshot,
               completed_at: row.completed_at,
               completed_date: localDate(row.completed_at),
+              revision: row.revision || 0,
+              corrected: !!row.corrected,
             })),
         ];
       }),
@@ -1970,6 +2206,8 @@ export async function handleChores(request, env, now) {
     method = request.method;
   if (path === "/chores/claim" && method === "POST")
     return claim(request, db, env, now);
+  if (path === "/chores/activity" && method === "GET")
+    return activity(request, db, env, now, url);
   if (path === "/chores/board" && method === "GET")
     return board(request, db, env, now, url);
   if (path.startsWith("/chores/calendar/"))
@@ -1977,6 +2215,8 @@ export async function handleChores(request, env, now) {
   const who = await actor(request, db, now, true);
   assertWrite(who);
   const room = await roomByActor(db, who);
+  if (path === "/chores/history")
+    return historyChange(request, db, room, who, now);
   if (path === "/chores/calendar-subscription")
     return calendarSettings(request, { db, room, who, now });
   if (path === "/chores/reminder-plan")
