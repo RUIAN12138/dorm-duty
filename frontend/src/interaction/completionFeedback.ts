@@ -69,4 +69,5 @@ export function completionFeedback(bounds: DOMRect | undefined) {
   void Promise.allSettled(
     animations.map((animation) => animation.finished),
   ).then(remove);
+  return remove;
 }

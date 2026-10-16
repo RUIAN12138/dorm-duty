@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { completionFeedback } from "../interaction/completionFeedback";
 import { showToast } from "../interaction/notice";
 import { createVelocityTracker, rubberBand } from "../interaction/gestures";
@@ -65,6 +65,12 @@ const completionMorphId = ref<number | null>(null);
 let completionMorphTimer: ReturnType<typeof setTimeout> | undefined;
 function settleCompletion(id: number) {
   if (completionMorphId.value === id) completionMorphId.value = null;
+  if (settlingTask.value?.id === id) {
+    const finished = settlingTask.value;
+    clearTimeout(settleTaskTimer);
+    settlingTask.value = null;
+    showCompletionPraise(finished);
+  }
 }
 onUnmounted(() => clearTimeout(completionMorphTimer));
 const waterReceipt = ref<ChoreTask | null>(null);
@@ -141,10 +147,15 @@ function runQueuedTool() {
   action?.();
 }
 const selectedTaskId = ref<number | null>(null);
+const selectedTaskKey = ref<ChoreTask["key"] | null>(null);
 const titleAnimation = ref(true);
 function chooseDutyTask(id: number, event: MouseEvent) {
   titleAnimation.value = event.detail !== 0;
+  if (settlingTask.value && settlingTask.value.id !== id)
+    settleCompletion(settlingTask.value.id);
   selectedTaskId.value = id;
+  selectedTaskKey.value =
+    personalTasks.value.find((task) => task.id === id)?.key || null;
 }
 const titleOffset = ref(0),
   titleDragging = ref(false);
@@ -161,6 +172,7 @@ const taskSwipe = createTaskSwipe(
     if (next) {
       titleAnimation.value = true;
       selectedTaskId.value = next.id;
+      selectedTaskKey.value = next.key;
     } else if (personalTasks.value.length > 1)
       showToast(direction > 0 ? "已经是最后一项" : "已经是第一项");
   },
@@ -326,13 +338,50 @@ const completedTasks = computed(() => {
   );
 });
 const praiseTask = ref<ChoreTask | null>(null);
+const praiseElement = ref<HTMLElement>();
+const praiseTop = ref<number | null>(null);
 let praiseTimer: ReturnType<typeof setTimeout> | undefined;
 onUnmounted(() => clearTimeout(praiseTimer));
 function showCompletionPraise(task: ChoreTask) {
+  praiseTop.value = null;
   praiseTask.value = task;
   clearTimeout(praiseTimer);
   praiseTimer = setTimeout(() => (praiseTask.value = null), 2200);
+  void nextTick(positionPraise);
 }
+function positionPraise() {
+  const el = praiseElement.value;
+  const nav = document.querySelector(".chore-bottom-nav");
+  if (!el || !nav || !praiseTask.value) return;
+  const height = el.offsetHeight;
+  const end = nav.getBoundingClientRect().top - 12;
+  let cursor =
+    (document.querySelector(".board-identity")?.getBoundingClientRect()
+      .bottom || 56) + 4;
+  const preferred = end - (innerHeight <= 650 ? 12 : 42) - height;
+  const rows = [
+    ...document.querySelectorAll(
+      ".board-focus .hero-caption, .board-focus .task-selector, .board-focus .task-title-stage, .board-focus .water-title-stage, .board-focus .completion-surface, .board-focus .round-progress, .board-focus .water-nudge-actions",
+    ),
+  ]
+    .map((node) => node.getBoundingClientRect())
+    .filter((r) => r.width && r.height && r.bottom > cursor && r.top < end)
+    .sort((a, b) => a.top - b.top);
+  const candidates: number[] = [];
+  for (const row of [...rows, { top: end, bottom: end }]) {
+    if (row.top - cursor >= height + 12)
+      candidates.push(
+        Math.max(cursor + 6, Math.min(row.top - height - 6, preferred)),
+      );
+    cursor = Math.max(cursor, row.bottom);
+  }
+  praiseTop.value =
+    candidates.sort(
+      (a, b) => Math.abs(a - preferred) - Math.abs(b - preferred),
+    )[0] ?? preferred;
+}
+onMounted(() => window.addEventListener("resize", positionPraise));
+onUnmounted(() => window.removeEventListener("resize", positionPraise));
 function canUndoTask(id: number) {
   return board.value?.undo_tasks.some((task) => task.id === id) || false;
 }
@@ -344,6 +393,7 @@ const activeDutyTask = computed(
   () =>
     (settlingTask.value?.key !== "water" ? settlingTask.value : null) ||
     personalTasks.value.find((task) => task.id === selectedTaskId.value) ||
+    personalTasks.value.find((task) => task.key === selectedTaskKey.value) ||
     personalTasks.value.find((task) => task.status !== "completed") ||
     personalTasks.value[0] ||
     null,
@@ -628,17 +678,19 @@ function acceptCompletion(receipt: ChoreCompletion) {
   const finished = receipt.task;
   completedOpen.value = false;
   completionReceipt.value = finished;
-  showCompletionPraise(finished);
   settlingTask.value = finished;
   clearTimeout(settleTaskTimer);
-  settleTaskTimer = setTimeout(() => (settlingTask.value = null), 620);
+  settleTaskTimer = setTimeout(
+    () => settleCompletion(finished.id),
+    motionAllowed() ? 1800 : 0,
+  );
   completionEpoch.value++;
   if (motionAllowed()) {
     completionMorphId.value = finished.id;
     clearTimeout(completionMorphTimer);
     completionMorphTimer = setTimeout(
       () => settleCompletion(finished.id),
-      1300,
+      1800,
     );
   }
   if (finished.key === "water") waterReceipt.value = finished;
@@ -700,7 +752,10 @@ async function complete(task: ChoreTask, circle = false) {
     task.status === "completed"
   )
     return;
-  if (task.key !== "water") selectedTaskId.value = task.id;
+  if (task.key !== "water") {
+    selectedTaskId.value = task.id;
+    selectedTaskKey.value = task.key;
+  }
   const surface =
     document.querySelector<HTMLElement>(
       `[data-testid="complete-${task.key}-${task.id}"]`,
@@ -772,7 +827,10 @@ async function undo(id: number) {
     );
     board.value.calendar = board.value.calendar.filter((t) => t.id !== id);
     if (receipt.task.key === "water") board.value.water_task = receipt.task;
-    else selectedTaskId.value = id;
+    else {
+      selectedTaskId.value = id;
+      selectedTaskKey.value = receipt.task.key;
+    }
     board.value.version = receipt.version;
     completionSyncPending.value = true;
     await load();
@@ -1118,10 +1176,11 @@ onUnmounted(() => {
                   :aria-pressed="activeDutyTask?.id === task.id"
                   @click="chooseDutyTask(task.id, $event)"
                 >
-                  {{ task.name
-                  }}<van-icon
-                    v-if="task.status === 'completed'"
+                  <span class="task-option-name">{{ task.name }}</span>
+                  <van-icon
                     name="success"
+                    class="task-option-state"
+                    :class="{ 'is-complete': task.status === 'completed' }"
                     aria-hidden="true"
                   />
                 </button>
@@ -1172,6 +1231,7 @@ onUnmounted(() => {
                   "
                   :task="activeDutyTask"
                   :busy="!!busy"
+                  :syncing="completionSyncPending"
                   :disabled="
                     completionSyncPending ||
                     (!demo && activeDutyTask.duty_date > board.today)
@@ -1190,6 +1250,7 @@ onUnmounted(() => {
                   "
                   :task="recentUndo"
                   :busy="!!busy"
+                  :syncing="completionSyncPending"
                   :disabled="completionSyncPending"
                   :demo="demo"
                   @undo="undo($event.id)"
@@ -1286,6 +1347,7 @@ onUnmounted(() => {
                     :receipt="completionReceipt"
                     @settled="settleCompletion"
                     :busy="!!busy"
+                    :syncing="completionSyncPending"
                     :disabled="completionSyncPending"
                     :demo="demo"
                     @complete="complete"
@@ -1312,6 +1374,7 @@ onUnmounted(() => {
                     v-if="recentUndo && recentUndo.id !== waterActionTask?.id"
                     :task="recentUndo"
                     :busy="!!busy"
+                    :syncing="completionSyncPending"
                     :disabled="completionSyncPending"
                     :demo="demo"
                     @undo="undo($event.id)"
@@ -1336,11 +1399,18 @@ onUnmounted(() => {
         <Transition name="quiet-toast">
           <p
             v-if="praiseTask"
+            :key="praiseTask.id"
+            ref="praiseElement"
             class="completion-praise"
+            :style="
+              praiseTop === null
+                ? undefined
+                : { top: `${praiseTop}px`, bottom: 'auto' }
+            "
             role="status"
             data-testid="completion-toast"
           >
-            你真棒👍！
+            <span class="completion-praise-bubble">你真棒👍！</span>
           </p>
         </Transition>
       </Teleport>
@@ -2694,7 +2764,7 @@ onUnmounted(() => {
 .completion-praise {
   position: fixed;
   z-index: 110;
-  bottom: calc(88px + env(safe-area-inset-bottom));
+  bottom: calc(120px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   margin: 0;
@@ -2705,9 +2775,31 @@ onUnmounted(() => {
   white-space: nowrap;
   pointer-events: none;
 }
+.completion-praise-bubble {
+  display: block;
+  padding: 10px 18px;
+  border: 1px solid #ededed;
+  border-radius: 999px;
+  background: #fafafa;
+  transform-origin: center bottom;
+}
 .quiet-toast-enter-active,
-.quiet-toast-leave-active {
-  transition: opacity 240ms var(--ui-ease-out);
+.quiet-toast-enter-active .completion-praise-bubble {
+  transition:
+    opacity 240ms var(--ui-ease-out),
+    transform 320ms var(--ui-ease-overshoot);
+}
+.quiet-toast-leave-active,
+.quiet-toast-leave-active .completion-praise-bubble {
+  transition:
+    opacity 180ms var(--ui-ease-out),
+    transform 180ms var(--ui-ease-out);
+}
+.quiet-toast-enter-from .completion-praise-bubble {
+  transform: translateY(8px) scale(0.9);
+}
+.quiet-toast-leave-to .completion-praise-bubble {
+  transform: translateY(5px) scale(0.97);
 }
 .quiet-toast-enter-from,
 .quiet-toast-leave-to {
@@ -2854,5 +2946,71 @@ onUnmounted(() => {
   min-height: 104px;
   display: grid;
   align-items: center;
+}
+</style>
+
+<style scoped>
+/* Reserve each success icon before the first check-in. No task row rewrap. */
+.task-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 350px);
+}
+.task-selector button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  min-width: 0;
+  gap: 4px;
+  padding: 8px 7px;
+}
+.task-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-option-state {
+  width: 16px;
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 180ms var(--ui-ease-out),
+    transform 220ms var(--ui-ease-overshoot);
+}
+.task-option-state.is-complete {
+  opacity: 1;
+  transform: scale(1);
+}
+</style>
+
+<style scoped>
+/* Status rows and a second eligible receipt must never recenter the title. */
+.chore-personal {
+  position: relative;
+}
+.chore-personal > .hero-caption {
+  position: absolute;
+  top: calc(50% - 178px);
+  left: 0;
+  margin: 0;
+}
+.chore-personal > .task-selector {
+  position: absolute;
+  top: calc(50% - 123px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.chore-personal > .chore-task {
+  position: absolute;
+  top: calc(50% - 55px);
+  left: 0;
+}
+@media (max-height: 650px) {
+  .chore-personal > .hero-caption {
+    top: calc(50% - 150px);
+  }
+  .chore-personal > .task-selector {
+    top: calc(50% - 102px);
+  }
 }
 </style>
