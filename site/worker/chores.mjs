@@ -286,6 +286,13 @@ async function actor(request, db, now, required = false) {
     scoped: false,
   };
 }
+// Legacy read-only guest routes must respect the same member-session boundary.
+export async function choreGuestAccess(request, db, now, dormId) {
+  const who = await actor(request, db, now);
+  if (who && who.dorm_id !== dormId)
+    fail(403, "wrong_dorm", "请使用这个宿舍的身份进入");
+  return who;
+}
 function assertWrite(who) {
   if (who.is_demo)
     fail(403, "demo_read_only", "游客模式仅供体验，请创建或加入正式宿舍");
@@ -745,6 +752,13 @@ async function board(request, db, env, now, url) {
     "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
     [room.id],
   );
+  const waterHandoff = water
+    ? await first(
+        db,
+        "SELECT id,sequence,assignee_id,completed_at FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' AND sequence=?",
+        [room.id, water.sequence - 1],
+      )
+    : null;
   const adjacentMonth = (delta) => {
     const date = new Date(`${month}-01T00:00:00Z`);
     date.setUTCMonth(date.getUTCMonth() + delta);
@@ -841,6 +855,14 @@ async function board(request, db, env, now, url) {
       taskView(task, now, actorForTasks, settings, members),
     ),
     water_task: taskView(water, now, actorForTasks, settings, members),
+    water_handoff: waterHandoff
+      ? {
+          id: waterHandoff.id,
+          sequence: waterHandoff.sequence,
+          from_member_id: waterHandoff.assignee_id,
+          completed_at: waterHandoff.completed_at,
+        }
+      : null,
     undo_tasks: undoRows.map((task) =>
       taskView(task, now, actorForTasks, settings, members),
     ),
@@ -903,16 +925,26 @@ async function setMarker(db, room, who, marker, state) {
 async function claim(request, db, env, now) {
   const input = await body(
       request,
-      ["invite_code", "member_id", "marker_id"],
-      ["invite_code", "member_id"],
+      ["invite_code", "member_id", "nickname", "marker_id"],
+      ["invite_code"],
     ),
-    uid = integer(input.member_id),
     room = await roomByInvite(db, env, input.invite_code);
   if (room.is_demo)
     fail(403, "demo_read_only", "游客模式仅供体验，请创建或加入正式宿舍");
-  const { state, members } = await maintain(db, room, now),
-    member = members.find((entry) => entry.user_id === uid);
-  if (!member) fail(404, "member_missing", "请选择有效宿舍成员");
+  if (input.nickname === undefined)
+    fail(422, "name_required", "请更新页面，并输入你的完整名字进入宿舍");
+  const nickname = str(input.nickname, 1, 32),
+    uidHint = input.member_id === undefined ? null : integer(input.member_id),
+    { state, members } = await maintain(db, room, now),
+    matches = members.filter((entry) => entry.nickname === nickname);
+  if (matches.length > 1 && uidHint === null)
+    fail(409, "ambiguous_name", "这个名字对应多位室友，请联系宿舍创建者核对");
+  const member = matches.find(
+    (entry) => uidHint === null || entry.user_id === uidHint,
+  );
+  if (!member)
+    fail(403, "name_mismatch", "名字不匹配，请输入创建者填写的完整名字");
+  const uid = member.user_id;
   let marker = member.marker_id;
   if (input.marker_id !== undefined) {
     marker = validateMarker(input.marker_id);
@@ -999,6 +1031,47 @@ function normalizeCategory(input, current, ids, today) {
   if (typeof value.enabled !== "boolean") invalid();
   return value;
 }
+async function reassignPendingWater(db, mutation, room, water, members, now) {
+  const pending = await first(
+    db,
+    "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
+    [room.id],
+  );
+  if (!pending) return;
+  const last = await first(
+    db,
+    "SELECT assignee_id FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
+    [room.id],
+  );
+  const next = last
+    ? (water.rotation_order.indexOf(last.assignee_id) + 1) %
+      water.rotation_order.length
+    : 0;
+  const member = members.find((m) => m.user_id === water.rotation_order[next]);
+  if (pending.assignee_id === member.user_id) return;
+  mutation.update(
+    "chore_tasks",
+    {
+      assignee_id: member.user_id,
+      assignee_name_snapshot: member.nickname,
+      marker_id_snapshot: member.marker_id,
+    },
+    "id=? AND status='pending'",
+    [pending.id],
+  );
+  mutation.update(
+    "chore_push_jobs",
+    { status: "cancelled" },
+    "dorm_id=? AND status='pending' AND reminder_id IN (SELECT id FROM chore_reminders WHERE dorm_id=? AND task_id=? AND target_member_id<>?)",
+    [room.id, room.id, pending.id, member.user_id],
+  );
+  mutation.update(
+    "chore_reminders",
+    { read_at: now.toISOString() },
+    "dorm_id=? AND task_id=? AND target_member_id<>? AND read_at IS NULL",
+    [room.id, pending.id, member.user_id],
+  );
+}
 async function configure(request, db, room, who, now, orderOnly = false) {
   if (!orderOnly && (!who.is_creator || who.scoped))
     fail(403, "admin_required", "只有宿舍创建者可以修改任务设置");
@@ -1038,6 +1111,16 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         updated.find((entry) => entry.key === category.key) || category,
     ),
     mutation = new Mutation(db, room, state.version, who, !orderOnly);
+  const changedWater = updated.find(
+    (c) =>
+      c.key === "water" &&
+      JSON.stringify(c.rotation_order) !==
+        JSON.stringify(
+          settings.find((old) => old.key === "water").rotation_order,
+        ),
+  );
+  if (changedWater)
+    await reassignPendingWater(db, mutation, room, changedWater, members, now);
   if (orderOnly) {
     for (const category of updated)
       mutation.update(

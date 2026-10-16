@@ -53,7 +53,7 @@ async function fixture(h) {
   const claimed = await api(h, "/chores/claim", {
     method: "POST",
     status: 201,
-    data: { invite_code: r.invite_code, member_id: id },
+    data: { invite_code: r.invite_code, member_id: id, nickname: r.dorm.members.find(m => m.user_id === id).nickname },
   });
   const member = { id, token: claimed.access_token };
   h.env.PUSH_CONFIG = {

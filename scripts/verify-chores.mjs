@@ -579,23 +579,24 @@ async function pageMatrix(page, role) {
   await page.waitForTimeout(300);
   await stableIdentity(page, before);
 }
-async function join(page, code, userId, mark) {
+async function join(page, code, userId, mark, nickname) {
   await page.goto(origin + "/");
   await page.getByTestId("guest-join-dorm").click();
   await page.getByTestId("guest-invite").fill(code);
   await page.getByTestId("guest-join-submit").click();
-  await page.getByTestId(`guest-member-${userId}`).waitFor();
+  await page.getByTestId("guest-member-name").waitFor();
+  assert.equal(await page.locator('[data-testid^="guest-member-"]:not(input)').count(), 0);
   await noNavigation(page);
-  await page.getByTestId(`guest-member-${userId}`).click();
-  await noNavigation(page);
-  await page.getByTestId(`marker-${mark}`).click();
-  const response = page.waitForResponse(
-    (r) =>
-      new URL(r.url()).pathname === "/chores/claim" &&
-      r.request().method() === "POST",
-  );
-  await page.getByTestId("marker-confirm").click();
+  await page.getByTestId("guest-member-name").fill("不在名单中的名字");
+  await page.getByTestId("guest-name-submit").click();
+  await page.getByRole("alert").filter({hasText:"名字不匹配"}).waitFor();
+  await page.getByTestId("guest-member-name").fill(nickname);
+  const response = page.waitForResponse(r => new URL(r.url()).pathname === "/chores/claim" && r.request().method() === "POST");
+  await page.getByTestId("guest-name-submit").click();
   const result = await (await response).json();
+  assert.equal(result.member.user_id, userId);
+  await page.getByTestId(`marker-${mark}`).click();
+  await page.getByTestId("marker-confirm").click();
   secrets.push(result.access_token);
   await pane(page, "duty");
   return result.access_token;
@@ -842,6 +843,7 @@ try {
     created.invite_code,
     otherId,
     "pixel-11",
+    created.dorm.members.find(m => m.user_id === otherId).nickname,
   );
   const board = (id, token) =>
     api(`/chores/board?invite_code=${created.invite_code}&member_id=${id}`, {
@@ -916,7 +918,8 @@ try {
   await openTool(b.page, "guest-change-dorm");
   await b.page.getByTestId("guest-invite").fill(secondRoom.invite_code);
   await b.page.getByTestId("guest-join-submit").click();
-  await b.page.getByTestId(`guest-member-${secondMember.user_id}`).click();
+  await b.page.getByTestId("guest-member-name").fill(secondMember.nickname);
+  await b.page.getByTestId("guest-name-submit").click();
   await b.page.getByTestId("marker-confirm").click();
   await pane(b.page, "duty");
   await b.page.reload();
@@ -937,6 +940,7 @@ try {
   );
   const memberOrderBefore = (await board(otherId, memberToken)).water_order;
   await b.page.getByTestId("open-water-order").click();
+  await b.page.getByTestId("order-category-water").click();
   await b.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   assert.equal(await b.page.getByTestId("water-order-save").count(), 1);
   assert.equal(await b.page.getByTestId("order-recover-owner").count(), 0);
@@ -949,7 +953,7 @@ try {
     .waitFor({ state: "hidden" });
   const memberOrderAfter = await board(otherId, memberToken);
   assert.notDeepEqual(memberOrderAfter.water_order, memberOrderBefore);
-  assert.equal(memberOrderAfter.water_task.assignee_id, ownerId);
+  assert.equal(memberOrderAfter.water_task.assignee_id, memberOrderAfter.water_order[0]);
   await api("/chores/order", {
     method: "PATCH",
     token: memberToken,
@@ -962,9 +966,10 @@ try {
   await a.page.reload();
   await pane(a.page, "duty");
   checks.push(
-    "ordinary scoped member reorders and saves without creator recovery; current water assignee stays fixed",
+    "ordinary scoped member reorders and saves without creator recovery; pending water assignee is recalculated immediately",
   );
   await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId("order-category-water").click();
   await a.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   await snapshot(a.page, "independent-water-order-390");
   await a.page.getByTestId(`order-down-water-${ownerId}`).focus();
@@ -975,9 +980,10 @@ try {
     .waitFor({ state: "hidden" });
   assert.equal(
     (await board(ownerId, ownerToken)).water_task.assignee_id,
-    ownerId,
+    otherId,
   );
   await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId("order-category-water").click();
   await a.page.getByTestId(`order-up-water-${ownerId}`).focus();
   await a.page.keyboard.press("Enter");
   await a.page.getByTestId("water-order-save").click();
@@ -985,7 +991,7 @@ try {
     .getByRole("dialog", { name: "抬水轮序", exact: true })
     .waitFor({ state: "hidden" });
   checks.push(
-    "independent header order control persists a reorder while keeping the current water assignee",
+    "independent header order control persists a reorder and recalculates the pending water assignee",
   );
   await a.page.getByTestId("round-progress").click();
   await a.page.getByTestId("round-members").waitFor();
@@ -1006,6 +1012,7 @@ try {
     (r) => r.key === "floor",
   );
   await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId("order-category-water").click();
   await a.page.getByTestId("order-category-floor").click();
   await a.page.getByTestId(`order-down-floor-${ownerId}`).focus();
   await a.page.keyboard.press("Enter");
@@ -1054,6 +1061,16 @@ try {
   checks.push(
     "rapid task-title switches keep at least one readable title instead of a serial exit/enter blank interval",
   );
+  for (const name of ["地板", "厕所", "洗手池"]) {
+    await a.page.locator(".task-selector").getByRole("button", {name, exact:true}).click();
+    await a.page.getByRole("button", {name:`查看${name}详情`, exact:true}).click();
+    const dialog = a.page.getByRole("dialog", {name,exact:true});
+    await dialog.waitFor();
+    await dialog.getByRole("button", {name:"关闭详情",exact:true}).click();
+    await dialog.waitFor({state:"hidden"});
+  }
+  checks.push("all three duty titles remain clickable and their detail dialogs dismiss independently");
+  await a.page.locator(".task-selector").getByRole("button", {name:"地板",exact:true}).click();
   phase = "three_page_navigation";
   await pageMatrix(a.page, "creator");
   await pageMatrix(b.page, "member");
@@ -1356,6 +1373,7 @@ try {
   assert.equal(
     (await board(otherId, memberToken)).member.marker_id,
     "pixel-11",
+    created.dorm.members.find(m => m.user_id === otherId).nickname,
   );
   await snapshot(a.page, "restored-after-restart-390");
   for (const key of Object.keys(panes)) {

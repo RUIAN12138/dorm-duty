@@ -16,8 +16,10 @@ const props = defineProps<{
   modelValue: boolean;
   members: ChoreMember[];
   category: ChoreCategory;
+  initialKey?: string;
   categories?: ChoreCategory[];
   currentId?: number;
+  lastWaterId?: number;
   editable: boolean;
   version: number;
   token: string;
@@ -27,7 +29,14 @@ const emit = defineEmits<{
   saved: [];
   closed: [];
 }>();
-const selectedKey = ref("water");
+const selectedKey = ref(props.initialKey || props.category.key);
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) selectedKey.value = props.initialKey || props.category.key;
+  },
+  { flush: "sync" },
+);
 const selectedCategory = computed(
   () =>
     props.categories?.find((c) => c.key === selectedKey.value) ||
@@ -45,6 +54,15 @@ const options = computed(() =>
 const order = ref<number[]>([]),
   saving = ref(false),
   error = ref("");
+const pendingWaterId = computed(() =>
+  order.value.length
+    ? order.value[
+        props.lastWaterId === undefined
+          ? 0
+          : (order.value.indexOf(props.lastWaterId) + 1) % order.value.length
+      ]
+    : undefined,
+);
 let version = 0,
   category: ChoreCategory;
 watch(
@@ -104,7 +122,7 @@ async function save() {
         title="调整轮序"
         :text="
           editable
-            ? '长按名字提起整行，上下拖动调整先后，松手后保存。'
+            ? '长按名字提起整行，上下拖动调整先后，点「保存轮序」生效。抬水会以最近一次已抬水的人为起点，立即重新确定下一位；没有抬水记录时从第一位开始。'
             : '游客仅可查看。加入正式宿舍后，每位成员都能调整轮序。'
         "
       />
@@ -116,6 +134,10 @@ async function save() {
       :active="modelValue"
       :disabled="saving"
       :category-key="selectedCategory.key"
+      :current-id="
+        selectedCategory.key === 'water' ? pendingWaterId : undefined
+      "
+      :current-label="pendingWaterId === currentId ? '当前轮到' : '保存后轮到'"
     />
     <ol v-else class="order-people">
       <li

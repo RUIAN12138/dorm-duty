@@ -14,6 +14,8 @@ const props = withDefaults(
     reset: number;
     categoryKey?: string;
     completed?: boolean;
+    current?: boolean;
+    currentLabel?: string;
   }>(),
   { categoryKey: "water", completed: undefined },
 );
@@ -170,23 +172,21 @@ onBeforeUnmount(() => {
   >
     <div class="sort-card" :style="{ '--entry-index': index }">
       <span class="sort-position">{{ index + 1 }}</span>
-      <button
-        type="button"
+      <div
         class="sort-person"
-        :disabled="disabled"
-        :aria-label="`长按${member.nickname}拖动`"
         :data-testid="`order-person-${categoryKey}-${member.user_id}`"
         @contextmenu.prevent
-        @keydown.up.prevent="emit('step', member.user_id, -1, true)"
-        @keydown.down.prevent="emit('step', member.user_id, 1, true)"
       >
         <MemberMark :id="member.marker_id" :size="24" inline /><strong
           ><span>{{ member.nickname }}</span
           ><small v-if="completed !== undefined">{{
             completed ? "已完成" : "待完成"
+          }}</small
+          ><small v-if="current" class="current-turn">{{
+            currentLabel || "当前轮到"
           }}</small></strong
         >
-      </button>
+      </div>
       <button
         type="button"
         class="sort-step"
@@ -285,6 +285,11 @@ strong {
   white-space: nowrap;
   font-size: 16px;
   font-weight: 500;
+}
+.current-turn {
+  color: #111;
+  font-size: 12px;
+  font-weight: 600;
 }
 button {
   display: grid;

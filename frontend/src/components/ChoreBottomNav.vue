@@ -256,7 +256,7 @@ function click(event: MouseEvent) {
   width: calc((100% - 32px) / 3);
   height: 54px;
   border-radius: var(--ui-control-radius);
-  background: var(--ui-surface-muted);
+  background: #e6e6e6;
 }
 .is-moving .nav-selection {
   will-change: transform;
@@ -284,6 +284,9 @@ a.pressed {
 a.active {
   color: var(--ui-ink);
   font-weight: 600;
+}
+a.active svg {
+  stroke-width: 2.2;
 }
 @media (prefers-reduced-motion: reduce) {
   a {

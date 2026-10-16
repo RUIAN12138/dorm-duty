@@ -11,6 +11,8 @@ const props = withDefaults(
     disabled?: boolean;
     categoryKey?: string;
     completedIds?: number[];
+    currentId?: number;
+    currentLabel?: string;
   }>(),
   { categoryKey: "water" },
 );
@@ -128,6 +130,8 @@ watch(
         :member="person(id)"
         :category-key="categoryKey"
         :completed="completedIds ? completedIds.includes(id) : undefined"
+        :current="id === currentId"
+        :current-label="currentLabel"
         :index="index"
         :count="order.length"
         :active="active"

@@ -58,6 +58,7 @@ async function claim(h, r, id, marker_id) {
     data: {
       invite_code: r.invite_code,
       member_id: id,
+      nickname: h.db.sqlite.prepare("SELECT nickname FROM users WHERE id=?").get(id).nickname,
       ...(marker_id ? { marker_id } : {}),
     },
   });
@@ -397,8 +398,8 @@ export async function runChoreChecks() {
     }
     equal(
       next.water_task.assignee_id,
-      initial.water_task.assignee_id,
-      "editing water order keeps pending assignee",
+      changes.find(c => c.key === "water").rotation_order[0],
+      "water order immediately recalculates the pending assignee",
     );
     equal(
       next.water_task.content,
@@ -449,8 +450,8 @@ export async function runChoreChecks() {
       data: { version: initial.version, categories: [{ key: "water", rotation_order: order }] } });
     const reloaded = await board(h, r, owner);
     equal(reloaded.categories.find(c => c.key === "water").rotation_order, order);
-    equal(reloaded.water_task.assignee_id, initial.water_task.assignee_id);
-    const actor = initial.water_task.assignee_id === owner.user_id ? owner : await claim(h, r, initial.water_task.assignee_id);
+    equal(reloaded.water_task.assignee_id, order[0]);
+    const actor = reloaded.water_task.assignee_id === owner.user_id ? owner : await claim(h, r, reloaded.water_task.assignee_id);
     await complete(h, actor, reloaded.water_task);
     const next = await board(h, r, owner);
     equal(next.water_task.assignee_id, order[(order.indexOf(actor.user_id) + 1) % order.length]);
