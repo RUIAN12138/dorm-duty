@@ -7,6 +7,7 @@ import {
   type ChoreRecord,
   type ChoreActivity,
   type ChoreBoardData,
+  type ChoreCategory,
 } from "../api/chores";
 import CompactRecordList from "./CompactRecordList.vue";
 import HintPopover from "./HintPopover.vue";
@@ -24,6 +25,7 @@ const props = defineProps<{
   token?: string;
   version?: number;
   rounds?: ChoreBoardData["rounds"];
+  categories?: ChoreCategory[];
   creator?: boolean;
   undoIds?: number[];
   today: string;
@@ -40,6 +42,7 @@ const emit = defineEmits<{
   closed: [];
   undo: [id: number];
   refresh: [];
+  settings: [key: ChoreCategory["key"]];
 }>();
 const selected = ref("");
 const calendarRoot = ref<HTMLElement>(),
@@ -394,30 +397,9 @@ watch(
                           selected = selected === cell.date ? '' : cell.date
                         "
                       >
-                        <span class="calendar-day-number"
-                          >{{ cell.day
-                          }}<small
-                            v-if="cell.marks.length > 2"
-                            class="calendar-more"
-                            >+{{ cell.marks.length - 2 }}</small
-                          ></span
-                        ><span class="calendar-cell-marks"
-                          ><span
-                            v-for="mark in cell.visibleMarks"
-                            :key="`${mark.assignee_id}:${mark.type}`"
-                            class="calendar-task-mark"
-                            :data-task-type="mark.type"
-                            :title="`${mark.assignee_name} · ${mark.type === 'water' ? '抬水' : '值日'}`"
-                            aria-hidden="true"
-                            ><MemberMark
-                              :id="mark.marker_id"
-                              :size="16" /><ChoreTypeIcon :type="mark.type"
-                          /></span> </span
-                        ><span class="day-record-dots" aria-hidden="true"
-                          ><i
-                            v-for="i in Math.min(cell.records.length, 4)"
-                            :key="i"
-                        /></span></button
+                        <span class="calendar-day-number">{{
+                          cell.day
+                        }}</span></button
                       ><span
                         v-else
                         class="calendar-blank"
@@ -430,8 +412,6 @@ watch(
             </div>
           </div>
           <div class="calendar-type-legend" aria-label="任务标记图例">
-            <span><ChoreTypeIcon type="duty" />值日</span>
-            <span><ChoreTypeIcon type="water" />抬水</span>
             <span class="calendar-heat-key"
               >少<i
                 v-for="level in 4"
@@ -447,6 +427,13 @@ watch(
           :records="listRecords"
           :today="today"
           :month="month"
+          :member-id="memberId"
+          :busy="busy"
+          :editable="!!token"
+          :creator="creator"
+          :undo-ids="undoIds"
+          @undo="emit('undo', $event)"
+          @edit="editHistory"
           @select="showDay"
       /></TabsContent>
       <TabsContent value="stats" class="stats-mode"
@@ -454,6 +441,9 @@ watch(
           v-if="activity && !activityError"
           :activity="activity"
           :rounds="rounds || []"
+          :categories="categories"
+          :creator="creator"
+          @settings="emit('settings', $event)"
         />
         <p v-if="activityLoading" role="status">正在读取统计…</p></TabsContent
       >
@@ -1131,7 +1121,7 @@ h1 small {
 .stats-mode :deep(.swipe-card-deck) {
   flex: 1;
   min-height: 0;
-  padding-top: 20px;
+  padding-top: 4px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1141,7 +1131,10 @@ h1 small {
   height: auto;
   min-height: 0;
   max-height: 350px;
-  margin: 0 10px;
+  margin: 28px 12px 8px;
+}
+.stats-mode :deep(.deck-dots) {
+  flex-shrink: 0;
 }
 .stats-mode :deep(.deck-controls) {
   flex-shrink: 0;
@@ -1179,7 +1172,7 @@ h1 small {
     min-height: 20px;
   }
   .stats-mode :deep(.swipe-card-deck) {
-    padding-top: 18px;
+    padding-top: 0;
   }
 }
 </style>

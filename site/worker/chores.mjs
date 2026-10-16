@@ -199,6 +199,7 @@ function categoryView(row) {
     start_date: row.start_date,
     weekdays: parse(row.weekdays),
     rotation_days: row.rotation_days,
+    reminder_interval_days: row.reminder_interval_days,
     rotation_order: parse(row.rotation_order),
     enabled: Boolean(row.enabled),
     mode: row.mode,
@@ -761,10 +762,16 @@ async function activity(request, db, env, now, url) {
     `SELECT * FROM (${historySQL}) WHERE completed_at>=? AND completed_at<? ORDER BY completed_at DESC,id DESC LIMIT 501`,
     [room.id, room.id, deadline(addDate(today, -4), "00:00"), end],
   );
+  const lastCompleted = await all(
+    db,
+    `SELECT key,MAX(completed_at) AS completed_at FROM (${historySQL}) WHERE completed_at<=? GROUP BY key`,
+    [room.id, room.id, new Date(now).toISOString()],
+  );
   return json({
     start,
     today,
     daily,
+    last_completed: lastCompleted,
     recent_records: rows.slice(0, 500).map(historyView),
     recent_truncated: rows.length > 500,
   });
@@ -1223,6 +1230,7 @@ function normalizeCategory(input, current, ids, today) {
       "start_date",
       "weekdays",
       "rotation_days",
+      "reminder_interval_days",
       "rotation_order",
       "enabled",
       "mode",
@@ -1257,6 +1265,7 @@ function normalizeCategory(input, current, ids, today) {
   value.weekdays.forEach((day) => integer(day, 1, 7));
   value.weekdays = [...value.weekdays].sort((a, b) => a - b);
   value.rotation_days = integer(value.rotation_days, 1, 30);
+  value.reminder_interval_days = integer(value.reminder_interval_days, 1, 365);
   if (
     !Array.isArray(value.rotation_order) ||
     value.rotation_order.length !== ids.length ||
@@ -1391,6 +1400,7 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         start_date: category.start_date,
         weekdays: JSON.stringify(category.weekdays),
         rotation_days: category.rotation_days,
+        reminder_interval_days: category.reminder_interval_days,
         rotation_order: JSON.stringify(category.rotation_order),
         enabled: category.enabled ? 1 : 0,
         mode: category.mode,

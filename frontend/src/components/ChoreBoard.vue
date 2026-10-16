@@ -107,6 +107,7 @@ const initialParts = new Intl.DateTimeFormat("en-CA", {
 month.value = `${initialParts.find((part) => part.type === "year")?.value}-${initialParts.find((part) => part.type === "month")?.value}`;
 const messagesOpen = ref(false),
   settingsOpen = ref(false),
+  settingsCategory = ref<ChoreTask["key"]>(),
   reminderOpen = ref(false),
   markerOpen = ref(false),
   markerDraft = ref("");
@@ -274,11 +275,8 @@ watch(
 );
 function openTask(task: ChoreTask, event: MouseEvent) {
   if (task.key !== "water" && taskSwipe.suppressesClick(event)) return;
-  detailMotion.value = task.key === "water" ? "bottom" : "shared";
-  detailOrigin.value =
-    task.key === "water"
-      ? null
-      : (event.currentTarget as HTMLElement).getBoundingClientRect();
+  detailMotion.value = "bottom";
+  detailOrigin.value = null;
   detailTask.value = task;
   detailOpen.value = true;
 }
@@ -1071,6 +1069,11 @@ onUnmounted(() => {
                 :token="demo ? '' : token"
                 :version="board.version"
                 :rounds="board.rounds"
+                :categories="board.categories"
+                @settings="
+                  settingsCategory = $event;
+                  settingsOpen = true;
+                "
                 :creator="board.is_creator"
                 :undo-ids="board.undo_tasks.map((task) => task.id)"
                 @refresh="load"
@@ -1414,7 +1417,12 @@ onUnmounted(() => {
             label="任务设置"
             icon="setting-o"
             data-testid="open-chore-settings"
-            @click="fromTools(() => (settingsOpen = true))"
+            @click="
+              fromTools(() => {
+                settingsCategory = undefined;
+                settingsOpen = true;
+              })
+            "
           />
           <ActionItem
             label="个人与更多"
@@ -1601,7 +1609,8 @@ onUnmounted(() => {
         :version="board.version"
         :token="token"
         :initial-category="
-          section === 'water' ? 'water' : activeDutyTask?.key || 'floor'
+          settingsCategory ||
+          (section === 'water' ? 'water' : activeDutyTask?.key || 'floor')
         "
         @saved="load"
         @closed="presentNewReminders"
@@ -2837,18 +2846,46 @@ onUnmounted(() => {
 </style>
 <style scoped>
 .water-pane {
-  justify-content: flex-start;
-  padding-top: clamp(72px, 15svh, 130px);
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 24px;
 }
-@media (max-height: 650px) {
-  .water-pane {
-    padding-top: 48px;
-  }
+.water-title-stage :deep(h2) {
+  font-size: clamp(60px, 18vw, 84px);
+  line-height: 1.15;
+}
+.water-title-stage {
+  min-height: 96px;
 }
 </style>
 <style>
 /* Informational notices never block a page swipe or task control underneath. */
 .chore-notice.van-toast {
   pointer-events: none;
+}
+</style>
+<style scoped>
+/* Anchor the name independently of receipt/reminder rows, so completion never
+   recenters the whole stack when its action changes. */
+.water-pane {
+  position: relative;
+}
+.water-pane > .hero-caption {
+  position: absolute;
+  top: calc(50% - 136px);
+  left: 0;
+  margin: 0;
+}
+.water-pane > .chore-water {
+  position: absolute;
+  top: calc(50% - 90px);
+  left: 0;
+  width: 100%;
+}
+.water-title-stage {
+  height: 104px;
+  min-height: 104px;
+  display: grid;
+  align-items: center;
 }
 </style>

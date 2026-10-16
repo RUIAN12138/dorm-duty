@@ -38,7 +38,7 @@ try {
  const records=people.map(p=>({id:p.id,key:'floor',name:'地板',assignee_id:p.user_id,assignee_name:p.nickname,marker_id:p.marker_id,completed_at:p.completed_at,completed_date:'2026-10-15'}));
  const past=[...records,...records.map(r=>({...r,id:r.id+20}))].map(r=>({...r,id:r.id+10,completed_at:r.completed_at.replace('15T','14T'),completed_date:'2026-10-14'}));
  (window as any).qa={own:()=>{epoch.value++;(window as any).qa.full()},nextDay:()=>{today.value='2026-10-16';todayOpen.value=false},full:()=>{round.value={...round.value,completed:4,completions:[...people,{...people[0]!,id:4,user_id:4,nickname:'室友4',completed_at:'2026-10-15T04:00:00Z'}]}},undo:()=>{round.value={...round.value,completed:3,completions:people}},reopen:async()=>{active.value=false;await new Promise(r=>setTimeout(r,30));active.value=true},deadline:()=>deadline.value,order:()=>order.value,month:()=>month.value};
- </script><template><main style="max-width:430px;padding:24px;margin:auto"><div data-testid="large-round"><Round :round="round" :active="active"/></div><div data-testid="mini-round"><Round :round="round" :active="active" :celebrate="epoch" compact/></div><Calendar v-model:month="month" :month="month" :today="today" :records="[...records,...past]" :members="people" @change="month=$event"/><Timeline date="2026-10-15" label="今天" :records="records" :expanded="todayOpen" list @toggle="todayOpen=!todayOpen"/><Timeline date="2026-10-14" label="10月14日" :records="past" :expanded="pastOpen" list @toggle="pastOpen=!pastOpen"/><Sort v-model="order" :members="people" :active="true"/><TimeWheel v-model="deadline" test-id="wheel-input"/></main></template>`,
+ </script><template><main style="max-width:430px;padding:24px;margin:auto"><div data-testid="large-round"><Round :round="round" :active="active"/></div><div data-testid="mini-round"><Round :round="round" :active="active" :celebrate="epoch" compact/></div><Calendar v-model:month="month" :month="month" :today="today" :records="[...records,...past]" :members="people" @change="month=$event"/><section data-testid="timeline-fixture"><Timeline date="2026-10-15" label="今天" :records="records" :expanded="todayOpen" list @toggle="todayOpen=!todayOpen"/><Timeline date="2026-10-14" label="10月14日" :records="past" :expanded="pastOpen" list @toggle="pastOpen=!pastOpen"/></section><Sort v-model="order" :members="people" :active="true"/><TimeWheel v-model="deadline" test-id="wheel-input"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -187,28 +187,28 @@ try {
   await page.getByTestId("calendar-view-list").click();
   check(
     await page
-      .getByTestId("record-group-2026-10-15")
+      .getByTestId("timeline-fixture").getByTestId("record-group-2026-10-15")
       .getAttribute("aria-expanded"),
     "true",
     "today starts expanded",
   );
   check(
     await page
-      .getByTestId("record-group-2026-10-14")
+      .getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14")
       .getAttribute("aria-expanded"),
     "false",
     "past day starts as one row",
   );
-  await page.getByTestId("record-group-2026-10-14").click();
+  await page.getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14").click();
   check(
     await page
-      .getByTestId("record-group-2026-10-14")
+      .getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14")
       .getAttribute("aria-expanded"),
     "true",
     "past date expands on demand",
   );
   const delays = await page
-    .locator("#records-2026-10-14 .record-stagger")
+    .locator("[data-testid=timeline-fixture] #records-2026-10-14 .record-stagger")
     .evaluateAll((els) =>
       els.map((e) =>
         parseFloat(getComputedStyle(e).transitionDelay.split(",")[0]),
@@ -216,7 +216,7 @@ try {
     );
   assert(delays[1] > delays[0] && delays[2] > delays[1]);
   checks.push("record entrances stagger downwards");
-  const stack = page.locator("#records-2026-10-14");
+  const stack = page.locator("[data-testid=timeline-fixture] #records-2026-10-14");
   check(
     await stack.locator(".timeline-rail").count(),
     0,
@@ -235,14 +235,14 @@ try {
     .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
   assert(positions.every((p, i) => i === 0 || p > positions[i - 1] + 70));
   checks.push("expanded cards occupy separate readable rows");
-  await page.getByTestId("record-group-2026-10-14").click();
+  await page.getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14").click();
   await page.waitForTimeout(850);
   check(await stack.locator('.record-stagger').count(),0,'collapsed records remove all hidden interactive rows');
   const depth=await page.getByTestId('record-group-2026-10-14').locator('..').evaluate(el=>[getComputedStyle(el,'::before').content,getComputedStyle(el,'::after').content]);
   assert(depth.every(value=>value!=='none'));
   checks.push('closed day retains two static depth layers without animating height');
   await page
-    .getByTestId("record-group-2026-10-14")
+    .getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14")
     .locator("..")
     .screenshot({
       path: path.join(
@@ -250,10 +250,10 @@ try {
         `${safari ? "webkit" : "chromium"}-stack-closed.jpg`,
       ),
     });
-  await page.getByTestId("record-group-2026-10-14").click();
+  await page.getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14").click();
   await page.waitForTimeout(850);
   await page
-    .getByTestId("record-group-2026-10-14")
+    .getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14")
     .locator("..")
     .screenshot({
       path: path.join(
@@ -264,12 +264,12 @@ try {
   await page.screenshot({
     path: path.join(evidence, `${safari ? "webkit" : "chromium"}-records.jpg`),
   });
-  await page.getByTestId("record-group-2026-10-14").click();
-  await page.getByTestId("record-group-2026-10-14").click();
+  await page.getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14").click();
+  await page.getByTestId("timeline-fixture").getByTestId("record-group-2026-10-14").click();
   await page.waitForTimeout(350);
   check(
     await page
-      .locator("#records-2026-10-14")
+      .locator("[data-testid=timeline-fixture] #records-2026-10-14")
       .evaluate((e) => e.getBoundingClientRect().height > 100),
     true,
     "rapid collapse reversal opens the same group",
@@ -277,7 +277,7 @@ try {
   await page.evaluate(() => window.qa.nextDay());
   check(
     await page
-      .getByTestId("record-group-2026-10-15")
+      .getByTestId("timeline-fixture").getByTestId("record-group-2026-10-15")
       .getAttribute("aria-expanded"),
     "false",
     "midnight folds yesterday without reloading the page",

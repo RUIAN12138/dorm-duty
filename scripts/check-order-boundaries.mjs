@@ -219,8 +219,8 @@ const categories=computed(()=>['floor','toilet','sink','water'].map((key,i)=>({k
       .map((a) => a.effect.getKeyframes())
       .flat(),
   );
-  assert(feedback.some((k) => String(k.transform).includes("0.94")));
-  checks.push("nudge uses restrained local elastic deformation without shrinking below 0.94");
+  assert(feedback.some((k) => String(k.transform).includes("0.84")));
+  checks.push("nudge restores the original local elastic deformation");
   check(
     await page.evaluate(() => window.qa.sent()),
     1,

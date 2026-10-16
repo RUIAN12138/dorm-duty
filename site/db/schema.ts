@@ -229,6 +229,9 @@ export const choreCategories = sqliteTable(
     startDate: text("start_date").notNull(),
     weekdays: text("weekdays").notNull().default("[1,2,3,4,5,6,7]"),
     rotationDays: integer("rotation_days").notNull().default(1),
+    reminderIntervalDays: integer("reminder_interval_days")
+      .notNull()
+      .default(3),
     rotationOrder: text("rotation_order").notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     mode: text("mode").notNull().default("self_round"),
@@ -246,6 +249,10 @@ export const choreCategories = sqliteTable(
     check(
       "chore_rotation_days_check",
       sql`${table.rotationDays} BETWEEN 1 AND 30`,
+    ),
+    check(
+      "chore_reminder_interval_check",
+      sql`${table.reminderIntervalDays} BETWEEN 1 AND 365`,
     ),
   ],
 );

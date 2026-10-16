@@ -28,8 +28,8 @@ function tap(event: MouseEvent) {
   bounce = target.animate(
     [
       { transform: current === "none" ? "scale(1)" : current },
-      { transform: "scaleX(1.04) scaleY(.94)", offset: 0.18 },
-      { transform: "scaleX(.98) scaleY(1.035)", offset: 0.58 },
+      { transform: "scaleX(1.09) scaleY(.84)", offset: 0.18 },
+      { transform: "scaleX(.96) scaleY(1.075)", offset: 0.58 },
       { transform: "scaleX(1.025) scaleY(.98)", offset: 0.8 },
       { transform: "scale(1)" },
     ],
@@ -61,6 +61,7 @@ onUnmounted(() => bounce?.cancel());
       @animationend="taps = taps.filter((item) => item.id !== hit.id)"
     >
       <span class="nudge-ring"></span>
+      <span class="nudge-plus">催促 +1</span>
     </span>
   </button>
 </template>

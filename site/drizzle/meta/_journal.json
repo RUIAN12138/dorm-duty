@@ -78,6 +78,13 @@
       "when": 1792116000000,
       "tag": "0010_history_corrections",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792120000000,
+      "tag": "0011_task_reminder_intervals",
+      "breakpoints": true
     }
   ]
 }
