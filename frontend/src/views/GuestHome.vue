@@ -15,6 +15,13 @@ import MarkerPicker from "../components/MarkerPicker.vue";
 import MemberMark from "../components/MemberMark.vue";
 import ChoreBottomNav from "../components/ChoreBottomNav.vue";
 import CreatorRecovery from "../components/CreatorRecovery.vue";
+import ElasticSheet from "../components/ElasticSheet.vue";
+import EmailAccountPanel from "../components/EmailAccountPanel.vue";
+import {
+  emailAccount,
+  refreshEmailAccount,
+  type EmailEntry,
+} from "../api/email";
 import { showToast } from "vant";
 import { ApiError } from "../api";
 import { useSession } from "../stores/session";
@@ -53,6 +60,40 @@ const creatingRoom = ref(false),
   createMembers = ref("");
 const createdInvite = ref("");
 const recoveryOpen = ref(false);
+const emailOpen = ref(false);
+function needsEmail() {
+  if (!emailAccount.available || emailAccount.loggedIn) return false;
+  emailOpen.value = true;
+  return true;
+}
+async function acceptEmailEntry(entry: EmailEntry) {
+  emailOpen.value = false;
+  cancelSelection();
+  if (entry.is_creator) {
+    sessionStorage.setItem("dorm-token", entry.access_token);
+    localStorage.setItem("dorm-owner-token", entry.access_token);
+    await session.refresh().catch(() => {});
+  }
+  saveChoreToken(entry.invite_code, entry.member_id, entry.access_token);
+  await loadDorm(entry.invite_code, entry.member_id, entry.access_token);
+}
+function emailLogout() {
+  emailOpen.value = false;
+  cancelSelection();
+  session.clear();
+  try {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith("dorm-chore-device-v1:")) localStorage.removeItem(key);
+    localStorage.removeItem(storageKey);
+  } catch {
+    /* Optional storage. */
+  }
+  member.value = null;
+  dorm.value = null;
+  choreToken.value = "";
+  inviteCode.value = "";
+  viewMode.value = "entry";
+}
 const section = computed(() =>
   route.path === "/water"
     ? "water"
@@ -256,6 +297,7 @@ async function choose(person: GuestMember) {
   }
 }
 async function submitName() {
+  if (needsEmail()) return;
   if (loading.value || !enteredName.value.trim()) return;
   const { id, signal } = startRequest();
   try {
@@ -264,6 +306,12 @@ async function submitName() {
       signal,
     );
     if (!isCurrent(id, signal)) return;
+    if (result.is_creator) {
+      sessionStorage.setItem("dorm-token", result.access_token);
+      localStorage.setItem("dorm-owner-token", result.access_token);
+      await session.refresh();
+      if (!isCurrent(id, signal)) return;
+    }
     const owner = await creatorToken(result.member);
     if (!isCurrent(id, signal)) return;
     let token = owner || result.access_token;
@@ -373,6 +421,7 @@ async function refresh() {
   );
 }
 function openDormChange() {
+  if (needsEmail()) return;
   cancelSelection();
   notice.value = "";
   createdInvite.value = "";
@@ -380,6 +429,7 @@ function openDormChange() {
   changingDorm.value = true;
 }
 function openCreate() {
+  if (needsEmail()) return;
   openDormChange();
   changingDorm.value = false;
   creatingRoom.value = true;
@@ -560,6 +610,9 @@ function removeSharedInvite() {
 watch(() => route.query.invite_code, removeSharedInvite);
 
 onMounted(() => {
+  void refreshEmailAccount().catch(() => {
+    /* Legacy/offline server keeps the current identity. */
+  });
   const saved = storedChoice();
   const sharedLink = route.query.invite_code !== undefined;
   // Only manual join/create or a previous room choice grants the UI entry.
@@ -737,13 +790,29 @@ onUnmounted(() => {
         class="guest-entry"
         aria-labelledby="entry-title"
       >
-        <h1 id="entry-title">先找到你的宿舍</h1>
+        <h1 id="entry-title">
+          {{
+            emailAccount.available && !emailAccount.loggedIn
+              ? "欢迎来到轮到"
+              : "先找到你的宿舍"
+          }}
+        </h1>
+        <EmailAccountPanel
+          v-if="(emailAccount.available || emailAccount.loggedIn) && !emailOpen"
+          hide-title
+          @entered="acceptEmailEntry"
+          @logout="emailLogout"
+        />
         <JoinedDorms
+          v-if="!emailAccount.available || emailAccount.loggedIn"
           :rooms="savedDorms"
           :disabled="loading"
           @select="returnToDorm"
         />
-        <div class="guest-entry-actions">
+        <div
+          v-if="!emailAccount.available || emailAccount.loggedIn"
+          class="guest-entry-actions"
+        >
           <button
             class="guest-primary"
             data-testid="guest-join-dorm"
@@ -921,6 +990,7 @@ onUnmounted(() => {
             @join-dorm="openDormChange"
             @create-dorm="openCreate"
             @recover-owner="recoveryOpen = true"
+            @email-account="emailOpen = true"
           />
         </section>
       </template>
@@ -936,6 +1006,16 @@ onUnmounted(() => {
       <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
     </footer>
     <ChoreBottomNav v-if="navVisible" :section="section" />
+    <ElasticSheet v-model="emailOpen" title="邮箱账号" motion="bottom">
+      <EmailAccountPanel
+        v-if="emailOpen"
+        hide-title
+        :member-token="viewMode === 'dorm' ? choreToken : ''"
+        :dorm-id="dorm?.id"
+        @entered="acceptEmailEntry"
+        @logout="emailLogout"
+      />
+    </ElasticSheet>
     <CreatorRecovery
       v-model="recoveryOpen"
       mode="restore"

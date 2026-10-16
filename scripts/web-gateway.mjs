@@ -27,7 +27,7 @@ if (!indexFile.startsWith(`${distRoot}${path.sep}`)) {
 if (!(await stat(indexFile)).isFile())
   throw new Error("请先构建 frontend/dist");
 const apiPaths =
-  /^\/(auth|dorms|duties|guest|notifications|push|health|docs|openapi\.json)(\/|$)/;
+  /^\/(email|chores|auth|dorms|duties|guest|notifications|push|health|docs|openapi\.json)(\/|$)/;
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",

@@ -176,6 +176,7 @@ export function claimChoreIdentity(
 ) {
   return choreRequest<ChoreClaim>("/chores/claim", "", {
     method: "POST",
+    headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
     signal,
   });
