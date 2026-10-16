@@ -57,3 +57,4 @@ native/harmony/entry/build/
 native/harmony/local.properties
 native/harmony/.idea/
 native/harmony/signing/
+.gstack/
