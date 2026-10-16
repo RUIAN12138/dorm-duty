@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onBeforeUnmount, onMounted } from "vue";
 import { TabsRoot, TabsContent } from "reka-ui";
 import {
   choreRequest,
@@ -8,9 +8,10 @@ import {
   type ChoreActivity,
   type ChoreBoardData,
 } from "../api/chores";
+import CompactRecordList from "./CompactRecordList.vue";
+import HintPopover from "./HintPopover.vue";
 import ActivitySummary from "./ActivitySummary.vue";
 import HistoryEditor from "./HistoryEditor.vue";
-import { shiftDay } from "../interaction/activity";
 import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
@@ -41,6 +42,33 @@ const emit = defineEmits<{
   refresh: [];
 }>();
 const selected = ref("");
+const calendarRoot = ref<HTMLElement>(),
+  roomHeight = ref(600);
+function fitViewport() {
+  const top =
+    (calendarRoot.value?.getBoundingClientRect().top || 76) + window.scrollY;
+  const nav =
+    document.querySelector(".chore-bottom-nav")?.getBoundingClientRect()
+      .height || 67;
+  roomHeight.value = Math.max(
+    280,
+    Math.floor(window.innerHeight - top - nav - 12),
+  );
+}
+let layoutObserver: ResizeObserver | undefined;
+onMounted(() => {
+  fitViewport();
+  window.addEventListener("resize", fitViewport);
+  window.visualViewport?.addEventListener("resize", fitViewport);
+  layoutObserver = new ResizeObserver(fitViewport);
+  if (calendarRoot.value?.parentElement)
+    layoutObserver.observe(calendarRoot.value.parentElement);
+});
+onBeforeUnmount(() => {
+  layoutObserver?.disconnect();
+  window.removeEventListener("resize", fitViewport);
+  window.visualViewport?.removeEventListener("resize", fitViewport);
+});
 const activity = ref<ChoreActivity | null>(null),
   activityError = ref(""),
   activityLoading = ref(false);
@@ -70,18 +98,6 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => activityController?.abort());
-const recentDays = computed(() =>
-  Array.from({ length: 5 }, (_, i) => {
-    const date = shiftDay(props.today, i - 4);
-    return {
-      date,
-      count:
-        activity.value?.daily
-          .filter((d) => d.date === date)
-          .reduce((n, d) => n + d.count, 0) || 0,
-    };
-  }),
-);
 const historyOpen = ref(false),
   historyRecord = ref<ChoreRecord | null>(null),
   historyDate = ref("");
@@ -260,7 +276,9 @@ watch(
     as-child
   >
     <section
-      class="chore-calendar"
+      ref="calendarRoot"
+      class="chore-calendar compact-calendar"
+      :style="{ '--calendar-room-height': `${roomHeight}px` }"
       aria-labelledby="calendar-title"
       data-testid="chore-calendar"
     >
@@ -291,6 +309,14 @@ watch(
             @click="step(1)"
           >
             <van-icon name="arrow" />
+          </button>
+          <button
+            v-if="token"
+            data-testid="history-add"
+            aria-label="补记完成记录"
+            @click="editHistory()"
+          >
+            <van-icon name="plus" aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -357,6 +383,7 @@ watch(
                           'is-selected': cell.date === selected,
                         }"
                         :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
+                        :data-heat="Math.min(4, cell.records.length)"
                         :aria-pressed="cell.date === selected"
                         :data-testid="
                           page.delta === 0
@@ -405,61 +432,28 @@ watch(
           <div class="calendar-type-legend" aria-label="任务标记图例">
             <span><ChoreTypeIcon type="duty" />值日</span>
             <span><ChoreTypeIcon type="water" />抬水</span>
-          </div>
-        </div>
-      </TabsContent>
-      <TabsContent value="list" as-child>
-        <div
-          class="calendar-list"
-          data-testid="calendar-list"
-          :aria-busy="loading"
-        >
-          <div class="recent-days" aria-label="近五天打卡">
-            <button
-              v-for="day in recentDays"
-              :key="day.date"
-              @click="showDay(day.date)"
+            <span class="calendar-heat-key"
+              >少<i
+                v-for="level in 4"
+                :key="level"
+                :data-heat="level"
+              />多</span
             >
-              <span>{{
-                day.date === today
-                  ? "今天"
-                  : `${Number(day.date.slice(5, 7))}/${Number(day.date.slice(8))}`
-              }}</span
-              ><strong>{{
-                activityLoading ? "…" : activityError ? "—" : day.count
-              }}</strong
-              ><span>次</span>
-            </button>
           </div>
-          <p v-if="!listRecords.length" class="calendar-list-empty">
-            本月还没有完成记录
-          </p>
-          <RecordTimeline
-            v-for="group in groups"
-            v-else
-            :key="group.date"
-            :date="group.date"
-            :label="dateLabel(group.date)"
-            :records="group.records"
-            :member-id="memberId"
-            :busy="busy"
-            :expanded="isExpanded(group.date)"
-            list
-            @toggle="toggleGroup(group.date)"
-            :editable="!!token"
-            :creator="creator"
-            :undo-ids="undoIds"
-            @edit="editHistory"
-            @undo="emit('undo', $event)"
-          />
         </div>
       </TabsContent>
-      <TabsContent value="stats"
+      <TabsContent value="list" as-child
+        ><CompactRecordList
+          :records="listRecords"
+          :today="today"
+          :month="month"
+          @select="showDay"
+      /></TabsContent>
+      <TabsContent value="stats" class="stats-mode"
         ><ActivitySummary
           v-if="activity && !activityError"
           :activity="activity"
           :rounds="rounds || []"
-          @day="showDay"
         />
         <p v-if="activityLoading" role="status">正在读取统计…</p></TabsContent
       >
@@ -467,20 +461,6 @@ watch(
         {{ activityError
         }}<button class="calendar-ghost" @click="loadActivity">重试</button>
       </p>
-      <p
-        v-if="view === 'list' && activity?.recent_truncated"
-        class="activity-error"
-      >
-        近五天明细超过500条，打卡条与统计仍按全部记录计算。
-      </p>
-      <button
-        v-if="token"
-        class="calendar-ghost"
-        data-testid="history-add"
-        @click="editHistory()"
-      >
-        补记完成记录
-      </button>
       <HistoryEditor
         v-if="token && memberId"
         v-model="historyOpen"
@@ -531,22 +511,6 @@ watch(
           />
         </div>
       </ElasticSheet>
-      <details
-        v-if="view === 'calendar'"
-        class="calendar-legend"
-        aria-label="室友标记图例"
-      >
-        <summary>
-          室友标记<van-icon name="arrow-down" aria-hidden="true" />
-        </summary>
-        <div>
-          <span v-for="person in members" :key="person.user_id"
-            ><MemberMark :id="person.marker_id" :size="16" /><span>{{
-              person.nickname
-            }}</span></span
-          >
-        </div>
-      </details>
     </section>
   </TabsRoot>
 </template>
@@ -949,5 +913,301 @@ h1 small {
 .month-stage > .month-page {
   box-shadow: none;
   border-inline: var(--ui-card-border);
+}
+</style>
+
+<style scoped>
+.compact-calendar {
+  display: flex;
+  flex-direction: column;
+  height: var(--calendar-room-height);
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+}
+.compact-calendar > header {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 0 12px;
+  gap: 12px;
+}
+.compact-calendar h1 {
+  margin: 0 !important;
+  font-size: 28px;
+  line-height: 1.15;
+  gap: 8px;
+}
+.compact-calendar h1 > span {
+  font-size: 28px;
+}
+.compact-calendar h1 small {
+  font-size: 13px;
+}
+.calendar-nav {
+  gap: 4px;
+}
+.calendar-nav button {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+}
+.compact-calendar :deep(.calendar-view-selector) {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding: 3px;
+}
+.compact-calendar :deep(.calendar-view-selector button) {
+  min-height: 38px;
+  font-size: 14px;
+}
+.compact-calendar > .calendar-mode,
+.compact-calendar > .compact-records,
+.compact-calendar > .stats-mode {
+  flex: 1;
+  min-height: 0;
+}
+.calendar-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.compact-calendar .calendar-surface {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 8px;
+  max-height: 440px;
+  height: 100%;
+  min-height: 0;
+  border-radius: 16px;
+}
+.month-viewport {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+.month-stage {
+  height: 100%;
+  will-change: auto;
+}
+.month-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 4px !important;
+  border-radius: 12px !important;
+}
+.month-page-heading {
+  min-height: 24px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.month-page-heading strong {
+  font-size: 15px;
+}
+.month-page-heading > span {
+  font-size: 12px;
+}
+.chore-weekdays {
+  flex-shrink: 0;
+  height: 24px;
+  gap: 2px;
+}
+.chore-weekdays span {
+  font-size: 12px;
+  padding: 4px 0;
+}
+.chore-calendar-grid {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+.compact-calendar .chore-calendar-grid button {
+  min-height: 0;
+  height: 100%;
+  padding: 1px 0;
+  gap: 0;
+  border-radius: 9px;
+  justify-content: center;
+}
+.calendar-day-number {
+  font-size: 14px;
+  min-width: 22px;
+  height: 22px;
+}
+.calendar-cell-marks {
+  height: 14px;
+  gap: 2px;
+}
+.calendar-task-mark {
+  height: 13px;
+  width: 17px;
+  overflow: visible;
+}
+.calendar-task-mark :deep(.member-mark) {
+  width: 12px !important;
+  height: 12px !important;
+}
+.calendar-task-mark .chore-type-icon {
+  width: 7px;
+  height: 7px;
+  right: -2px;
+  bottom: 0;
+  border-width: 1px;
+}
+.day-record-dots {
+  height: 3px;
+  gap: 2px;
+}
+.day-record-dots i {
+  width: 2px;
+  height: 2px;
+}
+.calendar-more {
+  font-size: 9px;
+  top: 0;
+  right: 0;
+}
+.calendar-type-legend {
+  flex-shrink: 0;
+  min-height: 24px;
+  margin: 4px 0 0;
+  padding: 0 4px;
+  gap: 12px;
+  font-size: 11px;
+}
+.calendar-type-legend .chore-type-icon {
+  width: 10px;
+  height: 10px;
+}
+.calendar-heat-key {
+  margin-left: auto;
+  gap: 3px !important;
+}
+.calendar-heat-key i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  display: block;
+}
+[data-heat="1"] {
+  background: #f2f2f2 !important;
+}
+[data-heat="2"] {
+  background: #e4e4e4 !important;
+}
+[data-heat="3"] {
+  background: #d3d3d3 !important;
+}
+[data-heat="4"] {
+  background: #bdbdbd !important;
+}
+.compact-calendar .is-selected {
+  outline: 1px solid var(--ui-ink);
+  outline-offset: -1px;
+}
+.compact-calendar > .activity-error {
+  font-size: 13px;
+  margin: 0;
+  padding: 4px 0;
+}
+.stats-mode {
+  display: flex;
+  flex-direction: column;
+}
+.stats-mode :deep(.activity-summary) {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 0;
+}
+.stats-mode :deep(.summary-heading) {
+  min-height: 24px;
+  flex-shrink: 0;
+}
+.stats-mode :deep(.swipe-card-deck) {
+  flex: 1;
+  min-height: 0;
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stats-mode :deep(.deck-stage) {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  max-height: 350px;
+  margin: 0 10px;
+}
+.stats-mode :deep(.deck-controls) {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+@media (max-height: 650px) {
+  .calendar-type-legend {
+    min-height: 18px;
+    font-size: 10px;
+  }
+  .calendar-day-number {
+    height: 19px;
+    min-width: 19px;
+    font-size: 13px;
+  }
+  .calendar-cell-marks {
+    height: 12px;
+  }
+  .calendar-task-mark {
+    height: 12px;
+  }
+  .month-page-heading {
+    min-height: 20px;
+  }
+  .chore-weekdays {
+    height: 20px;
+  }
+  .compact-calendar :deep(.calendar-view-selector) {
+    margin-bottom: 8px;
+  }
+  .compact-calendar > header {
+    padding-bottom: 8px;
+  }
+  .stats-mode :deep(.summary-heading) {
+    min-height: 20px;
+  }
+  .stats-mode :deep(.swipe-card-deck) {
+    padding-top: 18px;
+  }
+}
+</style>
+
+<style scoped>
+.compact-calendar .calendar-task-mark {
+  width: 13px;
+  height: 12px;
+  flex: 0 0 13px;
+}
+.compact-calendar .calendar-cell-marks {
+  gap: 1px;
+  flex-shrink: 0;
+}
+.compact-calendar .calendar-task-mark .chore-type-icon {
+  right: 0;
+  bottom: 0;
+}
+.compact-calendar .calendar-day-number {
+  flex-shrink: 0;
+}
+.compact-calendar .day-record-dots {
+  flex-shrink: 0;
+}
+</style>
+<style scoped>
+/* Reka keeps inactive panel shells hidden; layout styles must not unhide them. */
+.compact-calendar > [hidden] {
+  display: none !important;
 }
 </style>

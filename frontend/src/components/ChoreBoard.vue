@@ -16,7 +16,9 @@ import {
   type ChoreTask,
 } from "../api/chores";
 import QuietRoundProgress from "./QuietRoundProgress.vue";
-import QuietTaskCard from "./QuietTaskCard.vue";
+import WaterNudge from "./WaterNudge.vue";
+import WaterHandoffName from "./WaterHandoffName.vue";
+import { baselineWaterHandoff } from "../interaction/waterHandoff";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
 import CompletionAction from "./CompletionAction.vue";
@@ -191,7 +193,7 @@ function sectionSwipeDown(event: PointerEvent) {
   if (
     !(event.target instanceof Element) ||
     event.target.closest(
-      "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll]",
+      "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll],[data-page-gesture]",
     )
   )
     return;
@@ -309,10 +311,7 @@ const personalNext = computed(
       .sort((a, b) => a.duty_date.localeCompare(b.duty_date)) || [],
 );
 const personalTasks = computed(() =>
-  (personalToday.value.length
-    ? personalToday.value
-    : personalNext.value
-  ).filter((task) => task.status !== "completed"),
+  personalToday.value.length ? personalToday.value : personalNext.value,
 );
 const completedOpen = ref(false);
 const completedTasks = computed(() => {
@@ -595,6 +594,10 @@ async function load(): Promise<boolean> {
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
 
+    baselineWaterHandoff(
+      `${props.invite}:${props.memberId}`,
+      result.water_handoff,
+    );
     board.value = result;
     if (
       waterReceipt.value &&
@@ -1086,25 +1089,20 @@ onUnmounted(() => {
             </section>
             <section
               v-if="section === 'duty'"
-              class="p0-task-page"
+              class="chore-personal"
+              :class="{
+                'completion-linked': activeDutyTask?.status === 'completed',
+              }"
               aria-labelledby="personal-title"
               data-testid="pane-duty"
             >
               <h1
                 id="personal-title"
-                class="p0-page-title"
+                class="hero-caption"
                 data-section-swipe-handle
                 data-testid="page-swipe-title"
               >
-                {{
-                  personalTasks.length
-                    ? activeRound
-                      ? "这轮你可以做"
-                      : hasToday
-                        ? "今天的值日"
-                        : "即将到来"
-                    : "本轮已完成"
-                }}
+                {{ dutyCaption }}
               </h1>
               <div
                 v-if="personalTasks.length > 1"
@@ -1117,188 +1115,217 @@ onUnmounted(() => {
                   :aria-pressed="activeDutyTask?.id === task.id"
                   @click="chooseDutyTask(task.id, $event)"
                 >
-                  {{ task.name }}
+                  {{ task.name
+                  }}<van-icon
+                    v-if="task.status === 'completed'"
+                    name="success"
+                    aria-hidden="true"
+                  />
                 </button>
               </div>
-              <div class="p0-task-swap">
-                <Transition
-                  name="quiet-task"
-                  @before-leave="hideLeaving"
-                  @before-enter="showEntered"
+              <article
+                v-if="activeDutyTask"
+                class="chore-task focus-hero"
+                :class="{
+                  'task-is-completed': activeDutyTask.status === 'completed',
+                }"
+                :data-testid="`chore-task-${activeDutyTask.key}-${activeDutyTask.id}`"
+              >
+                <div
+                  class="task-title-stage"
+                  data-testid="task-title-swipe"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  :class="{ 'title-dragging': titleDragging }"
+                  :style="{ transform: `translate3d(${titleOffset}px,0,0)` }"
+                  @pointerdown="taskSwipe.down"
+                  @pointermove="taskSwipe.move"
+                  @pointerup="taskSwipe.up"
+                  @pointercancel="taskSwipe.cancel"
+                  @lostpointercapture="taskSwipe.cancel"
+                  @keydown.esc="taskSwipe.cancel"
                 >
-                  <div
-                    v-if="activeDutyTask"
-                    :key="activeDutyTask.id"
-                    class="p0-task-focus"
+                  <TaskTitle
+                    :value="activeDutyTask.id"
+                    :animated="titleAnimation"
                   >
-                    <QuietTaskCard
-                      :task="activeDutyTask"
-                      :meta="
-                        activeRound
-                          ? `${activeRound.completed}/${activeRound.total} · 第 ${activeRound.sequence} 轮`
-                          : `${dateText(activeDutyTask.duty_date)} · ${statusText(activeDutyTask)}`
-                      "
-                      :allowed="
-                        (activeDutyTask.can_complete || demo) &&
-                        activeDutyTask.duty_date <= board.today
-                      "
-                      :busy="!!busy || completionSyncPending"
-                      @complete="complete($event, true)"
-                      @detail="openTask"
-                    />
-                    <CompletionAction
-                      v-if="
-                        activeDutyTask.can_complete ||
-                        demo ||
-                        activeDutyTask.status === 'completed'
-                      "
-                      :task="activeDutyTask"
-                      :receipt="completionReceipt"
-                      :busy="!!busy"
-                      :disabled="
-                        completionSyncPending ||
-                        (!demo && activeDutyTask.duty_date > board.today)
-                      "
-                      :demo="demo"
-                      @complete="complete"
-                      @undo="undo($event.id)"
-                    />
                     <button
-                      v-if="activeRound"
-                      class="p0-text-button"
-                      data-testid="round-progress"
-                      @click="roundOpen = true"
+                      class="task-title-button"
+                      :aria-label="`查看${activeDutyTask.name}详情`"
+                      @click="openTask(activeDutyTask, $event)"
                     >
-                      <QuietRoundProgress
-                        :round="activeRound"
-                        compact
-                      /><van-icon name="arrow" aria-hidden="true" />
+                      {{ activeDutyTask.name }}
                     </button>
-                  </div>
-                  <div v-else key="empty" class="p0-empty">
-                    <h2>暂时没有待办</h2>
-                    <button class="p0-text-button" @click="orderOpen = true">
-                      查看值日安排<van-icon name="arrow" aria-hidden="true" />
-                    </button>
-                  </div>
-                </Transition>
-              </div>
+                  </TaskTitle>
+                </div>
+                <p v-if="!hasToday && !activeRound" class="hero-date">
+                  {{ dateText(activeDutyTask.duty_date) }}
+                </p>
+                <CompletionAction
+                  v-if="
+                    activeDutyTask.status === 'completed' ||
+                    activeDutyTask.can_complete ||
+                    demo
+                  "
+                  :task="activeDutyTask"
+                  :busy="!!busy"
+                  :disabled="
+                    completionSyncPending ||
+                    (!demo && activeDutyTask.duty_date > board.today)
+                  "
+                  :demo="demo"
+                  :receipt="completionReceipt"
+                  @settled="settleCompletion"
+                  @complete="complete"
+                  @undo="undo($event.id)"
+                />
+                <CompletionAction
+                  v-if="
+                    recentUndo &&
+                    recentUndo.id !== activeDutyTask.id &&
+                    recentUndo.id !== completionMorphId
+                  "
+                  :task="recentUndo"
+                  :busy="!!busy"
+                  :disabled="completionSyncPending"
+                  :demo="demo"
+                  @undo="undo($event.id)"
+                />
+                <button
+                  v-if="activeRound"
+                  class="round-progress"
+                  data-testid="round-progress"
+                  @click="roundOpen = true"
+                >
+                  <QuietRoundProgress
+                    v-if="displayRound"
+                    :round="displayRound"
+                    compact
+                  />
+                  <van-icon name="arrow" aria-hidden="true" />
+                </button>
+              </article>
+              <div v-else class="focus-hero"><h2>休息</h2></div>
             </section>
             <section
               v-if="section === 'water'"
-              class="p0-task-page"
+              class="water-pane"
               data-testid="pane-water"
             >
-              <template v-if="displayedWater">
+              <template v-if="water">
                 <h1
-                  class="p0-page-title"
+                  class="hero-caption"
                   data-section-swipe-handle
                   data-testid="page-swipe-title"
                 >
                   {{
-                    displayedWater.assignee_id === memberId
-                      ? "没水时轮到你"
-                      : "下一位抬水"
+                    water.assignee_id === memberId
+                      ? "没水时轮到你："
+                      : "抬水轮到："
                   }}
                 </h1>
-                <section class="p0-task-focus" data-testid="water-task">
-                  <QuietTaskCard
-                    :key="displayedWater.id"
-                    :task="displayedWater"
-                    :meta="
-                      displayedWater.assignee_id === memberId
-                        ? '没水时抬水，完成后打卡'
-                        : `${displayedWater.assignee_name} · 待完成`
-                    "
-                    :allowed="
-                      displayedWater.can_complete ||
-                      (demo && displayedWater.assignee_id === memberId)
-                    "
-                    :busy="!!busy || completionSyncPending"
-                    @complete="complete($event, true)"
-                    @detail="openTask"
-                  />
+                <section
+                  class="chore-water focus-hero"
+                  aria-labelledby="water-title"
+                  data-testid="water-task"
+                >
+                  <div class="water-title-stage">
+                    <TaskTitle
+                      :value="water.assignee_id"
+                      id="water-title"
+                      :style="
+                        water.assignee_id !== memberId &&
+                        water.assignee_name.length > 8
+                          ? { fontSize: 'clamp(30px, 9vw, 40px)' }
+                          : undefined
+                      "
+                    >
+                      <WaterHandoffName
+                        :scope="`${invite}:${memberId}`"
+                        :event="board.water_handoff"
+                        :members="board.members"
+                        :target-id="water.assignee_id"
+                        :target-name="water.assignee_name"
+                        :active="
+                          !messagesOpen &&
+                          !orderOpen &&
+                          !toolsOpen &&
+                          !preferencesOpen &&
+                          !pushOpen &&
+                          !settingsOpen &&
+                          !recoveryOpen &&
+                          !reminderOpen &&
+                          !markerOpen &&
+                          !detailTask &&
+                          !roundOpen
+                        "
+                      >
+                        <WaterNudge
+                          v-if="water.assignee_id !== memberId"
+                          :key="water.id"
+                          :name="water.assignee_name"
+                          @tap="nudgeWater"
+                        />
+                        <button
+                          v-else
+                          class="task-title-button"
+                          :aria-label="`查看${water.name}详情`"
+                          @click="openTask(water, $event)"
+                        >
+                          {{ water.name }}
+                        </button>
+                      </WaterHandoffName>
+                    </TaskTitle>
+                  </div>
                   <CompletionAction
-                    v-if="
-                      displayedWater.can_complete ||
-                      displayedWater.status === 'completed' ||
-                      (demo && displayedWater.assignee_id === memberId)
-                    "
-                    :task="displayedWater"
+                    v-if="waterActionTask"
+                    :task="waterActionTask"
                     :receipt="completionReceipt"
+                    @settled="settleCompletion"
                     :busy="!!busy"
                     :disabled="completionSyncPending"
                     :demo="demo"
                     @complete="complete"
                     @undo="undo($event.id)"
                   />
-                  <button
-                    v-else
-                    class="p0-primary"
-                    :disabled="!!busy"
-                    @click="nudgeWater"
+                  <div
+                    v-if="water.assignee_id !== memberId"
+                    class="water-nudge-actions"
                   >
-                    提醒 {{ displayedWater.assignee_name }}
-                  </button>
-                  <p v-if="nudgeCaption" class="p0-status" role="status">
-                    {{ nudgeCaption }}
+                    <p class="hero-date" role="status">
+                      {{ nudgeCaption }}
+                    </p>
+                    <button
+                      class="water-remind"
+                      @click="openTask(water, $event)"
+                    >
+                      查看任务
+                    </button>
+                  </div>
+                  <p v-else-if="!waterActionTask" class="hero-date">
+                    {{ dateText(water.duty_date) }} 开始
                   </p>
-                  <button
-                    class="p0-text-button"
-                    @click="openTask(displayedWater, $event)"
-                  >
-                    查看任务<van-icon name="arrow" aria-hidden="true" />
-                  </button>
+                  <CompletionAction
+                    v-if="recentUndo && recentUndo.id !== waterActionTask?.id"
+                    :task="recentUndo"
+                    :busy="!!busy"
+                    :disabled="completionSyncPending"
+                    :demo="demo"
+                    @undo="undo($event.id)"
+                  />
                 </section>
               </template>
-              <div v-else class="p0-empty" data-testid="water-empty">
-                <h1 class="p0-page-title" data-testid="page-swipe-title">
+              <div v-else class="water-empty" data-testid="water-empty">
+                <h1
+                  class="hero-caption"
+                  data-section-swipe-handle
+                  data-testid="page-swipe-title"
+                >
                   抬水已暂停
                 </h1>
-                <button class="p0-text-button" @click="orderOpen = true">
-                  查看抬水安排
-                </button>
+                <h2>休息</h2>
               </div>
             </section>
-            <details
-              v-if="section !== 'calendar' && completedTasks.length"
-              class="p0-completed"
-              :open="completedOpen"
-              @toggle="
-                completedOpen = ($event.target as HTMLDetailsElement).open
-              "
-            >
-              <summary>
-                已完成
-                <span
-                  >{{ completedTasks.length
-                  }}<van-icon name="arrow-down" aria-hidden="true"
-                /></span>
-              </summary>
-              <div class="p0-completed-list">
-                <article v-for="task in completedTasks" :key="task.id">
-                  <QuietTaskCard
-                    :task="task"
-                    :meta="
-                      task.completed_at
-                        ? `${dateText(task.completed_at.slice(0, 10))} · ${clock(task.completed_at)}`
-                        : '已完成'
-                    "
-                    compact
-                    @detail="openTask"
-                  />
-                  <button
-                    v-if="canUndoTask(task.id)"
-                    class="p0-text-button"
-                    :disabled="!!busy || completionSyncPending"
-                    :data-testid="`undo-${task.id}`"
-                    @click="undo(task.id)"
-                  >
-                    撤销完成
-                  </button>
-                </article>
-              </div>
-            </details>
           </div>
         </Transition>
       </div>
@@ -2754,5 +2781,74 @@ onUnmounted(() => {
 }
 .task-detail-card::after {
   display: none;
+}
+</style>
+
+<style scoped>
+.chore-personal,
+.water-pane {
+  min-height: calc(100svh - 170px - env(safe-area-inset-bottom));
+  gap: var(--ui-space-md);
+  padding: var(--ui-space-md) 0 var(--ui-space-lg);
+  background: var(--ui-surface) !important;
+  transition: none !important;
+}
+.chore-personal.completion-linked {
+  background: var(--ui-surface) !important;
+}
+.focus-hero {
+  gap: var(--ui-space-md);
+}
+.focus-hero > .completion-surface {
+  width: min(100%, 300px);
+  height: 56px;
+}
+.round-progress {
+  min-height: 44px;
+  gap: var(--ui-card-gap);
+  margin: 0;
+}
+.calendar-pane {
+  padding: var(--ui-card-gap) 0 0;
+}
+@media (max-height: 650px) {
+  .chore-personal,
+  .water-pane {
+    min-height: calc(100svh - 155px);
+    gap: 16px;
+    padding: 12px 0 20px;
+  }
+  .focus-hero {
+    gap: 16px;
+  }
+  .focus-hero h2 {
+    font-size: clamp(44px, 14vw, 64px);
+  }
+}
+</style>
+<style scoped>
+.hero-caption {
+  width: 100%;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+</style>
+<style scoped>
+.water-pane {
+  justify-content: flex-start;
+  padding-top: clamp(72px, 15svh, 130px);
+}
+@media (max-height: 650px) {
+  .water-pane {
+    padding-top: 48px;
+  }
+}
+</style>
+<style>
+/* Informational notices never block a page swipe or task control underneath. */
+.chore-notice.van-toast {
+  pointer-events: none;
 }
 </style>
