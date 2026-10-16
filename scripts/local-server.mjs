@@ -191,8 +191,8 @@ try {
           ? undefined
           : Buffer.concat(chunks),
       });
-      let response = await emailRuntime.wrap(request, (next) =>
-        worker.fetch(next, env, ctx),
+      let response = await emailRuntime.wrap(request, (next, emailCreator) =>
+        worker.fetch(next, { ...env, EMAIL_CREATOR: emailCreator }, ctx),
       );
       if (url.pathname === "/health" && response.ok && req.method === "GET") {
         response = new Response(

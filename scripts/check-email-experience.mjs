@@ -72,8 +72,12 @@ try {
               ? undefined
               : Buffer.concat(chunks),
           });
-          const response = await email.wrap(request, (r) =>
-            handleApi(r, h.env, { waitUntil() {} }),
+          const response = await email.wrap(request, (r, emailCreator) =>
+            handleApi(
+              r,
+              { ...h.env, EMAIL_CREATOR: emailCreator },
+              { waitUntil() {} },
+            ),
           );
           res.writeHead(response.status, Object.fromEntries(response.headers));
           res.end(Buffer.from(await response.arrayBuffer()));
@@ -153,6 +157,43 @@ try {
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  check(
+    await page.locator(".guest-brand").count(),
+    0,
+    "entry has no persistent corner brand",
+  );
+  await page.getByRole("button", { name: "邮箱账号", exact: true }).click();
+  const hint = page.locator(".hint-popover");
+  await hint.waitFor();
+  const hintFrames = await hint.evaluate(async (el) => {
+    const frames = [];
+    for (let i = 0; i < 18; i++) {
+      await new Promise(requestAnimationFrame);
+      frames.push(Number(getComputedStyle(el).opacity));
+    }
+    return frames;
+  });
+  check(
+    hintFrames.some((v) => v > 0 && v < 1),
+    true,
+    "hint visibly interpolates on opening",
+  );
+  const hintBox = await hint.boundingBox();
+  check(
+    Math.abs(hintBox.y + hintBox.height / 2 - 844 / 2) < 2,
+    true,
+    "hint is vertically centered",
+  );
+  check(
+    await page
+      .getByTestId("hint-glass")
+      .evaluate((el) => getComputedStyle(el).backdropFilter === "none"),
+    true,
+    "hint backdrop dims without blur",
+  );
+  await page.screenshot({ path: path.join(evidence, "centered-hint.png") });
+  await page.getByRole("button", { name: "知道了", exact: true }).click();
+  await hint.waitFor({ state: "hidden" });
   const control = page.getByRole("button", { name: "获取验证码", exact: true });
   const box = await control.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -164,14 +205,39 @@ try {
     "email submit keeps press feedback",
   );
   await page.mouse.up();
-  async function login(p) {
-    await p.getByLabel("邮箱", { exact: true }).fill("ui-qa@example.invalid");
+  async function login(p, address = "ui-qa@example.invalid", gate = false) {
+    await p.getByLabel("邮箱", { exact: true }).fill(address);
     await p.getByRole("button", { name: "获取验证码", exact: true }).click();
     await p.getByLabel("验证码", { exact: true }).waitFor();
+    const codeFrames = await p
+      .locator(".email-code-field")
+      .evaluate(async (el) => {
+        const frames = [];
+        for (let i = 0; i < 18; i++) {
+          await new Promise(requestAnimationFrame);
+          frames.push(Number(getComputedStyle(el).opacity));
+        }
+        return frames;
+      });
+    check(
+      codeFrames.some((v) => v > 0 && v < 1),
+      true,
+      "code input fades and slides into the email step",
+    );
+    const submitBox = await p
+      .locator("form > button[type=submit]")
+      .boundingBox();
+    const checkBox = await p.locator(".email-check").boundingBox();
+    check(
+      submitBox.y - (checkBox.y + checkBox.height) >= 24,
+      true,
+      "email input options and confirmation have a thumb-friendly gap",
+    );
     const code = deliveries.at(-1).text.match(/验证码是：(\d{6})/)[1];
     await p.getByLabel("验证码", { exact: true }).fill(code);
-    await p.getByRole("button", { name: "验证并进入", exact: true }).click();
-    await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
+    await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
+    if (!gate)
+      await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
   }
   await login(page);
   check(
@@ -203,6 +269,46 @@ try {
     true,
     "refresh restores current dorm",
   );
+  // Joining a new room is above the remembered-room list, with no dead top space.
+  await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page.getByTestId("guest-change-dorm").click();
+  await page
+    .getByRole("heading", { name: "加入新宿舍", exact: true })
+    .waitFor();
+  const joinInput = await page.getByTestId("guest-invite").boundingBox();
+  const joinButton = await page.getByTestId("guest-join-submit").boundingBox();
+  const joined = await page
+    .locator(".guest-switch-form .joined-dorms")
+    .boundingBox();
+  check(
+    joinButton.y - (joinInput.y + joinInput.height) >= 46,
+    true,
+    "invite field and join button have a generous 48px gap",
+  );
+  check(
+    joined.y > joinButton.y + joinButton.height,
+    true,
+    "join-new-room form comes before saved rooms",
+  );
+  check(
+    (await page.locator("#switch-title").boundingBox()).y > 100 &&
+      (await page.locator("#switch-title").boundingBox()).y < 260,
+    true,
+    "join form sits in the optical centre instead of at the top edge",
+  );
+  await page.screenshot({ path: path.join(evidence, "join-layout.png") });
+  await page.getByRole("button", { name: "邀请码帮助", exact: true }).click();
+  await page.locator(".hint-popover").waitFor();
+  await page.waitForTimeout(220);
+  const joinHint = await page.locator(".hint-popover").boundingBox();
+  check(
+    Math.abs(joinHint.y + joinHint.height / 2 - 844 / 2) < 2,
+    true,
+    "join help dialog is also centered",
+  );
+  await page.screenshot({ path: path.join(evidence, "join-hint.png") });
+  await page.getByRole("button", { name: "知道了", exact: true }).click();
+  await page.getByRole("button", { name: "返回当前任务", exact: true }).click();
   clock += 61000;
   const second = await context(320),
     other = await second.newPage();
@@ -237,6 +343,80 @@ try {
     0,
     "logout clears current identity view",
   );
+  const createdRoom = h.db.sqlite
+    .prepare("SELECT invite_code,id FROM dormitories WHERE name='邮箱界面 QA'")
+    .get();
+  const newMemberContext = await context();
+  const newcomer = await newMemberContext.newPage();
+  newcomer.on("pageerror", (e) => errors.push(e.message));
+  await newcomer.goto(url);
+  await login(newcomer, "new-member@example.invalid");
+  await newcomer.getByTestId("guest-join-dorm").click();
+  await newcomer.getByTestId("guest-invite").fill(createdRoom.invite_code);
+  await newcomer.getByTestId("guest-join-submit").click();
+  await newcomer.getByTestId("guest-member-name").fill("界面测试乙");
+  await newcomer.getByTestId("guest-name-submit").click();
+  await newcomer.getByTestId("marker-confirm").click();
+  await newcomer
+    .getByRole("button", { name: "更多操作", exact: true })
+    .waitFor();
+  const joinedMember = h.db.sqlite
+    .prepare(
+      "SELECT em.creator_verified FROM email_members em JOIN email_accounts e ON e.id=em.account_id WHERE e.email='new-member@example.invalid'",
+    )
+    .get();
+  check(
+    joinedMember.creator_verified,
+    0,
+    "verified newcomer joins by invite and exact name as an ordinary member",
+  );
+  await newMemberContext.close();
+  // A saved pre-email creator identity must go through verification, then bind
+  // with its original full proof, never create a duplicate room or user.
+  const oldRoom = await h
+    .request("/guest/create", {
+      method: "POST",
+      data: { name: "旧创建者迁移 QA", nickname: "旧创建者" },
+    })
+    .then((r) => r.json());
+  const migration = await context();
+  await migration.addInitScript(
+    ({ room }) => {
+      localStorage.setItem(
+        "dorm-guest-view-v1",
+        JSON.stringify({
+          guest_mode: "dorm",
+          invite_code: room.invite_code,
+          member_id: room.member_id,
+        }),
+      );
+      localStorage.setItem(
+        `dorm-chore-device-v1:${room.invite_code}:${room.member_id}`,
+        room.access_token,
+      );
+      localStorage.setItem("dorm-owner-token", room.access_token);
+    },
+    { room: oldRoom },
+  );
+  const old = await migration.newPage();
+  old.on("pageerror", (e) => errors.push(e.message));
+  await old.goto(url);
+  await old.getByLabel("邮箱", { exact: true }).waitFor();
+  check(
+    await old.getByRole("button", { name: "更多操作", exact: true }).count(),
+    0,
+    "saved old credentials cannot bypass the email gate",
+  );
+  await login(old, "legacy-ui@example.invalid", true);
+  await old.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+  check(
+    h.db.sqlite
+      .prepare("SELECT creator_verified FROM email_members WHERE user_id=?")
+      .get(oldRoom.member_id).creator_verified,
+    1,
+    "old creator proves ownership once and retains the same member ID",
+  );
+  await migration.close();
   check(errors, [], "no uncaught browser errors");
   console.log(
     JSON.stringify(

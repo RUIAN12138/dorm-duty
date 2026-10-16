@@ -4,6 +4,7 @@ import runtime from "../runtime/email-runtime.cjs";
 const h = await createHarness();
 let time = Date.now(),
   sent = 0,
+  lastMessage,
   reject = false,
   checks = 0;
 const eq = (a, b) => {
@@ -23,7 +24,8 @@ const options = {
   config,
   now: () => new Date(time),
   autoStart: false,
-  send: async () => {
+  send: async (message) => {
+    lastMessage = message;
     if (reject) throw new Error("injected failure");
     sent++;
   },
@@ -188,6 +190,14 @@ try {
   await delivery.drain();
   eq(status(expired), "cancelled");
   eq(sent, 1);
+  const currentPlan = reminder({ scheduled: true });
+  db.prepare(
+    "INSERT INTO chore_scheduled_reminders(preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids) VALUES (?,2,?,'2026-10-17','08:00',?,?)",
+  ).run(pref, currentPlan, at(), JSON.stringify([task.id]));
+  await delivery.drain();
+  eq(status(currentPlan), "accepted");
+  eq(lastMessage.subject.includes("系统"), true);
+  eq(lastMessage.text.includes("发起人：系统自动提醒"), true);
   console.log(
     `邮件投递取消、重试、过期与重启检查通过 ${checks} 项（隔离传输）`,
   );

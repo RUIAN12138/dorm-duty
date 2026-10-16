@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import {
   emailAccount,
   emailPost,
@@ -10,10 +10,22 @@ import HintPopover from "./HintPopover.vue";
 import { showToast } from "../interaction/notice";
 
 const props = withDefaults(
-  defineProps<{ memberToken?: string; dormId?: number; hideTitle?: boolean }>(),
+  defineProps<{
+    memberToken?: string;
+    ownerToken?: string;
+    memberId?: number;
+    gate?: boolean;
+    dormId?: number;
+    hideTitle?: boolean;
+  }>(),
   { memberToken: "" },
 );
-const emit = defineEmits<{ entered: [entry: EmailEntry]; logout: [] }>();
+const emit = defineEmits<{
+  entered: [entry: EmailEntry];
+  logout: [];
+  recover: [];
+}>();
+const codeField = ref<HTMLInputElement>();
 const email = ref(""),
   code = ref(""),
   challenge = ref(""),
@@ -28,7 +40,11 @@ const timer = setInterval(() => {
 }, 1000);
 onUnmounted(() => clearInterval(timer));
 const linked = computed(() =>
-  emailAccount.rooms.some((room) => room.id === props.dormId),
+  emailAccount.rooms.some(
+    (room) =>
+      room.id === props.dormId ||
+      (props.gate && room.member_id === props.memberId),
+  ),
 );
 const submitLabel = computed(() =>
   busy.value
@@ -61,7 +77,41 @@ async function sendCode() {
     retryAt = Date.now() + result.retry_after * 1000;
     remaining.value = result.retry_after;
     showToast("验证码已发送，请查看邮箱");
+    await nextTick();
+    codeField.value?.focus({ preventScroll: true });
+    codeField.value?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
+}
+async function bindIdentity() {
+  if (linked.value) return;
+  let failure: unknown;
+  const proofs = [
+    ...new Set(
+      [props.memberToken, ...(props.gate ? [props.ownerToken] : [])].filter(
+        Boolean,
+      ),
+    ),
+  ];
+  for (const proof of proofs) {
+    try {
+      await emailPost("bind", {
+        member_token: proof,
+        ...(props.memberId ? { member_id: props.memberId } : {}),
+      });
+      await refreshEmailAccount();
+      return;
+    } catch (e) {
+      failure = e;
+    }
+  }
+  if (failure) throw failure;
+}
+async function enterBoundRoom() {
+  const room = emailAccount.rooms.find(
+    (room) => room.member_id === props.memberId,
+  );
+  if (props.gate && room)
+    emit("entered", await emailPost<EmailEntry>("enter", { dorm_id: room.id }));
 }
 async function verify() {
   await act(async () => {
@@ -74,11 +124,9 @@ async function verify() {
     challenge.value = "";
     code.value = "";
     await refreshEmailAccount();
-    if (props.memberToken) {
-      await emailPost("bind", { member_token: props.memberToken });
-      await refreshEmailAccount();
-    }
     reverify.value = false;
+    if (props.memberToken || props.gate) await bindIdentity();
+    await enterBoundRoom();
     showToast(props.memberToken ? "邮箱已绑定当前身份" : "邮箱验证成功");
   });
 }
@@ -90,8 +138,8 @@ function enter(dormId: number) {
 }
 function bind() {
   void act(async () => {
-    await emailPost("bind", { member_token: props.memberToken });
-    await refreshEmailAccount();
+    await bindIdentity();
+    await enterBoundRoom();
     showToast("当前身份已绑定邮箱");
   });
 }
@@ -115,7 +163,7 @@ function logout() {
   });
 }
 onMounted(() => {
-  void act(refreshEmailAccount);
+  if (!emailAccount.loaded) void act(refreshEmailAccount);
 });
 </script>
 
@@ -151,20 +199,23 @@ onMounted(() => {
             :disabled="busy"
             placeholder="你的邮箱地址"
           />
-          <template v-if="challenge">
-            <label for="account-code">验证码</label>
-            <input
-              id="account-code"
-              v-model="code"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              required
-              :disabled="busy"
-              placeholder="六位验证码"
-            />
-          </template>
+          <Transition name="email-code">
+            <div v-if="challenge" class="email-code-field">
+              <label for="account-code">验证码</label>
+              <input
+                ref="codeField"
+                id="account-code"
+                v-model="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                required
+                :disabled="busy"
+                placeholder="六位验证码"
+              />
+            </div>
+          </Transition>
           <label class="email-check"
             ><input
               v-model="mailEnabled"
@@ -246,7 +297,7 @@ onMounted(() => {
           重新验证邮箱
         </button>
         <div
-          v-if="!memberToken && emailAccount.rooms.length"
+          v-if="(!memberToken || gate) && emailAccount.rooms.length"
           class="email-rooms"
         >
           <button
@@ -287,6 +338,13 @@ onMounted(() => {
       </section>
     </Transition>
     <p v-if="error" class="email-error" role="alert">{{ error }}</p>
+    <button
+      v-if="gate && error.includes('管理权限')"
+      class="email-reverify"
+      @click="emit('recover')"
+    >
+      恢复旧宿舍管理权限
+    </button>
   </div>
 </template>
 
@@ -311,6 +369,49 @@ onMounted(() => {
 .email-panel form {
   display: grid;
   gap: 16px;
+}
+.email-panel form > .guest-primary {
+  margin-top: 24px;
+  min-height: 52px;
+}
+.email-code-field {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+.email-panel input {
+  scroll-margin-block: 32px;
+}
+.email-code-enter-active {
+  transition:
+    opacity 240ms var(--ui-ease-enter),
+    transform 240ms var(--ui-ease-enter);
+}
+.email-code-leave-active {
+  transition:
+    opacity 180ms var(--ui-ease-out),
+    transform 180ms var(--ui-ease-out);
+}
+.email-code-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.email-code-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.email-panel > section {
+  animation: email-arrive 240ms var(--ui-ease-enter) both;
+}
+@keyframes email-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .email-panel label {
   font-size: 16px;

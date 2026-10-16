@@ -58,6 +58,7 @@ jobs:
           node site/scripts/check-harmony-basic-push.mjs
           node site/scripts/check-email-accounts.mjs
           node site/scripts/check-email-delivery.mjs
+          node site/scripts/check-email-entry-policy.mjs
           node site/scripts/check-push-settings.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs

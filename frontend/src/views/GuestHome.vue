@@ -20,6 +20,7 @@ import EmailAccountPanel from "../components/EmailAccountPanel.vue";
 import {
   emailAccount,
   refreshEmailAccount,
+  emailPost,
   type EmailEntry,
 } from "../api/email";
 import { showToast } from "vant";
@@ -61,12 +62,21 @@ const creatingRoom = ref(false),
 const createdInvite = ref("");
 const recoveryOpen = ref(false);
 const emailOpen = ref(false);
+const migrationToken = ref(""),
+  migrationOwnerToken = ref(""),
+  migrationMemberId = ref<number>();
 function needsEmail() {
-  if (!emailAccount.available || emailAccount.loggedIn) return false;
+  if (!emailAccount.required || emailAccount.loggedIn) return false;
   emailOpen.value = true;
   return true;
 }
+function openRecovery() {
+  if (!needsEmail()) recoveryOpen.value = true;
+}
 async function acceptEmailEntry(entry: EmailEntry) {
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
   emailOpen.value = false;
   cancelSelection();
   if (entry.is_creator) {
@@ -390,16 +400,31 @@ function cancelSelection() {
   error.value = "";
 }
 function identityExpired() {
-  if (member.value) saveChoreToken(inviteCode.value, member.value.user_id, "");
+  if (emailAccount.required) {
+    migrationMemberId.value = member.value?.user_id;
+    migrationToken.value = choreToken.value;
+    migrationOwnerToken.value = localStorage.getItem("dorm-owner-token") || "";
+  } else if (member.value)
+    saveChoreToken(inviteCode.value, member.value.user_id, "");
   cancelSelection();
   member.value = null;
   choreToken.value = "";
-  notice.value = "这台设备的身份已失效，请重新输入你的名字。";
+  notice.value = emailAccount.required
+    ? "请用邮箱重新进入宿舍。"
+    : "这台设备的身份已失效，请重新输入你的名字。";
+  if (emailAccount.required) {
+    viewMode.value = "entry";
+    dorm.value = null;
+    void refreshEmailAccount().catch(() => {});
+  }
 }
 function changeMember() {
   cancelSelection();
   choosingMember.value = true;
   notice.value = "";
+}
+function retryEntry() {
+  window.location.reload();
 }
 async function refresh() {
   if (
@@ -466,6 +491,7 @@ async function submitCreate() {
     } catch {
       /* The created room and owner token remain usable after reconnecting. */
     }
+    await refreshEmailAccount().catch(() => {});
     if (!isCurrent(id, signal)) return;
     creatingRoom.value = false;
     createdInvite.value = result.invite_code;
@@ -609,10 +635,8 @@ function removeSharedInvite() {
 }
 watch(() => route.query.invite_code, removeSharedInvite);
 
-onMounted(() => {
-  void refreshEmailAccount().catch(() => {
-    /* Legacy/offline server keeps the current identity. */
-  });
+onMounted(async () => {
+  loading.value = true;
   const saved = storedChoice();
   const sharedLink = route.query.invite_code !== undefined;
   // Only manual join/create or a previous room choice grants the UI entry.
@@ -620,7 +644,35 @@ onMounted(() => {
   const code = saved.invite_code;
   removeSharedInvite();
   inviteCode.value = code;
-  if (code || saved.guest_mode === "demo")
+  try {
+    await refreshEmailAccount();
+  } catch {
+    loading.value = false;
+    error.value = "暂时无法验证身份，请联网重试。";
+    return;
+  }
+  loading.value = false;
+  if (code && saved.guest_mode !== "demo" && emailAccount.required) {
+    const linked = emailAccount.rooms.find((room) => room.invite_code === code);
+    if (emailAccount.loggedIn && linked) {
+      try {
+        await acceptEmailEntry(
+          await emailPost<EmailEntry>("enter", { dorm_id: linked.id }),
+        );
+      } catch (e) {
+        error.value = (e as Error).message;
+      }
+    } else {
+      // Keep original credentials privately for this one-time migration. Do not
+      // load the board, clear proof, or show a roster before email verification.
+      migrationMemberId.value = saved.member_id;
+      migrationToken.value = saved.member_id
+        ? savedChoreToken(code, saved.member_id)
+        : "";
+      migrationOwnerToken.value =
+        localStorage.getItem("dorm-owner-token") || "";
+    }
+  } else if (code || saved.guest_mode === "demo")
     void loadDorm(
       code,
       code === saved.invite_code ? saved.member_id : undefined,
@@ -648,9 +700,8 @@ onUnmounted(() => {
         !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
     }"
   >
-    <header v-if="!navVisible" class="guest-header">
+    <header v-if="!navVisible && viewMode === 'demo'" class="guest-header">
       <div class="guest-brand-line">
-        <span class="guest-brand">轮到<span aria-hidden="true">.</span></span>
         <span
           v-if="viewMode === 'demo'"
           class="guest-demo-badge"
@@ -670,7 +721,11 @@ onUnmounted(() => {
         <h1 id="create-title">创建你的宿舍</h1>
         <HintPopover
           title="创建者权限"
-          text="管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。"
+          :text="
+            emailAccount.loggedIn
+              ? '用当前邮箱创建，自动拥有创建者权限。换设备后用同一邮箱登录即可。'
+              : '管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。'
+          "
         />
       </div>
       <form @submit.prevent="submitCreate">
@@ -729,22 +784,13 @@ onUnmounted(() => {
       aria-labelledby="switch-title"
     >
       <div class="entry-heading">
-        <h1 id="switch-title">
-          {{ savedDorms.length ? "切换宿舍" : "加入宿舍" }}
-        </h1>
+        <h1 id="switch-title">加入新宿舍</h1>
         <HintPopover
           title="邀请码在哪里？"
           label="邀请码帮助"
           text="向宿舍创建者索取邀请码，再输入名单中你的完整名字即可进入。"
         />
       </div>
-      <JoinedDorms
-        :rooms="savedDorms"
-        :disabled="loading"
-        :current="inviteCode"
-        @select="returnToDorm"
-      />
-      <h2 v-if="savedDorms.length" class="join-new-title">加入新宿舍</h2>
       <form @submit.prevent="switchDorm()">
         <label for="guest-invite" class="invite-label">宿舍邀请码</label>
         <input
@@ -773,6 +819,12 @@ onUnmounted(() => {
           {{ member ? "返回当前任务" : "取消" }}
         </button>
       </div>
+      <JoinedDorms
+        :rooms="savedDorms"
+        :disabled="loading"
+        :current="inviteCode"
+        @select="returnToDorm"
+      />
     </section>
     <template v-else>
       <div v-if="loading" class="guest-loading" role="status">
@@ -781,7 +833,7 @@ onUnmounted(() => {
       <div v-if="error && !dorm" class="guest-error" role="alert">
         <h1>暂时无法查看</h1>
         <p>{{ error }}</p>
-        <button class="guest-primary" :disabled="loading" @click="refresh">
+        <button class="guest-primary" :disabled="loading" @click="retryEntry">
           重新加载
         </button>
       </div>
@@ -792,25 +844,30 @@ onUnmounted(() => {
       >
         <h1 id="entry-title">
           {{
-            emailAccount.available && !emailAccount.loggedIn
+            emailAccount.required && !emailAccount.loggedIn
               ? "欢迎来到轮到"
               : "先找到你的宿舍"
           }}
         </h1>
         <EmailAccountPanel
-          v-if="(emailAccount.available || emailAccount.loggedIn) && !emailOpen"
+          v-if="(emailAccount.required || emailAccount.loggedIn) && !emailOpen"
           hide-title
+          :member-token="migrationToken"
+          :owner-token="migrationOwnerToken"
+          :member-id="migrationMemberId"
+          :gate="!!migrationMemberId"
+          @recover="openRecovery"
           @entered="acceptEmailEntry"
           @logout="emailLogout"
         />
         <JoinedDorms
-          v-if="!emailAccount.available || emailAccount.loggedIn"
+          v-if="!emailAccount.required || emailAccount.loggedIn"
           :rooms="savedDorms"
           :disabled="loading"
           @select="returnToDorm"
         />
         <div
-          v-if="!emailAccount.available || emailAccount.loggedIn"
+          v-if="!emailAccount.required || emailAccount.loggedIn"
           class="guest-entry-actions"
         >
           <button
@@ -839,7 +896,7 @@ onUnmounted(() => {
           <button
             class="guest-demo-link"
             data-testid="guest-recover-owner"
-            @click="recoveryOpen = true"
+            @click="openRecovery"
           >
             恢复管理权限
           </button>
@@ -1116,6 +1173,15 @@ onUnmounted(() => {
   flex-direction: column;
   justify-content: center;
   padding: 48px 0 96px;
+}
+.is-entry-flow .guest-switch-form {
+  justify-content: center;
+  padding: 32px 0 64px;
+}
+.guest-page .guest-switch-form form > .guest-primary {
+  position: relative;
+  bottom: auto;
+  margin-top: 48px;
 }
 .guest-entry h1 {
   text-align: center;
