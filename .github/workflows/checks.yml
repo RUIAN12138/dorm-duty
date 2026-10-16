@@ -36,6 +36,7 @@ jobs:
           node site/scripts/check-worker.mjs
       - name: Verify business and notification behavior
         run: |
+          python3 scripts/test_native_setup.py
           node site/scripts/check-cloud-backend.mjs
           node site/scripts/check-name-entry.mjs
           node site/scripts/check-history.mjs
@@ -95,7 +96,13 @@ jobs:
           java-version: "17"
       - name: Build and lint Android preview
         working-directory: native/android
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+        run: |
+          ./gradlew --no-daemon :app:checkReleaseReadiness :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+          if ./gradlew --no-daemon :app:assembleRelease > "$RUNNER_TEMP/dorm-release-gate.log" 2>&1; then
+            echo "Release unexpectedly built without the fixed signing configuration" >&2
+            exit 1
+          fi
+          grep -q '发布构建被阻止' "$RUNNER_TEMP/dorm-release-gate.log"
       - name: Keep Android preview package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

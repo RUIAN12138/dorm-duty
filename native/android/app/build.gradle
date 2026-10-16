@@ -16,6 +16,7 @@ android {
  buildFeatures { buildConfig true }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+apply from: rootProject.file('release-signing.gradle')
 dependencies {
  implementation 'androidx.webkit:webkit:1.12.1'
  implementation 'cn.jiguang.sdk:jpush:5.6.0'
