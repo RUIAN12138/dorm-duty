@@ -1220,3 +1220,15 @@ h1 small {
   display: none !important;
 }
 </style>
+
+<style scoped>
+/* Date feedback changes the cell surface, never the calendar geometry. */
+.chore-calendar-grid button {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease !important;
+}
+.chore-calendar-grid button:active:not(:disabled) {
+  background: #e7e7e7;
+}
+</style>
