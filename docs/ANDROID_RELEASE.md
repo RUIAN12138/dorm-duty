@@ -1,15 +1,15 @@
 # Android 最小可用发布路径
 
-2026-10-16 核对基线：main `bd0c463`，网页已发布 `v40r1`。Android 1.2.1 修复缺失的 JCommonService 子类注册，并新增合并 Manifest 检查。Android 15 专用模拟器已覆盖安装、保留正式验收宿舍身份、授权通知并成功注册设备。测试通知仍被极光以 HTTP 401 拒绝，设备没有收到；固定签名与厂商真机验收仍未完成。
+2026-10-16 核对基线：main `8fe460c`，网页已发布 `v40r1`。Android 1.2.1 已在 Android 15 专用模拟器完成注册、系统测试通知标题和正文显示、点击返回正确宿舍，以及强制停止后手动启动保留身份。服务端 AppKey、客户端与 CI 构建变量已同步；固定发布签名、厂商通道和真机验收仍未完成。具体观察见 [安卓推送验收记录](ANDROID_PUSH_ACCEPTANCE.md)。
 
 ## 阻塞与任务
 
 | 工作 | 当前状态 | 验收入口 |
 | --- | --- | --- |
-| 服务端极光配置 | Android 配置已私密写入、权限 600、服务账号可读并重启；发送返回 401，设备查询返回 401 / 7004，需核对同一应用的密钥配对；HarmonyOS 尚未配置 | [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) |
+| 服务端极光配置 | Android 配置已匹配并重启，设备查询 200；测试任务 accepted、模拟器实际显示正文；两位成员互发仍待验收，HarmonyOS 服务端仍未配置 | [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) |
 | 厂商离线通道 | 基础 SDK 已有，小米 / 华为 Android / vivo 插件和平台配置待做 | [#38](https://github.com/RUIAN12138/dorm-duty/issues/38) |
-| 真机验收 | Android 15 模拟器已安装、恢复身份并注册推送；通知显示 / 点击跳转尚未通过，模拟器不能代替厂商锁屏验收 | [#39](https://github.com/RUIAN12138/dorm-duty/issues/39) |
-| 固定签名与覆盖升级 | Gradle 接入与未配置拦截已实现；用户私钥与实际覆盖升级待验收 | [#40](https://github.com/RUIAN12138/dorm-duty/issues/40) |
+| 真机验收 | Android 15 模拟器通知标题 / 正文 / 点击恢复宿舍已通过；实际机型、锁屏、后台限制及通知任务路由待验收 | [#39](https://github.com/RUIAN12138/dorm-duty/issues/39) |
+| 固定签名与覆盖升级 | Gradle 接入与未配置拦截已实现；本机 debug 覆盖安装保留身份；固定发布私钥、release 签名与覆盖升级待验收 | [#40](https://github.com/RUIAN12138/dorm-duty/issues/40) |
 | 本地提醒补充 | 即时催促以推送为主，本地只补已知时间的提醒；实现待做 | [#41](https://github.com/RUIAN12138/dorm-duty/issues/41) |
 
 ## 1. 在服务器终端填写极光配置
@@ -62,7 +62,9 @@ CI 通过仓库 Actions 变量 `DORM_ANDROID_JPUSH_APPKEY` 注入公开 Android 
 
 按 Issue #39 记录机型 / 系统 / WebView / 包名 / 签名指纹，以及身份恢复、通知正文与跳转、返回、输入键盘、系统栏、横屏和网络恢复。每条通知记录“服务器接受 / 设备显示 / 点击后目标页”三个结果。没有设备观察时标“待验收”，不能用编译通过替代。
 
-本轮使用独立验收宿舍和测试成员，没有向真实室友发送消息或修改值日记录。1.2.0 的设备注册超时被日志定位为缺少 JCommonService；1.2.1 补齐后成功绑定一台 Android 设备。首次测试的队列结果为 `failed / HTTP 401`，只读设备查询为 `401 / 7004`。按[极光设备管理文档](https://docs.jiguang.cn/jpush/server/push/rest_api_v3_device)，需核对 AppKey 与 Master Secret；配置文件可读或格式通过不等于平台鉴权通过。用户在服务器私密修正后重启，再发送一条新测试，不重放旧的失败任务。
+本轮使用独立验收宿舍和测试成员，没有向真实室友发送消息或修改值日记录。1.2.0 缺少 JCommonService 导致注册超时；1.2.1 补齐后注册成功，但旧 AppKey 与已保存密钥不配对，发送返回 401。所有者提供匹配的 AppKey 后，SDK 又明确报告该应用未启用 Android（1009）；所有者添加 Android 平台后，重新注册和设备查询成功。服务器备份、切换到匹配 AppKey 并重启后，新测试任务于 2026-10-16 09:53:18 UTC 被接受，模拟器实际显示完整正文，点击返回验收宿舍。旧失败任务保留原状态，没有重放。
+
+本次验证的是测试通知指向首页的跳转，不代替两位成员互发、抬水提醒指向抬水页或厂商后台送达。原有 62 条完成记录与历史表摘要在配置更新前后一致。
 
 CI 在 debug 构建后检查实际合并 Manifest 的自定义服务、内部可见性、独立进程、SDK 发现 action、接收器和通知权限。本机含公开 AppKey 的体验包额外执行 `--require-app-key` 检查；这些静态检查与实际送达证据分别记录。
 
