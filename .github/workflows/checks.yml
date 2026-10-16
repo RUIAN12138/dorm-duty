@@ -66,6 +66,7 @@ jobs:
         run: |
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
+          node scripts/check-list-collapse-sync.mjs
           DORM_TOUCH=1 node scripts/check-focus-compact.mjs
           node scripts/check-completion-experience.mjs
           node scripts/check-round-calendar-motion.mjs
