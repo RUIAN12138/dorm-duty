@@ -267,7 +267,16 @@ function sectionSwipeCancel(event: PointerEvent) {
   if (sectionPointer?.id === event.pointerId) resetSectionSwipe();
 }
 function sectionHidden() {
-  if (document.hidden) resetSectionSwipe();
+  if (document.hidden) {
+    resetSectionSwipe();
+    // Suspended mobile fetches may otherwise hold `loading` through resume.
+    // Only the read request is cancelled; task mutations have their own flow.
+    if (loading.value) {
+      ++requestId;
+      controller?.abort();
+      loading.value = false;
+    }
+  }
 }
 onMounted(() => {
   window.addEventListener("blur", resetSectionSwipe);
@@ -625,6 +634,7 @@ function scheduleMidnight(serverTime: string) {
   midnight = setTimeout(() => void load(), Math.max(1000, next - now + 1500));
 }
 async function load(): Promise<boolean> {
+  if (document.hidden && board.value) return false;
   controller?.abort();
   const requestController = new AbortController();
   controller = requestController;
@@ -1010,6 +1020,10 @@ function visibleRefresh() {
     void load();
 }
 watch(month, () => void load());
+watch(
+  () => props.token,
+  () => void load(),
+);
 const removeNativeReady = onNativePushReady(() => {
   if (!props.demo) void syncMemberPush(props.token).catch(() => {});
 });
@@ -1019,6 +1033,7 @@ onMounted(() => {
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
+  window.addEventListener("pageshow", visibleRefresh);
 });
 onUnmounted(() => {
   alive = false;
@@ -1032,6 +1047,7 @@ onUnmounted(() => {
   document.removeEventListener("visibilitychange", visibleRefresh);
   window.removeEventListener("focus", visibleRefresh);
   window.removeEventListener("online", visibleRefresh);
+  window.removeEventListener("pageshow", visibleRefresh);
 });
 </script>
 <template>

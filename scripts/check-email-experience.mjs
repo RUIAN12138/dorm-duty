@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import https from "node:https";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chromium,
   webkit,
@@ -262,12 +263,186 @@ try {
     1,
     "new dorm automatically binds its creator to verified account",
   );
+  // Reproduce a suspended page carrying a revoked member grant while its email
+  // cookie remains valid. Keep the actual board DOM through asynchronous repair.
+  const saved = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("dorm-guest-view-v1")),
+  );
+  const previousToken = await page.evaluate(
+    ({ invite_code, member_id }) =>
+      localStorage.getItem(`dorm-chore-device-v1:${invite_code}:${member_id}`),
+    saved,
+  );
+  h.db.sqlite
+    .prepare("DELETE FROM email_grants WHERE token_hash=?")
+    .run(createHash("sha256").update(previousToken).digest("hex"));
+  let recoverRequests = 0;
+  await page.route("**/email/enter", async (route) => {
+    recoverRequests++;
+    await new Promise((r) => setTimeout(r, 350));
+    await route.continue();
+  });
+  await page.evaluate(() => {
+    window.originalBoard = document.querySelector(
+      '[data-testid="chore-board"]',
+    );
+    window.resumeFrames = [];
+    window.resumeDone = new Promise((resolve) => {
+      const start = performance.now();
+      function frame() {
+        window.resumeFrames.push({
+          same:
+            window.originalBoard ===
+            document.querySelector('[data-testid="chore-board"]'),
+          spinner: !!document.querySelector(".guest-loading,.board-loading"),
+        });
+        if (performance.now() - start < 1100) requestAnimationFrame(frame);
+        else resolve();
+      }
+      requestAnimationFrame(frame);
+    });
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.evaluate(() => window.resumeDone);
+  await page.waitForFunction(
+    ({ invite_code, member_id, old }) =>
+      localStorage.getItem(
+        `dorm-chore-device-v1:${invite_code}:${member_id}`,
+      ) !== old,
+    { ...saved, old: previousToken },
+  );
+  check(
+    recoverRequests,
+    1,
+    "foreground events share one identity recovery request",
+  );
+  check(
+    await page.evaluate(() =>
+      window.resumeFrames.every((f) => f.same && !f.spinner),
+    ),
+    true,
+    "identity recovery keeps the same task DOM without a loading flash",
+  );
+  check(
+    await page
+      .getByRole("heading", { name: "暂时无法查看", exact: true })
+      .count(),
+    0,
+    "expired member grant never strands the user on a reload-only error",
+  );
+  await page.unroute("**/email/enter");
+  await first.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.locator(".chore-inline-error").waitFor();
+  check(
+    await page.evaluate(
+      () =>
+        window.originalBoard ===
+        document.querySelector('[data-testid="chore-board"]'),
+    ),
+    true,
+    "offline resume preserves current screen and identity",
+  );
+  await first.setOffline(false);
+  const resumedRead = page.waitForResponse(
+    (r) => r.url().includes("/chores/board?") && r.status() === 200,
+  );
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("online"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await resumedRead;
+  await page.locator(".chore-inline-error").waitFor({ state: "hidden" });
+  check(
+    await page
+      .getByRole("heading", { name: "暂时无法查看", exact: true })
+      .count(),
+    0,
+    "reconnected foreground recovers without manually reloading",
+  );
+  let releaseSuspended, suspendedStarted;
+  const suspended = new Promise((resolve) => {
+    suspendedStarted = resolve;
+  });
+  const releaseRead = new Promise((resolve) => {
+    releaseSuspended = resolve;
+  });
+  const boardPattern = /\/chores\/board\?/;
+  let reads = 0;
+  await page.route(boardPattern, async (route) => {
+    if (++reads === 1) {
+      suspendedStarted();
+      await releaseRead;
+    }
+    try {
+      await route.continue();
+    } catch {
+      /* Hidden read was aborted. */
+    }
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await suspended;
+  const freshRead = page.waitForResponse(
+    (r) => r.url().includes("/chores/board?") && r.status() === 200,
+  );
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    delete document.hidden;
+    delete document.visibilityState;
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await freshRead;
+  releaseSuspended();
+  await page.unroute(boardPattern);
+  check(
+    reads >= 2,
+    true,
+    "suspended read is cancelled and a fresh request starts on resume",
+  );
+  check(
+    await page.evaluate(
+      () =>
+        window.originalBoard ===
+        document.querySelector('[data-testid="chore-board"]'),
+    ),
+    true,
+    "suspended request recovery preserves the task component",
+  );
+  const beforeReload = await page.evaluate(
+    ({ invite_code, member_id }) =>
+      localStorage.getItem(`dorm-chore-device-v1:${invite_code}:${member_id}`),
+    saved,
+  );
   await page.reload();
   await page.getByRole("button", { name: "更多操作", exact: true }).waitFor();
   check(
     (await page.getByText("邮箱界面 QA", { exact: true }).count()) > 0,
     true,
     "refresh restores current dorm",
+  );
+  check(
+    await page.evaluate(
+      ({ invite_code, member_id }) =>
+        localStorage.getItem(
+          `dorm-chore-device-v1:${invite_code}:${member_id}`,
+        ),
+      saved,
+    ),
+    beforeReload,
+    "page reload reuses the active credential",
   );
   // Joining a new room is above the remembered-room list, with no dead top space.
   await page.getByRole("button", { name: "更多操作", exact: true }).click();
@@ -415,6 +590,30 @@ try {
       .get(oldRoom.member_id).creator_verified,
     1,
     "old creator proves ownership once and retains the same member ID",
+  );
+  h.db.sqlite
+    .prepare(
+      "DELETE FROM email_sessions WHERE account_id=(SELECT id FROM email_accounts WHERE email='legacy-ui@example.invalid')",
+    )
+    .run();
+  await old.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+  });
+  await old.getByLabel("邮箱", { exact: true }).waitFor();
+  await old.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+  });
+  await old.waitForTimeout(200);
+  check(
+    await old
+      .getByRole("heading", { name: "暂时无法查看", exact: true })
+      .count(),
+    0,
+    "expired email session opens verification instead of a reload-only dead end",
   );
   await migration.close();
   check(errors, [], "no uncaught browser errors");

@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { choreRequest } from "./chores";
+import { choreRequest, savedChoreToken } from "./chores";
 
 export interface EmailRoom {
   id: number;
@@ -28,6 +28,14 @@ export const emailPost = <T>(path: string, values: unknown = {}) =>
     headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
   });
+export function enterEmailRoom(dormId: number) {
+  const room = emailAccount.rooms.find((room) => room.id === dormId);
+  const token = room ? savedChoreToken(room.invite_code, room.member_id) : "";
+  return emailPost<EmailEntry>("enter", {
+    dorm_id: dormId,
+    ...(token ? { member_token: token } : {}),
+  });
+}
 export async function refreshEmailAccount() {
   const [config, account] = await Promise.all([
     choreRequest<{ available: boolean; registration_required: boolean }>(

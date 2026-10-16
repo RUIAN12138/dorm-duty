@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import {
   emailAccount,
   emailPost,
+  enterEmailRoom,
   refreshEmailAccount,
   type EmailEntry,
 } from "../api/email";
@@ -110,8 +111,7 @@ async function enterBoundRoom() {
   const room = emailAccount.rooms.find(
     (room) => room.member_id === props.memberId,
   );
-  if (props.gate && room)
-    emit("entered", await emailPost<EmailEntry>("enter", { dorm_id: room.id }));
+  if (props.gate && room) emit("entered", await enterEmailRoom(room.id));
 }
 async function verify() {
   await act(async () => {
@@ -132,7 +132,7 @@ async function verify() {
 }
 function enter(dormId: number) {
   void act(async () => {
-    const result = await emailPost<EmailEntry>("enter", { dorm_id: dormId });
+    const result = await enterEmailRoom(dormId);
     emit("entered", result);
   });
 }

@@ -12737,34 +12737,43 @@ function createEmailRuntime(db, {
       LEFT JOIN member_marks mm ON mm.dorm_id=em.dorm_id AND mm.user_id=em.user_id WHERE em.account_id=? ORDER BY em.bound_at DESC`
     ).all(who.id);
   }
-  function grant(who, dormId) {
+  function grant(who, dormId, existingToken) {
     const room = rooms(who).find((r) => r.id === dormId);
     if (!room) fail(403, "\u8BE5\u90AE\u7BB1\u6CA1\u6709\u8FD9\u4E2A\u5BBF\u820D\u7684\u6709\u6548\u8EAB\u4EFD");
-    const token = secret(), digest = hash(token), at = stamp(), expires = who.session_expires;
-    const full = Number(room.is_creator);
-    transaction(() => {
-      const old = sql.prepare(
-        `SELECT g.token_hash,g.full_session FROM email_grants g LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
-        LEFT JOIN sessions s ON s.token_hash=g.token_hash WHERE g.email_session_hash=? AND COALESCE(m.user_id,s.user_id)=?`
-      ).all(who.session_hash, room.member_id);
-      for (const row of old)
+    if (existingToken !== void 0 && (typeof existingToken !== "string" || !/^[a-f0-9]{64}$/i.test(existingToken)))
+      fail(422, "\u5BBF\u820D\u51ED\u636E\u683C\u5F0F\u65E0\u6548");
+    const full = Number(room.is_creator), at = stamp();
+    const old = sql.prepare(
+      `SELECT g.token_hash,g.full_session,COALESCE(m.expires_at,s.expires_at) AS expires_at
+      FROM email_grants g LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
+      LEFT JOIN sessions s ON s.token_hash=g.token_hash WHERE g.email_session_hash=? AND COALESCE(m.user_id,s.user_id)=?
+      ORDER BY COALESCE(m.created_at,s.created_at),g.rowid`
+    ).all(who.session_hash, room.member_id);
+    const reused = existingToken && old.find(
+      (row) => row.token_hash === hash(existingToken) && row.full_session === full && row.expires_at > at
+    );
+    const token = reused ? existingToken : secret(), digest = hash(token), expires = who.session_expires;
+    if (!reused)
+      transaction(() => {
+        const remove = old.slice(0, Math.max(0, old.length - 31));
+        for (const row of remove)
+          sql.prepare(
+            `DELETE FROM ${row.full_session ? "sessions" : "member_sessions"} WHERE token_hash=?`
+          ).run(row.token_hash);
+        for (const row of remove)
+          sql.prepare("DELETE FROM email_grants WHERE token_hash=?").run(row.token_hash);
+        if (full)
+          sql.prepare(
+            "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')"
+          ).run(digest, room.member_id, at, expires);
+        else
+          sql.prepare(
+            "INSERT INTO member_sessions(token_hash,user_id,dorm_id,created_at,expires_at) VALUES (?,?,?,?,?)"
+          ).run(digest, room.member_id, room.id, at, expires);
         sql.prepare(
-          `DELETE FROM ${row.full_session ? "sessions" : "member_sessions"} WHERE token_hash=?`
-        ).run(row.token_hash);
-      for (const row of old)
-        sql.prepare("DELETE FROM email_grants WHERE token_hash=?").run(row.token_hash);
-      if (full)
-        sql.prepare(
-          "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')"
-        ).run(digest, room.member_id, at, expires);
-      else
-        sql.prepare(
-          "INSERT INTO member_sessions(token_hash,user_id,dorm_id,created_at,expires_at) VALUES (?,?,?,?,?)"
-        ).run(digest, room.member_id, room.id, at, expires);
-      sql.prepare(
-        "INSERT INTO email_grants(token_hash,email_session_hash,full_session) VALUES (?,?,?)"
-      ).run(digest, who.session_hash, full);
-    });
+          "INSERT INTO email_grants(token_hash,email_session_hash,full_session) VALUES (?,?,?)"
+        ).run(digest, who.session_hash, full);
+      });
     return {
       ...room,
       access_token: token,
@@ -12912,8 +12921,8 @@ function createEmailRuntime(db, {
       return reply({ ok: true });
     }
     if (pathname === "/email/enter") {
-      const data = await input(request, ["dorm_id"]);
-      return reply(grant(who, data.dorm_id));
+      const data = await input(request, ["dorm_id", "member_token"]);
+      return reply(grant(who, data.dorm_id, data.member_token));
     }
     if (pathname === "/email/preferences") {
       const data = await input(request, ["mail_enabled"]);

@@ -304,50 +304,70 @@ export function createEmailRuntime(
       )
       .all(who.id);
   }
-  function grant(who, dormId) {
+  function grant(who, dormId, existingToken) {
     const room = rooms(who).find((r) => r.id === dormId);
     if (!room) fail(403, "该邮箱没有这个宿舍的有效身份");
-    const token = secret(),
+    if (
+      existingToken !== undefined &&
+      (typeof existingToken !== "string" ||
+        !/^[a-f0-9]{64}$/i.test(existingToken))
+    )
+      fail(422, "宿舍凭据格式无效");
+    const full = Number(room.is_creator),
+      at = stamp();
+    const old = sql
+      .prepare(
+        `SELECT g.token_hash,g.full_session,COALESCE(m.expires_at,s.expires_at) AS expires_at
+      FROM email_grants g LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
+      LEFT JOIN sessions s ON s.token_hash=g.token_hash WHERE g.email_session_hash=? AND COALESCE(m.user_id,s.user_id)=?
+      ORDER BY COALESCE(m.created_at,s.created_at),g.rowid`,
+      )
+      .all(who.session_hash, room.member_id);
+    const reused =
+      existingToken &&
+      old.find(
+        (row) =>
+          row.token_hash === hash(existingToken) &&
+          row.full_session === full &&
+          row.expires_at > at,
+      );
+    const token = reused ? existingToken : secret(),
       digest = hash(token),
-      at = stamp(),
       expires = who.session_expires;
-    const full = Number(room.is_creator);
-    transaction(() => {
-      // One generated session per email login and room; ordinary polls do not accumulate tokens.
-      const old = sql
-        .prepare(
-          `SELECT g.token_hash,g.full_session FROM email_grants g LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
-        LEFT JOIN sessions s ON s.token_hash=g.token_hash WHERE g.email_session_hash=? AND COALESCE(m.user_id,s.user_id)=?`,
-        )
-        .all(who.session_hash, room.member_id);
-      for (const row of old)
+    if (!reused)
+      transaction(() => {
+        // Shared cookies do not imply a single browser window. A returning window
+        // must not revoke another active window's identity. Reuse on reload and
+        // cap lost-window credentials instead of rotating every room entry.
+        const remove = old.slice(0, Math.max(0, old.length - 31));
+        for (const row of remove)
+          sql
+            .prepare(
+              `DELETE FROM ${row.full_session ? "sessions" : "member_sessions"} WHERE token_hash=?`,
+            )
+            .run(row.token_hash);
+        for (const row of remove)
+          sql
+            .prepare("DELETE FROM email_grants WHERE token_hash=?")
+            .run(row.token_hash);
+        if (full)
+          sql
+            .prepare(
+              "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')",
+            )
+            .run(digest, room.member_id, at, expires);
+        else
+          sql
+            .prepare(
+              "INSERT INTO member_sessions(token_hash,user_id,dorm_id,created_at,expires_at) VALUES (?,?,?,?,?)",
+            )
+            .run(digest, room.member_id, room.id, at, expires);
         sql
           .prepare(
-            `DELETE FROM ${row.full_session ? "sessions" : "member_sessions"} WHERE token_hash=?`,
+            "INSERT INTO email_grants(token_hash,email_session_hash,full_session) VALUES (?,?,?)",
           )
-          .run(row.token_hash);
-      for (const row of old)
-        sql
-          .prepare("DELETE FROM email_grants WHERE token_hash=?")
-          .run(row.token_hash);
-      if (full)
-        sql
-          .prepare(
-            "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')",
-          )
-          .run(digest, room.member_id, at, expires);
-      else
-        sql
-          .prepare(
-            "INSERT INTO member_sessions(token_hash,user_id,dorm_id,created_at,expires_at) VALUES (?,?,?,?,?)",
-          )
-          .run(digest, room.member_id, room.id, at, expires);
-      sql
-        .prepare(
-          "INSERT INTO email_grants(token_hash,email_session_hash,full_session) VALUES (?,?,?)",
-        )
-        .run(digest, who.session_hash, full);
-    });
+          .run(digest, who.session_hash, full);
+      });
     return {
       ...room,
       access_token: token,
@@ -556,8 +576,8 @@ export function createEmailRuntime(
       return reply({ ok: true });
     }
     if (pathname === "/email/enter") {
-      const data = await input(request, ["dorm_id"]);
-      return reply(grant(who, data.dorm_id));
+      const data = await input(request, ["dorm_id", "member_token"]);
+      return reply(grant(who, data.dorm_id, data.member_token));
     }
     if (pathname === "/email/preferences") {
       const data = await input(request, ["mail_enabled"]);
