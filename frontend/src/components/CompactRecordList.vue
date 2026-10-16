@@ -53,6 +53,17 @@ const isOpen = (date: string) =>
     ? collapsedToday.value !== date
     : expanded.value.has(date);
 let positions: { el: HTMLElement; top: number }[] = [];
+let pendingCollapseDuration: number | undefined;
+const activeCollapses = new Map<HTMLElement, number>();
+const layoutAnimations = new Map<HTMLElement, Animation>();
+function followCollapse(
+  element: HTMLElement,
+  distance: number,
+  duration: number,
+) {
+  activeCollapses.set(element, distance);
+  pendingCollapseDuration = duration;
+}
 function captureLayout() {
   positions = [
     ...(root.value?.querySelectorAll<HTMLElement>(".record-stack") || []),
@@ -61,23 +72,59 @@ function captureLayout() {
 function settleLayout() {
   const before = positions;
   positions = [];
+  const collapseDuration = pendingCollapseDuration;
+  pendingCollapseDuration = undefined;
+  for (const element of activeCollapses.keys())
+    if (!element.isConnected || !element.classList.contains("is-collapsing"))
+      activeCollapses.delete(element);
+  for (const [element, animation] of layoutAnimations)
+    if (!element.isConnected) {
+      animation.cancel();
+      layoutAnimations.delete(element);
+    }
+  for (const { el } of before) {
+    layoutAnimations.get(el)?.cancel();
+    layoutAnimations.delete(el);
+  }
   if (!motionAllowed()) return;
   // Measure the new layout without an earlier FLIP transform. The saved
   // positions already include its current visual pose when interrupted.
-  for (const { el } of before) el.getAnimations().forEach((a) => a.cancel());
+  const groups = [
+    ...(root.value?.querySelectorAll<HTMLElement>(".record-stack") || []),
+  ];
+  let reserved = 0;
+  const targets = new Map<HTMLElement, number>();
+  for (const group of groups) {
+    targets.set(group, -reserved);
+    reserved += activeCollapses.get(group) || 0;
+  }
   const moves = before.map(({ el, top }) => ({
     el,
     delta: top - el.getBoundingClientRect().top,
   }));
   for (const { el, delta } of moves) {
-    if (Math.abs(delta) > 1)
-      el.animate(
+    const target = targets.get(el) || 0;
+    if (Math.abs(delta - target) > 1) {
+      const animation = el.animate(
         [
           { transform: `translate3d(0,${delta}px,0)` },
-          { transform: "translate3d(0,0,0)" },
+          { transform: `translate3d(0,${target}px,0)` },
         ],
-        { duration: 280, easing: "cubic-bezier(.22,1,.36,1)" },
+        {
+          duration: collapseDuration || 280,
+          easing: "cubic-bezier(.22,1,.36,1)",
+          fill: "both",
+        },
       );
+      // Hold the visually collapsed pose until RecordTimeline releases its
+      // scroll reservation, then FLIP to the identical actual layout.
+      layoutAnimations.set(el, animation);
+      animation.onfinish = () => {
+        if (target || layoutAnimations.get(el) !== animation) return;
+        animation.cancel();
+        layoutAnimations.delete(el);
+      };
+    }
   }
 }
 function toggle(date: string) {
@@ -105,7 +152,12 @@ onMounted(() => {
   });
   if (root.value) observer.observe(root.value);
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  layoutAnimations.forEach((animation) => animation.cancel());
+  layoutAnimations.clear();
+  activeCollapses.clear();
+});
 watch(
   () => props.month,
   () => (page.value = 0),
@@ -155,6 +207,7 @@ const label = (date: string) =>
         @toggle="toggle(group.date)"
         @before-layout="captureLayout"
         @after-layout="settleLayout"
+        @collapse-start="followCollapse"
         @edit="emit('edit', $event)"
         @undo="emit('undo', $event)"
       />

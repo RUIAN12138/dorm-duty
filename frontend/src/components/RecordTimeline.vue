@@ -24,6 +24,7 @@ const emit = defineEmits<{
   edit: [record: ChoreRecord];
   "before-layout": [];
   "after-layout": [];
+  "collapse-start": [element: HTMLElement, distance: number, duration: number];
 }>();
 const root = ref<HTMLElement>();
 const collapsing = ref(false);
@@ -42,13 +43,21 @@ watch(
     if (!previous) return;
     // Keep the scroll extent until the last visible card has faded away.
     // Removing it immediately clamps scrollTop before FLIP can compensate.
-    body.style.minHeight = `${body.getBoundingClientRect().height}px`;
+    const height = body.getBoundingClientRect().height;
+    body.style.minHeight = `${height}px`;
     collapsing.value = true;
     const top = body.getBoundingClientRect().top;
     body.querySelectorAll(".record-stagger").forEach((el) => {
       const box = el.getBoundingClientRect();
       positions.set(el, { top: box.top - top, width: box.width });
     });
+    if (root.value)
+      emit(
+        "collapse-start",
+        root.value,
+        height,
+        260 + Math.min(Math.max(0, props.records.length - 1), 5) * 18,
+      );
   },
   { flush: "pre" },
 );
