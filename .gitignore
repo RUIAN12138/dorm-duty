@@ -47,6 +47,8 @@ native/android/build/
 native/android/app/build/
 native/android/local.properties
 native/android/gradle-local.properties
+**/android-release.properties
+**/release-signing.properties
 native/android/app/agconnect-services.json
 native/android/app/google-services.json
 native/harmony/oh_modules/
