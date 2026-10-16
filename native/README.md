@@ -49,7 +49,9 @@ HarmonyOS 需要 DevEco Studio 与 SDK 6.1.1：在 `harmony` 执行 `ohpm instal
 
 ## 1.2.1 Android 推送注册修复
 
-Android 15 专用模拟器复现 1.2.0 注册超时：JCore 明确报告缺少自定义 JCommonService。1.2.1 补充内部独立进程服务、SDK 发现 action 和接收器 action，并在 CI 检查实际合并 Manifest。已覆盖安装并保留验收宿舍身份，用户主动开启通知后成功注册；服务端测试发送返回 401，设备未显示通知。密钥配对和真实送达继续在 [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) 跟踪，不能按“已注册”宣布通知可用。HarmonyOS 版本本轮不变。
+Android 15 专用模拟器复现 1.2.0 注册超时：JCore 明确报告缺少自定义 JCommonService。1.2.1 补充内部独立进程服务、SDK 发现 action 和接收器 action，并在 CI 检查实际合并 Manifest。已覆盖安装并保留验收宿舍身份，主动开启通知后成功注册。
+
+2026-10-16 后续验收：所有者修正 AppKey 并为对应极光应用启用 Android 平台后，服务端与客户端配置一致，专用模拟器收到完整测试通知，点击恢复正确宿舍，强制停止后手动启动仍保留身份。Actions 公开 AppKey 变量与本机验收包已同步；详见 [验收记录](../docs/ANDROID_PUSH_ACCEPTANCE.md)。两位成员互发、抬水任务路由、厂商真机锁屏和固定发布签名仍在 [#37](https://github.com/RUIAN12138/dorm-duty/issues/37)、[#38](https://github.com/RUIAN12138/dorm-duty/issues/38)、[#39](https://github.com/RUIAN12138/dorm-duty/issues/39)、[#40](https://github.com/RUIAN12138/dorm-duty/issues/40) 跟踪。HarmonyOS 版本与服务端配置本轮不变。
 
 ## 设备验收
 
