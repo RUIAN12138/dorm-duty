@@ -607,24 +607,7 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   for (const width of [320, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await page.evaluate(() => scrollTo(0, 0));
-    eq(
-      await page
-        .locator(".calendar-more, .calendar-task-mark")
-        .evaluateAll((els) =>
-          els.every((el) => {
-            const a = el.getBoundingClientRect(),
-              b = el.closest("button").getBoundingClientRect();
-            return (
-              a.left >= b.left &&
-              a.right <= b.right + 0.5 &&
-              a.top >= b.top &&
-              a.bottom <= b.bottom + 0.5
-            );
-          }),
-        ),
-      true,
-      "dense calendar markers stay in their date at " + width + "px",
-    );
+    eq(await page.locator('.calendar-more,.calendar-task-mark,.day-record-dots').count(),0,'calendar uses only heat cells at '+width+'px');
     eq(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,

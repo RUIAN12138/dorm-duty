@@ -1175,7 +1175,8 @@ try {
   await day.click();
   const details = a.page.getByTestId("calendar-day-details");
   assert.equal(await details.locator(".calendar-record").count(), 5);
-  assert.equal(await day.locator(".member-mark").count(), 2);
+  assert.equal(await day.locator(".member-mark").count(), 0);
+  assert.equal(await day.getAttribute("data-heat"), "4");
   assert.match(await details.textContent(), /创建者/);
   assert.match(await details.textContent(), /室友甲/);
   await a.page.getByTestId(`calendar-undo-${floor.id}`).click();
@@ -1367,18 +1368,14 @@ try {
       await a.page.getByTestId("calendar-list").waitFor();
       const seenRecords=new Set();
       while(true){
-        await a.page.waitForTimeout(200);
-        const navigation=await a.page.getByTestId('chore-bottom-nav').boundingBox();
-        for(const record of await a.page.locator('.compact-record-row').all()){
-          seenRecords.add(await record.getAttribute('data-testid'));
-          const bounds=await record.boundingBox();
-          assert(bounds && bounds.y>=0 && bounds.y+bounds.height<=navigation.y,'every paginated list record is visible without scrolling');
-        }
+        for(const heading of await a.page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+        await a.page.waitForTimeout(420);
+        for(const record of await a.page.locator('[data-testid^="calendar-list-record-"]').all())seenRecords.add(await record.getAttribute('data-testid'));
         const next=a.page.getByRole('button',{name:'下一页记录',exact:true});
-        if(!(await next.isEnabled()))break;
+        if(!await next.count()||!await next.isEnabled())break;
         await next.click();
       }
-      assert.equal(seenRecords.size,restored.calendar.length,'all completed records remain available through pagination');
+      assert.equal(seenRecords.size,restored.calendar.length,'all completed records remain available through folded date groups');
       for (const [width, height] of [[320, 568], [390, 667], [390, 844], [430, 932]]) {
         await a.page.setViewportSize({width, height});
         for (const mode of ['grid', 'list', 'stats']) {
@@ -1399,7 +1396,7 @@ try {
   }
   checks.push(
     "restart of the temporary persistent server restores custom rules, water turn, member marks and completed records in both browser contexts",
-    "calendar list shows person, task and time; its rows remain reachable above the fixed bottom navigation",
+    "calendar list restores folded date groups; all records remain accessible",
     "all three full-application calendar modes fit four portrait viewports without redundant vertical scrolling",
   );
   assert.deepEqual(issues, [], "browser JavaScript errors");

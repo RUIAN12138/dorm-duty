@@ -20,7 +20,7 @@
 
 - **值日**：地板、厕所默认各自使用自由轮次，每人本轮主动做一次，全员完成这一项后自动开启下一轮；创建者也可切换为按日排班并配置时间。
 - **抬水**：按顺序轮换，实际抬完才打卡，自动交给下一位。
-- **日历**：按上海时区实际完成日期留下成员标记，点击日期查看记录。
+- **日历**：按上海时区实际完成日期显示热力深浅，点击日期查看人员与记录；列表按日期折叠。
 - **提醒**：站内提醒（同一发送人、接收人、任务一分钟内最多一条）与系统通知（Web Push，iPhone 需 iOS 16.4+ 添加主屏幕并授权）。
 - **身份**：信任式选人入口，需要邀请码和成员完整名字，不提供强身份验证；创建者凭据保存在当前浏览器，清除网站数据会丢失管理权限（可凭邀请码和恢复码取回，见 [创建者恢复](docs/CREATOR_RECOVERY.md)）。
 
@@ -37,6 +37,7 @@
 ```bash
 node site/scripts/check-cloud-backend.mjs
 node site/scripts/check-chores.mjs
+node site/scripts/check-recency.mjs
 node site/scripts/check-rounds.mjs
 node site/scripts/check-worker.mjs
 ```
@@ -69,3 +70,5 @@ dorm-duty/
 ## 协作
 
 两人协作请先阅读 [CONTRIBUTING](CONTRIBUTING.md)，在 Issues 选择问题或开发任务模板，各自使用任务分支，通过 PR 互相审查。PR 自动提供验收与发布交接模板。GitHub Actions 在 main 提交和 PR 上自动构建网页、检查业务 / 通知规则及安卓安装版；合并后由发布负责人单独验收与发布。
+
+最新界面与间隔提醒说明见 [RESTORE_MOTION_RECENCY](docs/RESTORE_MOTION_RECENCY.md)。

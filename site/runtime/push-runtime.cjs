@@ -7644,6 +7644,7 @@ function categoryView(row) {
     start_date: row.start_date,
     weekdays: parse(row.weekdays),
     rotation_days: row.rotation_days,
+    reminder_interval_days: row.reminder_interval_days,
     rotation_order: parse(row.rotation_order),
     enabled: Boolean(row.enabled),
     mode: row.mode

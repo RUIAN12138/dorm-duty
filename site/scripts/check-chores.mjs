@@ -173,7 +173,7 @@ export async function runChoreChecks() {
       db.sqlite.exec("COMMIT");
       for (const table of choreTables)
         equal(
-          db.sqlite.prepare(`SELECT * FROM ${table}`).all(),
+          db.sqlite.prepare(`SELECT ${Object.keys(choreBefore[table][0] || {}).join(",") || "*"} FROM ${table}`).all(),
           choreBefore[table],
           `migration preserves ${table} rows and ids`,
         );

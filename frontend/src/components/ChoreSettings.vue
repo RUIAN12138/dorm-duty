@@ -32,7 +32,12 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      draft.value = JSON.parse(JSON.stringify(props.categories));
+      draft.value = JSON.parse(JSON.stringify(props.categories)).map(
+        (c: ChoreCategory) => ({
+          ...c,
+          reminder_interval_days: c.reminder_interval_days || 3,
+        }),
+      );
       selectedCategory.value = props.initialCategory || "floor";
       error.value = "";
     }
@@ -174,6 +179,17 @@ async function save() {
           </p>
         </template>
         <p v-else class="mode-description">没水时，轮到的人抬水并打卡。</p>
+        <label :for="`interval-${category.key}`">卡片提醒间隔（天）</label>
+        <input
+          :id="`interval-${category.key}`"
+          v-model.number="category.reminder_interval_days"
+          :data-testid="`settings-interval-${category.key}`"
+          type="number"
+          min="1"
+          max="365"
+          step="1"
+          required
+        />
         <div v-if="category.mode === 'scheduled'" class="settings-two-columns">
           <div>
             <label :for="`time-${category.key}`">截止时间</label

@@ -57,6 +57,8 @@ try {
   }
   const initial = await board(),
     waterId = initial.water_task.id;
+  const configured=await h.request('/chores/settings',{token:room.access_token,method:'PATCH',data:{version:initial.version,categories:[{key:'floor',reminder_interval_days:1}]}});
+  assert.equal(configured.status,200);
   const html = path.join(front, name + ".html"),
     vue = path.join(front, name + ".vue");
   await fs.writeFile(
@@ -223,39 +225,35 @@ try {
     1,
     "only one statistics card accepts interaction",
   );
-  await page
-    .getByRole("button", { name: "下一张统计卡片", exact: true })
-    .click();
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector(".deck-card.is-front")
-        ?.getAttribute("data-card-index") === "1",
-  );
-  check(
-    await page.locator(".deck-card.is-front h2").innerText(),
-    "厕所",
-    "next control changes the focused statistics card",
-  );
-  await page.waitForTimeout(400);
-  const bounds = await page.locator(".deck-stage").boundingBox();
-  await page.mouse.move(
-    bounds.x + bounds.width * 0.7,
-    bounds.y + bounds.height * 0.4,
-  );
-  await page.mouse.down();
-  await page.mouse.move(
-    bounds.x + bounds.width * 0.3,
-    bounds.y + bounds.height * 0.4,
-    { steps: 8 },
-  );
-  await page.mouse.up();
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector(".deck-card.is-front")
-        ?.getAttribute("data-card-index") === "2",
-  );
+  check(await page.getByTestId('stats-floor').getAttribute('data-tone'),'warm','task-specific interval colors the elapsed-time card');
+  check(await page.getByTestId('stats-toilet').getAttribute('data-tone'),'empty','missing history is not marked overdue');
+  check(await page.locator('.calendar-task-mark,.calendar-more,.day-record-dots').count(),0,'calendar hides tiny people and task markers');
+  check(await page.getByRole("button",{name:"下一张统计卡片",exact:true}).count(),0,"statistics has no arrow controls");
+  await page.getByRole('button',{name:'设置间隔',exact:true}).click();
+  const intervalSheet=page.getByRole('dialog',{name:'宿舍任务设置',exact:true});
+  await intervalSheet.waitFor();
+  await page.getByTestId('settings-interval-floor').fill('365');
+  await intervalSheet.getByRole('button',{name:'保存设置',exact:true}).click();
+  await intervalSheet.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>document.querySelector('[data-testid="stats-floor"]')?.getAttribute('data-tone')==='neutral');
+  check((await board()).categories.find(c=>c.key==='floor').reminder_interval_days,365,'creator saves a per-task interval from statistics');
+  await page.getByRole('button',{name:'设置间隔',exact:true}).click();
+  await page.getByTestId('settings-interval-floor').fill('1');
+  await intervalSheet.getByRole('button',{name:'保存设置',exact:true}).click();
+  await intervalSheet.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>document.querySelector('[data-testid="stats-floor"]')?.getAttribute('data-tone')==='warm');
+  async function swipeCard(){
+    const bounds=await page.locator('.deck-stage').boundingBox();
+    await page.mouse.move(bounds.x+bounds.width*.8,bounds.y+bounds.height*.5);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x+bounds.width*.16,bounds.y+bounds.height*.5,{steps:12});
+    check(await page.locator('.deck-card.is-front').evaluate(e=>Math.abs(new DOMMatrix(getComputedStyle(e).transform).m41)>10),true,'stacked front card follows the pointer before release');
+    await page.mouse.up();await page.waitForTimeout(500);
+  }
+  await swipeCard();
+  check(await page.locator('.deck-card.is-front h2').innerText(),'厕所','swipe changes the focused card');
+  await swipeCard();
+  check(await page.locator('.deck-card.is-front h2').innerText(),'洗手池','successive swipe changes the focused card');
   check(
     new URL(page.url()).pathname,
     "/calendar",
@@ -321,6 +319,7 @@ try {
           true,
           `all statistics metrics fit ${width}x${height}`,
         );
+      if(label==='stats')check(await page.locator('.deck-card.is-front footer').evaluate(el=>el.getBoundingClientRect().bottom<=el.closest('.deck-stage').getBoundingClientRect().bottom+1),true,`last-completion time is not clipped at ${width}x${height}`);
       if (label === "calendar")
         check(
           await page
@@ -381,29 +380,21 @@ try {
     "list removes the top count strip",
   );
   const seen = new Set();
-  while (true) {
-    await page.waitForTimeout(170);
-    for (const row of await page.locator(".compact-record-row").all())
-      seen.add(await row.getAttribute("data-testid"));
-    const next = page.getByRole("button", { name: "下一页记录", exact: true });
-    if (!(await next.isEnabled())) break;
+  while(true){
+    for(const heading of await page.locator('.records-heading').all()){
+      if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+    }
+    await page.waitForTimeout(420);
+    for(const row of await page.locator('[data-testid^="calendar-list-record-"]').all())seen.add(await row.getAttribute('data-testid'));
+    const next=page.getByRole('button',{name:'下一页记录',exact:true});
+    if(!await next.count()||!await next.isEnabled())break;
     await next.click();
   }
-  check(
-    seen.size,
-    after.calendar.length,
-    "pagination exposes every historical record without truncation",
-  );
-  while (
-    await page
-      .getByRole("button", { name: "上一页记录", exact: true })
-      .isEnabled()
-  )
-    await page.getByRole("button", { name: "上一页记录", exact: true }).click();
-  await page.getByTestId(`calendar-list-record-${record.id}`).click();
-  await page
-    .getByRole("button", { name: "修正小林的抬水记录", exact: true })
-    .click();
+  check(seen.size,after.calendar.length,'folded date groups retain every historical record');
+  const previous=page.getByRole('button',{name:'上一页记录',exact:true});
+  while(await previous.count()&&await previous.isEnabled())await previous.click();
+  for(const heading of await page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+  await page.getByTestId(`calendar-list-record-${record.id}`).getByRole('button',{name:'修正小林的抬水记录',exact:true}).click();
   const edit = page.getByRole("dialog", { name: "修正记录", exact: true });
   await edit.waitFor();
   await edit.getByText("修正记录 · 1", { exact: true }).waitFor();

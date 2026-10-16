@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type { ChoreActivity, ChoreBoardData } from "../api/chores";
-import { activityStreak } from "../interaction/activity";
+import { computed, ref, onBeforeUnmount } from "vue";
+import type {
+  ChoreActivity,
+  ChoreBoardData,
+  ChoreCategory,
+} from "../api/chores";
 import TaskCategoryIcon from "./TaskCategoryIcon.vue";
 import HintPopover from "./HintPopover.vue";
 import SwipeCardDeck from "./SwipeCardDeck.vue";
 const props = defineProps<{
   activity: ChoreActivity;
   rounds: ChoreBoardData["rounds"];
+  categories?: ChoreCategory[];
+  creator?: boolean;
 }>();
-const current = ref(0);
+const emit = defineEmits<{ settings: [key: ChoreCategory["key"]] }>();
+const current = ref(0),
+  now = ref(Date.now());
+const timer = setInterval(() => (now.value = Date.now()), 60000);
+onBeforeUnmount(() => clearInterval(timer));
 const names = [
   ["floor", "地板"],
   ["toilet", "厕所"],
@@ -18,19 +27,60 @@ const names = [
 ];
 const cards = computed(() =>
   names.map(([key, name]) => {
-    const days = props.activity.daily.filter((d) => d.key === key),
-      round = props.rounds.find((r) => r.key === key);
+    const at = props.activity.last_completed?.find(
+      (r) => r.key === key,
+    )?.completed_at;
+    const minutes = at
+      ? Math.max(0, Math.floor((now.value - Date.parse(at)) / 60000))
+      : null;
+    const days = minutes === null ? null : minutes / 1440;
+    const interval =
+      props.categories?.find((c) => c.key === key)?.reminder_interval_days || 3;
+    const number =
+      minutes === null
+        ? "—"
+        : minutes < 60
+          ? minutes < 1
+            ? "刚刚"
+            : String(minutes)
+          : minutes < 1440
+            ? String(Math.floor(minutes / 60))
+            : String(Math.floor(days!));
+    const unit =
+      minutes === null
+        ? "暂无记录"
+        : minutes < 1
+          ? "完成"
+          : minutes < 60
+            ? "分钟前"
+            : minutes < 1440
+              ? "小时前"
+              : "天前";
     return {
       key: key!,
-      name: name!,
-      total: days.reduce((n, d) => n + d.count, 0),
-      rate: round
-        ? Math.round((round.completed / Math.max(1, round.total)) * 100)
-        : null,
-      ...activityStreak(
-        days.map((d) => d.date),
-        props.activity.today,
-      ),
+      name: props.categories?.find((c) => c.key === key)?.name || name!,
+      at,
+      number,
+      unit,
+      tone:
+        days === null
+          ? "empty"
+          : days >= interval * 2
+            ? "alert"
+            : days >= interval
+              ? "warm"
+              : "neutral",
+      date: at
+        ? new Intl.DateTimeFormat("zh-CN", {
+            timeZone: "Asia/Shanghai",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          }).format(new Date(at))
+        : "",
     };
   }),
 );
@@ -38,55 +88,52 @@ const cards = computed(() =>
 <template>
   <section class="activity-summary" data-testid="activity-summary">
     <div class="summary-heading">
-      <span>近三月</span
+      <span>距上次完成</span
       ><HintPopover
-        title="统计口径"
-        text="本月及前两月的真实打卡。连续天数只表示连续有记录的日期。本轮完成率按已完成人数计算；抬水没有固定完成配额。"
-        label="查看统计口径"
-      />
+        title="间隔提醒"
+        text="按全宿舍该任务最近一次有效打卡计算，包括修正后的历史记录。每项任务可由创建者设置间隔：达到间隔变淡橙，达到两倍变浅红。颜色只作提醒，不代表固定到期。暂无记录单独显示。"
+        label="查看间隔提醒规则"
+      /><button
+        v-if="creator"
+        class="interval-settings"
+        @click="emit('settings', cards[current]!.key as ChoreCategory['key'])"
+      >
+        设置间隔
+      </button>
     </div>
     <SwipeCardDeck
       v-model="current"
-      :labels="cards.map((card) => card.name)"
+      :labels="cards.map((c) => c.name)"
       label="分类统计卡片"
-    >
-      <template #default="{ index }"
-        ><div class="stat-card" :data-testid="`stats-${cards[index]!.key}`">
+      ><template #default="{ index }">
+        <div
+          class="stat-card"
+          :data-testid="`stats-${cards[index]!.key}`"
+          :data-tone="cards[index]!.tone"
+        >
           <header>
             <TaskCategoryIcon :kind="cards[index]!.key" />
             <h2>{{ cards[index]!.name }}</h2>
           </header>
-          <div class="stat-total">
-            <strong>{{ cards[index]!.total }}</strong
-            ><span>次完成</span>
+          <div class="stat-elapsed">
+            <strong>{{ cards[index]!.number }}</strong
+            ><span>{{ cards[index]!.unit }}</span>
           </div>
-          <dl>
-            <div>
-              <dt>本轮完成率</dt>
-              <dd>
-                {{
-                  cards[index]!.rate === null ? "—" : `${cards[index]!.rate}%`
-                }}
-              </dd>
-            </div>
-            <div>
-              <dt>当前连续</dt>
-              <dd>{{ cards[index]!.current }}<span>天</span></dd>
-            </div>
-            <div>
-              <dt>最长连续</dt>
-              <dd>{{ cards[index]!.longest }}<span>天</span></dd>
-            </div>
-          </dl>
-        </div></template
-      >
-    </SwipeCardDeck>
+          <footer>
+            <span>{{ cards[index]!.at ? "上次完成" : "还没有打卡记录" }}</span
+            ><time v-if="cards[index]!.at" :datetime="cards[index]!.at">{{
+              cards[index]!.date
+            }}</time>
+          </footer>
+        </div>
+      </template></SwipeCardDeck
+    >
   </section>
 </template>
 <style scoped>
 .activity-summary {
   min-width: 0;
-  padding-top: var(--ui-card-gap);
+  padding-top: 12px;
 }
 .summary-heading {
   display: flex;
@@ -94,7 +141,15 @@ const cards = computed(() =>
   justify-content: space-between;
   min-height: 32px;
   color: var(--ui-text-muted);
-  font-size: var(--ui-small-size);
+  font-size: 14px;
+}
+.interval-settings {
+  border: 0;
+  background: none;
+  color: var(--ui-ink);
+  font: inherit;
+  padding: 8px;
+  min-height: 44px;
 }
 .stat-card {
   display: flex;
@@ -102,73 +157,68 @@ const cards = computed(() =>
   justify-content: space-between;
   height: 100%;
   padding: 24px;
-  box-sizing: border-box;
+  background: #f7f7f5;
+  color: #191919;
+}
+.stat-card[data-tone="warm"] {
+  background: #fff0d9;
+  color: #694118;
+}
+.stat-card[data-tone="alert"] {
+  background: #fbe1dc;
+  color: #8e342b;
+}
+.stat-card[data-tone="empty"] {
+  background: #f5f5f5;
+  color: #777;
 }
 header {
   display: flex;
   align-items: center;
-  gap: var(--ui-card-gap);
+  gap: 12px;
 }
 h2 {
-  font-size: var(--ui-card-title-size);
-  line-height: var(--ui-title-leading);
-  margin: 0;
-}
-.stat-total {
-  display: flex;
-  align-items: baseline;
-  gap: var(--ui-card-gap);
-  padding: 16px 0;
-}
-.stat-total strong {
-  font-size: clamp(52px, 9svh, 80px);
-  line-height: 1;
-  font-weight: 650;
-  letter-spacing: -3px;
-  font-variant-numeric: tabular-nums;
-}
-.stat-total > span {
-  font-size: var(--ui-small-size);
-  color: var(--ui-text-muted);
-}
-dl {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--ui-card-gap);
-  margin: 0;
-  padding-top: 16px;
-  border-top: var(--ui-card-border);
-}
-dt {
-  font-size: 12px;
-  color: var(--ui-text-muted);
-  white-space: nowrap;
-}
-dd {
-  margin: 8px 0 0;
   font-size: 24px;
   line-height: 1.15;
-  font-weight: 600;
+  margin: 0;
+}
+.stat-elapsed {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.stat-elapsed strong {
+  font-size: clamp(64px, 12svh, 108px);
+  line-height: 1;
+  font-weight: 650;
+  letter-spacing: -4px;
   font-variant-numeric: tabular-nums;
 }
-dd span {
-  font-size: 13px;
-  font-weight: 400;
-  margin-left: 3px;
+.stat-elapsed > span {
+  font-size: 18px;
+}
+footer {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+footer > span {
+  opacity: 0.62;
+}
+time {
+  font-variant-numeric: tabular-nums;
 }
 @media (max-height: 650px) {
   .stat-card {
     padding: 16px;
   }
-  .stat-card :deep(.task-category-icon) {
-    width: 36px;
-    height: 36px;
+  .stat-elapsed strong {
+    font-size: 64px;
   }
-  .stat-total {
-    padding: 8px 0;
-  }
-  .stat-total strong {
-    font-size: 52px;
+  header :deep(.task-category-icon) {
+    width: 32px;
+    height: 32px;
   }
 }
 </style>

@@ -15,6 +15,7 @@ export interface ChoreCategory {
   start_date: string;
   weekdays: number[];
   rotation_days: number;
+  reminder_interval_days?: number;
   rotation_order: number[];
   enabled: boolean;
   mode: "scheduled" | "self_round" | "completion";
@@ -197,6 +198,7 @@ export interface ChoreActivity {
   start: string;
   today: string;
   daily: { date: string; key: string; count: number }[];
+  last_completed?: { key: string; completed_at: string }[];
   recent_records: ChoreRecord[];
   recent_truncated: boolean;
 }

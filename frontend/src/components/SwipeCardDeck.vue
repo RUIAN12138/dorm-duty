@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from "vue";
-import { motionAllowed } from "../interaction/motion";
+import { ref, onBeforeUnmount } from "vue";
 import {
+  horizontalIntent,
   createVelocityTracker,
   rubberBand,
-  horizontalIntent,
 } from "../interaction/gestures";
+import { motionAllowed } from "../interaction/motion";
+// React Bits Stack: overlapping cards with depth; Carousel: velocity and snap.
+// Vue implementation, no React source or runtime bundled.
 const props = defineProps<{
   modelValue: number;
   labels: string[];
@@ -15,82 +17,99 @@ const emit = defineEmits<{ "update:modelValue": [index: number] }>();
 const stage = ref<HTMLElement>(),
   offset = ref(0),
   dragging = ref(false),
-  leaving = ref(false);
+  settling = ref(false);
 let gesture: {
   id: number;
   x: number;
   y: number;
-  element: HTMLElement;
   horizontal: boolean;
+  target: HTMLElement;
   velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
-let timer: ReturnType<typeof setTimeout> | undefined,
-  suppressUntil = 0;
+let timer: ReturnType<typeof setTimeout> | undefined;
+const width = () => stage.value?.clientWidth || 300;
+function target() {
+  return props.modelValue + (offset.value > 0 ? -1 : 1);
+}
 function depth(index: number) {
-  return (index - props.modelValue + props.labels.length) % props.labels.length;
+  if (index === props.modelValue) return 0;
+  let next = target();
+  if (next < 0 || next >= props.labels.length)
+    next =
+      props.modelValue === props.labels.length - 1
+        ? props.modelValue - 1
+        : props.modelValue + 1;
+  const order = [
+    next,
+    ...props.labels
+      .map((_, i) => i)
+      .filter((i) => i !== props.modelValue && i !== next),
+  ];
+  return order.indexOf(index) + 1;
 }
 function pose(index: number) {
   const d = depth(index),
-    front = d === 0;
+    p = Math.min(1, Math.abs(offset.value) / (width() * 0.8));
+  if (d === 0)
+    return {
+      zIndex: 10,
+      opacity: 1,
+      transform: `translate3d(${offset.value}px,0,0) rotate(${offset.value / 55}deg)`,
+    };
+  if (d === 1)
+    return {
+      zIndex: 9,
+      opacity: 1,
+      transform: `translate3d(${8 * (1 - p)}px,${-14 * (1 - p)}px,0) rotate(${2.8 * (1 - p)}deg) scale(${0.96 + 0.04 * p})`,
+    };
+  const layer = Math.min(2, d - 1);
   return {
-    zIndex: props.labels.length - d,
-    opacity: d < 3 ? 1 : 0,
-    transform: front
-      ? `translate3d(${offset.value}px,0,0) rotate(${offset.value / 65}deg)`
-      : `translate3d(${d * 4}px,${-d * 18}px,0) rotate(${d % 2 ? -2 : 2}deg) scale(${1 - d * 0.035})`,
-    pointerEvents: front ? ("auto" as const) : ("none" as const),
+    zIndex: 8 - layer,
+    opacity: d < 5 ? 1 : 0,
+    transform: `translate3d(${-5 * layer}px,${-14 * layer}px,0) rotate(${-2 * layer}deg) scale(${1 - 0.04 * layer})`,
   };
 }
-function reset() {
+function release() {
   const old = gesture;
   gesture = null;
   dragging.value = false;
-  if (old?.element.hasPointerCapture(old.id))
-    old.element.releasePointerCapture(old.id);
+  if (old?.target.hasPointerCapture(old.id))
+    old.target.releasePointerCapture(old.id);
 }
 function choose(index: number) {
   if (
     index < 0 ||
     index >= props.labels.length ||
     index === props.modelValue ||
-    leaving.value
-  )
+    settling.value
+  ) {
+    offset.value = 0;
     return;
-  reset();
+  }
+  release();
   if (!motionAllowed()) {
     offset.value = 0;
     emit("update:modelValue", index);
     return;
   }
-  leaving.value = true;
-  offset.value =
-    (index > props.modelValue ? -1 : 1) *
-    (stage.value?.clientWidth || 320) *
-    1.15;
+  settling.value = true;
+  offset.value = (index > props.modelValue ? -1 : 1) * (width() + 48);
   clearTimeout(timer);
   timer = setTimeout(() => {
     emit("update:modelValue", index);
     offset.value = 0;
-    leaving.value = false;
-  }, 180);
+    settling.value = false;
+  }, 220);
 }
 function down(e: PointerEvent) {
   e.stopPropagation();
-  if (
-    !e.isPrimary ||
-    e.button !== 0 ||
-    gesture ||
-    leaving.value ||
-    (e.target instanceof Element &&
-      e.target.closest("button,a,input,select,textarea"))
-  )
-    return;
+  if (!e.isPrimary || e.button !== 0 || gesture || settling.value) return;
   gesture = {
     id: e.pointerId,
     x: e.clientX,
     y: e.clientY,
-    element: e.currentTarget as HTMLElement,
     horizontal: false,
+    target: e.currentTarget as HTMLElement,
     velocity: createVelocityTracker(e.clientX, performance.now()),
   };
 }
@@ -102,32 +121,32 @@ function move(e: PointerEvent) {
   if (!gesture.horizontal) {
     const intent = horizontalIntent(x, y);
     if (intent === "vertical") {
-      reset();
+      release();
       return;
     }
     if (intent !== "horizontal") return;
     gesture.horizontal = true;
     dragging.value = true;
-    gesture.element.setPointerCapture(e.pointerId);
+    gesture.target.setPointerCapture(e.pointerId);
   }
   e.preventDefault();
-  e.stopPropagation();
   const blocked =
     (x > 0 && props.modelValue === 0) ||
     (x < 0 && props.modelValue === props.labels.length - 1);
   offset.value = blocked ? rubberBand(x, 64) : x;
-  suppressUntil = performance.now() + 500;
 }
 function up(e: PointerEvent, cancel = false) {
   if (!gesture || gesture.id !== e.pointerId) return;
-  const x = offset.value,
-    projected = x + gesture.velocity.read(performance.now()) * 100;
-  const commit =
+  const old = gesture,
+    x = offset.value,
+    projected = x + old.velocity.read(performance.now()) * 100;
+  release();
+  if (
     !cancel &&
-    gesture.horizontal &&
-    (Math.abs(x) > 52 || (Math.abs(x) > 24 && Math.abs(projected) > 90));
-  reset();
-  if (commit) {
+    old.horizontal &&
+    (Math.abs(x) > width() * 0.22 ||
+      (Math.abs(x) > 24 && Math.abs(projected) > 90))
+  ) {
     const next = props.modelValue + (x < 0 ? 1 : -1);
     if (next >= 0 && next < props.labels.length) {
       choose(next);
@@ -136,47 +155,34 @@ function up(e: PointerEvent, cancel = false) {
   }
   offset.value = 0;
 }
-function click(e: MouseEvent) {
-  if (e.detail && performance.now() < suppressUntil) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
-function inactive() {
+function quiet() {
   if (!motionAllowed()) {
     clearTimeout(timer);
-    reset();
+    release();
     offset.value = 0;
-    leaving.value = false;
+    settling.value = false;
   }
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
-media.addEventListener("change", inactive);
-window.addEventListener("ui-motion-change", inactive);
-document.addEventListener("visibilitychange", inactive);
+media.addEventListener("change", quiet);
+document.addEventListener("visibilitychange", quiet);
+window.addEventListener("ui-motion-change", quiet);
 onBeforeUnmount(() => {
   clearTimeout(timer);
-  reset();
-  media.removeEventListener("change", inactive);
-  window.removeEventListener("ui-motion-change", inactive);
-  document.removeEventListener("visibilitychange", inactive);
+  release();
+  media.removeEventListener("change", quiet);
+  document.removeEventListener("visibilitychange", quiet);
+  window.removeEventListener("ui-motion-change", quiet);
 });
-watch(
-  () => props.labels.length,
-  () => {
-    reset();
-    offset.value = 0;
-    if (props.modelValue >= props.labels.length) emit("update:modelValue", 0);
-  },
-);
 </script>
 <template>
   <section class="swipe-card-deck" :aria-label="label" data-page-gesture>
     <div
       ref="stage"
       class="deck-stage"
-      :class="{ 'is-dragging': dragging, 'is-leaving': leaving }"
+      :class="{ 'is-dragging': dragging, 'is-settling': settling }"
       tabindex="0"
+      :aria-label="`${label}，左右滑动切换`"
       @keydown.left.prevent="choose(modelValue - 1)"
       @keydown.right.prevent="choose(modelValue + 1)"
       @pointerdown="down"
@@ -184,7 +190,7 @@ watch(
       @pointerup="up($event)"
       @pointercancel="up($event, true)"
       @lostpointercapture="up($event, true)"
-      @click.capture="click"
+      @dragstart.prevent
     >
       <article
         v-for="(name, index) in labels"
@@ -192,124 +198,99 @@ watch(
         class="deck-card"
         :class="{ 'is-front': index === modelValue }"
         :style="pose(index)"
+        :aria-label="name"
         :aria-hidden="index !== modelValue"
         :inert="index !== modelValue ? true : undefined"
-        :aria-label="name"
         :data-card-index="index"
       >
         <slot :index="index" :active="index === modelValue" />
       </article>
     </div>
-    <div class="deck-controls">
-      <button
-        aria-label="上一张统计卡片"
-        :disabled="modelValue === 0 || leaving"
-        @click="choose(modelValue - 1)"
-      >
-        <van-icon name="arrow-left" aria-hidden="true" />
-      </button>
-      <div class="deck-dots" aria-label="选择统计卡片">
-        <button
-          v-for="(name, index) in labels"
-          :key="name"
-          :aria-label="`查看${name}统计`"
-          :aria-current="index === modelValue ? 'true' : undefined"
-          :disabled="leaving"
-          @click="choose(index)"
-        >
-          <span />
-        </button>
-      </div>
-      <button
-        aria-label="下一张统计卡片"
-        :disabled="modelValue === labels.length - 1 || leaving"
-        @click="choose(modelValue + 1)"
-      >
-        <van-icon name="arrow" aria-hidden="true" />
-      </button>
+    <div class="deck-dots" aria-hidden="true">
+      <span
+        v-for="(_, index) in labels"
+        :key="index"
+        :class="{ 'is-current': index === modelValue }"
+      />
     </div>
+    <span class="sr-only" aria-live="polite"
+      >{{ labels[modelValue] }}，第 {{ modelValue + 1 }} 张，共
+      {{ labels.length }} 张</span
+    >
   </section>
 </template>
 <style scoped>
 .swipe-card-deck {
-  display: grid;
-  gap: var(--ui-space-sm);
   min-width: 0;
+  isolation: isolate;
   overflow: hidden;
-  padding-top: 24px;
 }
 .deck-stage {
   position: relative;
   isolation: isolate;
-  margin: 0 8px;
   min-width: 0;
-  height: clamp(236px, calc(100svh - 370px), 350px);
+  min-height: 0;
+  margin: 28px 12px 8px;
   touch-action: pan-y;
   outline: none;
+  cursor: grab;
+}
+.deck-stage:active {
+  cursor: grabbing;
 }
 .deck-stage:focus-visible {
   outline: 2px solid var(--ui-ink);
-  outline-offset: 8px;
-  border-radius: var(--ui-card-radius);
+  outline-offset: 4px;
+  border-radius: 24px;
 }
 .deck-card {
   position: absolute;
   inset: 0;
+  min-width: 0;
   border: var(--ui-card-border);
-  border-radius: 20px;
+  border-radius: 24px;
+  overflow: hidden;
   background: var(--ui-surface);
   transform-origin: center bottom;
   transition:
-    transform 360ms var(--ui-ease-out),
+    transform 280ms var(--ui-ease-out),
     opacity 180ms var(--ui-ease-out);
-  overflow: hidden;
 }
-.is-dragging .is-front {
+.is-dragging .deck-card {
   transition: none;
 }
-.is-leaving .is-front {
+.is-settling .deck-card {
   transition:
-    transform 180ms var(--ui-ease-out),
+    transform 220ms var(--ui-ease-out),
     opacity 180ms var(--ui-ease-out);
-}
-.deck-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-}
-.deck-controls > button,
-.deck-dots button {
-  width: 44px;
-  height: 44px;
-  border: 0;
-  background: none;
-  color: var(--ui-ink);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.deck-controls > button:disabled {
-  opacity: 0.25;
-  cursor: default;
 }
 .deck-dots {
   display: flex;
+  justify-content: center;
   align-items: center;
-}
-.deck-dots button {
-  width: 32px;
+  gap: 8px;
+  height: 32px;
 }
 .deck-dots span {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: #d6d6d6;
-  transition: transform 240ms var(--ui-ease-out);
+  background: #ddd;
+  transition: transform 160ms var(--ui-ease-out);
 }
-.deck-dots button[aria-current] span {
-  background: var(--ui-ink);
-  transform: scale(1.3);
+.deck-dots .is-current {
+  background: #111;
+  transform: scale(1.35);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 @media (prefers-reduced-motion: reduce) {
   .deck-card,
