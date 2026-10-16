@@ -27,7 +27,7 @@ const time = (value: string) =>
     "
   >
     <span class="record-avatar"
-      ><MemberMark :id="record.marker_id" :size="26"
+      ><MemberMark :id="record.marker_id" :size="28" inline
     /></span>
     <span class="record-description"
       ><strong>{{ record.assignee_name }}</strong

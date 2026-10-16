@@ -307,6 +307,7 @@ onBeforeUnmount(() => {
           :class="{ 'is-nonmodal': props.modal === false }"
           :data-motion="props.motion === 'bottom' ? 'bottom' : 'shared'"
           :data-phase="phase"
+          :inert="phase === 'closing' ? true : undefined"
           tabindex="-1"
         >
           <DialogOverlay v-if="props.modal !== false" as-child

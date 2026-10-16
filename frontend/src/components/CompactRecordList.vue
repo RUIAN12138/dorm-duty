@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
+import { motionAllowed } from "../interaction/motion";
 import type { ChoreRecord } from "../api/chores";
 import RecordTimeline from "./RecordTimeline.vue";
 const props = defineProps<{
@@ -45,6 +53,9 @@ const isOpen = (date: string) =>
     ? collapsedToday.value !== date
     : expanded.value.has(date);
 function toggle(date: string) {
+  const before = [
+    ...(root.value?.querySelectorAll<HTMLElement>(".record-stack") || []),
+  ].map((el) => ({ el, top: el.getBoundingClientRect().top }));
   if (date === props.today) collapsedToday.value = isOpen(date) ? date : "";
   else {
     const next = new Set(expanded.value);
@@ -52,6 +63,21 @@ function toggle(date: string) {
     else next.add(date);
     expanded.value = next;
   }
+  void nextTick(() => {
+    if (!motionAllowed()) return;
+    for (const { el, top } of before) {
+      el.getAnimations().forEach((a) => a.cancel());
+      const delta = top - el.getBoundingClientRect().top;
+      if (Math.abs(delta) > 1)
+        el.animate(
+          [
+            { transform: `translate3d(0,${delta}px,0)` },
+            { transform: "translate3d(0,0,0)" },
+          ],
+          { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
+        );
+    }
+  });
 }
 function setPage(value: number) {
   page.value = Math.max(0, Math.min(total.value - 1, value));
@@ -101,10 +127,11 @@ const label = (date: string) =>
     </div>
     <div v-else class="folded-record-page" :data-page="page">
       <RecordTimeline
-        v-for="group in visible"
+        v-for="(group, index) in visible"
         :key="group.date"
         :date="group.date"
         :label="label(group.date)"
+        :style="{ '--group-delay': `${Math.min(index, 8) * 32}ms` }"
         :records="group.records"
         :member-id="memberId"
         :busy="busy"
