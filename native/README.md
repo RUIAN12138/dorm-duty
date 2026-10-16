@@ -47,7 +47,11 @@ GitHub 临时 runner 的调试签名可能随构建变化，这些附件不作�
 
 HarmonyOS 需要 DevEco Studio 与 SDK 6.1.1：在 `harmony` 执行 `ohpm install --all`，再执行 `hvigorw --mode module -p product=default -p buildMode=debug assembleHap --no-daemon`。当前未配置签名，生成 `entry-default-unsigned.hap`，不能直接安装真机。DevEco 会负责配置签名，不通过代码生成假 Profile。
 
-## 1.2.0 设备验收
+## 1.2.1 Android 推送注册修复
+
+Android 15 专用模拟器复现 1.2.0 注册超时：JCore 明确报告缺少自定义 JCommonService。1.2.1 补充内部独立进程服务、SDK 发现 action 和接收器 action，并在 CI 检查实际合并 Manifest。已覆盖安装并保留验收宿舍身份，用户主动开启通知后成功注册；服务端测试发送返回 401，设备未显示通知。密钥配对和真实送达继续在 [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) 跟踪，不能按“已注册”宣布通知可用。HarmonyOS 版本本轮不变。
+
+## 设备验收
 
 1. Android 安装调试 APK；HarmonyOS 先为 `cn.lundao.dorm` 配置本应用调试签名，再安装。重装 / 换设备时管理者用已保存的恢复码取回权限，不导入其他应用的签名。
 2. 正常创建 / 加入、选人、值日与抬水打卡；完全关闭再打开，确认身份仍保留。

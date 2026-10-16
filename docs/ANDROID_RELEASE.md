@@ -1,14 +1,14 @@
 # Android 最小可用发布路径
 
-2026-10-16 核对基线：main `7b04bbe`，网页已发布 `v40r1`。客户端仍是 1.2.0 的调试体验版。以下工程准备不代表通知已送达、固定签名已创建或真机验收已完成。
+2026-10-16 核对基线：main `bd0c463`，网页已发布 `v40r1`。Android 1.2.1 修复缺失的 JCommonService 子类注册，并新增合并 Manifest 检查。Android 15 专用模拟器已覆盖安装、保留正式验收宿舍身份、授权通知并成功注册设备。测试通知仍被极光以 HTTP 401 拒绝，设备没有收到；固定签名与厂商真机验收仍未完成。
 
 ## 阻塞与任务
 
 | 工作 | 当前状态 | 验收入口 |
 | --- | --- | --- |
-| 服务端极光配置 | 本轮只读核对 Android / HarmonyOS 均未配置；交互配置工具已准备 | [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) |
+| 服务端极光配置 | Android 配置已私密写入、权限 600、服务账号可读并重启；发送返回 401，设备查询返回 401 / 7004，需核对同一应用的密钥配对；HarmonyOS 尚未配置 | [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) |
 | 厂商离线通道 | 基础 SDK 已有，小米 / 华为 Android / vivo 插件和平台配置待做 | [#38](https://github.com/RUIAN12138/dorm-duty/issues/38) |
-| 真机验收 | adb 工具可用，本轮未发现连接设备；模拟器不能代替厂商锁屏验收 | [#39](https://github.com/RUIAN12138/dorm-duty/issues/39) |
+| 真机验收 | Android 15 模拟器已安装、恢复身份并注册推送；通知显示 / 点击跳转尚未通过，模拟器不能代替厂商锁屏验收 | [#39](https://github.com/RUIAN12138/dorm-duty/issues/39) |
 | 固定签名与覆盖升级 | Gradle 接入与未配置拦截已实现；用户私钥与实际覆盖升级待验收 | [#40](https://github.com/RUIAN12138/dorm-duty/issues/40) |
 | 本地提醒补充 | 即时催促以推送为主，本地只补已知时间的提醒；实现待做 | [#41](https://github.com/RUIAN12138/dorm-duty/issues/41) |
 
@@ -61,6 +61,10 @@ CI 通过仓库 Actions 变量 `DORM_ANDROID_JPUSH_APPKEY` 注入公开 Android 
 ## 4. 设备证据
 
 按 Issue #39 记录机型 / 系统 / WebView / 包名 / 签名指纹，以及身份恢复、通知正文与跳转、返回、输入键盘、系统栏、横屏和网络恢复。每条通知记录“服务器接受 / 设备显示 / 点击后目标页”三个结果。没有设备观察时标“待验收”，不能用编译通过替代。
+
+本轮使用独立验收宿舍和测试成员，没有向真实室友发送消息或修改值日记录。1.2.0 的设备注册超时被日志定位为缺少 JCommonService；1.2.1 补齐后成功绑定一台 Android 设备。首次测试的队列结果为 `failed / HTTP 401`，只读设备查询为 `401 / 7004`。按[极光设备管理文档](https://docs.jiguang.cn/jpush/server/push/rest_api_v3_device)，需核对 AppKey 与 Master Secret；配置文件可读或格式通过不等于平台鉴权通过。用户在服务器私密修正后重启，再发送一条新测试，不重放旧的失败任务。
+
+CI 在 debug 构建后检查实际合并 Manifest 的自定义服务、内部可见性、独立进程、SDK 发现 action、接收器和通知权限。本机含公开 AppKey 的体验包额外执行 `--require-app-key` 检查；这些静态检查与实际送达证据分别记录。
 
 ## 前端与其他 PR
 
