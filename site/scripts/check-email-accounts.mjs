@@ -335,6 +335,22 @@ try {
   );
   cookie = secondCookie;
   eq((await api("/email/me")).logged_in, false); // logged-out cookie stays revoked
+  failSend = false;
+  const reservation = h.db.sqlite.prepare(
+    "INSERT INTO email_challenges(id,email,code_hash,client_hash,created_at,expires_at) VALUES (?,?,?,?,?,?)",
+  );
+  for (let i = 0; i < 100; i++)
+    reservation.run(
+      i.toString(16).padStart(64, "0"),
+      `quota-${i}@example.invalid`,
+      "a".repeat(64),
+      "different-fixture-client",
+      new Date(time).toISOString(),
+      new Date(time + 600000).toISOString(),
+    );
+  const sentBeforeQuota = delivered.length;
+  await api("/email/code", { email: "quota-check@example.invalid" }, 429);
+  eq(delivered.length, sentBeforeQuota);
   console.log(
     `邮箱账号、迁移权限与邮件队列检查通过 ${checks} 项（隔离传输，未发送真实邮件）`,
   );

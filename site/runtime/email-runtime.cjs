@@ -12806,7 +12806,10 @@ function createEmailRuntime(db, {
         const ips = sql.prepare(
           "SELECT COUNT(*) AS n FROM email_challenges WHERE client_hash=? AND created_at>?"
         ).get(client, new Date(now().getTime() - 36e5).toISOString());
-        if (recent.n >= 5 || ips.n >= 30 || recent.last && now().getTime() - Date.parse(recent.last) < 6e4)
+        const total = sql.prepare(
+          "SELECT COUNT(*) AS n FROM email_challenges WHERE created_at>?"
+        ).get(new Date(now().getTime() - 36e5).toISOString());
+        if (recent.n >= 5 || ips.n >= 30 || total.n >= 100 || recent.last && now().getTime() - Date.parse(recent.last) < 6e4)
           fail(429, "\u9A8C\u8BC1\u7801\u53D1\u9001\u8FC7\u4E8E\u9891\u7E41\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5");
         sql.prepare("UPDATE email_challenges SET consumed=1 WHERE email=?").run(email);
         sql.prepare(

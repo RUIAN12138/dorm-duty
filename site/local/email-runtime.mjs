@@ -405,9 +405,15 @@ export function createEmailRuntime(
             "SELECT COUNT(*) AS n FROM email_challenges WHERE client_hash=? AND created_at>?",
           )
           .get(client, new Date(now().getTime() - 3600000).toISOString());
+        const total = sql
+          .prepare(
+            "SELECT COUNT(*) AS n FROM email_challenges WHERE created_at>?",
+          )
+          .get(new Date(now().getTime() - 3600000).toISOString());
         if (
           recent.n >= 5 ||
           ips.n >= 30 ||
+          total.n >= 100 ||
           (recent.last && now().getTime() - Date.parse(recent.last) < 60000)
         )
           fail(429, "验证码发送过于频繁，请稍后再试");
