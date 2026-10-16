@@ -53,6 +53,7 @@ const emit = defineEmits<{
   "join-dorm": [];
   "create-dorm": [];
   "recover-owner": [];
+  "email-account": [];
 }>();
 const board = ref<ChoreBoardData | null>(null),
   loading = ref(false),
@@ -1505,6 +1506,13 @@ onUnmounted(() => {
         @closed="runQueuedTool"
       >
         <div class="menu-section">
+          <ActionItem
+            v-if="!demo"
+            label="邮箱账号与提醒"
+            icon="envelop-o"
+            data-testid="open-email-account"
+            @click="fromPreferences(() => emit('email-account'))"
+          />
           <ActionItem
             label="切换我的身份"
             icon="friends-o"

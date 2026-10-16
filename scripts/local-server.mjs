@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 import worker from "../site/worker/index.js";
 import pushRuntimeModule from "../site/runtime/push-runtime.cjs";
+import emailRuntimeModule from "../site/runtime/email-runtime.cjs";
 import { openDatabase, ensureLocalDemo } from "../site/local/database.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -28,6 +29,7 @@ let db,
   server,
   closing = false,
   pushRuntime,
+  emailRuntime,
   reminderScheduler;
 const waits = new Set();
 
@@ -77,6 +79,7 @@ async function lockDatabase() {
 async function release() {
   await reminderScheduler?.close();
   await Promise.allSettled(waits);
+  await emailRuntime?.close();
   await pushRuntime?.close();
   db?.close();
   if (ownsLock) {
@@ -112,6 +115,18 @@ try {
   await lockDatabase();
   db = await openDatabase(databasePath);
   const env = { DB: db, DEFAULT_DORM_INVITE_CODE: ensureLocalDemo(db) };
+  let emailConfig = null;
+  try {
+    emailConfig = await emailRuntimeModule.loadEmailConfig(
+      path.dirname(databasePath),
+    );
+  } catch {
+    console.error("邮件配置不可用，已有身份与站内提醒继续运行");
+  }
+  emailRuntime = emailRuntimeModule.createEmailRuntime(db, {
+    config: emailConfig,
+    base: webBase,
+  });
   try {
     pushRuntime = await pushRuntimeModule.createPushRuntime(
       db,
@@ -158,14 +173,27 @@ try {
         else if (url.pathname.startsWith(webBase))
           url.pathname = `/${url.pathname.slice(webBase.length)}`;
       }
+      const requestHeaders = new Headers(req.headers);
+      // Strip caller-controlled values. A loopback reverse proxy may supply X-Real-IP.
+      const loopback = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
+        req.socket.remoteAddress,
+      );
+      requestHeaders.set(
+        "X-Dorm-Client",
+        serverDeployment && loopback
+          ? String(req.headers["x-real-ip"] || req.socket.remoteAddress)
+          : req.socket.remoteAddress || "unknown",
+      );
       const request = new Request(url, {
         method: req.method,
-        headers: req.headers,
+        headers: requestHeaders,
         body: ["GET", "HEAD"].includes(req.method)
           ? undefined
           : Buffer.concat(chunks),
       });
-      let response = await worker.fetch(request, env, ctx);
+      let response = await emailRuntime.wrap(request, (next) =>
+        worker.fetch(next, env, ctx),
+      );
       if (url.pathname === "/health" && response.ok && req.method === "GET") {
         response = new Response(
           JSON.stringify({

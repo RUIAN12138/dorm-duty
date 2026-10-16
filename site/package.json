@@ -19,6 +19,7 @@
     "ical.js": "2.2.1"
   },
   "dependencies": {
+    "nodemailer": "10.1.2",
     "web-push": "3.6.7"
   }
 }

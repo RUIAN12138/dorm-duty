@@ -51,7 +51,7 @@ export function createGuestDorm(
 ) {
   return guestRequest<GuestCreation>("/guest/create", {}, signal, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
   });
 }

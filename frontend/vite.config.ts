@@ -6,6 +6,7 @@ const base = process.env.DORM_WEB_BASE || "/";
 if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base))
   throw new Error("DORM_WEB_BASE 必须是以 / 开头和结尾的安全路径");
 const paths = [
+  "/email",
   "/guest",
   "/chores",
   "/auth",

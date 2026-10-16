@@ -36,6 +36,8 @@ jobs:
           node site/scripts/check-worker.mjs
       - name: Verify business and notification behavior
         run: |
+          node site/scripts/build-email-runtime.mjs
+          git diff --exit-code site/runtime/email-runtime.cjs
           python3 scripts/test_native_setup.py
           node site/scripts/check-cloud-backend.mjs
           node site/scripts/check-name-entry.mjs
@@ -54,6 +56,8 @@ jobs:
           node site/scripts/check-native-back.mjs
           node site/scripts/check-native-bridge.mjs
           node site/scripts/check-harmony-basic-push.mjs
+          node site/scripts/check-email-accounts.mjs
+          node site/scripts/check-email-delivery.mjs
           node site/scripts/check-push-settings.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs
@@ -86,6 +90,8 @@ jobs:
         env:
           DORM_WEB_BASE: /dorm-duty/
         run: npm run build --prefix frontend -- --outDir dist-server
+      - name: Verify email account HTTPS and mobile flow
+        run: node scripts/check-email-experience.mjs
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 20
