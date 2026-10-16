@@ -76,6 +76,21 @@ try {
     token,
     "POST",
     {
+      id: task.id,
+      revision: 0,
+      version: b.version,
+      member_id: member.user_id,
+      key: "water",
+      completed_at: at,
+      reason: "POST不得绑定原任务",
+    },
+    422,
+  );
+  await api(
+    "/chores/history",
+    token,
+    "POST",
+    {
       version: b.version,
       member_id: room.member_id,
       key: "water",

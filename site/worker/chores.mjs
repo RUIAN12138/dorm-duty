@@ -811,8 +811,16 @@ async function historyChange(request, db, room, who, now) {
     fail(404, "not_found", "接口不存在");
   const input = await body(
     request,
-    ["id", "revision", "version", "member_id", "key", "completed_at", "reason"],
-    ["version", "reason"],
+    request.method === "POST"
+      ? ["version", "member_id", "key", "completed_at", "reason"]
+      : request.method === "PATCH"
+        ? ["id", "revision", "version", "completed_at", "reason"]
+        : ["id", "revision", "version", "reason"],
+    request.method === "POST"
+      ? ["version", "member_id", "key", "completed_at", "reason"]
+      : request.method === "PATCH"
+        ? ["id", "revision", "version", "completed_at", "reason"]
+        : ["id", "revision", "version", "reason"],
   );
   const reason = str(input.reason, 1, 200),
     version = integer(input.version, 0),
