@@ -117,7 +117,7 @@ function entering(el: Element) {
         class="record-stagger"
         :style="{
           '--record-delay': `${appearDelay + Math.min(index, 8) * (appearDelay ? 28 : 32)}ms`,
-          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 6) * 20}ms`,
+          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 6) * 10}ms`,
         }"
       >
         <ChoreRecordRow
@@ -232,8 +232,8 @@ function entering(el: Element) {
 }
 .record-reveal-leave-active {
   transition:
-    transform 180ms var(--ui-ease-out) var(--record-exit-delay),
-    opacity 160ms var(--ui-ease-out) var(--record-exit-delay);
+    transform 140ms var(--ui-ease-out) var(--record-exit-delay),
+    opacity 120ms var(--ui-ease-out) var(--record-exit-delay);
   position: absolute;
   left: 0;
   right: 0;
