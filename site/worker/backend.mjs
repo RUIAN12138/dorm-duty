@@ -639,7 +639,16 @@ async function guestView(db, room) {
     members: await choreGuestMemberMarks(db, room.id),
   };
 }
-async function guestCreate(request, db, now) {
+async function guestCreate(request, db, now, emailCreator) {
+  const emailSession = emailCreator
+    ? await first(
+        db,
+        "SELECT account_id,expires_at FROM email_sessions WHERE token_hash=? AND account_id=? AND expires_at>?",
+        [emailCreator.sessionHash, emailCreator.accountId, now.toISOString()],
+      )
+    : null;
+  if (emailCreator && !emailSession)
+    fail(401, "email_required", "请先用邮箱验证码登录");
   const input = await body(
     request,
     ["name", "nickname", "members", "marker_id"],
@@ -665,7 +674,9 @@ async function guestCreate(request, db, now) {
     token = random(),
     tokenHash = await digest(token);
   const current = now.toISOString(),
-    expires = new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString();
+    expires =
+      emailSession?.expires_at ||
+      new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString();
   const today = localDate(now),
     usernamesJson = JSON.stringify(usernames),
     ops = [];
@@ -737,6 +748,31 @@ async function guestCreate(request, db, now) {
         [marker, invite],
       ),
     );
+  if (emailCreator) {
+    // Ownership, room and email linkage commit together. A concurrently revoked
+    // email login makes the NOT NULL subquery fail and rolls the entire batch back.
+    ops.push(
+      stmt(
+        db,
+        "INSERT INTO email_members(account_id,user_id,dorm_id,creator_verified,bound_at) VALUES ((SELECT account_id FROM email_sessions WHERE token_hash=? AND account_id=? AND expires_at>?), (SELECT id FROM users WHERE username=?), (SELECT id FROM dormitories WHERE invite_code=?),1,?)",
+        [
+          emailCreator.sessionHash,
+          emailCreator.accountId,
+          current,
+          usernames[0],
+          invite,
+          current,
+        ],
+      ),
+    );
+    ops.push(
+      stmt(
+        db,
+        "INSERT INTO email_grants(token_hash,email_session_hash,full_session) VALUES (?,?,1)",
+        [tokenHash, emailCreator.sessionHash],
+      ),
+    );
+  }
   await db.batch(ops);
   const room = normalizeDorm(
     await first(db, "SELECT * FROM dormitories WHERE invite_code=?", [invite]),
@@ -1484,7 +1520,7 @@ async function dispatch(request, env, ctx) {
   }
   if (/^\/chores(\/|$)/.test(path)) return handleChores(request, env, now);
   if (path === "/guest/create" && method === "POST")
-    return guestCreate(request, db, now);
+    return guestCreate(request, db, now, env.EMAIL_CREATOR);
   if (path === "/guest/recover" && method === "POST")
     return recoverCreator(request, db, now);
   if ((path === "/guest/dorm" || path === "/guest/tasks") && method === "GET") {

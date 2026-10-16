@@ -222,7 +222,13 @@ const months = computed(() =>
   [-1, 0, 1].map((delta) => {
     const key = shiftMonth(props.month, delta);
     const [year = 2026, month = 1] = key.split("-").map(Number);
-    const records = delta === 0 ? props.records : props.neighbors?.[key] || [];
+    // During a month commit the board request is still in flight. Keep the
+    // already-loaded adjacent month's heat cells instead of briefly painting
+    // the old month's records into the new centre panel.
+    const records = [
+      ...props.records,
+      ...Object.values(props.neighbors || {}).flat(),
+    ].filter((record) => record.completed_date.startsWith(key));
     const byDate = new Map<string, ChoreRecord[]>();
     for (const record of records) {
       const list = byDate.get(record.completed_date) || [];

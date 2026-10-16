@@ -660,7 +660,7 @@ async function load(): Promise<boolean> {
     return true;
   } catch (e) {
     if (id !== requestId || requestController.signal.aborted) return false;
-    if (e instanceof ApiError && e.status === 401) {
+    if (e instanceof ApiError && [401, 428].includes(e.status)) {
       emit("expired");
       return false;
     }

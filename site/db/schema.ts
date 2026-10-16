@@ -10,6 +10,11 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
+export const emailEntryPolicy = sqliteTable("email_entry_policy", {
+  id: integer("id").primaryKey(),
+  required: integer("required").notNull().default(0),
+  activatedAt: text("activated_at"),
+});
 export const emailAccounts = sqliteTable("email_accounts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),

@@ -32,30 +32,29 @@ export function useMonthCarousel(
   } | null = null;
   const width = () => viewport.value?.clientWidth || 1;
   function interrupt() {
-    if (animation && track.value) {
-      offset.value =
-        new DOMMatrixReadOnly(getComputedStyle(track.value).transform).m41 +
-        width();
-    }
     animation?.stop();
     animation = undefined;
   }
   function settle(from = offset.value) {
     animation?.stop();
-    offset.value = 0;
+    offset.value = from;
     if (
       !track.value ||
       !motionAllowed() ||
       document.hidden ||
       Math.abs(from) < 0.5
-    )
+    ) {
+      offset.value = 0;
       return;
-    track.value.style.transform = `translate3d(${-width() + from}px,0,0)`;
-    const running = animate(
-      track.value,
-      { transform: `translate3d(${-width()}px,0,0)` },
-      motionTokens.settle,
-    );
+    }
+    // Vue owns the transform throughout. Mixing a queued style patch with a
+    // DOM/WAAPI transform used to erase the compensated first frame on rebase.
+    const running = animate(from, 0, {
+      ...motionTokens.settle,
+      onUpdate: (value) => {
+        offset.value = value;
+      },
+    });
     animation = running;
     void running.then(() => {
       if (animation === running) animation = undefined;
@@ -161,7 +160,8 @@ export function useMonthCarousel(
       pending = null;
       settle(from);
     },
-    { flush: "post" },
+    // Rebase panels and their compensated offset in the SAME Vue render.
+    { flush: "pre" },
   );
   const hidden = () => {
     if (document.hidden) {

@@ -12624,6 +12624,16 @@ function createEmailRuntime(db, {
       throw error2;
     }
   };
+  if (available)
+    transaction(() => {
+      const activated = sql.prepare(
+        "UPDATE email_entry_policy SET required=1,activated_at=? WHERE id=1 AND required=0"
+      ).run(stamp());
+      if (activated.changes) sql.exec("DELETE FROM email_sessions");
+    });
+  const registrationRequired = () => Boolean(
+    sql.prepare("SELECT required FROM email_entry_policy WHERE id=1").get()?.required
+  );
   const cookie = (token, age = 30 * 86400) => `${cookieName}=${token}; Path=${base2}; HttpOnly; SameSite=Strict; Max-Age=${age}${config?.publicOrigin.startsWith("https:") ? "; Secure" : ""}`;
   function session(request) {
     const token = (request.headers.get("Cookie") || "").split(";").map((v) => v.trim()).find((v) => v.startsWith(cookieName + "="))?.slice(cookieName.length + 1);
@@ -12674,10 +12684,12 @@ function createEmailRuntime(db, {
     if (!full) fail(401, "\u5F53\u524D\u5BBF\u820D\u8EAB\u4EFD\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u8FDB\u5165");
     return { ...full, token_hash: digest };
   }
-  function bind(who, token) {
+  function bind(who, token, expectedMember) {
     if (now().getTime() - Date.parse(who.verified_at) > 10 * 6e4)
       fail(401, "\u7ED1\u5B9A\u8EAB\u4EFD\u524D\u8BF7\u91CD\u65B0\u9A8C\u8BC1\u90AE\u7BB1");
     const member = memberToken(token);
+    if (expectedMember !== void 0 && member.user_id !== expectedMember)
+      fail(409, "\u8FD9\u4EFD\u8BBE\u5907\u51ED\u8BC1\u5C5E\u4E8E\u5176\u4ED6\u6210\u5458\uFF0C\u8BF7\u4F7F\u7528\u539F\u8EAB\u4EFD\u51ED\u8BC1\u6216\u91CD\u65B0\u52A0\u5165");
     const owner = sql.prepare("SELECT admin_user_id FROM dormitories WHERE id=?").get(member.dorm_id);
     if (owner.admin_user_id === member.user_id && !member.creator_verified)
       fail(403, "\u521B\u5EFA\u8005\u8BF7\u5728\u6301\u6709\u7BA1\u7406\u6743\u9650\u7684\u8BBE\u5907\u4E0A\u7ED1\u5B9A\u90AE\u7BB1\uFF0C\u6216\u5148\u6062\u590D\u7BA1\u7406\u6743\u9650");
@@ -12779,7 +12791,10 @@ function createEmailRuntime(db, {
   async function route(request) {
     const pathname = new URL(request.url).pathname, method = request.method;
     if (pathname === "/email/config" && method === "GET")
-      return reply({ available, registration_required: available });
+      return reply({
+        available,
+        registration_required: registrationRequired()
+      });
     if (pathname === "/email/me" && method === "GET") {
       const who2 = session(request);
       return reply(
@@ -12892,8 +12907,8 @@ function createEmailRuntime(db, {
       return reply({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
     }
     if (pathname === "/email/bind") {
-      const data = await input(request, ["member_token"]);
-      bind(who, data.member_token);
+      const data = await input(request, ["member_token", "member_id"]);
+      bind(who, data.member_token, data.member_id);
       return reply({ ok: true });
     }
     if (pathname === "/email/enter") {
@@ -12929,15 +12944,67 @@ function createEmailRuntime(db, {
     }
     fail(404, "\u63A5\u53E3\u4E0D\u5B58\u5728");
   }
+  function hasEmailGrant(request) {
+    const token = /^Bearer ([a-f0-9]{64})$/i.exec(
+      request.headers.get("Authorization") || ""
+    )?.[1];
+    if (!token) return false;
+    return Boolean(
+      sql.prepare(
+        `SELECT 1 FROM email_grants g
+      JOIN email_sessions e ON e.token_hash=g.email_session_hash AND e.expires_at>?
+      LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
+      LEFT JOIN sessions s ON s.token_hash=g.token_hash
+      JOIN email_members em ON em.account_id=e.account_id AND em.user_id=COALESCE(m.user_id,s.user_id)
+      WHERE g.token_hash=?`
+      ).get(stamp(), hash(token))
+    );
+  }
+  function guardEntry(request) {
+    if (!registrationRequired()) return;
+    const url = new URL(request.url), p = url.pathname;
+    if (["/chores/push/config", "/chores/native/config"].includes(p)) return;
+    if (request.method === "GET" && p.startsWith("/chores/calendar/")) return;
+    if (!/^\/(chores|guest|auth|dorms|duties|notifications|push)(\/|$)/.test(p))
+      return;
+    if (request.method === "GET" && [
+      "/guest/dorm",
+      "/guest/tasks",
+      "/chores/board",
+      "/chores/activity"
+    ].includes(p)) {
+      const code = url.searchParams.get("invite_code");
+      if (!code || sql.prepare(
+        "SELECT 1 FROM dormitories WHERE invite_code=? AND is_demo=1"
+      ).get(code.trim().toUpperCase()))
+        return;
+      if (p === "/guest/dorm" && !request.headers.has("Authorization") && session(request))
+        return;
+    }
+    if (!hasEmailGrant(request))
+      fail(428, "\u65B0\u7248\u9700\u8981\u5148\u9A8C\u8BC1\u90AE\u7BB1\uFF0C\u518D\u7ED1\u5B9A\u6216\u6062\u590D\u4F60\u7684\u5BBF\u820D\u8EAB\u4EFD");
+  }
   async function wrap2(request, dispatch) {
     try {
       const p = new URL(request.url).pathname;
       if (p.startsWith("/email/")) return await route(request);
-      if (request.method === "POST" && (p === "/chores/claim" || p === "/guest/create")) {
+      if (request.method === "POST" && (p === "/chores/claim" || p === "/guest/create" || p === "/guest/recover")) {
         let who = session(request);
-        if (available || who) {
+        if (registrationRequired() || who) {
           mutationOrigin(request);
           who = required(request);
+        }
+        if (p === "/guest/recover" && who) {
+          const data = await request.clone().json().catch(() => ({}));
+          const conflict = sql.prepare(
+            `SELECT 1 FROM dormitories d JOIN email_members em ON em.dorm_id=d.id
+            WHERE d.invite_code=? AND ((em.user_id=d.admin_user_id AND em.account_id<>?) OR (em.account_id=? AND em.user_id<>d.admin_user_id))`
+          ).get(
+            String(data.invite_code || "").trim().toUpperCase(),
+            who.id,
+            who.id
+          );
+          if (conflict) fail(403, "\u8BF7\u4F7F\u7528\u8BE5\u5BBF\u820D\u521B\u5EFA\u8005\u7ED1\u5B9A\u7684\u90AE\u7BB1\u6062\u590D\u7BA1\u7406\u6743\u9650");
         }
         if (p === "/chores/claim") {
           const data = await request.clone().json().catch(() => ({}));
@@ -12961,25 +13028,31 @@ function createEmailRuntime(db, {
               fail(403, "\u521B\u5EFA\u8005\u8BF7\u5148\u5728\u539F\u8BBE\u5907\u7ED1\u5B9A\u90AE\u7BB1\uFF0C\u6216\u6062\u590D\u7BA1\u7406\u6743\u9650\u540E\u518D\u7ED1\u5B9A");
           }
         }
-        if (who && now().getTime() - Date.parse(who.verified_at) > 10 * 6e4)
-          fail(401, "\u52A0\u5165\u6216\u521B\u5EFA\u5BBF\u820D\u524D\u8BF7\u91CD\u65B0\u9A8C\u8BC1\u90AE\u7BB1");
-        const result = await dispatch(request);
-        if (who && result.ok) {
+        if (who && p !== "/guest/create" && now().getTime() - Date.parse(who.verified_at) > 10 * 6e4)
+          fail(401, "\u7ED1\u5B9A\u5BBF\u820D\u8EAB\u4EFD\u524D\u8BF7\u91CD\u65B0\u9A8C\u8BC1\u90AE\u7BB1");
+        const result = await dispatch(
+          request,
+          who && p === "/guest/create" ? { accountId: who.id, sessionHash: who.session_hash } : void 0
+        );
+        if (who && p === "/guest/create" && !result.ok && !session(request))
+          fail(401, "\u90AE\u7BB1\u767B\u5F55\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u9A8C\u8BC1\u540E\u521B\u5EFA\u5BBF\u820D");
+        if (who && result.ok && p !== "/guest/create") {
           const data = await result.clone().json();
           try {
             bind(who, data.access_token);
           } catch (error2) {
             const digest = hash(data.access_token);
             sql.prepare(
-              `DELETE FROM ${p === "/guest/create" ? "sessions" : "member_sessions"} WHERE token_hash=?`
+              `DELETE FROM ${p === "/guest/recover" ? "sessions" : "member_sessions"} WHERE token_hash=?`
             ).run(digest);
             throw error2;
           }
         }
         return result;
       }
-      if (available && new URL(request.url).pathname === "/auth/register")
+      if (registrationRequired() && ["/auth/register", "/auth/login"].includes(p))
         fail(409, "\u65B0\u8D26\u53F7\u8BF7\u4F7F\u7528\u90AE\u7BB1\u9A8C\u8BC1\u7801\u6CE8\u518C");
+      guardEntry(request);
       return await dispatch(request);
     } catch (error2) {
       return reply(
@@ -13061,11 +13134,12 @@ function createEmailRuntime(db, {
       );
       if (Number(claim.changes) !== 1) continue;
       const r = data.reminder;
-      const subject = r ? `\u8F6E\u5230 \xB7 ${r.task_name_snapshot}\u63D0\u9192` : "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u90AE\u4EF6";
-      const text = r ? `${r.nickname}\uFF0C${r.source === "scheduled" ? "\u4F60\u6709\u672A\u5B8C\u6210\u7684\u503C\u65E5\u3002" : `${r.sender_name_snapshot}\u63D0\u9192\u4F60${r.task_name_snapshot}\u3002`}
+      const subject = r ? r.source === "scheduled" ? `\u8F6E\u5230 \xB7 \u7CFB\u7EDF\u503C\u65E5\u63D0\u9192` : `\u8F6E\u5230 \xB7 ${r.sender_name_snapshot}\u50AC\u4FC3\u4F60${r.task_name_snapshot}` : "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u90AE\u4EF6";
+      const text = r ? `${r.nickname}\uFF0C${r.source === "scheduled" ? "\u7CFB\u7EDF\u63D0\u9192\uFF1A\u4F60\u6709\u672A\u5B8C\u6210\u7684\u503C\u65E5\u3002" : `${r.sender_name_snapshot}\u63D0\u9192\u4F60${r.task_name_snapshot}\u3002`}
 
 ${r.task_content_snapshot}
 
+${r.source === "scheduled" ? "\u53D1\u8D77\u4EBA\uFF1A\u7CFB\u7EDF\u81EA\u52A8\u63D0\u9192" : `\u53D1\u8D77\u4EBA\uFF1A${r.sender_name_snapshot}`}
 \u5BBF\u820D\uFF1A${r.dorm_name}` : "\u8FD9\u662F\u4E00\u6761\u6D4B\u8BD5\u90AE\u4EF6\u3002\u4F60\u5DF2\u5F00\u542F\u8F6E\u5230\u90AE\u4EF6\u63D0\u9192\u3002";
       try {
         await deliver({

@@ -78,7 +78,7 @@ onBeforeUnmount(() => removeBack?.());
   height: 22px;
 }
 .hint-trigger:active {
-  transform: scale(0.92);
+  transform: scale(0.96);
   background: var(--ui-surface-muted);
 }
 .hint-glass {
@@ -94,7 +94,7 @@ onBeforeUnmount(() => removeBack?.());
   position: fixed;
   z-index: 4000;
   left: 50%;
-  top: 56%;
+  top: 50%;
   transform: translate(-50%, -50%);
   width: min(320px, calc(100vw - 40px));
   max-height: calc(100dvh - 48px);

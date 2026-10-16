@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHarness } from "./check-cloud-backend.mjs";
 import runtime from "../runtime/email-runtime.cjs";
+import { handleApi } from "../worker/backend.mjs";
 
 let checks = 0;
 const eq = (a, b) => {
@@ -40,12 +41,17 @@ async function api(p, data, status = 200, opts = {}) {
         Origin: config.publicOrigin,
         Cookie: opts.cookie ?? cookie,
         "X-Dorm-Client": "fixture-client",
+        ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
         ...opts.headers,
       },
       body: data ? JSON.stringify(data) : undefined,
     }),
-    (request) =>
-      h.request(p, { method: request.method, data, token: opts.token }),
+    (request, emailCreator) =>
+      handleApi(
+        request,
+        { ...h.env, EMAIL_CREATOR: emailCreator },
+        { waitUntil() {} },
+      ),
   );
   eq(response.status, status);
   if (response.headers.get("Set-Cookie"))
@@ -189,6 +195,8 @@ try {
   );
   eq(delivered.at(-1).to, "second@example.invalid");
   eq(delivered.at(-1).subject.includes(task.name), true);
+  eq(delivered.at(-1).subject.includes("甲催促你"), true);
+  eq(delivered.at(-1).text.includes("发起人：甲"), true);
   const sends = delivered.length;
   await service.drain();
   eq(delivered.length, sends);
@@ -296,15 +304,25 @@ try {
     },
     401,
   );
-  // Recent verification is needed before attaching a new room, before mutation.
+  // A verified account creates a new room directly, with atomic email ownership.
   cookie = firstCookie;
   const roomCount = h.db.sqlite
     .prepare("SELECT COUNT(*) AS n FROM dormitories")
     .get().n;
-  await api("/guest/create", { name: "过期验证", nickname: "甲" }, 401);
+  const created = await api(
+    "/guest/create",
+    { name: "邮箱直接创建", nickname: "甲" },
+    201,
+  );
+  eq(
+    (await api("/email/me")).rooms.find((r) => r.id === created.dorm.id)
+      .is_creator,
+    1,
+  );
+  await api("/auth/me", null, 200, { token: created.access_token });
   eq(
     h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM dormitories").get().n,
-    roomCount,
+    roomCount + 1,
   );
   cookie = restoredCookie;
   const previousCookie = cookie;

@@ -139,6 +139,22 @@ export function createEmailRuntime(
       throw error;
     }
   };
+  if (available)
+    transaction(() => {
+      const activated = sql
+        .prepare(
+          "UPDATE email_entry_policy SET required=1,activated_at=? WHERE id=1 AND required=0",
+        )
+        .run(stamp());
+      // A single cutover, not a logout on every service restart. Keep legacy
+      // credentials as proof for binding; business APIs no longer accept them alone.
+      if (activated.changes) sql.exec("DELETE FROM email_sessions");
+    });
+  const registrationRequired = () =>
+    Boolean(
+      sql.prepare("SELECT required FROM email_entry_policy WHERE id=1").get()
+        ?.required,
+    );
   const cookie = (token, age = 30 * 86400) =>
     `${cookieName}=${token}; Path=${base}; HttpOnly; SameSite=Strict; Max-Age=${age}${config?.publicOrigin.startsWith("https:") ? "; Secure" : ""}`;
   function session(request) {
@@ -214,10 +230,12 @@ export function createEmailRuntime(
     if (!full) fail(401, "当前宿舍身份已失效，请重新进入");
     return { ...full, token_hash: digest };
   }
-  function bind(who, token) {
+  function bind(who, token, expectedMember) {
     if (now().getTime() - Date.parse(who.verified_at) > 10 * 60000)
       fail(401, "绑定身份前请重新验证邮箱");
     const member = memberToken(token);
+    if (expectedMember !== undefined && member.user_id !== expectedMember)
+      fail(409, "这份设备凭证属于其他成员，请使用原身份凭证或重新加入");
     const owner = sql
       .prepare("SELECT admin_user_id FROM dormitories WHERE id=?")
       .get(member.dorm_id);
@@ -363,7 +381,10 @@ export function createEmailRuntime(
     const pathname = new URL(request.url).pathname,
       method = request.method;
     if (pathname === "/email/config" && method === "GET")
-      return reply({ available, registration_required: available });
+      return reply({
+        available,
+        registration_required: registrationRequired(),
+      });
     if (pathname === "/email/me" && method === "GET") {
       const who = session(request);
       return reply(
@@ -530,8 +551,8 @@ export function createEmailRuntime(
       return reply({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
     }
     if (pathname === "/email/bind") {
-      const data = await input(request, ["member_token"]);
-      bind(who, data.member_token);
+      const data = await input(request, ["member_token", "member_id"]);
+      bind(who, data.member_token, data.member_id);
       return reply({ ok: true });
     }
     if (pathname === "/email/enter") {
@@ -575,20 +596,96 @@ export function createEmailRuntime(
     }
     fail(404, "接口不存在");
   }
-  // Protect name claims even if SMTP is unavailable later. Existing proven devices
-  // keep working during migration; email login restores only their linked identity.
+  function hasEmailGrant(request) {
+    const token = /^Bearer ([a-f0-9]{64})$/i.exec(
+      request.headers.get("Authorization") || "",
+    )?.[1];
+    if (!token) return false;
+    return Boolean(
+      sql
+        .prepare(
+          `SELECT 1 FROM email_grants g
+      JOIN email_sessions e ON e.token_hash=g.email_session_hash AND e.expires_at>?
+      LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
+      LEFT JOIN sessions s ON s.token_hash=g.token_hash
+      JOIN email_members em ON em.account_id=e.account_id AND em.user_id=COALESCE(m.user_id,s.user_id)
+      WHERE g.token_hash=?`,
+        )
+        .get(stamp(), hash(token)),
+    );
+  }
+  function guardEntry(request) {
+    if (!registrationRequired()) return;
+    const url = new URL(request.url),
+      p = url.pathname;
+    if (["/chores/push/config", "/chores/native/config"].includes(p)) return;
+    // Calendar feed URLs carry their own revocable feed credential.
+    if (request.method === "GET" && p.startsWith("/chores/calendar/")) return;
+    if (!/^\/(chores|guest|auth|dorms|duties|notifications|push)(\/|$)/.test(p))
+      return;
+    if (
+      request.method === "GET" &&
+      [
+        "/guest/dorm",
+        "/guest/tasks",
+        "/chores/board",
+        "/chores/activity",
+      ].includes(p)
+    ) {
+      const code = url.searchParams.get("invite_code");
+      if (
+        !code ||
+        sql
+          .prepare(
+            "SELECT 1 FROM dormitories WHERE invite_code=? AND is_demo=1",
+          )
+          .get(code.trim().toUpperCase())
+      )
+        return;
+      // Verified newcomers may look up the room summary, never its roster.
+      if (
+        p === "/guest/dorm" &&
+        !request.headers.has("Authorization") &&
+        session(request)
+      )
+        return;
+    }
+    if (!hasEmailGrant(request))
+      fail(428, "新版需要先验证邮箱，再绑定或恢复你的宿舍身份");
+  }
   async function wrap(request, dispatch) {
     try {
       const p = new URL(request.url).pathname;
       if (p.startsWith("/email/")) return await route(request);
       if (
         request.method === "POST" &&
-        (p === "/chores/claim" || p === "/guest/create")
+        (p === "/chores/claim" ||
+          p === "/guest/create" ||
+          p === "/guest/recover")
       ) {
         let who = session(request);
-        if (available || who) {
+        if (registrationRequired() || who) {
           mutationOrigin(request);
           who = required(request);
+        }
+        if (p === "/guest/recover" && who) {
+          const data = await request
+            .clone()
+            .json()
+            .catch(() => ({}));
+          const conflict = sql
+            .prepare(
+              `SELECT 1 FROM dormitories d JOIN email_members em ON em.dorm_id=d.id
+            WHERE d.invite_code=? AND ((em.user_id=d.admin_user_id AND em.account_id<>?) OR (em.account_id=? AND em.user_id<>d.admin_user_id))`,
+            )
+            .get(
+              String(data.invite_code || "")
+                .trim()
+                .toUpperCase(),
+              who.id,
+              who.id,
+            );
+          if (conflict) fail(403, "请使用该宿舍创建者绑定的邮箱恢复管理权限");
         }
         if (p === "/chores/claim") {
           const data = await request
@@ -626,10 +723,21 @@ export function createEmailRuntime(
               fail(403, "创建者请先在原设备绑定邮箱，或恢复管理权限后再绑定");
           }
         }
-        if (who && now().getTime() - Date.parse(who.verified_at) > 10 * 60000)
-          fail(401, "加入或创建宿舍前请重新验证邮箱");
-        const result = await dispatch(request);
-        if (who && result.ok) {
+        if (
+          who &&
+          p !== "/guest/create" &&
+          now().getTime() - Date.parse(who.verified_at) > 10 * 60000
+        )
+          fail(401, "绑定宿舍身份前请重新验证邮箱");
+        const result = await dispatch(
+          request,
+          who && p === "/guest/create"
+            ? { accountId: who.id, sessionHash: who.session_hash }
+            : undefined,
+        );
+        if (who && p === "/guest/create" && !result.ok && !session(request))
+          fail(401, "邮箱登录已过期，请重新验证后创建宿舍");
+        if (who && result.ok && p !== "/guest/create") {
           const data = await result.clone().json();
           try {
             bind(who, data.access_token);
@@ -637,7 +745,7 @@ export function createEmailRuntime(
             const digest = hash(data.access_token);
             sql
               .prepare(
-                `DELETE FROM ${p === "/guest/create" ? "sessions" : "member_sessions"} WHERE token_hash=?`,
+                `DELETE FROM ${p === "/guest/recover" ? "sessions" : "member_sessions"} WHERE token_hash=?`,
               )
               .run(digest);
             throw error;
@@ -645,8 +753,12 @@ export function createEmailRuntime(
         }
         return result;
       }
-      if (available && new URL(request.url).pathname === "/auth/register")
+      if (
+        registrationRequired() &&
+        ["/auth/register", "/auth/login"].includes(p)
+      )
         fail(409, "新账号请使用邮箱验证码注册");
+      guardEntry(request);
       return await dispatch(request);
     } catch (error) {
       return reply(
@@ -761,10 +873,12 @@ export function createEmailRuntime(
       if (Number(claim.changes) !== 1) continue;
       const r = data.reminder;
       const subject = r
-        ? `轮到 · ${r.task_name_snapshot}提醒`
+        ? r.source === "scheduled"
+          ? `轮到 · 系统值日提醒`
+          : `轮到 · ${r.sender_name_snapshot}催促你${r.task_name_snapshot}`
         : "轮到 · 测试邮件";
       const text = r
-        ? `${r.nickname}，${r.source === "scheduled" ? "你有未完成的值日。" : `${r.sender_name_snapshot}提醒你${r.task_name_snapshot}。`}\n\n${r.task_content_snapshot}\n\n宿舍：${r.dorm_name}`
+        ? `${r.nickname}，${r.source === "scheduled" ? "系统提醒：你有未完成的值日。" : `${r.sender_name_snapshot}提醒你${r.task_name_snapshot}。`}\n\n${r.task_content_snapshot}\n\n${r.source === "scheduled" ? "发起人：系统自动提醒" : `发起人：${r.sender_name_snapshot}`}\n宿舍：${r.dorm_name}`
         : "这是一条测试邮件。你已开启轮到邮件提醒。";
       try {
         await deliver({
