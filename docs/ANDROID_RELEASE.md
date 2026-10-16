@@ -4,10 +4,12 @@
 
 ## 阻塞与任务
 
+当前用户选择仅做基础通道，厂商集成不作为本轮交付条件；范围与后台限制见 [基础通知说明](BASIC_NOTIFICATIONS.md)。
+
 | 工作 | 当前状态 | 验收入口 |
 | --- | --- | --- |
 | 服务端极光配置 | Android 配置已匹配并重启，设备查询 200；测试任务 accepted、模拟器实际显示正文；两位成员互发仍待验收，HarmonyOS 服务端仍未配置 | [#37](https://github.com/RUIAN12138/dorm-duty/issues/37) |
-| 厂商离线通道 | 基础 SDK 已有，小米 / 华为 Android / vivo 插件和平台配置待做 | [#38](https://github.com/RUIAN12138/dorm-duty/issues/38) |
+| 厂商离线通道 | 按用户选择暂缓，不在基础通知交付范围内 | [#38](https://github.com/RUIAN12138/dorm-duty/issues/38) |
 | 真机验收 | Android 15 模拟器通知标题 / 正文 / 点击恢复宿舍已通过；实际机型、锁屏、后台限制及通知任务路由待验收 | [#39](https://github.com/RUIAN12138/dorm-duty/issues/39) |
 | 固定签名与覆盖升级 | Gradle 接入与未配置拦截已实现；本机 debug 覆盖安装保留身份；固定发布私钥、release 签名与覆盖升级待验收 | [#40](https://github.com/RUIAN12138/dorm-duty/issues/40) |
 | 本地提醒补充 | 即时催促以推送为主，本地只补已知时间的提醒；实现待做 | [#41](https://github.com/RUIAN12138/dorm-duty/issues/41) |
@@ -27,7 +29,7 @@ systemctl is-active dorm-duty
 
 工具提示输入两遍 Master Secret；输出只包含配置状态。`--check` 不验证平台密钥是否真实有效，重启成功也不代表设备收到推送。必须继续安装客户端、取得真实 registration_id 并发新测试通知。HarmonyOS 后续用相同命令将平台改为 `harmony`，输入该平台自己的应用配置。
 
-## 2. 厂商通道
+## 2. 厂商通道（暂缓，保留历史参考）
 
 维持 JPush / JCore 固定版本，申请厂商参数后按[极光厂商指南](https://docs.jiguang.cn/jpush/client/Android/android_3rd_guide)接入兼容插件并核对合并 Manifest。华为 Android 应用与现有 HarmonyOS 应用分别创建和配置。厂商插件接入、控制台通道配置、真机后台送达是三个独立验收点；目前都不标为完成。
 

@@ -53,6 +53,7 @@ jobs:
           node site/scripts/check-undo.mjs
           node site/scripts/check-native-back.mjs
           node site/scripts/check-native-bridge.mjs
+          node site/scripts/check-harmony-basic-push.mjs
           node site/scripts/check-push-settings.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs
