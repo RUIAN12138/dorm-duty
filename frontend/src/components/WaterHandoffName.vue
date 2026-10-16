@@ -9,6 +9,7 @@ const props = defineProps<{
   members: ChoreMember[];
   targetId: number;
   targetName: string;
+  active?: boolean;
 }>();
 const rolling = ref(false),
   names = ref<string[]>([]),
@@ -25,7 +26,7 @@ function stop() {
 }
 async function play() {
   stop();
-  if (document.hidden) return;
+  if (document.hidden || props.active === false) return;
   if (!consumeWaterHandoff(props.scope, props.event) || !motionAllowed())
     return;
   const id = generation;
@@ -78,6 +79,7 @@ watch(
     () => props.event?.id,
     () => props.event?.completed_at,
     () => props.targetId,
+    () => props.active,
   ],
   play,
   { immediate: true, flush: "post" },

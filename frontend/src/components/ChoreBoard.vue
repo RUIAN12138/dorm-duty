@@ -1201,6 +1201,19 @@ onUnmounted(() => {
                         :members="board.members"
                         :target-id="water.assignee_id"
                         :target-name="water.assignee_name"
+                        :active="
+                          !messagesOpen &&
+                          !orderOpen &&
+                          !toolsOpen &&
+                          !preferencesOpen &&
+                          !pushOpen &&
+                          !settingsOpen &&
+                          !recoveryOpen &&
+                          !reminderOpen &&
+                          !markerOpen &&
+                          !detailTask &&
+                          !roundOpen
+                        "
                       >
                         <WaterNudge
                           v-if="water.assignee_id !== memberId"
