@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, nextTick } from "vue";
 import type { ChoreRecord } from "../api/chores";
 import ChoreRecordRow from "./ChoreRecordRow.vue";
 const props = withDefaults(
@@ -22,15 +22,28 @@ const emit = defineEmits<{
   undo: [id: number];
   toggle: [];
   edit: [record: ChoreRecord];
+  "before-layout": [];
+  "after-layout": [];
 }>();
 const root = ref<HTMLElement>();
+const collapsing = ref(false);
+const leavingElements = new Set<Element>();
 const positions = new WeakMap<Element, { top: number; width: number }>();
 watch(
   () => props.expanded,
   (next, previous) => {
-    if (!previous || next) return;
-    const body = root.value?.querySelector(".record-stack-body");
+    const body = root.value?.querySelector<HTMLElement>(".record-stack-body");
     if (!body) return;
+    if (next) {
+      collapsing.value = false;
+      body.style.removeProperty("min-height");
+      return;
+    }
+    if (!previous) return;
+    // Keep the scroll extent until the last visible card has faded away.
+    // Removing it immediately clamps scrollTop before FLIP can compensate.
+    body.style.minHeight = `${body.getBoundingClientRect().height}px`;
+    collapsing.value = true;
     const top = body.getBoundingClientRect().top;
     body.querySelectorAll(".record-stagger").forEach((el) => {
       const box = el.getBoundingClientRect();
@@ -40,12 +53,24 @@ watch(
   { flush: "pre" },
 );
 function leaving(el: Element) {
+  leavingElements.add(el);
   const at = positions.get(el);
   if (!(el instanceof HTMLElement) || !at) return;
   el.style.top = `${at.top}px`;
   el.style.width = `${at.width}px`;
 }
+function finishLeaving(el: Element) {
+  leavingElements.delete(el);
+  if (leavingElements.size || props.expanded || !collapsing.value) return;
+  emit("before-layout");
+  root.value
+    ?.querySelector<HTMLElement>(".record-stack-body")
+    ?.style.removeProperty("min-height");
+  collapsing.value = false;
+  void nextTick(() => emit("after-layout"));
+}
 function entering(el: Element) {
+  leavingElements.delete(el);
   if (!(el instanceof HTMLElement)) return;
   el.style.removeProperty("top");
   el.style.removeProperty("width");
@@ -55,7 +80,11 @@ function entering(el: Element) {
   <section
     ref="root"
     class="record-stack"
-    :class="{ 'is-expanded': expanded, 'is-stacked': list && !expanded }"
+    :class="{
+      'is-expanded': expanded,
+      'is-collapsing': collapsing,
+      'is-stacked': list && !expanded && !collapsing,
+    }"
     data-testid="record-stack"
   >
     <button
@@ -78,6 +107,8 @@ function entering(el: Element) {
       class="record-stack-body"
       appear
       @before-leave="leaving"
+      @after-leave="finishLeaving"
+      @leave-cancelled="finishLeaving"
       @before-enter="entering"
     >
       <div
@@ -86,7 +117,7 @@ function entering(el: Element) {
         class="record-stagger"
         :style="{
           '--record-delay': `${appearDelay + Math.min(index, 8) * (appearDelay ? 28 : 32)}ms`,
-          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 6) * 20}ms`,
+          '--record-exit-delay': `${Math.min(Math.max(0, records.length - index - 1), 6) * 10}ms`,
         }"
       >
         <ChoreRecordRow
@@ -180,6 +211,7 @@ function entering(el: Element) {
   background: var(--ui-surface);
 }
 .record-stack-body {
+  box-sizing: border-box;
   position: relative;
   display: grid;
   gap: var(--ui-card-gap);
@@ -200,8 +232,8 @@ function entering(el: Element) {
 }
 .record-reveal-leave-active {
   transition:
-    transform 180ms var(--ui-ease-out) var(--record-exit-delay),
-    opacity 160ms var(--ui-ease-out) var(--record-exit-delay);
+    transform 140ms var(--ui-ease-out) var(--record-exit-delay),
+    opacity 120ms var(--ui-ease-out) var(--record-exit-delay);
   position: absolute;
   left: 0;
   right: 0;

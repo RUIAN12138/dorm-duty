@@ -185,8 +185,14 @@ try {
     0,
     "failed completion never celebrates",
   );
+  check(await page.getByTestId('completion-toast').count(),0,'failed completion never shows encouragement');
   await page.getByTestId(`complete-${task.key}-${task.id}`).click();
-  await page.getByTestId("completion-toast").waitFor();
+  const praise=page.getByTestId('completion-toast');
+  await praise.waitFor();
+  check((await praise.innerText()).trim(),'你真棒👍！','successful completion uses the requested quiet encouragement');
+  check(await praise.locator('button').count(),0,'encouragement has no extra controls');
+  check(await praise.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','encouragement has no toast background');
+  check(await praise.evaluate(el=>{const r=el.getBoundingClientRect(),nav=document.querySelector('.chore-bottom-nav').getBoundingClientRect(),action=document.querySelector('.completion-surface').getBoundingClientRect();return r.bottom<nav.top-10&&(r.top>=action.bottom||r.bottom<=action.top);}),true,'encouragement fits the empty area above navigation without overlapping the action');
   await page.waitForTimeout(850);
   check(
     (await board()).today_tasks.find((t) => t.id === task.id).status,
@@ -198,15 +204,13 @@ try {
     true,
     "completed task keeps its reversible button",
   );
-  await page
-    .getByTestId("completion-toast")
-    .getByRole("button", { name: "撤销", exact: true })
-    .click();
+  await page.screenshot({path:path.join(evidence,`${safari?'webkit':'chromium'}-completion-praise.png`)});
+  await page.getByTestId(`undo-${task.id}`).click();
   await page.getByTestId(`complete-${task.key}-${task.id}`).waitFor();
   check(
     (await board()).today_tasks.find((t) => t.id === task.id).status,
     "pending",
-    "toast Undo restores task",
+    "tapping the completed button still restores the task",
   );
   await page.getByTestId("nav-calendar").click();
   await page.getByTestId("calendar-view-stats").click();
@@ -254,8 +258,11 @@ try {
       await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+direction*bounds.width*.64,y,{steps:12});
     }
     check(await page.locator('.deck-card.is-front').evaluate(e=>Math.abs(new DOMMatrix(getComputedStyle(e).transform).m41)>10),true,'stacked front card follows the pointer before release');
+    const weights=await page.locator('.deck-dot-fill').evaluateAll(els=>els.map(e=>Number(getComputedStyle(e).opacity)));
+    check(weights.filter(v=>v>0.01&&v<0.99).length,2,'adjacent pagination dots crossfade continuously during the gesture');
     if(touchSession)await touchSession.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});else await page.mouse.up();
     await page.waitForTimeout(500);
+    check(await page.locator('.deck-dots .is-current .deck-dot-fill').evaluate(e=>Number(getComputedStyle(e).opacity)),1,'pagination dots settle on the visible card');
   }
   await swipeCard(1);
   check(await page.locator('.deck-card.is-front h2').innerText(),'抬水','rightward gesture wraps from the first card');
@@ -416,12 +423,19 @@ try {
   check(listEntrance.some(r=>r.opacity<1&&r.x>0),true,'expanded list cards fade in from right to left');
   check(listEntrance[2].delay>listEntrance[1].delay,true,'expanded list cards enter progressively');
   await page.waitForTimeout(600);
+  const expandedHeight=await seedStack.locator('.record-stack-body').evaluate(e=>e.getBoundingClientRect().height);
   await seedHeading.click();
+  check(await seedStack.locator('.record-stack-body').evaluate((e,h)=>e.getBoundingClientRect().height>=h-1,expandedHeight),true,'collapse retains its scroll extent while cards are still visible');
   const exits=await seedStack.locator('.record-reveal-leave-active').evaluateAll(els=>els.map(el=>Number.parseFloat(el.style.top)));
   check(exits.length,7,'collapse keeps each card for its exit animation');
   check(exits.every((y,i)=>Number.isFinite(y)&&(i===0||y>exits[i-1])),true,'collapsing cards preserve distinct old positions');
   await page.waitForTimeout(350);
   check(await seedStack.locator('.record-stagger').count(),0,'collapse leaves no ghost cards');
+  check(await seedStack.locator('.record-stack-body').evaluate(e=>e.style.minHeight),'','collapse releases its temporary scroll reservation');
+  await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(600);
+  check(await seedStack.locator('.record-stagger').evaluateAll(els=>els.length===7&&els.every(e=>getComputedStyle(e).opacity==='1'&&!e.style.top)),true,'interrupted collapse reopens all cards at their natural positions');
+  await seedHeading.click();await page.waitForTimeout(350);
+  check(await seedStack.locator('.record-stagger').count(),0,'repeated collapse does not leave stale cards');
   const seen = new Set();
   while(true){
     for(const heading of await page.locator('.records-heading').all()){

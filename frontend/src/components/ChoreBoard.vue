@@ -325,13 +325,13 @@ const completedTasks = computed(() => {
     (a, b) => (b.completed_at || "").localeCompare(a.completed_at || ""),
   );
 });
-const toastTask = ref<ChoreTask | null>(null);
-let undoToastTimer: ReturnType<typeof setTimeout> | undefined;
-onUnmounted(() => clearTimeout(undoToastTimer));
-function offerUndo(task: ChoreTask) {
-  toastTask.value = task;
-  clearTimeout(undoToastTimer);
-  undoToastTimer = setTimeout(() => (toastTask.value = null), 1600);
+const praiseTask = ref<ChoreTask | null>(null);
+let praiseTimer: ReturnType<typeof setTimeout> | undefined;
+onUnmounted(() => clearTimeout(praiseTimer));
+function showCompletionPraise(task: ChoreTask) {
+  praiseTask.value = task;
+  clearTimeout(praiseTimer);
+  praiseTimer = setTimeout(() => (praiseTask.value = null), 2200);
 }
 function canUndoTask(id: number) {
   return board.value?.undo_tasks.some((task) => task.id === id) || false;
@@ -628,7 +628,7 @@ function acceptCompletion(receipt: ChoreCompletion) {
   const finished = receipt.task;
   completedOpen.value = false;
   completionReceipt.value = finished;
-  offerUndo(finished);
+  showCompletionPraise(finished);
   settlingTask.value = finished;
   clearTimeout(settleTaskTimer);
   settleTaskTimer = setTimeout(() => (settlingTask.value = null), 620);
@@ -762,7 +762,7 @@ async function undo(id: number) {
       settlingTask.value = null;
     }
     completedOpen.value = false;
-    if (toastTask.value?.id === id) toastTask.value = null;
+    if (praiseTask.value?.id === id) praiseTask.value = null;
     if (receipt.task.key === "water") waterReceipt.value = null;
     board.value.today_tasks = board.value.today_tasks.map((t) =>
       t.id === id ? receipt.task : t,
@@ -1332,29 +1332,18 @@ onUnmounted(() => {
           </div>
         </Transition>
       </div>
-      <Teleport to="body"
-        ><Transition name="quiet-toast"
-          ><div
-            v-if="toastTask"
-            class="p0-undo-toast"
+      <Teleport to="body">
+        <Transition name="quiet-toast">
+          <p
+            v-if="praiseTask"
+            class="completion-praise"
             role="status"
             data-testid="completion-toast"
           >
-            <span class="completion-confirmed"
-              ><van-icon name="success" aria-hidden="true" />{{
-                toastTask.name
-              }}已完成</span
-            ><button
-              :disabled="!!busy || completionSyncPending"
-              @click="undo(toastTask.id)"
-            >
-              撤销</button
-            ><button aria-label="关闭完成提示" @click="toastTask = null">
-              ×
-            </button>
-          </div></Transition
-        ></Teleport
-      >
+            你真棒👍！
+          </p>
+        </Transition>
+      </Teleport>
       <p
         v-if="actionError && !markerOpen"
         class="chore-inline-error"
@@ -2702,45 +2691,23 @@ onUnmounted(() => {
 }
 </style>
 <style>
-.p0-undo-toast {
+.completion-praise {
   position: fixed;
-  z-index: 1500;
-  top: calc(80px + env(safe-area-inset-top));
+  z-index: 110;
+  bottom: calc(88px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--ui-card-gap);
-  width: min(calc(100% - 32px), 440px);
-  padding: 0 var(--ui-space-sm);
-  box-sizing: border-box;
-  min-height: var(--ui-action-height);
-  border: var(--ui-card-border);
-  border-radius: var(--ui-card-radius);
-  background: var(--ui-ink);
-  color: var(--ui-surface);
-  font-size: var(--ui-small-size);
-}
-.p0-undo-toast > span {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.p0-undo-toast button {
-  min-height: 44px;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  padding: 0;
-  cursor: pointer;
-}
-.p0-undo-toast button:disabled {
-  opacity: 0.5;
+  margin: 0;
+  color: #777;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .quiet-toast-enter-active,
 .quiet-toast-leave-active {
-  transition: opacity var(--ui-state-time);
+  transition: opacity 240ms var(--ui-ease-out);
 }
 .quiet-toast-enter-from,
 .quiet-toast-leave-to {
