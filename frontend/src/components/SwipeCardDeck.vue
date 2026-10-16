@@ -71,6 +71,19 @@ function pose(index: number) {
     transform: `translate3d(${-6 * layer}px,${-18 * layer}px,${-12 * layer}px) rotateZ(${-2 * layer}deg) scale(${1 - 0.04 * layer})`,
   };
 }
+function dotPose(index: number) {
+  const progress = Math.min(1, Math.abs(offset.value) / (width() * 0.8));
+  const weight =
+    index === props.modelValue
+      ? 1 - progress
+      : index === target()
+        ? progress
+        : 0;
+  return {
+    opacity: weight,
+    transform: `scale(${1 + weight * 0.35})`,
+  };
+}
 function release() {
   const old = gesture;
   gesture = null;
@@ -209,12 +222,17 @@ onBeforeUnmount(() => {
         </div>
       </article>
     </div>
-    <div class="deck-dots" aria-hidden="true">
+    <div
+      class="deck-dots"
+      :class="{ 'is-dragging': dragging, 'is-settling': settling }"
+      aria-hidden="true"
+    >
       <span
         v-for="(_, index) in labels"
         :key="index"
         :class="{ 'is-current': index === modelValue }"
-      />
+        ><i class="deck-dot-fill" :style="dotPose(index)" />
+      </span>
     </div>
     <span class="sr-only" aria-live="polite"
       >{{ labels[modelValue] }}，第 {{ modelValue + 1 }} 张，共
@@ -310,11 +328,19 @@ onBeforeUnmount(() => {
   height: 5px;
   border-radius: 50%;
   background: #ddd;
-  transition: transform 160ms var(--ui-ease-out);
 }
-.deck-dots .is-current {
+.deck-dot-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
   background: #111;
-  transform: scale(1.35);
+  transition:
+    opacity 220ms var(--ui-ease-out),
+    transform 220ms var(--ui-ease-out);
+}
+.deck-dots.is-dragging .deck-dot-fill {
+  transition: none;
 }
 .sr-only {
   position: absolute;
@@ -328,7 +354,7 @@ onBeforeUnmount(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .deck-card,
-  .deck-dots span {
+  .deck-dot-fill {
     transition: none;
   }
 }

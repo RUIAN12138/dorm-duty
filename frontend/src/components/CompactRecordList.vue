@@ -52,10 +52,36 @@ const isOpen = (date: string) =>
   date === props.today
     ? collapsedToday.value !== date
     : expanded.value.has(date);
-function toggle(date: string) {
-  const before = [
+let positions: { el: HTMLElement; top: number }[] = [];
+function captureLayout() {
+  positions = [
     ...(root.value?.querySelectorAll<HTMLElement>(".record-stack") || []),
   ].map((el) => ({ el, top: el.getBoundingClientRect().top }));
+}
+function settleLayout() {
+  const before = positions;
+  positions = [];
+  if (!motionAllowed()) return;
+  // Measure the new layout without an earlier FLIP transform. The saved
+  // positions already include its current visual pose when interrupted.
+  for (const { el } of before) el.getAnimations().forEach((a) => a.cancel());
+  const moves = before.map(({ el, top }) => ({
+    el,
+    delta: top - el.getBoundingClientRect().top,
+  }));
+  for (const { el, delta } of moves) {
+    if (Math.abs(delta) > 1)
+      el.animate(
+        [
+          { transform: `translate3d(0,${delta}px,0)` },
+          { transform: "translate3d(0,0,0)" },
+        ],
+        { duration: 240, easing: "cubic-bezier(.22,1,.36,1)" },
+      );
+  }
+}
+function toggle(date: string) {
+  captureLayout();
   if (date === props.today) collapsedToday.value = isOpen(date) ? date : "";
   else {
     const next = new Set(expanded.value);
@@ -63,21 +89,7 @@ function toggle(date: string) {
     else next.add(date);
     expanded.value = next;
   }
-  void nextTick(() => {
-    if (!motionAllowed()) return;
-    for (const { el, top } of before) {
-      el.getAnimations().forEach((a) => a.cancel());
-      const delta = top - el.getBoundingClientRect().top;
-      if (Math.abs(delta) > 1)
-        el.animate(
-          [
-            { transform: `translate3d(0,${delta}px,0)` },
-            { transform: "translate3d(0,0,0)" },
-          ],
-          { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-        );
-    }
-  });
+  void nextTick(settleLayout);
 }
 function setPage(value: number) {
   page.value = Math.max(0, Math.min(total.value - 1, value));
@@ -141,6 +153,8 @@ const label = (date: string) =>
         :creator="creator"
         :undo-ids="undoIds"
         @toggle="toggle(group.date)"
+        @before-layout="captureLayout"
+        @after-layout="settleLayout"
         @edit="emit('edit', $event)"
         @undo="emit('undo', $event)"
       />
@@ -176,6 +190,7 @@ const label = (date: string) =>
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   overscroll-behavior: contain;
   padding: 0 1px 14px;
   scrollbar-width: thin;
