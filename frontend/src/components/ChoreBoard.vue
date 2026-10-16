@@ -1208,7 +1208,7 @@ onUnmounted(() => {
                   @keydown.esc="taskSwipe.cancel"
                 >
                   <TaskTitle
-                    :value="activeDutyTask.id"
+                    :value="`${activeDutyTask.key}:${activeDutyTask.name}`"
                     :animated="titleAnimation"
                   >
                     <button
@@ -1295,7 +1295,8 @@ onUnmounted(() => {
                 >
                   <div class="water-title-stage">
                     <TaskTitle
-                      :value="water.assignee_id"
+                      value="water"
+                      :animated="false"
                       id="water-title"
                       :style="
                         water.assignee_id !== memberId &&

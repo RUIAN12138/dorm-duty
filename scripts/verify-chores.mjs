@@ -1134,7 +1134,9 @@ try {
   assert.equal((await board(ownerId,ownerToken)).today_tasks.find(t=>t.id===floor.id).status,'pending');
   await complete(a.page,floor);
   await a.page.waitForTimeout(850);
-  assert.equal(await a.page.getByTestId(`undo-${floor.id}`).innerText(),'已完成');
+  assert.equal(await a.page.getByTestId(`undo-${floor.id}`).locator('.done-label').innerText(),'已完成');
+  assert(await a.page.getByTestId(`undo-${floor.id}`).locator('.done-label').evaluate(el=>Number(getComputedStyle(el).opacity)>.99));
+  assert(await a.page.getByTestId(`undo-${floor.id}`).locator('.pending-label').evaluate(el=>Number(getComputedStyle(el).opacity)<.01));
   await snapshot(a.page,'undo-receipt-390');
   checks.push('completed duty keeps the familiar button; tapping it again restores the actual pending task');
   ownerBoard = await board(ownerId, ownerToken);

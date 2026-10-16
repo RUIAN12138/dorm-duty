@@ -299,6 +299,7 @@ onBeforeUnmount(() => {
 }
 .completion-surface:disabled {
   cursor: default;
+  opacity: 1;
 }
 .is-unavailable:not(.is-round) {
   opacity: 0.55;

@@ -162,9 +162,12 @@ try {
         rows.push({
           t: performance.now() - start,
           round: !!b?.classList.contains("is-round"),
+          surfaceOpacity: b && Number(getComputedStyle(b).opacity),
           button: rect(".completion-surface"),
           caption: rect(".hero-caption"),
           title: rect(".task-title-stage") || rect(".water-title-stage"),
+          titleText:
+            rect(".task-title-stage h2") || rect(".water-title-stage h2"),
           selector: rect(".task-selector"),
           nav: rect(".chore-bottom-nav"),
           scrollY,
@@ -210,7 +213,7 @@ try {
     }, duration);
   }
   function stable(rows, label) {
-    for (const key of ["caption", "title", "selector", "nav"]) {
+    for (const key of ["caption", "title", "titleText", "selector", "nav"]) {
       const values = rows.map((r) => r[key]).filter(Boolean);
       if (!values.length) continue;
       check(
@@ -252,6 +255,11 @@ try {
       rows.filter((r) => r.round).every((r) => r.color === "rgb(17, 17, 17)"),
       true,
       `${label}: shrinking surface never flashes grey or disappears`,
+    );
+    check(
+      rows.filter((r) => r.round).every((r) => r.surfaceOpacity > 0.99),
+      true,
+      `${label}: busy disabled styling never fades the whole button`,
     );
     check(
       rows.some((r) => r.stroke > 0 && r.stroke < 30),
