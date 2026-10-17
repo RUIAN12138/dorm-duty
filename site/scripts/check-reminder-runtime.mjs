@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { SQLiteD1 } from "../local/sqlite-d1.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const directory = await fs.mkdtemp(
@@ -28,7 +28,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function start() {
   child = spawn(
     process.execPath,
-    ["--import", hook, "scripts/local-server.mjs"],
+    ["--import", pathToFileURL(hook).href, "scripts/local-server.mjs"],
     {
       cwd: root,
       env: {
@@ -40,11 +40,12 @@ async function start() {
         DORM_LOCAL_DATABASE: database,
         DORM_TEST_CLOCK_FILE: clock,
       },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
     },
   );
   return new Promise((resolve, reject) => {
     let output = "";
+    let errors = "";
     const timer = setTimeout(
       () => reject(new Error("Isolated runtime did not become ready")),
       10000,
@@ -53,9 +54,13 @@ async function start() {
       clearTimeout(timer);
       reject(error);
     });
-    child.once("exit", () => {
+    child.once("exit", (code) => {
       clearTimeout(timer);
-      reject(new Error("Isolated runtime exited before readiness"));
+      reject(
+        new Error(
+          `Isolated runtime exited before readiness (${code}): ${errors.trim()}`,
+        ),
+      );
     });
     child.stdout.on("data", (chunk) => {
       output += chunk;
@@ -65,14 +70,16 @@ async function start() {
         resolve(`http://127.0.0.1:${JSON.parse(match[1]).port}`);
       }
     });
-    child.stderr.resume();
+    child.stderr.on("data", (chunk) => {
+      errors += chunk;
+    });
   });
 }
 async function stop() {
   if (!child || child.exitCode !== null) return;
   const process = child,
     exited = once(process, "exit");
-  process.kill("SIGTERM");
+  process.send("shutdown");
   const timer = setTimeout(() => process.kill("SIGKILL"), 8000);
   try {
     const [code] = await exited;

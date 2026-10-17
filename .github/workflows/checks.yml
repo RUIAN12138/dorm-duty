@@ -30,12 +30,18 @@ jobs:
           npm ci --prefix frontend
           npm ci --prefix site
       - name: Build and verify root website
+        env:
+          DORM_WEB_BUILD_DIR: data/web-build
         run: |
-          npm run build --prefix frontend
-          node site/scripts/embed-frontend.mjs
-          node site/scripts/check-worker.mjs
+          npm run web:build
+          DORM_WORKER_INPUT=../data/web-build/site/worker/index.js \
+          DORM_FRONTEND_DIST=../data/web-build/frontend \
+            node site/scripts/check-worker.mjs
       - name: Verify business and notification behavior
+        env:
+          DORM_WORKER_INPUT: ${{ github.workspace }}/data/web-build/site/worker/index.js
         run: |
+          node scripts/check-web-architecture.mjs
           node site/scripts/build-email-runtime.mjs
           git diff --exit-code site/runtime/email-runtime.cjs
           python3 scripts/test_native_setup.py

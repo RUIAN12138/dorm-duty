@@ -1,5 +1,7 @@
 # 服务器 IP 入口
 
+> 当前唯一正式路线见本文件 Node/SQLite 正式发布。下方 Docker Compose、FastAPI 与 Cloudflare/Pages 内容为历史资料，禁止用于正式 Web 部署；旧 compose 仅显式 legacy profile 可启动。
+
 用户已授权将 `8.148.190.114` 作为正式入口，明确不使用现有域名。正式地址为 [https://8.148.190.114/dorm-duty/](https://8.148.190.114/dorm-duty/)。2026-10-14 已上线，普通浏览器与真实 API 验证通过；用户已确认手机 Safari 能正常打开并看到任务，具体网络类型未记录。
 
 ## 最新发布（2026-10-16，v31）

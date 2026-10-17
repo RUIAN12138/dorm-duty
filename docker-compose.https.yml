@@ -1,10 +1,12 @@
 # Run together with docker-compose.yml on a server whose DNS points DOMAIN here.
 services:
   api:
+    profiles: ["legacy"]
     environment:
       # Uvicorn accepts forwarded headers only from this project bridge, not '*'.
       FORWARDED_ALLOW_IPS: ${DORM_PROXY_SUBNET:-172.30.61.0/24}
   caddy:
+    profiles: ["legacy"]
     image: caddy:2-alpine
     ports:
       - "80:80"

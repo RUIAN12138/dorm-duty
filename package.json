@@ -1,0 +1,12 @@
+{
+  "name": "dorm-duty-workspace",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "web:dev": "node scripts/web-command.mjs dev",
+    "web:build": "node scripts/web-command.mjs build",
+    "web:verify": "node scripts/web-command.mjs verify",
+    "web:release": "node scripts/web-command.mjs release"
+  }
+}

@@ -14,15 +14,19 @@
 
 ## 快速开始
 
-双击 `启动.command`，或在项目根目录运行：
+先运行 `./scripts/setup.sh` 安装锁定依赖，然后在项目根目录运行：
 
 ```bash
-./scripts/local.sh
+npm run web:dev
 ```
 
 访问 http://127.0.0.1:8081/。本地数据库 `data/dorm-local.db` 与正式服务器数据独立，不自动同步。
 
-> 注意：`site/worker/index.js` 是 `site/scripts/embed-frontend.mjs` 生成的部署入口，不提交到仓库。`local.sh` 与 CI 会在构建时重新生成；新鲜克隆后需先构建再运行依赖该文件的脚本。
+根级 Web 命令：`npm run web:dev` 启动、`npm run web:build` 构建、`npm run web:verify` 验收、`npm run web:release -- <名称>` 只生成发布包。双击 `启动.command` 或运行 `scripts/local.sh` 仍启动同一 Node/SQLite 服务；它们是兼容入口。
+
+> 注意：`site/worker/index.js` 仅是本地开发兼容入口，不提交到仓库。`web:build` 产物写入带时间戳的 `data/web-build-*/`；发布包写入 `data/<名称>/`，不会覆盖正式入口。
+
+`web:verify` 在临时目录重新构建前端和服务入口，Worker 资源检查与真实 HTTP 重启检查使用同一份产物，不依赖开发目录的残留文件。单独检查构建结果时，通过 `DORM_WORKER_INPUT` 指定入口绝对路径，`DORM_FRONTEND_DIST` 指定对应前端目录。运行要求 Node.js 22.13.0 或更新版本；CI 使用 22.23.0。
 
 ## 核心规则
 
@@ -37,7 +41,7 @@
 ## 检查
 
 ```bash
-./scripts/check.sh
+npm run web:verify
 ```
 
 业务检查（独立测试数据库）：
@@ -55,14 +59,14 @@ node site/scripts/check-worker.mjs
 ```text
 dorm-duty/
 ├── frontend/   Vue 3 / TS / Vite / Vant / Pinia / Router
-├── backend/    原 FastAPI 账号版（保留参考）
+├── backend/    原 FastAPI 账号版（历史只读）
 ├── site/       Worker 业务、文件 SQLite 适配器、Drizzle 迁移
 ├── scripts/    local.sh / local-server.mjs 等本地脚本
 ├── docs/       规格、进度、验收、部署与验证证据
 └── native/     Android / HarmonyOS 安装版工程
 ```
 
-当前线上业务使用 `site/worker/` 的 Node / Worker 共用实现；`backend/` 是保留的 FastAPI 账号版。改当前轮次与抬水规则时，先看 `site/worker/chores.mjs`。
+当前线上业务只使用 `scripts/local-server.mjs -> site/worker/` 的 Node/SQLite 链路；`backend/` 和 Cloudflare/Pages 发布脚本均为历史代码。改当前轮次与抬水规则时，先看 `site/worker/chores.mjs`。
 
 ## 文档
 
@@ -80,3 +84,5 @@ dorm-duty/
 两人协作请先阅读 [CONTRIBUTING](CONTRIBUTING.md)，在 Issues 选择问题或开发任务模板，各自使用任务分支，通过 PR 互相审查。PR 自动提供验收与发布交接模板。GitHub Actions 在 main 提交和 PR 上自动构建网页、检查业务 / 通知规则及安卓安装版；合并后由发布负责人单独验收与发布。
 
 最新界面与间隔提醒说明见 [RESTORE_MOTION_RECENCY](docs/RESTORE_MOTION_RECENCY.md)。
+
+当前架构及后续分阶段计划见 [Web 架构优化方案](docs/WEB_ARCHITECTURE_REFACTOR.md)。[旧后端调查](docs/BACKEND_ARCHITECTURE.md) 是 10 月 15 日快照，不代表目前邮箱与身份规则。

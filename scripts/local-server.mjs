@@ -2,25 +2,43 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 import { EMAIL_GATE_CAPABILITY } from "../site/worker/backend.mjs";
-import worker from "../site/worker/index.js";
 import pushRuntimeModule from "../site/runtime/push-runtime.cjs";
 import emailRuntimeModule from "../site/runtime/email-runtime.cjs";
 import { openDatabase, ensureLocalDemo } from "../site/local/database.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const minimumNode = [22, 13, 0];
+const currentNode = process.versions.node.split(".").map(Number);
+const supportedNode =
+  currentNode[0] > minimumNode[0] ||
+  (currentNode[0] === minimumNode[0] && currentNode[1] > minimumNode[1]) ||
+  (currentNode[0] === minimumNode[0] &&
+    currentNode[1] === minimumNode[1] &&
+    currentNode[2] >= minimumNode[2]);
+if (!supportedNode)
+  throw new Error(`正式 Web 链路要求 Node.js 22.13.0 或更新版本，当前为 ${process.version}`);
+const deploymentMode = process.env.DORM_DEPLOYMENT || "local";
+if (!new Set(["local", "server"]).has(deploymentMode))
+  throw new Error("DORM_DEPLOYMENT 只允许 local 或 server");
+// Isolated builds and HTTP checks must load the same generated artifact.
+// Installed releases keep their package-local entry unless explicitly overridden.
+const { default: worker } = await import(
+  pathToFileURL(path.resolve(root, "site", process.env.DORM_WORKER_INPUT || "worker/index.js")).href
+);
 const databasePath = path.resolve(
   process.env.DORM_LOCAL_DATABASE || path.join(root, "data/dorm-local.db"),
 );
+if (databasePath.includes("\u0000")) throw new Error("数据库路径无效");
 const databaseId = createHash("sha256").update(databasePath).digest("hex");
 const host = process.env.DORM_LOCAL_HOST || "0.0.0.0";
 const port = Number(process.env.DORM_LOCAL_PORT ?? "8081");
 let releaseInfo = { version: "development" };
 try { releaseInfo = JSON.parse(await fs.readFile(path.join(root, "site/release.json"), "utf8")); }
 catch (error) { if (error.code !== "ENOENT") throw error; }
-const serverDeployment = process.env.DORM_DEPLOYMENT === "server";
+const serverDeployment = deploymentMode === "server";
 const webBase = process.env.DORM_WEB_BASE || "/";
 if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(webBase))
   throw new Error("DORM_WEB_BASE 必须是安全的 /路径/ 格式");
@@ -207,6 +225,9 @@ try {
             ...(await response.json()),
             application: serverDeployment ? "dorm-duty" : "dorm-duty-local",
             runtime: serverDeployment ? "node-server" : "node-worker-local",
+            deployment_mode: deploymentMode,
+            node_version: process.versions.node,
+            web_base: webBase,
             storage: "sqlite",
             persistent: true,
             database_id: databaseId,
@@ -237,6 +258,9 @@ try {
     server.listen(port, host, resolve);
   });
   const actualPort = server.address().port;
+  console.log(
+    `运行配置：模式=${deploymentMode}；Node=${process.version}；Web Base=${webBase}；数据库=${databasePath}`,
+  );
   console.log(
     `轮到 · ${serverDeployment ? "服务器版" : "本地版"}：http://127.0.0.1:${actualPort}${webBase}`,
   );
@@ -284,3 +308,7 @@ async function stop() {
 }
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
+process.once("message", (message) => {
+  if (message !== "shutdown") return;
+  stop().then(() => process.disconnect?.());
+});
