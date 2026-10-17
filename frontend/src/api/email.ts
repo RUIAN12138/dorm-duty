@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import { logoutAll, pendingLogout, logoutEvent } from "./logout";
-import { choreRequest, savedChoreToken } from "./chores";
+import { choreRequest, savedChoreToken, saveChoreToken } from "./chores";
+import { forgetDorm } from "./dormHistory";
 
 export interface EmailRoom {
   id: number;
@@ -45,6 +46,41 @@ export function enterEmailRoom(dormId: number) {
   });
 }
 let accountEpoch = 0;
+export const identityUnboundEvent = "dorm-email-identity-unbound";
+const unboundStorageKey = "dorm-email-unbound-v1";
+function clearUnboundIdentity(room: EmailRoom) {
+  accountEpoch++;
+  emailAccount.rooms = emailAccount.rooms.filter((r) => r.id !== room.id);
+  const token = savedChoreToken(room.invite_code, room.member_id);
+  saveChoreToken(room.invite_code, room.member_id, "");
+  for (const [storage, key] of [
+    [localStorage, "dorm-owner-token"],
+    [sessionStorage, "dorm-token"],
+  ] as const)
+    if (token && storage.getItem(key) === token) storage.removeItem(key);
+  forgetDorm(room.invite_code);
+  try {
+    const choice = JSON.parse(
+      localStorage.getItem("dorm-guest-view-v1") || "{}",
+    );
+    if (
+      choice.invite_code === room.invite_code &&
+      choice.member_id === room.member_id
+    )
+      localStorage.removeItem("dorm-guest-view-v1");
+  } catch {
+    /* No persisted selection. */
+  }
+  window.dispatchEvent(new CustomEvent(identityUnboundEvent, { detail: room }));
+}
+export async function unbindEmailIdentity(room: EmailRoom) {
+  await emailPost("unbind", { dorm_id: room.id, member_id: room.member_id });
+  clearUnboundIdentity(room);
+  localStorage.setItem(
+    unboundStorageKey,
+    JSON.stringify({ room, at: Date.now() }),
+  );
+}
 function resetAccount() {
   accountEpoch++;
   emailAccount.loggedIn = false;
@@ -54,6 +90,13 @@ function resetAccount() {
 }
 window.addEventListener(logoutEvent, resetAccount);
 window.addEventListener("storage", (event) => {
+  if (event.key === unboundStorageKey && event.newValue) {
+    try {
+      clearUnboundIdentity(JSON.parse(event.newValue).room);
+    } catch {
+      /* Ignore malformed storage. */
+    }
+  }
   if (event.key === "dorm-pending-logout-v1" && event.newValue !== null) {
     resetAccount();
     window.dispatchEvent(new Event(logoutEvent));

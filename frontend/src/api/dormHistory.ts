@@ -40,3 +40,8 @@ export function rememberDorm(room: JoinedDorm) {
   }
   return rooms;
 }
+export function forgetDorm(code: string) {
+  const rooms = joinedDorms().filter((room) => room.code !== code);
+  localStorage.setItem(key, JSON.stringify(rooms));
+  return rooms;
+}
