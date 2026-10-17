@@ -44,12 +44,18 @@ class SQLiteStatement {
   statement() {
     return this.db.sqlite.prepare(this.sql);
   }
+  returnsRows(statement) {
+    if (typeof statement.columns === "function")
+      return statement.columns().length > 0;
+    return /^\s*(?:SELECT|PRAGMA|EXPLAIN|VALUES|WITH)\b/i.test(this.sql) ||
+      /\bRETURNING\b/i.test(this.sql);
+  }
   result() {
     const statement = this.statement();
     let results = [];
     let changes = 0;
     let lastRowId = 0;
-    if (statement.columns().length) {
+    if (this.returnsRows(statement)) {
       results = statement.all(...this.params).map((row) => ({ ...row }));
       if (!/^\s*(SELECT|PRAGMA|EXPLAIN|WITH)\b/i.test(this.sql)) {
         const meta = this.db.sqlite
@@ -95,9 +101,18 @@ class SQLiteStatement {
   }
   async raw({ columnNames = false } = {}) {
     const statement = this.statement();
-    const names = statement.columns().map((column) => column.name);
-    statement.setReturnArrays(true);
-    const values = statement.all(...this.params);
+    if (
+      typeof statement.columns === "function" &&
+      typeof statement.setReturnArrays === "function"
+    ) {
+      const names = statement.columns().map((column) => column.name);
+      statement.setReturnArrays(true);
+      const values = statement.all(...this.params);
+      return columnNames ? [names, ...values] : values;
+    }
+    const rows = statement.all(...this.params).map((row) => ({ ...row }));
+    const names = Object.keys(rows[0] || {});
+    const values = rows.map((row) => names.map((name) => row[name]));
     return columnNames ? [names, ...values] : values;
   }
 }
