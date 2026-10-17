@@ -4,7 +4,7 @@ import type { ChoreTask } from "../api/chores";
 import GalaxySpinner from "./GalaxySpinner.vue";
 import GalaxyCheck from "./GalaxyCheck.vue";
 import { completionFeedback } from "../interaction/completionFeedback";
-import { motionAllowed } from "../interaction/motion";
+import { motionAllowed, motionTiming } from "../interaction/motion";
 const props = defineProps<{
   task: ChoreTask;
   receipt?: ChoreTask | null;
@@ -75,9 +75,15 @@ watch(
             cancelFeedback = completionFeedback(
               button.value?.getBoundingClientRect(),
             );
-            resetTimer = setTimeout(() => settle(true), 320);
+            resetTimer = setTimeout(
+              () => settle(true),
+              motionTiming.completion * 1000,
+            );
           },
-          Math.max(0, 300 - (performance.now() - started)),
+          Math.max(
+            0,
+            motionTiming.reorder * 1000 - (performance.now() - started),
+          ),
         );
     } else if (!props.busy) {
       settle();
@@ -100,7 +106,7 @@ function settle(keepCheck = false) {
   if (keepCheck && id !== null)
     settledTimer = setTimeout(
       () => emit("settled", id),
-      motionAllowed() ? 320 : 0,
+      motionAllowed() ? motionTiming.reorder * 1000 : 0,
     );
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
@@ -208,7 +214,7 @@ onBeforeUnmount(() => {
   height: 100%;
   background: var(--completion-color);
   transition:
-    transform 320ms var(--ui-ease-soft),
+    transform var(--ui-reorder-time) var(--ui-ease-soft),
     background-color 180ms ease;
 }
 .completion-band {

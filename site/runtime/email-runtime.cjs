@@ -12603,16 +12603,34 @@ function createEmailRuntime(db, {
   now = () => /* @__PURE__ */ new Date(),
   base: base2 = "/",
   autoStart = true,
-  intervalMs = 1e4
+  intervalMs = 1e4,
+  version: version2 = "development"
 } = {}) {
   const sql = db.sqlite;
   if (config) validateEmailConfig(config);
   const smtp = config && !send ? createSmtpSender(config) : null;
-  const deliver = send || ((message) => smtp.send(message));
+  const transport = send || ((message) => smtp.send(message));
   const available = Boolean(config);
   const cookieName = "dorm_email_session";
   let running = null, stopped = false, timer;
   const stamp = () => now().toISOString();
+  function metric(name2) {
+    sql.prepare(`INSERT INTO runtime_metrics(name,count,updated_at) VALUES (?,1,?)
+      ON CONFLICT(name) DO UPDATE SET count=count+1,updated_at=excluded.updated_at`).run(name2, stamp());
+  }
+  const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  async function deliver(message) {
+    metric("mail_attempt");
+    try {
+      const html = message.html || `<div style="font-family:system-ui,sans-serif;line-height:1.6">${escapeHtml(message.text).replace(/\n/g, "<br>")}</div>`;
+      await transport({ ...message, html });
+      metric("mail_accepted");
+    } catch (error2) {
+      metric("mail_failed");
+      console.error(JSON.stringify({ event: "smtp_delivery_failed", severity: "error", at: stamp() }));
+      throw error2;
+    }
+  }
   const transaction = (fn) => {
     sql.exec("BEGIN IMMEDIATE");
     try {
@@ -12679,7 +12697,7 @@ function createEmailRuntime(db, {
       `SELECT s.user_id,u.current_dorm_id AS dorm_id,
       CASE WHEN m.role='admin' AND d.admin_user_id=s.user_id THEN 1 ELSE 0 END AS creator_verified FROM sessions s
       JOIN users u ON u.id=s.user_id JOIN dorm_members m ON m.user_id=u.id AND m.dorm_id=u.current_dorm_id AND m.is_active=1
-      JOIN dormitories d ON d.id=m.dorm_id AND d.is_demo=0 WHERE s.token_hash=? AND s.expires_at>?`
+      JOIN dormitories d ON d.id=m.dorm_id AND d.is_demo=0 WHERE s.token_hash=? AND s.expires_at>? AND s.kind='account' AND (s.dorm_id IS NULL OR s.dorm_id=u.current_dorm_id)`
     ).get(digest, at);
     if (!full) fail(401, "\u5F53\u524D\u5BBF\u820D\u8EAB\u4EFD\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u8FDB\u5165");
     return { ...full, token_hash: digest };
@@ -12691,8 +12709,7 @@ function createEmailRuntime(db, {
     if (expectedMember !== void 0 && member.user_id !== expectedMember)
       fail(409, "\u8FD9\u4EFD\u8BBE\u5907\u51ED\u8BC1\u5C5E\u4E8E\u5176\u4ED6\u6210\u5458\uFF0C\u8BF7\u4F7F\u7528\u539F\u8EAB\u4EFD\u51ED\u8BC1\u6216\u91CD\u65B0\u52A0\u5165");
     const owner = sql.prepare("SELECT admin_user_id FROM dormitories WHERE id=?").get(member.dorm_id);
-    if (owner.admin_user_id === member.user_id && !member.creator_verified)
-      fail(403, "\u521B\u5EFA\u8005\u8BF7\u5728\u6301\u6709\u7BA1\u7406\u6743\u9650\u7684\u8BBE\u5907\u4E0A\u7ED1\u5B9A\u90AE\u7BB1\uFF0C\u6216\u5148\u6062\u590D\u7BA1\u7406\u6743\u9650");
+    if (owner.admin_user_id === member.user_id) member.creator_verified = 1;
     const linked = sql.prepare(
       "SELECT * FROM email_members WHERE user_id=? OR (account_id=? AND dorm_id=?)"
     ).all(member.user_id, who.id, member.dorm_id);
@@ -12711,9 +12728,10 @@ function createEmailRuntime(db, {
         stamp()
       );
       sql.prepare(
-        "DELETE FROM member_sessions WHERE user_id=? AND token_hash<>?"
-      ).run(member.user_id, member.token_hash);
-      sql.prepare("DELETE FROM sessions WHERE user_id=? AND token_hash<>?").run(member.user_id, member.token_hash);
+        "DELETE FROM member_sessions WHERE user_id=? AND dorm_id=? AND token_hash<>?"
+      ).run(member.user_id, member.dorm_id, member.token_hash);
+      sql.prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=? AND token_hash<>?").run(member.user_id, member.dorm_id, member.token_hash);
+      sql.prepare("UPDATE sessions SET dorm_id=? WHERE token_hash=?").run(member.dorm_id, member.token_hash);
       const fullSession = Number(
         Boolean(
           sql.prepare("SELECT 1 FROM sessions WHERE token_hash=?").get(member.token_hash)
@@ -12764,8 +12782,8 @@ function createEmailRuntime(db, {
           sql.prepare("DELETE FROM email_grants WHERE token_hash=?").run(row.token_hash);
         if (full)
           sql.prepare(
-            "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')"
-          ).run(digest, room.member_id, at, expires);
+            "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind,dorm_id) VALUES (?,?,?,?,'account',?)"
+          ).run(digest, room.member_id, at, expires, room.id);
         else
           sql.prepare(
             "INSERT INTO member_sessions(token_hash,user_id,dorm_id,created_at,expires_at) VALUES (?,?,?,?,?)"
@@ -12802,7 +12820,8 @@ function createEmailRuntime(db, {
     if (pathname === "/email/config" && method === "GET")
       return reply({
         available,
-        registration_required: registrationRequired()
+        registration_required: registrationRequired(),
+        version: version2
       });
     if (pathname === "/email/me" && method === "GET") {
       const who2 = session(request);
@@ -12814,6 +12833,16 @@ function createEmailRuntime(db, {
           rooms: rooms(who2)
         } : { logged_in: false }
       );
+    }
+    if (pathname === "/email/operations" && method === "GET") {
+      const who2 = required(request);
+      if (!rooms(who2).some((room) => room.is_creator)) fail(403, "\u9700\u8981\u5BBF\u820D\u521B\u5EFA\u8005\u8EAB\u4EFD");
+      return reply({
+        version: version2,
+        counters: sql.prepare("SELECT name,count,updated_at FROM runtime_metrics ORDER BY name").all(),
+        pending: sql.prepare("SELECT COUNT(*) n FROM email_jobs WHERE status IN ('pending','sending')").get().n,
+        failed: sql.prepare("SELECT COUNT(*) n FROM email_jobs WHERE status='failed'").get().n
+      });
     }
     if (method !== "POST") fail(404, "\u63A5\u53E3\u4E0D\u5B58\u5728");
     mutationOrigin(request);
@@ -12853,9 +12882,11 @@ function createEmailRuntime(db, {
         await deliver({
           to: email,
           subject: "\u8F6E\u5230 \xB7 \u90AE\u7BB1\u9A8C\u8BC1\u7801",
+          html: `<p>\u4F60\u7684\u9A8C\u8BC1\u7801\u662F\uFF1A</p><p><strong style="font-size:28px;letter-spacing:6px">${code}</strong></p><p>\u9A8C\u8BC1\u7801\u4E3A\u516D\u4F4D\u6570\u5B57\uFF0C\u5341\u5206\u949F\u5185\u6709\u6548\uFF0C\u4EC5\u53EF\u4F7F\u7528\u4E00\u6B21\u3002\u7528\u4E8E\u6CE8\u518C\u6216\u767B\u5F55\u8F6E\u5230\u3002</p><p>\u91CD\u53D1\u4E0D\u4F1A\u4F7F\u5176\u4ED6\u9A8C\u8BC1\u9875\u9762\u4E2D\u672A\u8FC7\u671F\u7684\u9A8C\u8BC1\u7801\u5931\u6548\u3002\u8BF7\u5728\u83B7\u53D6\u8BE5\u9A8C\u8BC1\u7801\u7684\u9875\u9762\u8F93\u5165\uFF0C\u6BCF\u4E2A\u9A8C\u8BC1\u7801\u4EC5\u80FD\u4F7F\u7528\u4E00\u6B21\u3002</p><p>\u5982\u679C\u4E0D\u662F\u4F60\u672C\u4EBA\u64CD\u4F5C\uFF0C\u8BF7\u5FFD\u7565\u6B64\u90AE\u4EF6\u3002</p>`,
           text: `\u4F60\u7684\u9A8C\u8BC1\u7801\u662F\uFF1A${code}\u3002
 
 \u9A8C\u8BC1\u7801\u4E3A\u516D\u4F4D\u6570\u5B57\uFF0C\u5341\u5206\u949F\u5185\u6709\u6548\uFF0C\u4EC5\u53EF\u4F7F\u7528\u4E00\u6B21\u3002\u7528\u4E8E\u6CE8\u518C\u6216\u767B\u5F55\u8F6E\u5230\u3002
+\u91CD\u53D1\u4E0D\u4F1A\u4F7F\u5176\u4ED6\u9A8C\u8BC1\u9875\u9762\u7684\u65E7\u7801\u5931\u6548\uFF0C\u8BF7\u5728\u83B7\u53D6\u8BE5\u7801\u7684\u9875\u9762\u8F93\u5165\u3002
 \u5982\u679C\u4E0D\u662F\u4F60\u672C\u4EBA\u64CD\u4F5C\uFF0C\u8BF7\u5FFD\u7565\u6B64\u90AE\u4EF6\u3002`
         });
       } catch {
@@ -12930,10 +12961,10 @@ function createEmailRuntime(db, {
         if (!link) fail(409, "\u6B64\u8EAB\u4EFD\u5DF2\u89E3\u9664\u6216\u4E0D\u5C5E\u4E8E\u5F53\u524D\u90AE\u7BB1\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5");
         sql.prepare(
           `DELETE FROM email_grants WHERE token_hash IN (
-          SELECT token_hash FROM sessions WHERE user_id=? UNION
+          SELECT token_hash FROM sessions WHERE user_id=? AND dorm_id=? UNION
           SELECT token_hash FROM member_sessions WHERE user_id=? AND dorm_id=?)`
-        ).run(link.user_id, link.user_id, link.dorm_id);
-        sql.prepare("DELETE FROM sessions WHERE user_id=?").run(link.user_id);
+        ).run(link.user_id, link.dorm_id, link.user_id, link.dorm_id);
+        sql.prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=?").run(link.user_id, link.dorm_id);
         sql.prepare("DELETE FROM member_sessions WHERE user_id=? AND dorm_id=?").run(link.user_id, link.dorm_id);
         sql.prepare(
           "UPDATE chore_push_subscriptions SET is_active=0,revision=revision+1,updated_at=? WHERE user_id=? AND dorm_id=?"
@@ -13004,7 +13035,7 @@ function createEmailRuntime(db, {
       LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
       LEFT JOIN sessions s ON s.token_hash=g.token_hash
       JOIN email_members em ON em.account_id=e.account_id AND em.user_id=COALESCE(m.user_id,s.user_id)
-      WHERE g.token_hash=?`
+      WHERE g.token_hash=? AND em.dorm_id=COALESCE(m.dorm_id,s.dorm_id)`
       ).get(stamp(), hash(token))
     );
   }
@@ -13035,7 +13066,12 @@ function createEmailRuntime(db, {
   async function wrap2(request, dispatch) {
     try {
       const p = new URL(request.url).pathname;
-      if (p.startsWith("/email/")) return await route(request);
+      if (p.startsWith("/email/")) {
+        if (p === "/email/verify") metric("verify_attempt");
+        const response = await route(request);
+        if (p === "/email/verify" && response.ok) metric("verify_success");
+        return response;
+      }
       if (p === "/auth/logout" && request.method === "POST")
         return await dispatch(request);
       if (request.method === "POST" && (p === "/chores/claim" || p === "/guest/create" || p === "/guest/recover")) {
@@ -13074,8 +13110,6 @@ function createEmailRuntime(db, {
               "SELECT 1 FROM email_members WHERE account_id=? AND dorm_id=?"
             ).get(who.id, member.dorm_id))
               fail(403, "\u8BF7\u5148\u5728\u90AE\u7BB1\u8BBE\u7F6E\u4E2D\u89E3\u9664\u5F53\u524D\u8EAB\u4EFD\uFF0C\u518D\u7ED1\u5B9A\u672A\u7ED1\u5B9A\u90AE\u7BB1\u7684\u6210\u5458");
-            if (who && member.admin_user_id === member.id)
-              fail(403, "\u521B\u5EFA\u8005\u8BF7\u5148\u5728\u539F\u8BBE\u5907\u7ED1\u5B9A\u90AE\u7BB1\uFF0C\u6216\u6062\u590D\u7BA1\u7406\u6743\u9650\u540E\u518D\u7ED1\u5B9A");
           }
         }
         if (who && p !== "/guest/create" && now().getTime() - Date.parse(who.verified_at) > 10 * 6e4)
@@ -13090,6 +13124,13 @@ function createEmailRuntime(db, {
           const data = await result.clone().json();
           try {
             bind(who, data.access_token);
+            const room = rooms(who).find((room2) => room2.member_id === data.member?.user_id);
+            if (room?.is_creator && p === "/chores/claim") {
+              const entry = grant(who, room.id);
+              sql.prepare("DELETE FROM email_grants WHERE token_hash=?").run(hash(data.access_token));
+              sql.prepare("DELETE FROM member_sessions WHERE token_hash=?").run(hash(data.access_token));
+              return reply(entry, 201);
+            }
           } catch (error2) {
             const digest = hash(data.access_token);
             sql.prepare(
@@ -13105,6 +13146,8 @@ function createEmailRuntime(db, {
       guardEntry(request);
       return await dispatch(request);
     } catch (error2) {
+      if (new URL(request.url).pathname === "/email/verify") metric("verify_failed");
+      if (error2.status === 429) metric("rate_limited");
       return reply(
         {
           detail: {

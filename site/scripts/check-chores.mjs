@@ -110,7 +110,7 @@ const marker = (h, person, marker_id, options = {}) =>
 export async function runChoreChecks() {
   const scenarios = [];
   const test = (name, run) => scenarios.push({ name, run });
-  test("old migration preserves business data and caps device expiry without rotating credentials", async () => {
+  test("migration preserves business data and retires device credentials", async () => {
     const db = new SQLiteD1();
     try {
       const migrationRoot = path.join(root, "site/drizzle");
@@ -203,10 +203,8 @@ export async function runChoreChecks() {
         INSERT INTO chore_tasks(dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,status,sequence)
           VALUES (1,'sink','round-1-1','洗手池','清洁洗手池','2026-10-02',1,'旧创建者','pixel-01','','pending',1);
       `);
-      for (const row of before.sessions)
-        row.expires_at = new Date(
-          Date.parse(row.created_at) + 90 * 86400000,
-        ).toISOString();
+      equal(db.sqlite.prepare("SELECT COUNT(*) n FROM sessions").get().n, 0, "retired device session removed");
+      tables.splice(tables.indexOf("sessions"), 1);
       for (const table of tables) {
         const oldFields = Object.keys(before[table][0]);
         equal(

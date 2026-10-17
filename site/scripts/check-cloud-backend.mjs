@@ -22,8 +22,8 @@ export async function createHarness() {
   );
   for (const name of files)
     db.sqlite.exec(await fs.readFile(path.join(migrationRoot, name), "utf8"));
-  const { handleApi } = await import("../worker/backend.mjs");
-  const env = { DB: db, DEFAULT_DORM_INVITE_CODE: "" };
+  const { handleApi, EMAIL_GATE_CAPABILITY } = await import("../worker/backend.mjs");
+  const env = { DB: db, DEFAULT_DORM_INVITE_CODE: "", EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY };
   const pending = [];
   const ctx = {
     waitUntil(promise) {
@@ -918,6 +918,7 @@ export async function runBackendChecks() {
       data: { name: "长期排班", nickname: "创建人", members: ["室友"] },
     });
     secrets.push(created.access_token);
+    const recovery = await api(h, "/dorms/recovery", {token:created.access_token, method:"POST", data:{expected_version:0}});
     const history = h.db.sqlite
       .prepare("SELECT * FROM duty_tasks WHERE dorm_id=? ORDER BY duty_date")
       .all(created.dorm.id);
@@ -930,6 +931,10 @@ export async function runBackendChecks() {
       data: { name: "未设置排班" },
     });
     testNow += 31 * 86_400_000;
+    // Schedule extension is independent of credential lifetime: renew explicitly.
+    const refreshed = await api(h, "/guest/recover", {method:"POST", data:{invite_code:created.invite_code, recovery_code:recovery.recovery_code}});
+    created.access_token = refreshed.access_token;
+    secrets.push(refreshed.access_token);
     const route = `/guest/tasks?invite_code=${created.invite_code}&member_id=${created.member_id}`;
     const viewed = await api(h, route, {token:created.access_token});
     equal(viewed.today, addDays(day, 31));

@@ -1,10 +1,10 @@
-import { motionAllowed } from "./motion";
+import { motionAllowed, motionTiming, motionEaseCss } from "./motion";
 
 /** A local acknowledgement after the server receipt, without moving the page. */
 export function completionFeedback(bounds: DOMRect | undefined) {
   if (!bounds || !motionAllowed() || document.hidden) return;
   try {
-    navigator.vibrate?.(12);
+    navigator.vibrate?.(10);
   } catch {
     // Unsupported devices keep the same visual acknowledgement.
   }
@@ -49,7 +49,7 @@ export function completionFeedback(bounds: DOMRect | undefined) {
           opacity: 0,
         },
       ],
-      { duration: 360, easing: "cubic-bezier(.22,1,.36,1)" },
+      { duration: motionTiming.completion * 1000, easing: motionEaseCss },
     );
   });
   const media = matchMedia("(prefers-reduced-motion: reduce)");

@@ -688,17 +688,21 @@ try {
       `${width}px unlink setting has no overflow`,
     );
   }
+  await newcomer.evaluate(() => {
+    window.__unbindFrames = [];
+    const until = performance.now() + 1200;
+    function sample() {
+      const el = document.querySelector(".email-unbind-confirm");
+      if (el) window.__unbindFrames.push(Number(getComputedStyle(el).opacity));
+      if (performance.now() < until) requestAnimationFrame(sample);
+    }
+    requestAnimationFrame(sample);
+  });
   await newcomer.getByTestId("email-unbind").click();
   const unbindConfirm = newcomer.locator(".email-unbind-confirm");
   await unbindConfirm.waitFor();
-  const unbindFrames = await unbindConfirm.evaluate(async (el) => {
-    const samples = [];
-    for (let i = 0; i < 18; i++) {
-      await new Promise(requestAnimationFrame);
-      samples.push(Number(getComputedStyle(el).opacity));
-    }
-    return samples;
-  });
+  await newcomer.waitForTimeout(320);
+  const unbindFrames = await newcomer.evaluate(() => window.__unbindFrames);
   check(
     unbindFrames.some((value) => value > 0 && value < 1),
     true,
@@ -729,10 +733,22 @@ try {
     .click();
   await newcomer.getByTestId("guest-member-name").waitFor();
   await memberSibling.getByTestId("guest-member-name").waitFor();
+  // The closing sheet deliberately retains its content until exit finishes.
+  await newcomer.locator(".sheet-layer").waitFor({ state: "hidden" });
   check(
-    await newcomer.getByLabel("邮箱", { exact: true }).count(),
+    await newcomer
+      .getByLabel("邮箱", { exact: true })
+      .filter({ visible: true })
+      .count(),
     0,
     "unlink keeps email logged in and returns to same room name entry",
+  );
+  check(
+    await newcomer
+      .getByTestId("guest-member-name")
+      .evaluate((el) => el.getBoundingClientRect().top >= 80),
+    true,
+    "name field remains below mobile safe area",
   );
   await newcomer.getByTestId("guest-member-name").fill("界面测试甲");
   await newcomer.getByTestId("guest-name-submit").click();

@@ -16,6 +16,7 @@ import MemberMark from "../components/MemberMark.vue";
 import ChoreBottomNav from "../components/ChoreBottomNav.vue";
 import CreatorRecovery from "../components/CreatorRecovery.vue";
 import ElasticSheet from "../components/ElasticSheet.vue";
+import LoadingSkeleton from "../components/LoadingSkeleton.vue";
 import EmailAccountPanel from "../components/EmailAccountPanel.vue";
 import {
   emailAccount,
@@ -84,11 +85,18 @@ async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   cancelSelection();
   if (entry.is_creator) {
     sessionStorage.setItem("dorm-token", entry.access_token);
-    localStorage.setItem("dorm-owner-token", entry.access_token);
+    localStorage.setItem("dorm-email-admin-grant", entry.access_token);
     await session.refresh().catch(() => {});
   }
   saveChoreToken(entry.invite_code, entry.member_id, entry.access_token);
   await loadDorm(entry.invite_code, entry.member_id, entry.access_token, quiet);
+}
+function reenterAfterMigration() {
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
+  emailOpen.value = false;
+  openDormChange();
 }
 function exitDemo() {
   ++requestId;
@@ -367,7 +375,7 @@ async function submitName() {
     if (!isCurrent(id, signal)) return;
     if (result.is_creator) {
       sessionStorage.setItem("dorm-token", result.access_token);
-      localStorage.setItem("dorm-owner-token", result.access_token);
+      localStorage.setItem("dorm-email-admin-grant", result.access_token);
       await session.refresh();
       if (!isCurrent(id, signal)) return;
     }
@@ -481,7 +489,7 @@ function identityExpired() {
         choreToken.value ||
         (previousMember ? savedChoreToken(code, previousMember) : "");
       migrationOwnerToken.value =
-        localStorage.getItem("dorm-owner-token") || "";
+        localStorage.getItem("dorm-email-admin-grant") || "";
       cancelSelection();
       member.value = null;
       choreToken.value = "";
@@ -576,7 +584,7 @@ async function submitCreate() {
     if (!isCurrent(id, signal)) return;
     sessionStorage.setItem("dorm-token", result.access_token);
     try {
-      localStorage.setItem("dorm-owner-token", result.access_token);
+      localStorage.setItem("dorm-email-admin-grant", result.access_token);
     } catch {
       /* This device can still manage in its current session. */
     }
@@ -622,7 +630,7 @@ async function acceptRecovered(result: GuestCreation) {
     if (!isCurrent(id, signal)) return;
     sessionStorage.setItem("dorm-token", result.access_token);
     try {
-      localStorage.setItem("dorm-owner-token", result.access_token);
+      localStorage.setItem("dorm-email-admin-grant", result.access_token);
     } catch {
       /* Current visit remains usable. */
     }
@@ -687,7 +695,7 @@ async function returnToDorm(room: JoinedDorm) {
         );
         if (current?.id === dorm.value?.id && current.is_admin) {
           sessionStorage.setItem("dorm-token", choreToken.value);
-          localStorage.setItem("dorm-owner-token", choreToken.value);
+          localStorage.setItem("dorm-email-admin-grant", choreToken.value);
           await session.refresh();
         }
       } catch {
@@ -816,7 +824,7 @@ async function bootEntry() {
         ? savedChoreToken(code, saved.member_id)
         : "";
       migrationOwnerToken.value =
-        localStorage.getItem("dorm-owner-token") || "";
+        localStorage.getItem("dorm-email-admin-grant") || "";
     }
   } else if (code || saved.guest_mode === "demo")
     void loadDorm(
@@ -849,6 +857,7 @@ onUnmounted(() => {
     :class="{
       'has-chore-nav': navVisible,
       'has-compact-calendar': navVisible && section === 'calendar',
+      'is-name-entry': !navVisible && !!dorm && (!member || choosingMember),
       'is-entry-flow':
         !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
     }"
@@ -980,9 +989,7 @@ onUnmounted(() => {
       />
     </section>
     <template v-else>
-      <div v-if="loading" class="guest-loading" role="status">
-        <van-loading size="20px" color="#111111" />正在查看安排
-      </div>
+      <LoadingSkeleton v-if="loading && !dorm" />
       <div v-if="error && !dorm" class="guest-error" role="alert">
         <h1>暂时无法查看</h1>
         <p>{{ error }}</p>
@@ -1010,6 +1017,7 @@ onUnmounted(() => {
           :member-id="migrationMemberId"
           :gate="!!migrationMemberId"
           @recover="openRecovery"
+          @reenter="reenterAfterMigration"
           @entered="acceptEmailEntry"
           @logout="emailLogout"
         />
@@ -1223,7 +1231,6 @@ onUnmounted(() => {
       motion="bottom"
     >
       <EmailAccountPanel
-        v-if="emailOpen"
         hide-title
         :member-token="viewMode === 'dorm' ? choreToken : ''"
         :dorm-id="dorm?.id"
@@ -1248,6 +1255,9 @@ onUnmounted(() => {
 }
 .guest-page.has-chore-nav {
   padding-bottom: calc(104px + env(safe-area-inset-bottom));
+}
+.guest-page.is-name-entry {
+  padding-top: calc(env(safe-area-inset-top, 0px) + clamp(40px, 8dvh, 72px));
 }
 .guest-page.has-compact-calendar {
   /* The calendar already measures and reserves the actual fixed navigation. */

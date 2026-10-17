@@ -29,6 +29,8 @@ import "./focus.css";
 import App from "./App.vue";
 import { tilt } from "./interactions/tilt";
 import { router } from "./router";
+import { installMotionTokens } from "./interaction/motion";
+installMotionTokens();
 createApp(App)
   .use(createPinia())
   .use(router)

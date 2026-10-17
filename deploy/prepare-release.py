@@ -3,6 +3,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import json
+from datetime import datetime, timezone
 root = Path(__file__).resolve().parent.parent
 name = sys.argv[1]
 if not name.replace('-', '').replace('_', '').isalnum():
@@ -21,6 +23,11 @@ for filename in files:
     target = stage / filename
     target.parent.mkdir(parents=True,exist_ok=True)
     shutil.copy2(root / filename, target)
+(stage / 'site/release.json').write_text(json.dumps({
+    'version': name,
+    'commit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
+    'built_at': datetime.now(timezone.utc).isoformat(),
+}))
 (stage / 'site/package.json').write_text('{"type":"module","private":true}')
 for path in stage.rglob('*'):
     path.chmod(0o755 if path.is_dir() else 0o644)

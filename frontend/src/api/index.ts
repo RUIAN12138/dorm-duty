@@ -31,7 +31,7 @@ export async function api<T>(
       if (response.status === 401 && path !== "/auth/login") {
         sessionStorage.removeItem("dorm-token");
         try {
-          localStorage.removeItem("dorm-owner-token");
+          localStorage.removeItem("dorm-email-admin-grant");
         } catch {
           /* Optional persistence. */
         }
