@@ -10,7 +10,7 @@ export function pendingLogout() {
 function credentials() {
   const values = [
     sessionStorage.getItem("dorm-token"),
-    localStorage.getItem("dorm-owner-token"),
+    localStorage.getItem("dorm-email-admin-grant"),
   ];
   for (const key of Object.keys(localStorage))
     if (key.startsWith("dorm-chore-device-v1:"))
@@ -34,6 +34,7 @@ function clearLocal() {
     if (
       key.startsWith("dorm-chore-device-v1:") ||
       [
+        "dorm-email-admin-grant",
         "dorm-owner-token",
         "dorm-guest-view-v1",
         "dorm-joined-rooms-v1",

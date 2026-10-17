@@ -64,6 +64,7 @@ jobs:
           node site/scripts/check-email-entry-policy.mjs
           node site/scripts/check-auth-boundaries.mjs
           node site/scripts/check-email-unbind.mjs
+          node site/scripts/check-email-hardening.mjs
           node site/scripts/check-push-settings.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs

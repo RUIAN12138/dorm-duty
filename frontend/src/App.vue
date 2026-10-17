@@ -51,8 +51,7 @@ function signedOut() {
 }
 function expired() {
   session.clear();
-  if (!route.meta.public)
-    router.replace({ path: "/admin/login", query: { next: route.fullPath } });
+  if (!route.meta.public) router.replace("/");
 }
 onMounted(() => {
   removeNativeBack = installNativeBack();

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from "./LoadingSkeleton.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { completionFeedback } from "../interaction/completionFeedback";
 import { showToast } from "../interaction/notice";
@@ -1053,14 +1054,7 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="chore-board" data-testid="chore-board">
-    <div
-      v-if="loading && !board"
-      class="board-loading"
-      role="status"
-      aria-label="正在加载任务"
-    >
-      <GalaxySpinner class="board-spinner" />
-    </div>
+    <LoadingSkeleton v-if="loading && !board" />
     <div
       v-if="completionSyncPending && showSyncStatus"
       class="chore-sync-status"
@@ -2013,7 +2007,9 @@ onUnmounted(() => {
   -webkit-user-select: none;
 }
 .board-focus > .focus-pane:not([inert]) {
-  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    opacity var(--ui-page-time) var(--ui-ease-out),
+    transform var(--ui-page-time) var(--ui-ease-out);
 }
 .board-focus.section-swipe-dragging > .focus-pane:not([inert]) {
   opacity: var(--section-swipe-opacity);
@@ -2338,13 +2334,17 @@ onUnmounted(() => {
 }
 @media (prefers-reduced-motion: no-preference) {
   .focus-fade-enter-active {
-    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition:
+      opacity var(--ui-page-time) var(--ui-ease-out),
+      transform var(--ui-page-time) var(--ui-ease-out);
   }
   .focus-fade-leave-active {
     position: absolute;
     top: 0;
     pointer-events: none;
-    transition: opacity 160ms ease;
+    transition:
+      opacity var(--ui-page-time) var(--ui-ease-out),
+      transform var(--ui-page-time) var(--ui-ease-out);
   }
   .focus-fade-enter-from,
   .focus-fade-leave-to {
@@ -2875,15 +2875,19 @@ onUnmounted(() => {
 <style scoped>
 .focus-fade-enter-active,
 .focus-fade-leave-active {
-  transition: opacity 220ms var(--ui-ease-out) !important;
+  transition:
+    opacity var(--ui-page-time) var(--ui-ease-out),
+    transform var(--ui-page-time) var(--ui-ease-out);
   animation: none !important;
-  transform: none !important;
 }
-.focus-fade-enter-from,
+.focus-fade-enter-from {
+  opacity: 0;
+  transform: translateX(8px);
+  clip-path: none !important;
+}
 .focus-fade-leave-to {
   opacity: 0;
-  transform: none !important;
-  clip-path: none !important;
+  transform: translateX(-8px);
 }
 </style>
 

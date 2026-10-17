@@ -121,6 +121,7 @@ try {
   const deviceTwoCookie = await login("wrong@example.invalid");
   const deviceTwo = await api("/email/enter", { dorm_id: dorm });
   cookie = wrongCookie;
+  const secondRoom = await api("/guest/create", {name: "其他宿舍", nickname: "另一个身份", members: []}, 201);
   const at = new Date(now).toISOString();
   db.prepare(
     "INSERT INTO chore_push_subscriptions(dorm_id,user_id,endpoint,p256dh,auth,updated_at) VALUES (?,?,?,?,?,?)",
@@ -174,7 +175,9 @@ try {
     "cancelled",
   );
   eq((await api("/email/me")).logged_in, true);
-  eq((await api("/email/me")).rooms.length, 0);
+  eq((await api("/email/me")).rooms.length, 1);
+  await api("/auth/me", null, 200, secondRoom.access_token);
+  eq((await api("/email/enter", {dorm_id: secondRoom.dorm.id})).is_creator, true);
   eq((await api("/email/me", null, 200, "", deviceTwoCookie)).logged_in, true);
   for (const token of [oldToken, deviceTwo.access_token]) {
     eq(
@@ -251,11 +254,16 @@ try {
     dorm_id: dorm,
     member_id: corrected.member.user_id,
   });
-  // Creator role is never transferred by unlinking or claiming a name.
+  // An unbound creator can reclaim by verified email + invitation + name.
   cookie = ownerCookie;
   await login("owner@example.invalid");
   const owner = (await api("/email/me")).rooms[0];
   await api("/email/unbind", { dorm_id: dorm, member_id: owner.member_id });
+  const reclaimedCookie = cookie;
+  const reclaimed = await api("/chores/claim", { invite_code: invite, nickname: "创建者" }, 201);
+  eq(reclaimed.is_creator, true);
+  await api("/auth/me", null, 200, reclaimed.access_token);
+  cookie = otherCookie;
   await api("/chores/claim", { invite_code: invite, nickname: "创建者" }, 403);
   eq(
     db.prepare("SELECT admin_user_id FROM dormitories WHERE id=?").get(dorm)
@@ -266,8 +274,13 @@ try {
     db
       .prepare("SELECT COUNT(*) n FROM sessions WHERE user_id=?")
       .get(owner.member_id).n,
-    0,
+    1,
   );
+  const ops = await api("/email/operations", null, 200, "", reclaimedCookie);
+  eq(ops.counters.some(item => item.name === "mail_accepted" && item.count > 0), true);
+  eq(ops.counters.some(item => item.name === "verify_success" && item.count > 0), true);
+  await api("/email/operations", null, 403, "", otherCookie);
+  eq(sent.every(mail => typeof mail.html === "string" && mail.html.includes("<strong")), true);
   eq(db.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
   eq(db.prepare("PRAGMA foreign_key_check").all(), []);
   console.log(`邮箱身份解绑回归通过 ${checks} 项（隔离数据库与邮件）`);

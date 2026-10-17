@@ -116,18 +116,39 @@ export function createEmailRuntime(
     base = "/",
     autoStart = true,
     intervalMs = 10000,
+    version = "development",
+    requireRegistration = false,
   } = {},
 ) {
   const sql = db.sqlite;
   if (config) validateEmailConfig(config);
   const smtp = config && !send ? createSmtpSender(config) : null;
-  const deliver = send || ((message) => smtp.send(message));
+  const transport = send || ((message) => smtp.send(message));
   const available = Boolean(config);
   const cookieName = "dorm_email_session";
   let running = null,
     stopped = false,
     timer;
   const stamp = () => now().toISOString();
+  function metric(name) {
+    sql.prepare(`INSERT INTO runtime_metrics(name,count,updated_at) VALUES (?,1,?)
+      ON CONFLICT(name) DO UPDATE SET count=count+1,updated_at=excluded.updated_at`).run(name, stamp());
+  }
+  const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  async function deliver(message) {
+    metric("mail_attempt");
+    try {
+      // Plain text remains the source; HTML never interpolates unescaped names.
+      const html = message.html || `<div style="font-family:system-ui,sans-serif;line-height:1.6">${escapeHtml(message.text).replace(/\n/g, "<br>")}</div>`;
+      await transport({ ...message, html });
+      metric("mail_accepted");
+    } catch (error) {
+      metric("mail_failed");
+      // Structured service-journal alert: no address, OTP, credential or SMTP response.
+      console.error(JSON.stringify({ event: "smtp_delivery_failed", severity: "error", at: stamp() }));
+      throw error;
+    }
+  }
   const transaction = (fn) => {
     sql.exec("BEGIN IMMEDIATE");
     try {
@@ -139,7 +160,7 @@ export function createEmailRuntime(
       throw error;
     }
   };
-  if (available)
+  if (available || requireRegistration)
     transaction(() => {
       const activated = sql
         .prepare(
@@ -224,7 +245,7 @@ export function createEmailRuntime(
           `SELECT s.user_id,u.current_dorm_id AS dorm_id,
       CASE WHEN m.role='admin' AND d.admin_user_id=s.user_id THEN 1 ELSE 0 END AS creator_verified FROM sessions s
       JOIN users u ON u.id=s.user_id JOIN dorm_members m ON m.user_id=u.id AND m.dorm_id=u.current_dorm_id AND m.is_active=1
-      JOIN dormitories d ON d.id=m.dorm_id AND d.is_demo=0 WHERE s.token_hash=? AND s.expires_at>?`,
+      JOIN dormitories d ON d.id=m.dorm_id AND d.is_demo=0 WHERE s.token_hash=? AND s.expires_at>? AND s.kind='account' AND (s.dorm_id IS NULL OR s.dorm_id=u.current_dorm_id)`,
         )
         .get(digest, at);
     if (!full) fail(401, "当前宿舍身份已失效，请重新进入");
@@ -239,8 +260,9 @@ export function createEmailRuntime(
     const owner = sql
       .prepare("SELECT admin_user_id FROM dormitories WHERE id=?")
       .get(member.dorm_id);
-    if (owner.admin_user_id === member.user_id && !member.creator_verified)
-      fail(403, "创建者请在持有管理权限的设备上绑定邮箱，或先恢复管理权限");
+    // Verified email + invite/name claim may bind an unclaimed creator identity.
+    // The unique email_members constraint still prevents taking an existing binding.
+    if (owner.admin_user_id === member.user_id) member.creator_verified = 1;
     const linked = sql
       .prepare(
         "SELECT * FROM email_members WHERE user_id=? OR (account_id=? AND dorm_id=?)",
@@ -267,12 +289,13 @@ export function createEmailRuntime(
       // Retain this proven device, revoke previous name-only impersonation sessions.
       sql
         .prepare(
-          "DELETE FROM member_sessions WHERE user_id=? AND token_hash<>?",
+          "DELETE FROM member_sessions WHERE user_id=? AND dorm_id=? AND token_hash<>?",
         )
-        .run(member.user_id, member.token_hash);
+        .run(member.user_id, member.dorm_id, member.token_hash);
       sql
-        .prepare("DELETE FROM sessions WHERE user_id=? AND token_hash<>?")
-        .run(member.user_id, member.token_hash);
+        .prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=? AND token_hash<>?")
+        .run(member.user_id, member.dorm_id, member.token_hash);
+      sql.prepare("UPDATE sessions SET dorm_id=? WHERE token_hash=?").run(member.dorm_id, member.token_hash);
       const fullSession = Number(
         Boolean(
           sql
@@ -353,9 +376,9 @@ export function createEmailRuntime(
         if (full)
           sql
             .prepare(
-              "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')",
+              "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind,dorm_id) VALUES (?,?,?,?,'account',?)",
             )
-            .run(digest, room.member_id, at, expires);
+            .run(digest, room.member_id, at, expires, room.id);
         else
           sql
             .prepare(
@@ -404,6 +427,7 @@ export function createEmailRuntime(
       return reply({
         available,
         registration_required: registrationRequired(),
+        version,
       });
     if (pathname === "/email/me" && method === "GET") {
       const who = session(request);
@@ -417,6 +441,13 @@ export function createEmailRuntime(
             }
           : { logged_in: false },
       );
+    }
+    if (pathname === "/email/operations" && method === "GET") {
+      const who = required(request);
+      if (!rooms(who).some((room) => room.is_creator)) fail(403, "需要宿舍创建者身份");
+      return reply({ version, counters: sql.prepare("SELECT name,count,updated_at FROM runtime_metrics ORDER BY name").all(),
+        pending: sql.prepare("SELECT COUNT(*) n FROM email_jobs WHERE status IN ('pending','sending')").get().n,
+        failed: sql.prepare("SELECT COUNT(*) n FROM email_jobs WHERE status='failed'").get().n });
     }
     if (method !== "POST") fail(404, "接口不存在");
     mutationOrigin(request);
@@ -480,7 +511,8 @@ export function createEmailRuntime(
         await deliver({
           to: email,
           subject: "轮到 · 邮箱验证码",
-          text: `你的验证码是：${code}。\n\n验证码为六位数字，十分钟内有效，仅可使用一次。用于注册或登录轮到。\n如果不是你本人操作，请忽略此邮件。`,
+          html: `<p>你的验证码是：</p><p><strong style="font-size:28px;letter-spacing:6px">${code}</strong></p><p>验证码为六位数字，十分钟内有效，仅可使用一次。用于注册或登录轮到。</p><p>重发不会使其他验证页面中未过期的验证码失效。请在获取该验证码的页面输入，每个验证码仅能使用一次。</p><p>如果不是你本人操作，请忽略此邮件。</p>`,
+          text: `你的验证码是：${code}。\n\n验证码为六位数字，十分钟内有效，仅可使用一次。用于注册或登录轮到。\n重发不会使其他验证页面的旧码失效，请在获取该码的页面输入。\n如果不是你本人操作，请忽略此邮件。`,
         });
       } catch {
         sql
@@ -596,11 +628,11 @@ export function createEmailRuntime(
         sql
           .prepare(
             `DELETE FROM email_grants WHERE token_hash IN (
-          SELECT token_hash FROM sessions WHERE user_id=? UNION
+          SELECT token_hash FROM sessions WHERE user_id=? AND dorm_id=? UNION
           SELECT token_hash FROM member_sessions WHERE user_id=? AND dorm_id=?)`,
           )
-          .run(link.user_id, link.user_id, link.dorm_id);
-        sql.prepare("DELETE FROM sessions WHERE user_id=?").run(link.user_id);
+          .run(link.user_id, link.dorm_id, link.user_id, link.dorm_id);
+        sql.prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=?").run(link.user_id, link.dorm_id);
         sql
           .prepare("DELETE FROM member_sessions WHERE user_id=? AND dorm_id=?")
           .run(link.user_id, link.dorm_id);
@@ -692,7 +724,7 @@ export function createEmailRuntime(
       LEFT JOIN member_sessions m ON m.token_hash=g.token_hash
       LEFT JOIN sessions s ON s.token_hash=g.token_hash
       JOIN email_members em ON em.account_id=e.account_id AND em.user_id=COALESCE(m.user_id,s.user_id)
-      WHERE g.token_hash=?`,
+      WHERE g.token_hash=? AND em.dorm_id=COALESCE(m.dorm_id,s.dorm_id)`,
         )
         .get(stamp(), hash(token)),
     );
@@ -739,7 +771,12 @@ export function createEmailRuntime(
   async function wrap(request, dispatch) {
     try {
       const p = new URL(request.url).pathname;
-      if (p.startsWith("/email/")) return await route(request);
+      if (p.startsWith("/email/")) {
+        if (p === "/email/verify") metric("verify_attempt");
+        const response = await route(request);
+        if (p === "/email/verify" && response.ok) metric("verify_success");
+        return response;
+      }
       // Revocation does not grant access and must work even for expired/migration tokens.
       if (p === "/auth/logout" && request.method === "POST")
         return await dispatch(request);
@@ -805,8 +842,6 @@ export function createEmailRuntime(
                 .get(who.id, member.dorm_id)
             )
               fail(403, "请先在邮箱设置中解除当前身份，再绑定未绑定邮箱的成员");
-            if (who && member.admin_user_id === member.id)
-              fail(403, "创建者请先在原设备绑定邮箱，或恢复管理权限后再绑定");
           }
         }
         if (
@@ -827,6 +862,13 @@ export function createEmailRuntime(
           const data = await result.clone().json();
           try {
             bind(who, data.access_token);
+            const room = rooms(who).find((room) => room.member_id === data.member?.user_id);
+            if (room?.is_creator && p === "/chores/claim") {
+              const entry = grant(who, room.id);
+              sql.prepare("DELETE FROM email_grants WHERE token_hash=?").run(hash(data.access_token));
+              sql.prepare("DELETE FROM member_sessions WHERE token_hash=?").run(hash(data.access_token));
+              return reply(entry, 201);
+            }
           } catch (error) {
             const digest = hash(data.access_token);
             sql
@@ -847,6 +889,8 @@ export function createEmailRuntime(
       guardEntry(request);
       return await dispatch(request);
     } catch (error) {
+      if (new URL(request.url).pathname === "/email/verify") metric("verify_failed");
+      if (error.status === 429) metric("rate_limited");
       return reply(
         {
           detail: {
