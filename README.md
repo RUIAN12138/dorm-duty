@@ -80,3 +80,4 @@ dorm-duty/
 两人协作请先阅读 [CONTRIBUTING](CONTRIBUTING.md)，在 Issues 选择问题或开发任务模板，各自使用任务分支，通过 PR 互相审查。PR 自动提供验收与发布交接模板。GitHub Actions 在 main 提交和 PR 上自动构建网页、检查业务 / 通知规则及安卓安装版；合并后由发布负责人单独验收与发布。
 
 最新界面与间隔提醒说明见 [RESTORE_MOTION_RECENCY](docs/RESTORE_MOTION_RECENCY.md)。
+1111
