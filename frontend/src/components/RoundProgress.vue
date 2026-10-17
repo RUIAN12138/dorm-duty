@@ -191,11 +191,11 @@ onBeforeUnmount(() => {
         >+1</span
       >
     </div>
-    <p v-if="!compact" class="round-summary">
+    <p v-if="!compact && completed" class="round-summary">
       {{ completed === round.total ? "全员完成" : "本轮已完成" }}
     </p>
     <TransitionGroup
-      v-if="!compact"
+      v-if="!compact && people.length"
       appear
       name="round-rank"
       tag="ol"
@@ -459,5 +459,12 @@ circle {
   overscroll-behavior: contain;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   touch-action: pan-y;
+}
+</style>
+
+<style scoped>
+.has-fixed-content .round-empty {
+  margin: 8px 0 16px;
+  flex-shrink: 0;
 }
 </style>

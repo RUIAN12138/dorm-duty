@@ -30,11 +30,11 @@ try {
   await fs.writeFile(
     vue,
     `<script setup lang="ts">
-import {ref} from 'vue';import Sheet from './src/components/ElasticSheet.vue';import Round from './src/components/RoundProgress.vue';import Settings from './src/components/ChoreSettings.vue';
+import {ref,computed} from 'vue';import Sheet from './src/components/ElasticSheet.vue';import Round from './src/components/RoundProgress.vue';import Settings from './src/components/ChoreSettings.vue';
 const open=ref(false),settings=ref(false);const members=Array.from({length:8},(_,i)=>({user_id:i+1,nickname:'室友'+(i+1),marker_id:i===7?'invalid-mark':'pixel-'+String(i+1).padStart(2,'0')}));
-const round={completed:8,total:8,sequence:1,members,completions:members.map((m,i)=>({...m,id:i+1,completed_at:'2026-10-17T01:00:00Z'}))};
+const count=ref(8);(window as any).setCount=(n:number)=>count.value=n;const round=computed(()=>({completed:count.value,total:8,sequence:1,members,completions:members.slice(0,count.value).map((m,i)=>({...m,id:i+1,completed_at:'2026-10-17T01:00:00Z'}))}));
 const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地板','厕所','洗手池','抬水'][i],mode:key==='water'?'on_demand':'self_round',content:'清洁',start_date:'2026-10-17',deadline_time:'22:00',weekdays:[1,2,3,4,5,6,7],rotation_days:1,reminder_interval_days:3,rotation_order:members.map(m=>m.user_id),enabled:true}));
-</script><template><main><button data-testid="open" @click="open=true">轮次</button><button data-testid="settings" @click="settings=true">设置</button><Sheet v-model="open" title="本轮完成" contained fixed-content motion="bottom"><div class="round-members"><Round :round="round" :active="open"/></div></Sheet><Settings v-model="settings" :categories="categories" :members="members" :version="1" token="fixture"/></main></template>`,
+</script><template><main><button data-testid="open" @click="open=true">轮次</button><button data-testid="settings" @click="settings=true">设置</button><Sheet v-model="open" title="本轮完成" :content-height="'min(90dvh, 820px, calc(min(224px, 27dvh) + 180px + '+(count*66)+'px + env(safe-area-inset-bottom, 0px)))'" contained fixed-content motion="bottom"><div class="round-members"><Round :round="round" :active="open"/></div></Sheet><Settings v-model="settings" :categories="categories" :members="members" :version="1" token="fixture"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -79,6 +79,24 @@ const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地
   await page.route("**/marks/**",route=>route.abort());
   for (const width of [320,390,430]) {
     await page.setViewportSize({width,height:844});
+    let lastHeight=0;
+    for(const total of [0,1,2]) {
+      await page.evaluate(n=>window.setCount(n),total);
+      await page.getByTestId("open").click();
+      await page.waitForTimeout(350);
+      const box=await page.locator('.elastic-sheet').boundingBox();
+      check(box.height<600,true,`${width}px ${total} people leaves background visible`);
+      if(total===0) {
+        check(await page.getByTestId('round-ranking').count(),0,'empty round reserves no roster area');
+        const empty=await page.locator('.round-empty').boundingBox();
+        check(empty.y+empty.height<=box.y+box.height && box.y+box.height-empty.y-empty.height<65,true,'empty hint is close to bottom without dead space');
+        if(width===390) await page.screenshot({path:path.join(evidence,'round-empty.png')});
+      } else check(box.height>lastHeight+50,true,'drawer grows with short roster');
+      lastHeight=box.height;
+      await page.getByRole('button',{name:'关闭详情',exact:true}).click();
+      await page.locator('.sheet-layer').waitFor({state:'hidden'});
+    }
+    await page.evaluate(()=>window.setCount(8));
     await page.getByTestId("open").click();
     await page.waitForTimeout(700);
     const ring=page.getByTestId("round-progress-ring"), list=page.getByTestId("round-ranking");
