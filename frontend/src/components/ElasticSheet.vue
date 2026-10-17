@@ -19,6 +19,7 @@ const props = withDefaults(
     stickyHeader?: boolean;
     contained?: boolean;
     fixedContent?: boolean;
+    contentHeight?: string;
     title: string;
     origin?: DOMRect | null;
     motion?: "shared" | "bottom";
@@ -326,6 +327,7 @@ onBeforeUnmount(() => {
             }"
             :style="{
               transformOrigin: 'top left',
+              height: contained ? contentHeight : undefined,
               willChange: phase === 'open' ? 'auto' : 'transform',
             }"
           >
