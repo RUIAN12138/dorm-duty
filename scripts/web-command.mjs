@@ -67,6 +67,7 @@ function build({ frontend, worker, server = false }) {
 }
 
 const verificationScripts = [
+  "scripts/check-web-architecture.mjs",
   "site/scripts/check-worker.mjs",
   "site/scripts/check-cloud-backend.mjs",
   "site/scripts/check-chores.mjs",

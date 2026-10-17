@@ -297,3 +297,7 @@ async function stop() {
 }
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
+process.once("message", (message) => {
+  if (message !== "shutdown") return;
+  stop().then(() => process.disconnect?.());
+});
