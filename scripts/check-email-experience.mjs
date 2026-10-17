@@ -140,6 +140,46 @@ try {
     });
   }
   h.env.DEFAULT_DORM_INVITE_CODE = ensureLocalDemo(h.db);
+  const navigationContext = await context();
+  const navigationPage = await navigationContext.newPage();
+  navigationPage.on("pageerror", e => errors.push(e.message));
+  await navigationPage.goto(url);
+  await navigationPage.getByTestId("guest-demo-entry").waitFor();
+  check(await navigationPage.getByTestId("entry-back").count(), 0, "welcome is root without back");
+  await navigationPage.getByTestId("guest-demo-entry").click();
+  await navigationPage.getByTestId("entry-back").waitFor();
+  await navigationPage.waitForURL("**entry=identity");
+  await navigationPage.mouse.move(10, 300);
+  await navigationPage.mouse.down();
+  await navigationPage.mouse.move(70, 302, {steps:5});
+  check(await navigationPage.locator("main.guest-page").evaluate(el=>new DOMMatrixReadOnly(getComputedStyle(el).transform).m41 > 40), true, "edge drag follows finger before threshold");
+  await navigationPage.mouse.up();
+  await navigationPage.waitForTimeout(260);
+  check(await navigationPage.getByTestId("entry-back").count(),1,"short edge drag springs back without navigation");
+  await navigationPage.mouse.move(10,300); await navigationPage.mouse.down();
+  await navigationPage.mouse.move(190,302,{steps:8}); await navigationPage.mouse.up();
+  await navigationPage.getByTestId("guest-demo-entry").waitFor();
+  check(await navigationPage.getByTestId("entry-back").count(),0,"committed edge gesture returns to welcome");
+  await navigationPage.getByTestId("guest-demo-entry").click();
+  await navigationPage.waitForURL("**entry=identity");
+  await navigationPage.goBack();
+  await navigationPage.getByTestId("guest-demo-entry").waitFor();
+  check(await navigationPage.getByTestId("entry-back").count(),0,"browser back uses same entry history");
+  await navigationPage.goForward();
+  await navigationPage.locator(".guest-member-list").waitFor();
+  check(await navigationPage.getByTestId("entry-back").count(),1,"browser forward restores identity selection");
+  await navigationPage.goBack();
+  await navigationPage.getByTestId("guest-demo-entry").waitFor();
+  await navigationPage.getByLabel("邮箱",{exact:true}).fill("navigation@example.invalid");
+  await navigationPage.getByRole("button",{name:"获取验证码",exact:true}).click();
+  await navigationPage.waitForURL("**entry=email");
+  await navigationPage.getByTestId("entry-back").click();
+  await navigationPage.getByRole("button",{name:"获取验证码",exact:true}).waitFor();
+  check(await navigationPage.getByLabel("邮箱",{exact:true}).inputValue(),"navigation@example.invalid","email back preserves typed address");
+  await navigationPage.goForward();
+  await navigationPage.getByLabel("验证码",{exact:true}).waitFor();
+  check(await navigationPage.getByLabel("邮箱",{exact:true}).inputValue(),"navigation@example.invalid","browser forward resumes the existing verification challenge");
+  await navigationContext.close();
   const first = await context(),
     page = await first.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
@@ -310,6 +350,17 @@ try {
       await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
   }
   await login(page);
+  await page.getByTestId("guest-create-dorm").click();
+  await page.waitForURL("**entry=create");
+  await page.getByTestId("entry-back").click();
+  await page.getByTestId("guest-join-dorm").waitFor();
+  check(await page.getByTestId("guest-create-form").count(),0,"create returns to room selection");
+  await page.getByTestId("entry-back").click();
+  await page.getByTestId("entry-continue").waitFor();
+  check(await page.getByTestId("entry-back").count(),0,"room selection returns to welcome without signing out");
+  await page.getByTestId("entry-continue").click();
+  await page.getByTestId("guest-join-dorm").waitFor();
+
   check(
     (await first.cookies()).some(
       (c) =>
@@ -655,7 +706,7 @@ try {
     0,
     "legacy login redirects to email entry",
   );
-  // Gate opened from guest tools may close, but only onto the safe entry.
+  // Optional verification opened from guest tools returns to the same guest identity.
   await other.getByTestId("guest-demo-entry").click();
   await other.locator(".guest-member-list button").first().click();
   await other.getByTestId("open-tools").waitFor();
@@ -675,14 +726,9 @@ try {
     .filter({ has: other.getByLabel("邮箱", { exact: true }) })
     .waitFor();
   await other.getByRole("button", { name: "关闭详情", exact: true }).click();
-  await other.getByLabel("邮箱", { exact: true }).waitFor();
-  check(
-    await other.getByTestId("open-tools").count(),
-    0,
-    "closing required verification returns to entry, not the board",
-  );
-  await other.getByTestId("guest-demo-entry").click();
-  await other.locator(".guest-member-list button").first().click();
+  await other.getByTestId("open-tools").waitFor();
+  check(await other.getByTestId("open-tools").count(), 1, "closing optional email keeps guest identity and source board");
+  check(await other.getByTestId("entry-back").count(), 0, "board has no entry back button");
   await other.getByRole("button", { name: "退出游客", exact: true }).click();
   await other.reload();
   await other.getByLabel("邮箱", { exact: true }).waitFor();

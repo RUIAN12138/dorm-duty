@@ -10,7 +10,7 @@ const props = withDefaults(
     label?: string;
     inline?: boolean;
   }>(),
-  { size: 28 },
+  { size: 28, inline: true },
 );
 const mark = computed(
   () => marks.find((item) => item.id === props.id) || marks[0],
@@ -29,7 +29,10 @@ const mark = computed(
     :aria-hidden="!label"
   >
     <path
-      :d="pixelPaths[(mark?.id || 'pixel-01') as keyof typeof pixelPaths]"
+      :d="
+        pixelPaths[(mark?.id || 'pixel-01') as keyof typeof pixelPaths] ||
+        pixelPaths['pixel-01']
+      "
       :fill="mark?.color || '#47b985'"
     />
   </svg>

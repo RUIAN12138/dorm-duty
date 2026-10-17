@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   choreRequest,
@@ -7,6 +7,12 @@ import {
   savedChoreToken,
   saveChoreToken,
 } from "../api/chores";
+import EntryBack from "../components/EntryBack.vue";
+import {
+  motionAllowed,
+  motionEaseCss,
+  motionTiming,
+} from "../interaction/motion";
 import HintPopover from "../components/HintPopover.vue";
 import JoinedDorms from "../components/JoinedDorms.vue";
 import { joinedDorms, rememberDorm, type JoinedDorm } from "../api/dormHistory";
@@ -111,6 +117,7 @@ function exitDemo() {
   localStorage.removeItem(storageKey);
 }
 function emailLogout() {
+  identityFrame = undefined;
   migrationToken.value = "";
   migrationOwnerToken.value = "";
   migrationMemberId.value = undefined;
@@ -160,6 +167,129 @@ function identityUnbound(event: Event) {
     if (loaded) notice.value = "请输入你自己的名字，只能绑定未绑定邮箱的成员。";
   });
 }
+const entrySurface = ref<HTMLElement | null>(null);
+const entryEmail = ref<InstanceType<typeof EmailAccountPanel>>();
+const emailVerifying = ref(false);
+const roomChoicesVisible = ref(true);
+watch(
+  () => emailAccount.loggedIn,
+  (loggedIn) => {
+    if (loggedIn) roomChoicesVisible.value = true;
+  },
+);
+const entryKind = computed(() => {
+  if (member.value) return "main";
+  if (creatingRoom.value) return "create";
+  if (changingDorm.value) return "join";
+  if (dorm.value && viewMode.value !== "entry") return "identity";
+  if (emailVerifying.value) return "email";
+  if (emailAccount.loggedIn && roomChoicesVisible.value) return "rooms";
+  return "welcome";
+});
+const entryBackVisible = computed(
+  () => !member.value && !["welcome", "main"].includes(entryKind.value),
+);
+let historyWriting = false,
+  restoringEntry = false,
+  entryAnimation: Animation | undefined;
+let historyQueue = Promise.resolve();
+let identityFrame:
+  | { dorm: GuestDorm; mode: "demo" | "dorm"; invite: string }
+  | undefined;
+function animateEntryBack() {
+  entryAnimation?.cancel();
+  if (entrySurface.value && motionAllowed())
+    entryAnimation = entrySurface.value.animate(
+      [
+        { transform: "translate3d(-8px,0,0)", opacity: 0.3 },
+        { transform: "translate3d(0,0,0)", opacity: 1 },
+      ],
+      { duration: motionTiming.page * 1000, easing: motionEaseCss },
+    );
+}
+function restoreEntry(kind: string) {
+  if (
+    emailAccount.required &&
+    !emailAccount.loggedIn &&
+    (["rooms", "join", "create"].includes(kind) ||
+      (kind === "identity" && identityFrame?.mode !== "demo"))
+  )
+    kind = "welcome";
+  restoringEntry = true;
+  if (kind === "welcome") {
+    cancelSelection();
+    roomChoicesVisible.value = false;
+    dorm.value = null;
+    member.value = null;
+    viewMode.value = "entry";
+    entryEmail.value?.backToEmail();
+    emailVerifying.value = false;
+  } else if (kind === "email") {
+    entryEmail.value?.resumeVerification();
+  } else if (kind === "identity" && identityFrame) {
+    cancelSelection();
+    dorm.value = identityFrame.dorm;
+    viewMode.value = identityFrame.mode;
+    inviteCode.value = identityFrame.invite;
+  } else if (kind === "rooms") {
+    cancelSelection();
+    viewMode.value = "entry";
+    roomChoicesVisible.value = true;
+  } else if (kind === "join") {
+    cancelSelection();
+    changingDorm.value = true;
+  } else if (kind === "create") {
+    changingDorm.value = false;
+    creatingRoom.value = true;
+  }
+  void nextTick().then(() => {
+    restoringEntry = false;
+    animateEntryBack();
+  });
+}
+function entryBack() {
+  if (!entryBackVisible.value) return;
+  if (route.query.entry && router.options.history.state.back) router.back();
+  else restoreEntry("welcome");
+}
+watch(entryKind, (kind, previous) => {
+  if (kind === "identity" && dorm.value && viewMode.value !== "entry")
+    identityFrame = {
+      dorm: dorm.value,
+      mode: viewMode.value,
+      invite: inviteCode.value,
+    };
+  if (restoringEntry) return;
+  historyQueue = historyQueue.then(async () => {
+    await nextTick();
+    if (disposed || entryKind.value !== kind || restoringEntry) return;
+    historyWriting = true;
+    try {
+      const query = { ...route.query };
+      delete query.entry;
+      if (!["welcome", "main"].includes(kind)) query.entry = kind;
+      if (route.query.entry === query.entry) return;
+      const location = { path: route.path, query };
+      // Identity has welcome as its parent, not the invite form.
+      if (
+        ["main", "welcome"].includes(kind) ||
+        (kind === "identity" && previous === "join") ||
+        (kind === "rooms" && previous === "email")
+      )
+        await router.replace(location);
+      else await router.push(location);
+    } finally {
+      historyWriting = false;
+    }
+  });
+});
+watch(
+  () => route.query.entry,
+  (value) => {
+    if (historyWriting || member.value || !bootReady) return;
+    restoreEntry(typeof value === "string" ? value : "welcome");
+  },
+);
 const section = computed(() =>
   route.path === "/water"
     ? "water"
@@ -606,6 +736,7 @@ async function submitCreate() {
     remember();
     await router.replace({
       path: route.path,
+      query: { ...route.query },
     });
     await loadDorm(result.invite_code, result.member_id, result.access_token);
   } catch (e) {
@@ -682,6 +813,7 @@ async function switchDorm(useDefault = false) {
   creatingRoom.value = false;
   await router.replace({
     path: route.path,
+    query: { ...route.query },
   });
 }
 async function returnToDorm(room: JoinedDorm) {
@@ -746,7 +878,13 @@ function removeSharedInvite() {
 watch(() => route.query.invite_code, removeSharedInvite);
 
 watch(emailOpen, (open, previous) => {
-  if (!open && previous && emailAccount.required && !emailAccount.loggedIn) {
+  if (
+    !open &&
+    previous &&
+    emailAccount.required &&
+    !emailAccount.loggedIn &&
+    viewMode.value !== "demo"
+  ) {
     ++requestId;
     controller?.abort();
     loading.value = false;
@@ -840,6 +978,7 @@ onMounted(() => {
   window.addEventListener("online", visibleRefresh);
 });
 onUnmounted(() => {
+  entryAnimation?.cancel();
   disposed = true;
   window.removeEventListener(logoutEvent, emailLogout);
   window.removeEventListener(identityUnboundEvent, identityUnbound);
@@ -853,6 +992,7 @@ onUnmounted(() => {
 
 <template>
   <main
+    ref="entrySurface"
     class="guest-page"
     :class="{
       'has-chore-nav': navVisible,
@@ -862,6 +1002,12 @@ onUnmounted(() => {
         !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
     }"
   >
+    <EntryBack
+      v-if="entryBackVisible && !emailOpen && !recoveryOpen"
+      :target="entrySurface"
+      :disabled="loading || !!entryEmail?.busy"
+      @back="entryBack"
+    />
     <header v-if="!navVisible && viewMode === 'demo'" class="guest-header">
       <div class="guest-brand-line">
         <span
@@ -1004,13 +1150,20 @@ onUnmounted(() => {
       >
         <h1 id="entry-title">
           {{
-            emailAccount.required && !emailAccount.loggedIn
+            (emailAccount.required && !emailAccount.loggedIn) ||
+            !roomChoicesVisible
               ? "欢迎来到轮到"
               : "先找到你的宿舍"
           }}
         </h1>
         <EmailAccountPanel
-          v-if="(emailAccount.required || emailAccount.loggedIn) && !emailOpen"
+          ref="entryEmail"
+          @verification="emailVerifying = $event"
+          v-if="
+            (emailAccount.required || emailAccount.loggedIn) &&
+            (!emailAccount.loggedIn || roomChoicesVisible) &&
+            !emailOpen
+          "
           hide-title
           :member-token="migrationToken"
           :owner-token="migrationOwnerToken"
@@ -1021,14 +1174,28 @@ onUnmounted(() => {
           @entered="acceptEmailEntry"
           @logout="emailLogout"
         />
+        <button
+          v-if="emailAccount.loggedIn && !roomChoicesVisible"
+          class="guest-primary"
+          data-testid="entry-continue"
+          @click="roomChoicesVisible = true"
+        >
+          进入宿舍
+        </button>
         <JoinedDorms
-          v-if="!emailAccount.required || emailAccount.loggedIn"
+          v-if="
+            (!emailAccount.required || emailAccount.loggedIn) &&
+            roomChoicesVisible
+          "
           :rooms="savedDorms"
           :disabled="loading"
           @select="returnToDorm"
         />
         <div
-          v-if="!emailAccount.required || emailAccount.loggedIn"
+          v-if="
+            (!emailAccount.required || emailAccount.loggedIn) &&
+            roomChoicesVisible
+          "
           class="guest-entry-actions"
         >
           <button
@@ -1432,5 +1599,12 @@ onUnmounted(() => {
   .is-entry-flow .guest-switch-form {
     padding: 24px 0 40px;
   }
+}
+</style>
+
+<style scoped>
+.guest-page:has(> .entry-back) {
+  position: relative;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 76px);
 }
 </style>

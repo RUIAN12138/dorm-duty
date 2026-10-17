@@ -36,6 +36,7 @@ const emit = defineEmits<{
   logout: [];
   recover: [];
   reenter: [];
+  verification: [active: boolean];
 }>();
 const codeField = ref<HTMLInputElement>();
 const operations = ref<{
@@ -107,10 +108,29 @@ const email = ref(""),
   code = ref(""),
   challenge = ref(""),
   mailEnabled = ref(false);
+let previousChallenge = "";
+watch(email, () => {
+  previousChallenge = "";
+});
+watch(challenge, (value) => {
+  if (value) previousChallenge = value;
+  emit("verification", !!value);
+});
+function backToEmail() {
+  if (busy.value) return;
+  challenge.value = "";
+  code.value = "";
+  error.value = "";
+}
+
 const busy = ref(false),
   reverify = ref(false),
   error = ref(""),
   remaining = ref(0);
+function resumeVerification() {
+  challenge.value = previousChallenge;
+}
+defineExpose({ backToEmail, resumeVerification, busy });
 let retryAt = 0;
 const timer = setInterval(() => {
   remaining.value = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
