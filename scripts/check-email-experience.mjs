@@ -224,6 +224,7 @@ try {
     "email submit keeps press feedback",
   );
   await page.mouse.up();
+  let checkedWrongCodeMotion = false;
   async function login(p, address = "ui-qa@example.invalid", gate = false) {
     await p.getByLabel("邮箱", { exact: true }).fill(address);
     await p.evaluate(() => {
@@ -256,6 +257,53 @@ try {
       "email input options and confirmation have a thumb-friendly gap",
     );
     const code = deliveries.at(-1).text.match(/验证码是：(\d{6})/)[1];
+    if (!checkedWrongCodeMotion) {
+      checkedWrongCodeMotion = true;
+      await p
+        .getByLabel("验证码", { exact: true })
+        .fill(String((Number(code) + 1) % 1000000).padStart(6, "0"));
+      await p.waitForTimeout(220);
+      await p.evaluate(() => {
+        window.__wrongCodeFrames = [];
+        const until = performance.now() + 1400;
+        function sample() {
+          const input = document.querySelector("#account-code"),
+            error = document.querySelector("#email-error"),
+            main = document.querySelector("main");
+          if (input && main)
+            window.__wrongCodeFrames.push({
+              x: new DOMMatrix(getComputedStyle(input).transform).m41,
+              top: main.getBoundingClientRect().top,
+              errorOpacity: error
+                ? Number(getComputedStyle(error).opacity)
+                : null,
+            });
+          if (performance.now() < until) requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      });
+      await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
+      await p.locator("#email-error").waitFor();
+      await p.waitForTimeout(350);
+      const frames = await p.evaluate(() => window.__wrongCodeFrames);
+      check(
+        frames.some((f) => Math.abs(f.x) > 0.01),
+        true,
+        "wrong OTP shakes only the input",
+      );
+      check(
+        Math.max(...frames.map((f) => f.top)) -
+          Math.min(...frames.map((f) => f.top)) <
+          1,
+        true,
+        "wrong OTP never shakes the page",
+      );
+      check(
+        frames.some((f) => f.errorOpacity > 0 && f.errorOpacity < 1),
+        true,
+        "wrong OTP message visibly enters",
+      );
+    }
     await p.getByLabel("验证码", { exact: true }).fill(code);
     await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
     if (!gate)
