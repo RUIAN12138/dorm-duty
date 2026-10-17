@@ -5,10 +5,11 @@ import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 defineProps<{
   record: ChoreRecord;
   own: boolean;
+  editable?: boolean;
   busy?: boolean;
   testId?: string;
 }>();
-defineEmits<{ toggle: [id: number] }>();
+defineEmits<{ toggle: [id: number]; edit: [] }>();
 const time = (value: string) =>
   new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -18,22 +19,15 @@ const time = (value: string) =>
   }).format(new Date(value));
 </script>
 <template>
-  <component
-    :is="own ? 'button' : 'div'"
+  <div
     class="record-row"
     :class="{ 'own-record': own }"
-    :type="own ? 'button' : undefined"
-    :disabled="own ? busy : undefined"
-    :data-testid="testId"
-    :aria-label="
-      own
-        ? `${record.assignee_name}，${record.name}已完成，再次点击撤销打卡`
-        : undefined
+    :data-testid="
+      testId?.startsWith('calendar-list-record-') ? testId : undefined
     "
-    @click="own && !busy && $emit('toggle', record.id)"
   >
     <span class="record-avatar"
-      ><MemberMark :id="record.marker_id" :size="26"
+      ><MemberMark :id="record.marker_id" :size="28" inline
     /></span>
     <span class="record-description"
       ><strong>{{ record.assignee_name }}</strong
@@ -47,11 +41,31 @@ const time = (value: string) =>
       ><time :datetime="record.completed_at">{{
         time(record.completed_at)
       }}</time
-      ><span v-if="own" class="record-completed"
+      ><span class="record-completed"
         ><van-icon name="success" aria-hidden="true" />已完成</span
       ></span
     >
-  </component>
+    <div class="record-controls">
+      <button
+        v-if="own && record.id > 0 && !record.corrected"
+        :disabled="busy"
+        :data-testid="
+          testId?.startsWith('calendar-list-record-') ? undefined : testId
+        "
+        :aria-label="`撤销${record.name}打卡`"
+        @click="$emit('toggle', record.id)"
+      >
+        撤销</button
+      ><button
+        v-if="editable"
+        :disabled="busy"
+        :aria-label="`修正${record.assignee_name}的${record.name}记录`"
+        @click="$emit('edit')"
+      >
+        修正
+      </button>
+    </div>
+  </div>
 </template>
 <style scoped>
 .record-row {
@@ -62,9 +76,9 @@ const time = (value: string) =>
   min-height: 80px;
   padding: 15px 0;
   border: 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--ui-border);
   background: transparent;
-  color: #111;
+  color: var(--ui-ink);
   font: inherit;
   text-align: left;
 }
@@ -139,7 +153,7 @@ time {
 @media (prefers-reduced-motion: no-preference) {
   .own-record {
     transition:
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform var(--ui-release-time) var(--ui-ease-out),
       background-color 140ms ease;
   }
 }
@@ -147,5 +161,37 @@ time {
   .own-record:active {
     transform: none;
   }
+}
+</style>
+
+<style scoped>
+.record-row {
+  flex-wrap: wrap;
+  cursor: default;
+}
+.record-description strong {
+  font-size: var(--ui-body-size);
+}
+.record-row:active {
+  transform: none !important;
+}
+.record-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ui-card-gap);
+  width: 100%;
+}
+.record-controls:empty {
+  display: none;
+}
+.record-controls button {
+  border: 0;
+  background: var(--ui-surface-muted);
+  border-radius: var(--ui-control-radius);
+  min-height: 44px;
+  padding: 0 var(--ui-space-sm);
+  font: inherit;
+  font-size: var(--ui-small-size);
+  color: var(--ui-ink);
 }
 </style>

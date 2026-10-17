@@ -3,13 +3,14 @@
 import { CalendarError } from "./calendar.mjs";
 import {
   ChoreError,
+  choreGuestAccess,
   choreGuestMemberMarks,
   handleChores,
   validateMarker,
 } from "./chores.mjs";
 const DAY = 86_400_000;
 const SESSION_DAYS = 7;
-const DEVICE_DAYS = 365;
+const DEVICE_DAYS = 90;
 const ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 const DEFAULT_RULES = {
@@ -270,8 +271,8 @@ async function currentUser(request, db, now) {
   const tokenHash = await digest(match[1]);
   const user = await first(
     db,
-    "SELECT u.*,s.kind AS session_kind FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
-    [tokenHash, now.toISOString()],
+    "SELECT u.*,s.kind AS session_kind FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND (s.kind!='device' OR julianday(s.created_at,'+90 days')>julianday(?))",
+    [tokenHash, now.toISOString(), now.toISOString()],
   );
   if (!user) fail(401, "unauthorized", "登录已过期，请重新登录");
   user.session_hash = tokenHash;
@@ -638,7 +639,16 @@ async function guestView(db, room) {
     members: await choreGuestMemberMarks(db, room.id),
   };
 }
-async function guestCreate(request, db, now) {
+async function guestCreate(request, db, now, emailCreator) {
+  const emailSession = emailCreator
+    ? await first(
+        db,
+        "SELECT account_id,expires_at FROM email_sessions WHERE token_hash=? AND account_id=? AND expires_at>?",
+        [emailCreator.sessionHash, emailCreator.accountId, now.toISOString()],
+      )
+    : null;
+  if (emailCreator && !emailSession)
+    fail(401, "email_required", "请先用邮箱验证码登录");
   const input = await body(
     request,
     ["name", "nickname", "members", "marker_id"],
@@ -652,6 +662,8 @@ async function guestCreate(request, db, now) {
   if (!Array.isArray(others) || others.length > 11)
     invalid("一个宿舍最多填写 12 位成员");
   const nicknames = [nickname, ...others.map((value) => str(value, 1, 32))];
+  if (new Set(nicknames).size !== nicknames.length)
+    invalid("室友名字不能重复，请使用能区分彼此的名字");
   const prefix = `guest_${random(9)}`;
   const usernames = nicknames.map(
     (_, index) => `${prefix}_${String(index).padStart(2, "0")}`,
@@ -662,7 +674,9 @@ async function guestCreate(request, db, now) {
     token = random(),
     tokenHash = await digest(token);
   const current = now.toISOString(),
-    expires = new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString();
+    expires =
+      emailSession?.expires_at ||
+      new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString();
   const today = localDate(now),
     usernamesJson = JSON.stringify(usernames),
     ops = [];
@@ -734,6 +748,31 @@ async function guestCreate(request, db, now) {
         [marker, invite],
       ),
     );
+  if (emailCreator) {
+    // Ownership, room and email linkage commit together. A concurrently revoked
+    // email login makes the NOT NULL subquery fail and rolls the entire batch back.
+    ops.push(
+      stmt(
+        db,
+        "INSERT INTO email_members(account_id,user_id,dorm_id,creator_verified,bound_at) VALUES ((SELECT account_id FROM email_sessions WHERE token_hash=? AND account_id=? AND expires_at>?), (SELECT id FROM users WHERE username=?), (SELECT id FROM dormitories WHERE invite_code=?),1,?)",
+        [
+          emailCreator.sessionHash,
+          emailCreator.accountId,
+          current,
+          usernames[0],
+          invite,
+          current,
+        ],
+      ),
+    );
+    ops.push(
+      stmt(
+        db,
+        "INSERT INTO email_grants(token_hash,email_session_hash,full_session) VALUES (?,?,1)",
+        [tokenHash, emailCreator.sessionHash],
+      ),
+    );
+  }
   await db.batch(ops);
   const room = normalizeDorm(
     await first(db, "SELECT * FROM dormitories WHERE invite_code=?", [invite]),
@@ -1481,12 +1520,27 @@ async function dispatch(request, env, ctx) {
   }
   if (/^\/chores(\/|$)/.test(path)) return handleChores(request, env, now);
   if (path === "/guest/create" && method === "POST")
-    return guestCreate(request, db, now);
+    return guestCreate(request, db, now, env.EMAIL_CREATOR);
   if (path === "/guest/recover" && method === "POST")
     return recoverCreator(request, db, now);
   if ((path === "/guest/dorm" || path === "/guest/tasks") && method === "GET") {
     const room = await guestRoom(db, env, url);
-    if (path === "/guest/dorm") return json(await guestView(db, room));
+    const who = room.is_demo
+      ? null
+      : await choreGuestAccess(request, db, now, room.id);
+    if (path === "/guest/dorm")
+      return json(
+        room.is_demo || who
+          ? await guestView(db, room)
+          : {
+              id: room.id,
+              name: room.name,
+              is_demo: false,
+              members: [],
+            },
+      );
+    if (!room.is_demo && !who)
+      fail(401, "member_required", "请先输入正确的名字进入宿舍");
     const uid = queryInt(url, "member_id"),
       members = await roomMembers(db, room.id),
       member = members.find((entry) => entry.user_id === uid);
@@ -1531,26 +1585,59 @@ async function dispatch(request, env, ctx) {
       username = str(input.username, 3, 32),
       password = str(input.password, 8, 128);
     if (!/^[A-Za-z0-9_]+$/.test(username)) invalid();
+    // Atomic durable buckets survive restarts. Node overwrites X-Dorm-Client;
+    // Workers use CF-Connecting-IP. No client-supplied forwarding chain is trusted.
+    const client =
+      request.headers.get("CF-Connecting-IP") ||
+      request.headers.get("X-Dorm-Client") ||
+      "unknown";
+    const accountBucket = await digest(
+      `auth:${register ? "register" : "login"}:${username.toLowerCase()}`,
+    );
+    for (const [bucket, limit] of [
+      [await digest(`auth-ip:${client}`), 60],
+      [accountBucket, 5],
+    ]) {
+      const reserved = await first(
+        db,
+        `INSERT INTO auth_attempts(bucket,attempts,expires_at) VALUES (?,1,?)
+        ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN expires_at<=? THEN 1 ELSE attempts+1 END,
+        expires_at=CASE WHEN expires_at<=? THEN excluded.expires_at ELSE expires_at END RETURNING attempts`,
+        [
+          bucket,
+          new Date(now.getTime() + 15 * 60000).toISOString(),
+          now.toISOString(),
+          now.toISOString(),
+        ],
+      );
+      if (reserved.attempts > limit)
+        fail(429, "auth_rate_limited", "尝试过于频繁，请15分钟后重试");
+    }
+    await stmt(db, "DELETE FROM auth_attempts WHERE expires_at<=?", [
+      now.toISOString(),
+    ]).run();
     const existing = await first(db, "SELECT * FROM users WHERE username=?", [
       username,
     ]);
     if (register) {
       const nickname = str(input.nickname, 1, 32);
-      if (existing) fail(409, "username_taken", "账号已被注册");
+      // Same hashing cost and response for existing/new names; never overwrite.
+      const encoded = await passwordHash(password);
       await stmt(
         db,
-        "INSERT INTO users(username,password_hash,nickname,created_at) VALUES (?,?,?,?)",
-        [username, await passwordHash(password), nickname, now.toISOString()],
+        "INSERT OR IGNORE INTO users(username,password_hash,nickname,created_at) VALUES (?,?,?,?)",
+        [username, encoded, nickname, now.toISOString()],
       ).run();
       return json(
-        userView(
-          await first(db, "SELECT * FROM users WHERE username=?", [username]),
-        ),
+        { ok: true, message: "请使用账号密码登录；已有账号请使用原密码。" },
         201,
       );
     }
     if (!(await passwordMatches(password, existing?.password_hash)))
       fail(401, "invalid_credentials", "账号或密码不正确");
+    await stmt(db, "DELETE FROM auth_attempts WHERE bucket=?", [
+      accountBucket,
+    ]).run();
     const token = random(),
       hash = await digest(token),
       expires = new Date(now.getTime() + SESSION_DAYS * DAY).toISOString();
@@ -1568,6 +1655,20 @@ async function dispatch(request, env, ctx) {
       expires_in: SESSION_DAYS * 86_400,
     });
   }
+  if (path === "/auth/logout" && method === "POST") {
+    const token = /^Bearer ([a-f0-9]{64})$/i.exec(
+      request.headers.get("Authorization") || "",
+    )?.[1];
+    if (token) {
+      const tokenHash = await digest(token);
+      await db.batch([
+        stmt(db, "DELETE FROM email_grants WHERE token_hash=?", [tokenHash]),
+        stmt(db, "DELETE FROM sessions WHERE token_hash=?", [tokenHash]),
+        stmt(db, "DELETE FROM member_sessions WHERE token_hash=?", [tokenHash]),
+      ]);
+    }
+    return json({ ok: true });
+  }
   const known = /^\/(auth|dorms|duties|notifications|push)(\/|$)/.test(path);
   if (!known) fail(404, "not_found", "接口不存在");
   const user = await currentUser(request, db, now);
@@ -1579,15 +1680,6 @@ async function dispatch(request, env, ctx) {
   if (path === "/dorms/recovery" && method === "POST")
     return configureRecovery(request, db, user, now);
   if (path === "/auth/me" && method === "GET") {
-    if (user.session_kind === "device")
-      await stmt(
-        db,
-        "UPDATE sessions SET expires_at=? WHERE token_hash=? AND kind='device'",
-        [
-          new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString(),
-          user.session_hash,
-        ],
-      ).run();
     return json(userView(user));
   }
   if (path === "/auth/me" && method === "PATCH") {
@@ -1606,12 +1698,6 @@ async function dispatch(request, env, ctx) {
     return json(
       userView(await first(db, "SELECT * FROM users WHERE id=?", [user.id])),
     );
-  }
-  if (path === "/auth/logout" && method === "POST") {
-    await stmt(db, "DELETE FROM sessions WHERE token_hash=?", [
-      user.session_hash,
-    ]).run();
-    return json({ ok: true });
   }
   if (path === "/dorms" && method === "POST")
     return createRoom(request, db, user, now);

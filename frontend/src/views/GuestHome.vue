@@ -15,7 +15,19 @@ import MarkerPicker from "../components/MarkerPicker.vue";
 import MemberMark from "../components/MemberMark.vue";
 import ChoreBottomNav from "../components/ChoreBottomNav.vue";
 import CreatorRecovery from "../components/CreatorRecovery.vue";
+import ElasticSheet from "../components/ElasticSheet.vue";
+import EmailAccountPanel from "../components/EmailAccountPanel.vue";
+import {
+  emailAccount,
+  refreshEmailAccount,
+  enterEmailRoom,
+  type EmailEntry,
+  type EmailRoom,
+  identityUnboundEvent,
+} from "../api/email";
 import { showToast } from "vant";
+import { ApiError } from "../api";
+import { logoutEvent, pendingLogout } from "../api/logout";
 import { useSession } from "../stores/session";
 import {
   guestApi,
@@ -36,6 +48,8 @@ const loading = ref(false),
   choosingMember = ref(false);
 const choreToken = ref(""),
   pendingPerson = ref<GuestMember | null>(null),
+  enteredName = ref(""),
+  pendingClaimToken = ref(""),
   choiceMarker = ref(""),
   createMarker = ref("pixel-01");
 const error = ref(""),
@@ -50,6 +64,94 @@ const creatingRoom = ref(false),
   createMembers = ref("");
 const createdInvite = ref("");
 const recoveryOpen = ref(false);
+const emailOpen = ref(false);
+const migrationToken = ref(""),
+  migrationOwnerToken = ref(""),
+  migrationMemberId = ref<number>();
+function needsEmail() {
+  if (!emailAccount.required || emailAccount.loggedIn) return false;
+  emailOpen.value = true;
+  return true;
+}
+function openRecovery() {
+  if (!needsEmail()) recoveryOpen.value = true;
+}
+async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
+  emailOpen.value = false;
+  cancelSelection();
+  if (entry.is_creator) {
+    sessionStorage.setItem("dorm-token", entry.access_token);
+    localStorage.setItem("dorm-owner-token", entry.access_token);
+    await session.refresh().catch(() => {});
+  }
+  saveChoreToken(entry.invite_code, entry.member_id, entry.access_token);
+  await loadDorm(entry.invite_code, entry.member_id, entry.access_token, quiet);
+}
+function exitDemo() {
+  ++requestId;
+  controller?.abort();
+  loading.value = false;
+  cancelSelection();
+  member.value = null;
+  dorm.value = null;
+  choreToken.value = "";
+  inviteCode.value = "";
+  viewMode.value = "entry";
+  localStorage.removeItem(storageKey);
+}
+function emailLogout() {
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
+  ++requestId;
+  controller?.abort();
+  loading.value = false;
+  changingDorm.value = false;
+  creatingRoom.value = false;
+  savedDorms.value = [];
+  emailOpen.value = false;
+  cancelSelection();
+  session.clear();
+  try {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith("dorm-chore-device-v1:")) localStorage.removeItem(key);
+    localStorage.removeItem(storageKey);
+  } catch {
+    /* Optional storage. */
+  }
+  member.value = null;
+  dorm.value = null;
+  choreToken.value = "";
+  inviteCode.value = "";
+  viewMode.value = "entry";
+}
+function identityUnbound(event: Event) {
+  const room = (event as CustomEvent<EmailRoom>).detail;
+  savedDorms.value = joinedDorms();
+  if (session.user?.id === room.member_id) session.clear();
+  if (
+    inviteCode.value !== room.invite_code &&
+    migrationMemberId.value !== room.member_id
+  )
+    return;
+  cancelSelection();
+  emailOpen.value = false;
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
+  member.value = null;
+  choreToken.value = "";
+  dorm.value = null;
+  viewMode.value = "entry";
+  inviteCode.value = room.invite_code;
+  draftCode.value = room.invite_code;
+  void loadDorm(room.invite_code).then((loaded) => {
+    if (loaded) notice.value = "请输入你自己的名字，只能绑定未绑定邮箱的成员。";
+  });
+}
 const section = computed(() =>
   route.path === "/water"
     ? "water"
@@ -150,10 +252,10 @@ function remember() {
     /* Viewing still works with browser storage disabled. */
   }
 }
-function startRequest() {
+function startRequest(quiet = false) {
   controller?.abort();
   controller = new AbortController();
-  loading.value = true;
+  if (!quiet) loading.value = true;
   error.value = "";
   return { id: ++requestId, signal: controller.signal };
 }
@@ -189,23 +291,37 @@ async function loadDorm(
   code: string,
   restoreId?: number,
   knownOwnerToken = "",
+  quiet = false,
 ) {
-  const { id, signal } = startRequest();
+  const { id, signal } = startRequest(quiet);
   try {
-    const result = await guestApi<GuestDorm>(
-      "/guest/dorm",
-      { invite_code: code || undefined },
-      signal,
-    );
+    let token =
+      code && restoreId
+        ? knownOwnerToken ||
+          (await creatorToken({ user_id: restoreId, nickname: "" }, code)) ||
+          savedChoreToken(code, restoreId)
+        : "";
+    let result: GuestDorm;
+    try {
+      result = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: code || undefined },
+        signal,
+        token,
+      );
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 401 || !token) throw e;
+      if (restoreId) saveChoreToken(code, restoreId, "");
+      token = "";
+      result = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: code },
+        signal,
+      );
+    }
     if (!code && result.is_demo !== true) throw new Error("请先输入宿舍邀请码");
     const restored =
       result.members.find((m) => m.user_id === restoreId) || null;
-    const token =
-      restored && code
-        ? knownOwnerToken ||
-          (await creatorToken(restored, code)) ||
-          savedChoreToken(code, restored.user_id)
-        : "";
     if (!isCurrent(id, signal)) return false;
     // Commit only after the room is valid. Opening/cancelling a switch never logs out.
     dorm.value = result;
@@ -215,13 +331,10 @@ async function loadDorm(
     choreToken.value = token;
     choosingMember.value = false;
     pendingPerson.value = null;
+    pendingClaimToken.value = "";
+    enteredName.value = "";
     notice.value =
-      restoreId && !restored ? "这位室友已不在当前宿舍，请重新选择。" : "";
-    if (restored && code && !token) {
-      pendingPerson.value = restored;
-      choiceMarker.value = restored.marker_id || "pixel-01";
-      member.value = null;
-    }
+      restoreId && !restored ? "请输入你的名字，重新确认身份。" : "";
     remember();
     return true;
   } catch (e) {
@@ -241,41 +354,82 @@ async function choose(person: GuestMember) {
     remember();
     return;
   }
-  pendingPerson.value = person;
-  choiceMarker.value = person.marker_id || "pixel-01";
+}
+async function submitName() {
+  if (needsEmail()) return;
+  if (loading.value || !enteredName.value.trim()) return;
+  const { id, signal } = startRequest();
+  try {
+    const result = await claimChoreIdentity(
+      { invite_code: inviteCode.value, nickname: enteredName.value.trim() },
+      signal,
+    );
+    if (!isCurrent(id, signal)) return;
+    if (result.is_creator) {
+      sessionStorage.setItem("dorm-token", result.access_token);
+      localStorage.setItem("dorm-owner-token", result.access_token);
+      await session.refresh();
+      if (!isCurrent(id, signal)) return;
+    }
+    const owner = await creatorToken(result.member);
+    if (!isCurrent(id, signal)) return;
+    let token = owner || result.access_token;
+    let room: GuestDorm;
+    try {
+      room = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: inviteCode.value },
+        signal,
+        token,
+      );
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 401 || !owner) throw e;
+      token = result.access_token;
+      room = await guestApi<GuestDorm>(
+        "/guest/dorm",
+        { invite_code: inviteCode.value },
+        signal,
+        token,
+      );
+    }
+    if (!isCurrent(id, signal)) return;
+    await refreshEmailAccount();
+    if (!isCurrent(id, signal)) return;
+    dorm.value = room;
+    pendingClaimToken.value = token;
+    pendingPerson.value = result.member;
+    choiceMarker.value = result.member.marker_id;
+    notice.value = "";
+  } catch (e) {
+    if (isCurrent(id, signal)) error.value = (e as Error).message;
+  } finally {
+    if (isCurrent(id, signal)) loading.value = false;
+  }
 }
 async function confirmChoice() {
-  if (!pendingPerson.value || loading.value || !choiceMarker.value) return;
+  if (
+    !pendingPerson.value ||
+    loading.value ||
+    !choiceMarker.value ||
+    !pendingClaimToken.value
+  )
+    return;
   const person = pendingPerson.value;
   const { id, signal } = startRequest();
   try {
-    const owner = await creatorToken(person);
-    if (!isCurrent(id, signal)) return;
-    if (owner) {
-      if (choiceMarker.value !== person.marker_id)
-        await choreRequest("/chores/marker", owner, {
-          method: "PATCH",
-          body: JSON.stringify({ marker_id: choiceMarker.value }),
-          signal,
-        });
-      if (!isCurrent(id, signal)) return;
-      member.value = { ...person, marker_id: choiceMarker.value };
-      choreToken.value = owner;
-    } else {
-      const result = await claimChoreIdentity(
-        {
-          invite_code: inviteCode.value,
-          member_id: person.user_id,
-          marker_id: choiceMarker.value,
-        },
+    const token = pendingClaimToken.value;
+    if (choiceMarker.value !== person.marker_id)
+      await choreRequest("/chores/marker", token, {
+        method: "PATCH",
+        body: JSON.stringify({ marker_id: choiceMarker.value }),
         signal,
-      );
-      if (!isCurrent(id, signal)) return;
-      member.value = result.member;
-      choreToken.value = result.access_token;
-      saveChoreToken(inviteCode.value, person.user_id, result.access_token);
-    }
+      });
+    if (!isCurrent(id, signal)) return;
+    member.value = { ...person, marker_id: choiceMarker.value };
+    choreToken.value = token;
+    saveChoreToken(inviteCode.value, person.user_id, token);
     pendingPerson.value = null;
+    pendingClaimToken.value = "";
     choosingMember.value = false;
     remember();
   } catch (e) {
@@ -292,19 +446,79 @@ function cancelSelection() {
   changingDorm.value = false;
   creatingRoom.value = false;
   pendingPerson.value = null;
+  pendingClaimToken.value = "";
+  enteredName.value = "";
   error.value = "";
 }
+let identityRecovery: Promise<void> | null = null;
 function identityExpired() {
+  if (identityRecovery) return identityRecovery;
+  if (emailAccount.required) {
+    const code = inviteCode.value,
+      shownMember = member.value?.user_id,
+      previousMember = shownMember ?? storedChoice().member_id;
+    const epoch = requestId;
+    const current = () =>
+      epoch === requestId &&
+      inviteCode.value === code &&
+      member.value?.user_id === shownMember;
+    identityRecovery = (async () => {
+      await refreshEmailAccount();
+      if (!current()) return;
+      const linked = emailAccount.rooms.find(
+        (room) =>
+          room.invite_code === code && room.member_id === previousMember,
+      );
+      if (emailAccount.loggedIn && linked) {
+        const entry = await enterEmailRoom(linked.id);
+        if (current()) await acceptEmailEntry(entry, true);
+        return;
+      }
+      // Expired email login goes straight to verification. Preserve proof for
+      // migration, but do not send a legacy token through a public room reload.
+      migrationMemberId.value = previousMember;
+      migrationToken.value =
+        choreToken.value ||
+        (previousMember ? savedChoreToken(code, previousMember) : "");
+      migrationOwnerToken.value =
+        localStorage.getItem("dorm-owner-token") || "";
+      cancelSelection();
+      member.value = null;
+      choreToken.value = "";
+      viewMode.value = "entry";
+      dorm.value = null;
+    })()
+      .catch(() => {
+        // A transient connection failure keeps the current screen and identity.
+        // Foreground/online or the next poll will retry without forcing a reload.
+      })
+      .finally(() => {
+        identityRecovery = null;
+      });
+    return identityRecovery;
+  }
   if (member.value) saveChoreToken(inviteCode.value, member.value.user_id, "");
   cancelSelection();
   member.value = null;
   choreToken.value = "";
-  notice.value = "这台设备的身份已失效，请重新选择你的名字。";
+  notice.value = emailAccount.required
+    ? "请用邮箱重新进入宿舍。"
+    : "这台设备的身份已失效，请重新输入你的名字。";
 }
 function changeMember() {
+  if (
+    emailAccount.loggedIn &&
+    emailAccount.rooms.some((room) => room.id === dorm.value?.id)
+  ) {
+    emailOpen.value = true;
+    return;
+  }
   cancelSelection();
   choosingMember.value = true;
   notice.value = "";
+}
+function retryEntry() {
+  void boot();
 }
 async function refresh() {
   if (
@@ -326,6 +540,7 @@ async function refresh() {
   );
 }
 function openDormChange() {
+  if (needsEmail()) return;
   cancelSelection();
   notice.value = "";
   createdInvite.value = "";
@@ -333,6 +548,7 @@ function openDormChange() {
   changingDorm.value = true;
 }
 function openCreate() {
+  if (needsEmail()) return;
   openDormChange();
   changingDorm.value = false;
   creatingRoom.value = true;
@@ -369,6 +585,7 @@ async function submitCreate() {
     } catch {
       /* The created room and owner token remain usable after reconnecting. */
     }
+    await refreshEmailAccount().catch(() => {});
     if (!isCurrent(id, signal)) return;
     creatingRoom.value = false;
     createdInvite.value = result.invite_code;
@@ -484,7 +701,15 @@ async function returnToDorm(room: JoinedDorm) {
 }
 function visibleRefresh() {
   if (
+    (!bootReady || pendingLogout()) &&
+    document.visibilityState === "visible"
+  ) {
+    void boot();
+    return;
+  }
+  if (
     document.visibilityState === "visible" &&
+    viewMode.value !== "entry" &&
     !member.value &&
     !pendingPerson.value
   )
@@ -512,7 +737,38 @@ function removeSharedInvite() {
 }
 watch(() => route.query.invite_code, removeSharedInvite);
 
-onMounted(() => {
+watch(emailOpen, (open, previous) => {
+  if (!open && previous && emailAccount.required && !emailAccount.loggedIn) {
+    ++requestId;
+    controller?.abort();
+    loading.value = false;
+    cancelSelection();
+    member.value = null;
+    dorm.value = null;
+    choreToken.value = "";
+    viewMode.value = "entry";
+    changingDorm.value = false;
+    creatingRoom.value = false;
+    error.value = "";
+  }
+});
+window.addEventListener(logoutEvent, emailLogout);
+window.addEventListener(identityUnboundEvent, identityUnbound);
+let bootRunning = false;
+let bootReady = false;
+let disposed = false;
+async function boot() {
+  if (bootRunning || disposed) return;
+  bootRunning = true;
+  try {
+    await bootEntry();
+  } finally {
+    bootRunning = false;
+  }
+}
+async function bootEntry() {
+  const epoch = requestId;
+  loading.value = true;
   const saved = storedChoice();
   const sharedLink = route.query.invite_code !== undefined;
   // Only manual join/create or a previous room choice grants the UI entry.
@@ -520,17 +776,66 @@ onMounted(() => {
   const code = saved.invite_code;
   removeSharedInvite();
   inviteCode.value = code;
-  if (code || saved.guest_mode === "demo")
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await refreshEmailAccount();
+        break;
+      } catch (failure) {
+        if (attempt >= 2 || disposed || !navigator.onLine) throw failure;
+        await new Promise((resolve) =>
+          setTimeout(resolve, 600 * (attempt + 1)),
+        );
+      }
+    }
+    if (disposed || epoch !== requestId) return;
+    bootReady = true;
+    error.value = "";
+  } catch (failure) {
+    loading.value = false;
+    error.value =
+      (failure as Error).message || "暂时无法验证身份，请联网重试。";
+    return;
+  }
+  loading.value = false;
+  if (code && saved.guest_mode !== "demo" && emailAccount.required) {
+    const linked = emailAccount.rooms.find((room) => room.invite_code === code);
+    if (emailAccount.loggedIn && linked) {
+      try {
+        await acceptEmailEntry(await enterEmailRoom(linked.id));
+      } catch (e) {
+        if (e instanceof ApiError && [401, 403, 428].includes(e.status))
+          await identityExpired();
+        else error.value = (e as Error).message;
+      }
+    } else {
+      // Keep original credentials privately for this one-time migration. Do not
+      // load the board, clear proof, or show a roster before email verification.
+      migrationMemberId.value = saved.member_id;
+      migrationToken.value = saved.member_id
+        ? savedChoreToken(code, saved.member_id)
+        : "";
+      migrationOwnerToken.value =
+        localStorage.getItem("dorm-owner-token") || "";
+    }
+  } else if (code || saved.guest_mode === "demo")
     void loadDorm(
       code,
       code === saved.invite_code ? saved.member_id : undefined,
     );
   else if (sharedLink) openDormChange();
+}
+onMounted(() => {
+  void boot();
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
 });
 onUnmounted(() => {
+  disposed = true;
+  window.removeEventListener(logoutEvent, emailLogout);
+  window.removeEventListener(identityUnboundEvent, identityUnbound);
+  ++requestId;
   controller?.abort();
   document.removeEventListener("visibilitychange", visibleRefresh);
   window.removeEventListener("focus", visibleRefresh);
@@ -543,13 +848,13 @@ onUnmounted(() => {
     class="guest-page"
     :class="{
       'has-chore-nav': navVisible,
+      'has-compact-calendar': navVisible && section === 'calendar',
       'is-entry-flow':
         !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
     }"
   >
-    <header v-if="!navVisible" class="guest-header">
+    <header v-if="!navVisible && viewMode === 'demo'" class="guest-header">
       <div class="guest-brand-line">
-        <span class="guest-brand">轮到<span aria-hidden="true">.</span></span>
         <span
           v-if="viewMode === 'demo'"
           class="guest-demo-badge"
@@ -569,7 +874,11 @@ onUnmounted(() => {
         <h1 id="create-title">创建你的宿舍</h1>
         <HintPopover
           title="创建者权限"
-          text="管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。"
+          :text="
+            emailAccount.loggedIn
+              ? '用当前邮箱创建，自动拥有创建者权限。换设备后用同一邮箱登录即可。'
+              : '管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。'
+          "
         />
       </div>
       <form @submit.prevent="submitCreate">
@@ -628,22 +937,13 @@ onUnmounted(() => {
       aria-labelledby="switch-title"
     >
       <div class="entry-heading">
-        <h1 id="switch-title">
-          {{ savedDorms.length ? "切换宿舍" : "加入宿舍" }}
-        </h1>
+        <h1 id="switch-title">加入新宿舍</h1>
         <HintPopover
           title="邀请码在哪里？"
           label="邀请码帮助"
-          text="向宿舍创建者索取邀请码。输入后，再选择自己的名字即可进入。"
+          text="向宿舍创建者索取邀请码，再输入名单中你的完整名字即可进入。"
         />
       </div>
-      <JoinedDorms
-        :rooms="savedDorms"
-        :disabled="loading"
-        :current="inviteCode"
-        @select="returnToDorm"
-      />
-      <h2 v-if="savedDorms.length" class="join-new-title">加入新宿舍</h2>
       <form @submit.prevent="switchDorm()">
         <label for="guest-invite" class="invite-label">宿舍邀请码</label>
         <input
@@ -672,15 +972,21 @@ onUnmounted(() => {
           {{ member ? "返回当前任务" : "取消" }}
         </button>
       </div>
+      <JoinedDorms
+        :rooms="savedDorms"
+        :disabled="loading"
+        :current="inviteCode"
+        @select="returnToDorm"
+      />
     </section>
     <template v-else>
       <div v-if="loading" class="guest-loading" role="status">
         <van-loading size="20px" color="#111111" />正在查看安排
       </div>
-      <div v-if="error && !pendingPerson" class="guest-error" role="alert">
+      <div v-if="error && !dorm" class="guest-error" role="alert">
         <h1>暂时无法查看</h1>
         <p>{{ error }}</p>
-        <button class="guest-primary" :disabled="loading" @click="refresh">
+        <button class="guest-primary" :disabled="loading" @click="retryEntry">
           重新加载
         </button>
       </div>
@@ -689,13 +995,34 @@ onUnmounted(() => {
         class="guest-entry"
         aria-labelledby="entry-title"
       >
-        <h1 id="entry-title">先找到你的宿舍</h1>
+        <h1 id="entry-title">
+          {{
+            emailAccount.required && !emailAccount.loggedIn
+              ? "欢迎来到轮到"
+              : "先找到你的宿舍"
+          }}
+        </h1>
+        <EmailAccountPanel
+          v-if="(emailAccount.required || emailAccount.loggedIn) && !emailOpen"
+          hide-title
+          :member-token="migrationToken"
+          :owner-token="migrationOwnerToken"
+          :member-id="migrationMemberId"
+          :gate="!!migrationMemberId"
+          @recover="openRecovery"
+          @entered="acceptEmailEntry"
+          @logout="emailLogout"
+        />
         <JoinedDorms
+          v-if="!emailAccount.required || emailAccount.loggedIn"
           :rooms="savedDorms"
           :disabled="loading"
           @select="returnToDorm"
         />
-        <div class="guest-entry-actions">
+        <div
+          v-if="!emailAccount.required || emailAccount.loggedIn"
+          class="guest-entry-actions"
+        >
           <button
             class="guest-primary"
             data-testid="guest-join-dorm"
@@ -722,7 +1049,7 @@ onUnmounted(() => {
           <button
             class="guest-demo-link"
             data-testid="guest-recover-owner"
-            @click="recoveryOpen = true"
+            @click="openRecovery"
           >
             恢复管理权限
           </button>
@@ -758,7 +1085,9 @@ onUnmounted(() => {
             {{
               pendingPerson
                 ? `你好，${pendingPerson.nickname}`
-                : "你是哪位室友？"
+                : viewMode === "demo"
+                  ? "你是哪位室友？"
+                  : "输入你的名字"
             }}
           </h1>
           <template v-if="pendingPerson">
@@ -783,15 +1112,46 @@ onUnmounted(() => {
               :disabled="loading"
               @click="
                 pendingPerson = null;
+                pendingClaimToken = '';
+                enteredName = '';
                 error = '';
               "
             >
-              重新选择名字
+              重新输入名字
             </button>
           </template>
           <p v-if="notice" class="guest-notice" role="status">{{ notice }}</p>
+          <form
+            v-if="!pendingPerson && viewMode === 'dorm'"
+            class="name-entry"
+            data-testid="guest-name-form"
+            @submit.prevent="submitName"
+          >
+            <label for="member-name">你在宿舍名单中的名字</label>
+            <input
+              id="member-name"
+              v-model="enteredName"
+              data-testid="guest-member-name"
+              autocomplete="off"
+              autocapitalize="off"
+              maxlength="32"
+              placeholder="输入完整名字"
+              required
+              :disabled="loading"
+            />
+            <p v-if="error" class="guest-create-error" role="alert">
+              {{ error }}
+            </p>
+            <button
+              class="guest-primary"
+              data-testid="guest-name-submit"
+              :disabled="loading || !enteredName.trim()"
+            >
+              {{ loading ? "正在确认…" : "确认身份" }}
+            </button>
+          </form>
           <div
-            v-if="!pendingPerson && dorm.members.length"
+            v-if="!pendingPerson && viewMode === 'demo' && dorm.members.length"
             class="guest-member-list"
           >
             <button
@@ -809,7 +1169,9 @@ onUnmounted(() => {
             </button>
           </div>
           <p
-            v-else-if="!pendingPerson && !dorm.members.length"
+            v-else-if="
+              !pendingPerson && viewMode === 'demo' && !dorm.members.length
+            "
             class="guest-notice"
           >
             这个宿舍还没有成员，可以先进入宿舍管理添加。
@@ -825,7 +1187,7 @@ onUnmounted(() => {
         </section>
         <section v-else-if="member" class="guest-personal">
           <ChoreBoard
-            :key="`${inviteCode}:${member.user_id}:${choreToken}`"
+            :key="`${inviteCode}:${member.user_id}`"
             :section="section"
             :invite="inviteCode"
             :dorm-name="dorm.name"
@@ -838,6 +1200,8 @@ onUnmounted(() => {
             @join-dorm="openDormChange"
             @create-dorm="openCreate"
             @recover-owner="recoveryOpen = true"
+            @email-account="emailOpen = true"
+            @exit-demo="exitDemo"
           />
         </section>
       </template>
@@ -853,6 +1217,20 @@ onUnmounted(() => {
       <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
     </footer>
     <ChoreBottomNav v-if="navVisible" :section="section" />
+    <ElasticSheet
+      v-model="emailOpen"
+      title="邮箱登录与提醒设置"
+      motion="bottom"
+    >
+      <EmailAccountPanel
+        v-if="emailOpen"
+        hide-title
+        :member-token="viewMode === 'dorm' ? choreToken : ''"
+        :dorm-id="dorm?.id"
+        @entered="acceptEmailEntry"
+        @logout="emailLogout"
+      />
+    </ElasticSheet>
     <CreatorRecovery
       v-model="recoveryOpen"
       mode="restore"
@@ -871,6 +1249,10 @@ onUnmounted(() => {
 .guest-page.has-chore-nav {
   padding-bottom: calc(104px + env(safe-area-inset-bottom));
 }
+.guest-page.has-compact-calendar {
+  /* The calendar already measures and reserves the actual fixed navigation. */
+  padding-bottom: 0;
+}
 .guest-brand-line {
   display: flex;
   align-items: center;
@@ -887,6 +1269,34 @@ onUnmounted(() => {
 .guest-chooser h1,
 .guest-entry h1 {
   margin-top: 0;
+}
+.name-entry {
+  margin: 28px auto 0;
+  max-width: 340px;
+}
+.name-entry label {
+  display: block;
+  margin-bottom: 12px;
+  color: #555;
+  font-size: 15px;
+}
+.name-entry input {
+  width: 100%;
+  min-height: 60px;
+  padding: 14px 18px;
+  border: 1px solid #ddd;
+  border-radius: 18px;
+  background: #f7f7f7;
+  color: #111;
+  font: inherit;
+  font-size: 21px;
+}
+.name-entry input:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 3px;
+}
+.name-entry .guest-primary {
+  margin-top: 18px;
 }
 .guest-chooser .guest-member-list {
   margin-top: 24px;
@@ -921,6 +1331,15 @@ onUnmounted(() => {
   flex-direction: column;
   justify-content: center;
   padding: 48px 0 96px;
+}
+.is-entry-flow .guest-switch-form {
+  justify-content: center;
+  padding: 32px 0 64px;
+}
+.guest-page .guest-switch-form form > .guest-primary {
+  position: relative;
+  bottom: auto;
+  margin-top: 48px;
 }
 .guest-entry h1 {
   text-align: center;
@@ -961,13 +1380,14 @@ onUnmounted(() => {
   color: #aaa;
 }
 .guest-switch-form input:focus {
-  outline: 2px solid #111;
-  outline-offset: 3px;
+  outline: none;
+  border-color: #222;
+  box-shadow: 0 0 0 3px #0000000b;
 }
 .guest-entry .guest-primary,
 .guest-entry .guest-secondary,
 .guest-switch-form .guest-primary {
-  position: static;
+  position: relative;
   min-height: 58px;
   border-radius: 20px;
   font-size: 18px;

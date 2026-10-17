@@ -65,7 +65,7 @@ test("only a creator session may read or generate recovery credentials", async (
       const claimed = await api(h, "/chores/claim", {
         method: "POST",
         status: 201,
-        data: { invite_code: r.invite_code, member_id: id },
+        data: { invite_code: r.invite_code, member_id: id, nickname: r.dorm.members.find(m => m.user_id === id).nickname },
       });
       await api(h, "/dorms/recovery", {
         method,

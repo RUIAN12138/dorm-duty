@@ -36,10 +36,18 @@ jobs:
           node site/scripts/check-worker.mjs
       - name: Verify business and notification behavior
         run: |
+          node site/scripts/build-email-runtime.mjs
+          git diff --exit-code site/runtime/email-runtime.cjs
+          python3 scripts/test_native_setup.py
           node site/scripts/check-cloud-backend.mjs
+          node site/scripts/check-name-entry.mjs
+          node site/scripts/check-history.mjs
+          node site/scripts/check-recency.mjs
           node site/scripts/check-chores.mjs
           node site/scripts/check-rounds.mjs
           node site/scripts/check-round-order.mjs
+          node site/scripts/check-water-reassign.mjs
+          node site/scripts/check-polling-cost.mjs
           node site/scripts/check-member-push.mjs
           node site/scripts/check-native-push.mjs
           node site/scripts/check-water-nudge.mjs
@@ -47,6 +55,12 @@ jobs:
           node site/scripts/check-undo.mjs
           node site/scripts/check-native-back.mjs
           node site/scripts/check-native-bridge.mjs
+          node site/scripts/check-harmony-basic-push.mjs
+          node site/scripts/check-email-accounts.mjs
+          node site/scripts/check-email-delivery.mjs
+          node site/scripts/check-email-entry-policy.mjs
+          node site/scripts/check-auth-boundaries.mjs
+          node site/scripts/check-email-unbind.mjs
           node site/scripts/check-push-settings.mjs
           node site/scripts/check-calendar-subscription.mjs
           node site/scripts/check-calendar-settings.mjs
@@ -58,7 +72,15 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Verify mobile interaction foundation
-        run: node scripts/check-interaction-foundation.mjs
+        run: |
+          node scripts/check-interaction-foundation.mjs
+          node scripts/check-focus-compact.mjs
+          node scripts/check-list-collapse-sync.mjs
+          DORM_TOUCH=1 node scripts/check-focus-compact.mjs
+          node scripts/check-completion-experience.mjs
+          node scripts/check-round-calendar-motion.mjs
+          node scripts/check-order-boundaries.mjs
+          node scripts/check-entry-handoff.mjs
       - name: Keep interaction failure screenshot
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -71,6 +93,8 @@ jobs:
         env:
           DORM_WEB_BASE: /dorm-duty/
         run: npm run build --prefix frontend -- --outDir dist-server
+      - name: Verify email account HTTPS and mobile flow
+        run: node scripts/check-email-experience.mjs
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -82,7 +106,16 @@ jobs:
           java-version: "17"
       - name: Build and lint Android preview
         working-directory: native/android
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+        env:
+          DORM_JPUSH_APPKEY: ${{ vars.DORM_ANDROID_JPUSH_APPKEY }}
+        run: |
+          ./gradlew --no-daemon :app:checkReleaseReadiness :app:testDebugUnitTest :app:assembleDebug :app:lintDebug "-PJPUSH_APPKEY=$DORM_JPUSH_APPKEY"
+          python3 ../../scripts/check-android-push-manifest.py app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml
+          if ./gradlew --no-daemon :app:assembleRelease > "$RUNNER_TEMP/dorm-release-gate.log" 2>&1; then
+            echo "Release unexpectedly built without the fixed signing configuration" >&2
+            exit 1
+          fi
+          grep -q '发布构建被阻止' "$RUNNER_TEMP/dorm-release-gate.log"
       - name: Keep Android preview package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

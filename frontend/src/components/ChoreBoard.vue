@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { showToast as showVantToast } from "vant";
-function showToast(message: string) {
-  showVantToast({
-    message,
-    position: "top",
-    className: "chore-notice",
-    duration: 1600,
-  });
-}
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { completionFeedback } from "../interaction/completionFeedback";
+import { showToast } from "../interaction/notice";
+import { createVelocityTracker, rubberBand } from "../interaction/gestures";
 import { useRouter } from "vue-router";
 import { ApiError } from "../api";
 import { completeChore } from "../api/completion";
@@ -20,16 +14,17 @@ import {
   type ChoreReminder,
   type ChoreCompletion,
   type ChoreTask,
-  type ChoreCategory,
 } from "../api/chores";
-import HintPopover from "./HintPopover.vue";
-import SortableMembers from "./SortableMembers.vue";
+import RoundProgress from "./RoundProgress.vue";
+import WaterNudge from "./WaterNudge.vue";
+import WaterHandoffName from "./WaterHandoffName.vue";
+import { baselineWaterHandoff } from "../interaction/waterHandoff";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
 import CompletionAction from "./CompletionAction.vue";
+import GalaxySpinner from "./GalaxySpinner.vue";
 import ActionItem from "./ActionItem.vue";
-import { tilt as vTilt } from "../interactions/tilt";
-import WaterNudge from "./WaterNudge.vue";
+
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import ChoreCalendar from "./ChoreCalendar.vue";
 import ChoreSettings from "./ChoreSettings.vue";
@@ -41,6 +36,7 @@ import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
 import { createTaskSwipe } from "../interaction/taskSwipe";
+import { navigationOrigin, motionAllowed } from "../interaction/motion";
 const props = defineProps<{
   invite: string;
   dormName: string;
@@ -57,14 +53,50 @@ const emit = defineEmits<{
   "join-dorm": [];
   "create-dorm": [];
   "recover-owner": [];
+  "email-account": [];
+  "exit-demo": [];
 }>();
 const board = ref<ChoreBoardData | null>(null),
   loading = ref(false),
   error = ref(""),
   actionError = ref(""),
   busy = ref("");
+const completionReceipt = ref<ChoreTask | null>(null);
+const completionEpoch = ref(0);
+const completionMorphId = ref<number | null>(null);
+let completionMorphTimer: ReturnType<typeof setTimeout> | undefined;
+function settleCompletion(id: number) {
+  if (completionMorphId.value === id) completionMorphId.value = null;
+  if (settlingTask.value?.id === id) {
+    const finished = settlingTask.value;
+    clearTimeout(settleTaskTimer);
+    settlingTask.value = null;
+    showCompletionPraise(finished);
+  }
+}
+onUnmounted(() => clearTimeout(completionMorphTimer));
+const waterReceipt = ref<ChoreTask | null>(null);
+const waterActionTask = computed(
+  () =>
+    waterReceipt.value ||
+    (water.value?.can_complete ||
+    (props.demo && water.value?.assignee_id === props.memberId)
+      ? water.value
+      : null),
+);
 const completionSyncPending = ref(false),
   syncAction = ref("打卡");
+const showSyncStatus = ref(false);
+let syncStatusTimer: ReturnType<typeof setTimeout> | undefined;
+watch(completionSyncPending, (pending) => {
+  clearTimeout(syncStatusTimer);
+  showSyncStatus.value = false;
+  if (pending)
+    syncStatusTimer = setTimeout(() => {
+      showSyncStatus.value = true;
+    }, 700);
+});
+onUnmounted(() => clearTimeout(syncStatusTimer));
 const month = ref(
   new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -83,6 +115,7 @@ const initialParts = new Intl.DateTimeFormat("en-CA", {
 month.value = `${initialParts.find((part) => part.type === "year")?.value}-${initialParts.find((part) => part.type === "month")?.value}`;
 const messagesOpen = ref(false),
   settingsOpen = ref(false),
+  settingsCategory = ref<ChoreTask["key"]>(),
   reminderOpen = ref(false),
   markerOpen = ref(false),
   markerDraft = ref("");
@@ -94,6 +127,14 @@ const roundOpen = ref(false);
 const pushOpen = ref(false);
 const recoveryOpen = ref(false);
 let queuedTool: (() => void) | null = null;
+function openTools() {
+  if (detailTask.value) {
+    queuedTool = () => {
+      toolsOpen.value = true;
+    };
+    detailOpen.value = false;
+  } else toolsOpen.value = true;
+}
 function fromTools(action: () => void) {
   queuedTool = action;
   toolsOpen.value = false;
@@ -108,10 +149,15 @@ function runQueuedTool() {
   action?.();
 }
 const selectedTaskId = ref<number | null>(null);
+const selectedTaskKey = ref<ChoreTask["key"] | null>(null);
 const titleAnimation = ref(true);
 function chooseDutyTask(id: number, event: MouseEvent) {
   titleAnimation.value = event.detail !== 0;
+  if (settlingTask.value && settlingTask.value.id !== id)
+    settleCompletion(settlingTask.value.id);
   selectedTaskId.value = id;
+  selectedTaskKey.value =
+    personalTasks.value.find((task) => task.id === id)?.key || null;
 }
 const titleOffset = ref(0),
   titleDragging = ref(false);
@@ -128,6 +174,7 @@ const taskSwipe = createTaskSwipe(
     if (next) {
       titleAnimation.value = true;
       selectedTaskId.value = next.id;
+      selectedTaskKey.value = next.key;
     } else if (personalTasks.value.length > 1)
       showToast(direction > 0 ? "已经是最后一项" : "已经是第一项");
   },
@@ -136,7 +183,6 @@ const detailTask = ref<ChoreTask | null>(null);
 const detailOpen = ref(false);
 const detailMotion = ref<"shared" | "bottom">("shared");
 const detailOrigin = ref<DOMRect | null>(null);
-const direction = ref(1);
 const sectionOrder = ["duty", "water", "calendar"];
 const sectionPaths = ["/", "/water", "/calendar"];
 const sectionSwipeOffset = ref(0);
@@ -147,6 +193,7 @@ let sectionPointer: {
   y: number;
   horizontal: boolean;
   surface: HTMLElement;
+  velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 function resetSectionSwipe() {
   const active = sectionPointer;
@@ -160,7 +207,9 @@ function sectionSwipeDown(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || sectionPointer) return;
   if (
     !(event.target instanceof Element) ||
-    !event.target.closest("[data-section-swipe-handle]")
+    event.target.closest(
+      "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll],[data-page-gesture]",
+    )
   )
     return;
   sectionPointer = {
@@ -169,6 +218,7 @@ function sectionSwipeDown(event: PointerEvent) {
     y: event.clientY,
     horizontal: false,
     surface: event.currentTarget as HTMLElement,
+    velocity: createVelocityTracker(event.clientX, performance.now()),
   };
 }
 function sectionSwipeMove(event: PointerEvent) {
@@ -176,6 +226,7 @@ function sectionSwipeMove(event: PointerEvent) {
   if (!active || active.id !== event.pointerId) return;
   const x = event.clientX - active.x;
   const y = event.clientY - active.y;
+  active.velocity.add(event.clientX, performance.now());
   if (!active.horizontal) {
     if (Math.abs(y) > 8 && Math.abs(y) >= Math.abs(x)) {
       resetSectionSwipe();
@@ -187,45 +238,75 @@ function sectionSwipeMove(event: PointerEvent) {
   }
   event.preventDefault();
   sectionSwipeDragging.value = true;
-  sectionSwipeOffset.value = Math.max(-36, Math.min(36, x * 0.24));
+  sectionSwipeOffset.value = rubberBand(x, 150);
 }
 function sectionSwipeUp(event: PointerEvent) {
   const active = sectionPointer;
   if (!active || active.id !== event.pointerId) return;
   const x = event.clientX - active.x;
-  const commit = active.horizontal && Math.abs(x) >= 56;
+  const speed = active.velocity.read(performance.now());
+  const projected = x + speed * 160;
+  const commit =
+    active.horizontal &&
+    Math.abs(x) >= 18 &&
+    (Math.abs(x) >= 56 || Math.abs(projected) >= 72);
+  const travel = Math.abs(speed) > 0.3 ? projected : x;
   resetSectionSwipe();
   if (!commit) return;
   const index = sectionOrder.indexOf(props.section);
-  const next = index + (x < 0 ? 1 : -1);
+  const next = index + (travel < 0 ? 1 : -1);
   const path = sectionPaths[next];
   if (path) void router.push(path);
   else showToast(x < 0 ? "已经是最后一页" : "已经是第一页");
 }
 function sectionSwipeCancel(event: PointerEvent) {
+  if (
+    event.type === "lostpointercapture" &&
+    sectionPointer?.surface.hasPointerCapture(event.pointerId)
+  )
+    return;
   if (sectionPointer?.id === event.pointerId) resetSectionSwipe();
 }
+function sectionHidden() {
+  if (document.hidden) {
+    resetSectionSwipe();
+    // Suspended mobile fetches may otherwise hold `loading` through resume.
+    // Only the read request is cancelled; task mutations have their own flow.
+    if (loading.value) {
+      ++requestId;
+      controller?.abort();
+      loading.value = false;
+    }
+  }
+}
+onMounted(() => {
+  window.addEventListener("blur", resetSectionSwipe);
+  document.addEventListener("visibilitychange", sectionHidden);
+});
+onUnmounted(() => {
+  resetSectionSwipe();
+  window.removeEventListener("blur", resetSectionSwipe);
+  document.removeEventListener("visibilitychange", sectionHidden);
+});
 watch(
   () => props.section,
-  (next, previous) => {
+  () => {
     taskSwipe.cancel();
-    direction.value =
-      sectionOrder.indexOf(next) >= sectionOrder.indexOf(previous) ? 1 : -1;
+    resetSectionSwipe();
+    detailOpen.value = false;
   },
 );
 function openTask(task: ChoreTask, event: MouseEvent) {
   if (task.key !== "water" && taskSwipe.suppressesClick(event)) return;
-  detailMotion.value = task.key === "water" ? "bottom" : "shared";
-  detailOrigin.value =
-    task.key === "water"
-      ? null
-      : (event.currentTarget as HTMLElement).getBoundingClientRect();
+  detailMotion.value = "bottom";
+  detailOrigin.value = null;
   detailTask.value = task;
   detailOpen.value = true;
 }
 function showEntered(element: Element) {
   element.removeAttribute("aria-hidden");
   element.removeAttribute("inert");
+  navigationOrigin.value = null;
 }
 function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
@@ -253,9 +334,77 @@ const personalNext = computed(
 const personalTasks = computed(() =>
   personalToday.value.length ? personalToday.value : personalNext.value,
 );
+const completedOpen = ref(false);
+const completedTasks = computed(() => {
+  const own = [
+    ...personalToday.value,
+    ...(board.value?.undo_tasks || []),
+  ].filter(
+    (task) =>
+      task.status === "completed" &&
+      (props.section === "water" ? task.key === "water" : task.key !== "water"),
+  );
+  return [...new Map(own.map((task) => [task.id, task])).values()].sort(
+    (a, b) => (b.completed_at || "").localeCompare(a.completed_at || ""),
+  );
+});
+const praiseTask = ref<ChoreTask | null>(null);
+const praiseElement = ref<HTMLElement>();
+const praiseTop = ref<number | null>(null);
+let praiseTimer: ReturnType<typeof setTimeout> | undefined;
+onUnmounted(() => clearTimeout(praiseTimer));
+function showCompletionPraise(task: ChoreTask) {
+  praiseTop.value = null;
+  praiseTask.value = task;
+  clearTimeout(praiseTimer);
+  praiseTimer = setTimeout(() => (praiseTask.value = null), 2200);
+  void nextTick(positionPraise);
+}
+function positionPraise() {
+  const el = praiseElement.value;
+  const nav = document.querySelector(".chore-bottom-nav");
+  if (!el || !nav || !praiseTask.value) return;
+  const height = el.offsetHeight;
+  const end = nav.getBoundingClientRect().top - 12;
+  let cursor =
+    (document.querySelector(".board-identity")?.getBoundingClientRect()
+      .bottom || 56) + 4;
+  const preferred = end - (innerHeight <= 650 ? 12 : 42) - height;
+  const rows = [
+    ...document.querySelectorAll(
+      ".board-focus .hero-caption, .board-focus .task-selector, .board-focus .task-title-stage, .board-focus .water-title-stage, .board-focus .completion-surface, .board-focus .round-progress, .board-focus .water-nudge-actions",
+    ),
+  ]
+    .map((node) => node.getBoundingClientRect())
+    .filter((r) => r.width && r.height && r.bottom > cursor && r.top < end)
+    .sort((a, b) => a.top - b.top);
+  const candidates: number[] = [];
+  for (const row of [...rows, { top: end, bottom: end }]) {
+    if (row.top - cursor >= height + 12)
+      candidates.push(
+        Math.max(cursor + 6, Math.min(row.top - height - 6, preferred)),
+      );
+    cursor = Math.max(cursor, row.bottom);
+  }
+  praiseTop.value =
+    candidates.sort(
+      (a, b) => Math.abs(a - preferred) - Math.abs(b - preferred),
+    )[0] ?? preferred;
+}
+onMounted(() => window.addEventListener("resize", positionPraise));
+onUnmounted(() => window.removeEventListener("resize", positionPraise));
+function canUndoTask(id: number) {
+  return board.value?.undo_tasks.some((task) => task.id === id) || false;
+}
+
+const settlingTask = ref<ChoreTask | null>(null);
+let settleTaskTimer: ReturnType<typeof setTimeout> | undefined;
+onUnmounted(() => clearTimeout(settleTaskTimer));
 const activeDutyTask = computed(
   () =>
+    (settlingTask.value?.key !== "water" ? settlingTask.value : null) ||
     personalTasks.value.find((task) => task.id === selectedTaskId.value) ||
+    personalTasks.value.find((task) => task.key === selectedTaskKey.value) ||
     personalTasks.value.find((task) => task.status !== "completed") ||
     personalTasks.value[0] ||
     null,
@@ -266,101 +415,21 @@ const activeRound = computed(
       (round) => round.key === activeDutyTask.value?.key,
     ) || null,
 );
-const roundOrder = ref<number[]>([]),
-  roundSaving = ref(false),
-  roundError = ref("");
-let roundVersion = 0,
-  roundCategory: ChoreCategory | undefined;
-watch(roundOpen, (open) => {
-  if (!open || !board.value || !activeRound.value) return;
-  const category = board.value.categories.find(
-    (c) => c.key === activeRound.value?.key,
-  );
-  if (!category) return;
-  roundCategory = JSON.parse(JSON.stringify(category));
-  roundOrder.value = [...category.rotation_order];
-  roundVersion = board.value.version;
-  roundError.value = "";
-});
-async function saveRoundOrder() {
-  if (
-    roundSaving.value ||
-    !roundCategory ||
-    !board.value?.is_creator ||
-    props.demo
-  )
-    return;
-  roundSaving.value = true;
-  roundError.value = "";
-  try {
-    await choreRequest("/chores/settings", props.token, {
-      method: "PATCH",
-      body: JSON.stringify({
-        version: roundVersion,
-        categories: [{ ...roundCategory, rotation_order: roundOrder.value }],
-      }),
-    });
-    if (!alive) return;
-    roundOpen.value = false;
-    await load();
-  } catch (e) {
-    if (alive)
-      roundError.value =
-        e instanceof ApiError && e.status === 409
-          ? "排列已被更新，请关闭后重新打开再调整。"
-          : (e as Error).message;
-  } finally {
-    if (alive) roundSaving.value = false;
-  }
-}
-const roundProgressCircumference = 2 * Math.PI * 50;
-const roundAnimatedProgress = ref(0);
-const roundAnimatedCompleted = ref(0);
-let roundProgressFrame = 0;
-let roundProgressAnimation = 0;
-watch(
-  () => ({
-    open: roundOpen.value,
-    completed: activeRound.value?.completed ?? 0,
-    total: activeRound.value?.total ?? 0,
-  }),
-  ({ open, completed, total }) => {
-    if (roundProgressFrame) cancelAnimationFrame(roundProgressFrame);
-    roundProgressFrame = 0;
-    const animationId = ++roundProgressAnimation;
-    const boundedTotal = Math.max(0, total);
-    const boundedCompleted = Math.min(boundedTotal, Math.max(0, completed));
-    const targetProgress = boundedTotal ? boundedCompleted / boundedTotal : 0;
-    if (!open) return;
-    if (
-      matchMedia("(prefers-reduced-motion: reduce)").matches ||
-      document.documentElement.dataset.interaction === "keyboard"
-    ) {
-      roundAnimatedProgress.value = targetProgress;
-      roundAnimatedCompleted.value = boundedCompleted;
-      return;
-    }
-    const startProgress = roundAnimatedProgress.value,
-      startCompleted = roundAnimatedCompleted.value;
-    const startedAt = performance.now();
-    const animate = (now: number) => {
-      if (animationId !== roundProgressAnimation) return;
-      const progress = Math.min(1, (now - startedAt) / 280);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      roundAnimatedProgress.value =
-        startProgress + (targetProgress - startProgress) * eased;
-      roundAnimatedCompleted.value = Math.round(
-        startCompleted + (boundedCompleted - startCompleted) * eased,
-      );
-      if (progress < 1) roundProgressFrame = requestAnimationFrame(animate);
-      else roundProgressFrame = 0;
-    };
-    roundProgressFrame = requestAnimationFrame(animate);
-  },
-  { flush: "sync" },
+const completedRoundReceipt = ref<ChoreBoardData["rounds"][number] | null>(
+  null,
 );
-onUnmounted(() => {
-  if (roundProgressFrame) cancelAnimationFrame(roundProgressFrame);
+const displayRound = computed(() => {
+  const last = completedRoundReceipt.value;
+  const current = activeRound.value;
+  return last &&
+    current?.key === last.key &&
+    current.sequence === last.sequence + 1 &&
+    current.completed === 0
+    ? last
+    : current;
+});
+watch(roundOpen, (open) => {
+  if (!open) completedRoundReceipt.value = null;
 });
 
 const dutyCaption = computed(() =>
@@ -380,6 +449,9 @@ const water = computed(() =>
   board.value?.categories.find((category) => category.key === "water")?.enabled
     ? board.value?.water_task || null
     : null,
+);
+const displayedWater = computed(() =>
+  settlingTask.value?.key === "water" ? settlingTask.value : water.value,
 );
 const nudgeStatus = ref("");
 const nudgeSentAt = ref<string | null>(null);
@@ -563,6 +635,7 @@ function scheduleMidnight(serverTime: string) {
   midnight = setTimeout(() => void load(), Math.max(1000, next - now + 1500));
 }
 async function load(): Promise<boolean> {
+  if (document.hidden && board.value) return false;
   controller?.abort();
   const requestController = new AbortController();
   controller = requestController;
@@ -580,7 +653,17 @@ async function load(): Promise<boolean> {
     if (id !== requestId || requestController.signal.aborted) return false;
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
+
+    baselineWaterHandoff(
+      `${props.invite}:${props.memberId}`,
+      result.water_handoff,
+    );
     board.value = result;
+    if (
+      waterReceipt.value &&
+      !result.undo_tasks.some((t) => t.id === waterReceipt.value?.id)
+    )
+      waterReceipt.value = null;
     completionSyncPending.value = false;
     if (!props.demo) void syncMemberPush(props.token).catch(() => {});
     emit("member", result.member);
@@ -588,7 +671,7 @@ async function load(): Promise<boolean> {
     return true;
   } catch (e) {
     if (id !== requestId || requestController.signal.aborted) return false;
-    if (e instanceof ApiError && e.status === 401) {
+    if (e instanceof ApiError && [401, 428].includes(e.status)) {
       emit("expired");
       return false;
     }
@@ -598,9 +681,31 @@ async function load(): Promise<boolean> {
     if (id === requestId) loading.value = false;
   }
 }
+async function refreshArrangements() {
+  const success = await load();
+  if (success) showToast("安排已更新");
+}
 function acceptCompletion(receipt: ChoreCompletion) {
   if (!board.value) return;
   const finished = receipt.task;
+  completedOpen.value = false;
+  completionReceipt.value = finished;
+  settlingTask.value = finished;
+  clearTimeout(settleTaskTimer);
+  settleTaskTimer = setTimeout(
+    () => settleCompletion(finished.id),
+    motionAllowed() ? 1800 : 0,
+  );
+  completionEpoch.value++;
+  if (motionAllowed()) {
+    completionMorphId.value = finished.id;
+    clearTimeout(completionMorphTimer);
+    completionMorphTimer = setTimeout(
+      () => settleCompletion(finished.id),
+      1800,
+    );
+  }
+  if (finished.key === "water") waterReceipt.value = finished;
   const existed = board.value.today_tasks.find(
     (task) => task.id === finished.id,
   );
@@ -610,7 +715,15 @@ function acceptCompletion(receipt: ChoreCompletion) {
   board.value.next_tasks = board.value.next_tasks.map((task) =>
     task.id === finished.id ? finished : task,
   );
-  if (finished.key === "water") board.value.water_task = receipt.next_water;
+  if (finished.key === "water") {
+    board.value.water_task = receipt.next_water;
+    board.value.water_handoff = {
+      id: finished.id,
+      sequence: finished.sequence || 0,
+      from_member_id: finished.assignee_id,
+      completed_at: finished.completed_at!,
+    };
+  }
   if (detailTask.value?.id === finished.id) detailTask.value = finished;
   const round = board.value.rounds.find(
     (item) => item.key === finished.key && item.sequence === finished.sequence,
@@ -621,15 +734,25 @@ function acceptCompletion(receipt: ChoreCompletion) {
     );
     if (member && !member.completed) {
       member.completed = true;
+      round.completions ||= [];
+      round.completions.push({
+        user_id: finished.assignee_id,
+        nickname: finished.assignee_name,
+        marker_id: finished.marker_id,
+        id: finished.id,
+        completed_at: finished.completed_at!,
+      });
       round.completed = round.members.filter(
         (person) => person.completed,
       ).length;
+      if (round.completed === round.total)
+        completedRoundReceipt.value = JSON.parse(JSON.stringify(round));
     }
   }
   board.value.version = Math.max(board.value.version, receipt.version);
   completionSyncPending.value = true;
 }
-async function complete(task: ChoreTask) {
+async function complete(task: ChoreTask, circle = false) {
   if (props.demo) {
     demoNotice();
     return;
@@ -641,7 +764,18 @@ async function complete(task: ChoreTask) {
     task.status === "completed"
   )
     return;
-  if (task.key !== "water") selectedTaskId.value = task.id;
+  if (task.key !== "water") {
+    selectedTaskId.value = task.id;
+    selectedTaskKey.value = task.key;
+  }
+  const surface =
+    document.querySelector<HTMLElement>(
+      `[data-testid="complete-${task.key}-${task.id}"]`,
+    ) ||
+    document.querySelector<HTMLElement>(
+      `[data-testid="complete-circle-${task.id}"]`,
+    );
+  const feedbackBounds = surface?.getBoundingClientRect();
   syncAction.value = "打卡";
   busy.value = `complete-${task.id}`;
   actionError.value = "";
@@ -652,6 +786,7 @@ async function complete(task: ChoreTask) {
       (receipt) => {
         if (!alive) return;
         acceptCompletion(receipt);
+        if (circle) completionFeedback(feedbackBounds);
       },
       () => (alive ? load() : Promise.resolve(false)),
     );
@@ -689,6 +824,13 @@ async function undo(id: number) {
       { method: "PATCH", body: "{}" },
     );
     if (!alive || !board.value) return;
+    if (settlingTask.value?.id === id) {
+      clearTimeout(settleTaskTimer);
+      settlingTask.value = null;
+    }
+    completedOpen.value = false;
+    if (praiseTask.value?.id === id) praiseTask.value = null;
+    if (receipt.task.key === "water") waterReceipt.value = null;
     board.value.today_tasks = board.value.today_tasks.map((t) =>
       t.id === id ? receipt.task : t,
     );
@@ -697,7 +839,10 @@ async function undo(id: number) {
     );
     board.value.calendar = board.value.calendar.filter((t) => t.id !== id);
     if (receipt.task.key === "water") board.value.water_task = receipt.task;
-    else selectedTaskId.value = id;
+    else {
+      selectedTaskId.value = id;
+      selectedTaskKey.value = receipt.task.key;
+    }
     board.value.version = receipt.version;
     completionSyncPending.value = true;
     await load();
@@ -876,6 +1021,10 @@ function visibleRefresh() {
     void load();
 }
 watch(month, () => void load());
+watch(
+  () => props.token,
+  () => void load(),
+);
 const removeNativeReady = onNativePushReady(() => {
   if (!props.demo) void syncMemberPush(props.token).catch(() => {});
 });
@@ -885,6 +1034,7 @@ onMounted(() => {
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
+  window.addEventListener("pageshow", visibleRefresh);
 });
 onUnmounted(() => {
   alive = false;
@@ -898,6 +1048,7 @@ onUnmounted(() => {
   document.removeEventListener("visibilitychange", visibleRefresh);
   window.removeEventListener("focus", visibleRefresh);
   window.removeEventListener("online", visibleRefresh);
+  window.removeEventListener("pageshow", visibleRefresh);
 });
 </script>
 <template>
@@ -908,10 +1059,10 @@ onUnmounted(() => {
       role="status"
       aria-label="正在加载任务"
     >
-      <span></span><span></span><span></span>
+      <GalaxySpinner class="board-spinner" />
     </div>
     <div
-      v-if="completionSyncPending"
+      v-if="completionSyncPending && showSyncStatus"
       class="chore-sync-status"
       role="status"
       data-testid="completion-sync-pending"
@@ -928,11 +1079,19 @@ onUnmounted(() => {
     </div>
     <template v-if="board">
       <div class="board-identity">
-        <span class="identity-name">{{ board.member.nickname }}</span>
+        <button v-if="demo" class="demo-exit" @click="emit('exit-demo')">
+          退出游客
+        </button>
+        <span class="identity-name"
+          ><span>{{ dormName }}</span
+          ><span class="current-identity"
+            >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+          ></span
+        >
         <div class="identity-actions">
           <button
             class="order-trigger"
-            aria-label="抬水轮序"
+            aria-label="任务轮序"
             data-testid="open-water-order"
             @click="orderOpen = true"
           >
@@ -948,7 +1107,7 @@ onUnmounted(() => {
                 : '更多操作'
             "
             data-testid="open-tools"
-            @click="toolsOpen = true"
+            @click="openTools"
           >
             <van-icon name="ellipsis" aria-hidden="true" />
             <span
@@ -962,8 +1121,15 @@ onUnmounted(() => {
       </div>
       <div
         class="board-focus"
-        :class="{ 'section-swipe-dragging': sectionSwipeDragging }"
-        :style="{ '--section-swipe-offset': `${sectionSwipeOffset}px` }"
+        :class="{
+          'section-swipe-dragging': sectionSwipeDragging,
+          'quiet-pages': !motionAllowed(),
+        }"
+        :style="{
+          '--section-swipe-opacity': String(
+            1 - Math.min(0.42, Math.abs(sectionSwipeOffset) / 210),
+          ),
+        }"
         @pointerdown="sectionSwipeDown"
         @pointermove="sectionSwipeMove"
         @pointerup="sectionSwipeUp"
@@ -971,7 +1137,7 @@ onUnmounted(() => {
         @lostpointercapture="sectionSwipeCancel"
       >
         <Transition
-          :name="direction > 0 ? 'focus-next' : 'focus-prev'"
+          name="focus-fade"
           @before-leave="hideLeaving"
           @before-enter="showEntered"
         >
@@ -983,8 +1149,21 @@ onUnmounted(() => {
             >
               <ChoreCalendar
                 :month="month"
+                :invite="invite"
+                :token="demo ? '' : token"
+                :version="board.version"
+                :rounds="board.rounds"
+                :categories="board.categories"
+                @settings="
+                  settingsCategory = $event;
+                  settingsOpen = true;
+                "
+                :creator="board.is_creator"
+                :undo-ids="board.undo_tasks.map((task) => task.id)"
+                @refresh="load"
                 :today="board.today"
                 :records="board.calendar"
+                :neighbors="board.calendar_neighbors"
                 :members="board.members"
                 :member-id="memberId"
                 :busy="!!busy || completionSyncPending"
@@ -998,6 +1177,9 @@ onUnmounted(() => {
             <section
               v-if="section === 'duty'"
               class="chore-personal"
+              :class="{
+                'completion-linked': activeDutyTask?.status === 'completed',
+              }"
               aria-labelledby="personal-title"
               data-testid="pane-duty"
             >
@@ -1020,10 +1202,11 @@ onUnmounted(() => {
                   :aria-pressed="activeDutyTask?.id === task.id"
                   @click="chooseDutyTask(task.id, $event)"
                 >
-                  {{ task.name
-                  }}<van-icon
-                    v-if="task.status === 'completed'"
+                  <span class="task-option-name">{{ task.name }}</span>
+                  <van-icon
                     name="success"
+                    class="task-option-state"
+                    :class="{ 'is-complete': task.status === 'completed' }"
                     aria-hidden="true"
                   />
                 </button>
@@ -1051,7 +1234,7 @@ onUnmounted(() => {
                   @keydown.esc="taskSwipe.cancel"
                 >
                   <TaskTitle
-                    :value="activeDutyTask.id"
+                    :value="`${activeDutyTask.key}:${activeDutyTask.name}`"
                     :animated="titleAnimation"
                   >
                     <button
@@ -1074,18 +1257,26 @@ onUnmounted(() => {
                   "
                   :task="activeDutyTask"
                   :busy="!!busy"
+                  :syncing="completionSyncPending"
                   :disabled="
                     completionSyncPending ||
                     (!demo && activeDutyTask.duty_date > board.today)
                   "
                   :demo="demo"
+                  :receipt="completionReceipt"
+                  @settled="settleCompletion"
                   @complete="complete"
                   @undo="undo($event.id)"
                 />
                 <CompletionAction
-                  v-if="recentUndo && recentUndo.id !== activeDutyTask.id"
+                  v-if="
+                    recentUndo &&
+                    recentUndo.id !== activeDutyTask.id &&
+                    recentUndo.id !== completionMorphId
+                  "
                   :task="recentUndo"
                   :busy="!!busy"
+                  :syncing="completionSyncPending"
                   :disabled="completionSyncPending"
                   :demo="demo"
                   @undo="undo($event.id)"
@@ -1096,8 +1287,17 @@ onUnmounted(() => {
                   data-testid="round-progress"
                   @click="roundOpen = true"
                 >
-                  第 {{ activeRound.sequence }} 轮 · 已完成
-                  {{ activeRound.completed }}/{{ activeRound.total }}
+                  <RoundProgress
+                    v-if="displayRound"
+                    :round="displayRound"
+                    :active="section === 'duty'"
+                    :celebrate="completionEpoch"
+                    compact
+                  />
+                  <span v-if="displayRound" class="round-progress-label"
+                    >{{ displayRound.completed }}/{{ displayRound.total }} · 第
+                    {{ displayRound.sequence }} 轮</span
+                  >
                   <van-icon name="arrow" aria-hidden="true" />
                 </button>
               </article>
@@ -1127,7 +1327,8 @@ onUnmounted(() => {
                 >
                   <div class="water-title-stage">
                     <TaskTitle
-                      :value="water.assignee_id"
+                      value="water"
+                      :animated="false"
                       id="water-title"
                       :style="
                         water.assignee_id !== memberId &&
@@ -1136,36 +1337,57 @@ onUnmounted(() => {
                           : undefined
                       "
                     >
-                      <WaterNudge
-                        v-if="water.assignee_id !== memberId"
-                        :key="water.id"
-                        :name="water.assignee_name"
-                        @tap="nudgeWater"
-                      />
-                      <button
-                        v-else
-                        class="task-title-button"
-                        :aria-label="`查看${water.name}详情`"
-                        @click="openTask(water, $event)"
+                      <WaterHandoffName
+                        :scope="`${invite}:${memberId}`"
+                        :event="board.water_handoff"
+                        :members="board.members"
+                        :target-id="water.assignee_id"
+                        :target-name="water.assignee_name"
+                        :active="
+                          !messagesOpen &&
+                          !orderOpen &&
+                          !toolsOpen &&
+                          !preferencesOpen &&
+                          !pushOpen &&
+                          !settingsOpen &&
+                          !recoveryOpen &&
+                          !reminderOpen &&
+                          !markerOpen &&
+                          !detailTask &&
+                          !roundOpen
+                        "
                       >
-                        {{ water.name }}
-                      </button>
+                        <WaterNudge
+                          v-if="water.assignee_id !== memberId"
+                          :key="water.id"
+                          :name="water.assignee_name"
+                          @tap="nudgeWater"
+                        />
+                        <button
+                          v-else
+                          class="task-title-button"
+                          :aria-label="`查看${water.name}详情`"
+                          @click="openTask(water, $event)"
+                        >
+                          {{ water.name }}
+                        </button>
+                      </WaterHandoffName>
                     </TaskTitle>
                   </div>
                   <CompletionAction
-                    v-if="
-                      water.can_complete ||
-                      (demo && water.assignee_id === memberId)
-                    "
-                    :task="water"
+                    v-if="waterActionTask"
+                    :task="waterActionTask"
+                    :receipt="completionReceipt"
+                    @settled="settleCompletion"
                     :busy="!!busy"
+                    :syncing="completionSyncPending"
                     :disabled="completionSyncPending"
                     :demo="demo"
                     @complete="complete"
                     @undo="undo($event.id)"
                   />
                   <div
-                    v-else-if="water.assignee_id !== memberId"
+                    v-if="water.assignee_id !== memberId"
                     class="water-nudge-actions"
                   >
                     <p class="hero-date" role="status">
@@ -1178,13 +1400,14 @@ onUnmounted(() => {
                       查看任务
                     </button>
                   </div>
-                  <p v-else class="hero-date">
+                  <p v-else-if="!waterActionTask" class="hero-date">
                     {{ dateText(water.duty_date) }} 开始
                   </p>
                   <CompletionAction
-                    v-if="recentUndo"
+                    v-if="recentUndo && recentUndo.id !== waterActionTask?.id"
                     :task="recentUndo"
                     :busy="!!busy"
+                    :syncing="completionSyncPending"
                     :disabled="completionSyncPending"
                     :demo="demo"
                     @undo="undo($event.id)"
@@ -1205,6 +1428,25 @@ onUnmounted(() => {
           </div>
         </Transition>
       </div>
+      <Teleport to="body">
+        <Transition name="quiet-toast">
+          <p
+            v-if="praiseTask"
+            :key="praiseTask.id"
+            ref="praiseElement"
+            class="completion-praise"
+            :style="
+              praiseTop === null
+                ? undefined
+                : { top: `${praiseTop}px`, bottom: 'auto' }
+            "
+            role="status"
+            data-testid="completion-toast"
+          >
+            <span class="completion-praise-bubble">你真棒👍！</span>
+          </p>
+        </Transition>
+      </Teleport>
       <p
         v-if="actionError && !markerOpen"
         class="chore-inline-error"
@@ -1267,7 +1509,12 @@ onUnmounted(() => {
             label="任务设置"
             icon="setting-o"
             data-testid="open-chore-settings"
-            @click="fromTools(() => (settingsOpen = true))"
+            @click="
+              fromTools(() => {
+                settingsCategory = undefined;
+                settingsOpen = true;
+              })
+            "
           />
           <ActionItem
             label="个人与更多"
@@ -1285,7 +1532,15 @@ onUnmounted(() => {
       >
         <div class="menu-section">
           <ActionItem
-            label="切换室友"
+            v-if="!demo"
+            label="邮箱账号与提醒"
+            icon="envelop-o"
+            data-testid="open-email-account"
+            @click="fromPreferences(() => emit('email-account'))"
+          />
+          <ActionItem
+            v-if="!demo"
+            label="切换我的身份"
             icon="friends-o"
             data-testid="guest-change-member"
             @click="fromPreferences(() => emit('switch-member'))"
@@ -1322,7 +1577,7 @@ onUnmounted(() => {
             icon="replay"
             :disabled="loading || !!busy"
             data-testid="chore-refresh"
-            @click="fromPreferences(() => void load())"
+            @click="fromPreferences(() => void refreshArrangements())"
           />
         </div>
       </ElasticSheet>
@@ -1331,12 +1586,18 @@ onUnmounted(() => {
         v-model="orderOpen"
         :members="board.members"
         :category="board.categories.find((c) => c.key === 'water')!"
+        :initial-key="section === 'duty' ? activeDutyTask?.key : 'water'"
         :current-id="water?.assignee_id"
-        :creator="board.is_creator && !demo"
+        :last-water-id="board.water_handoff?.from_member_id"
+        :editable="!demo"
+        :categories="board.categories"
         :version="board.version"
         :token="token"
         @saved="load"
-        @closed="presentNewReminders"
+        @closed="
+          runQueuedTool();
+          presentNewReminders();
+        "
       />
       <ElasticSheet
         v-model="detailOpen"
@@ -1344,9 +1605,12 @@ onUnmounted(() => {
         :origin="detailOrigin"
         :motion="detailMotion"
         :modal="detailMotion !== 'bottom'"
-        @closed="detailTask = null"
+        @closed="
+          detailTask = null;
+          runQueuedTool();
+        "
       >
-        <div v-if="detailTask" v-tilt class="task-detail-card">
+        <div v-if="detailTask" class="task-detail-card">
           <p class="task-full-content">{{ detailTask.content }}</p>
           <div class="task-detail-meta">
             <span>{{ statusText(detailTask) }}</span>
@@ -1363,84 +1627,19 @@ onUnmounted(() => {
       </ElasticSheet>
       <ElasticSheet
         v-model="roundOpen"
-        :title="`${activeDutyTask?.name || '值日'} · 第 ${activeRound?.sequence || 1} 轮`"
+        :title="`${activeDutyTask?.name || '值日'} · 第 ${displayRound?.sequence || 1} 轮`"
         @closed="presentNewReminders"
       >
         <div
-          v-if="activeRound"
+          v-if="displayRound"
           class="round-members"
           data-testid="round-members"
         >
-          <div
-            class="round-progress-display"
-            aria-hidden="true"
-            data-testid="round-progress-ring"
-          >
-            <svg viewBox="0 0 120 120">
-              <circle class="round-progress-track" cx="60" cy="60" r="50" />
-              <circle
-                class="round-progress-value"
-                cx="60"
-                cy="60"
-                r="50"
-                :stroke-dasharray="roundProgressCircumference"
-                :stroke-dashoffset="
-                  roundProgressCircumference * (1 - roundAnimatedProgress)
-                "
-              />
-            </svg>
-            <div class="round-progress-center">
-              <strong>{{ roundAnimatedCompleted }}</strong>
-              <span>人已完成</span>
-            </div>
-          </div>
-          <div class="round-summary-line">
-            <p class="round-summary">
-              已完成 {{ activeRound.completed }}/{{ activeRound.total }} · 还差
-              {{ Math.max(0, activeRound.total - activeRound.completed) }} 人
-            </p>
-            <HintPopover
-              v-if="board.is_creator && !demo"
-              title="调整排列"
-              text="按住室友拖动，松手后点保存排列。自由轮次仍可随时打卡，排列不会改变已有完成记录。"
-            />
-          </div>
-          <template v-if="board.is_creator && !demo">
-            <SortableMembers
-              v-model="roundOrder"
-              :members="activeRound.members"
-              :active="roundOpen"
-              :disabled="roundSaving"
-              :category-key="activeRound.key"
-              :completed-ids="
-                activeRound.members
-                  .filter((m) => m.completed)
-                  .map((m) => m.user_id)
-              "
-            />
-            <p v-if="roundError" class="chore-inline-error" role="alert">
-              {{ roundError }}
-            </p>
-            <button
-              class="guest-primary round-save"
-              :disabled="roundSaving"
-              data-testid="round-order-save"
-              @click="saveRoundOrder"
-            >
-              {{ roundSaving ? "正在保存…" : "保存排列" }}
-            </button>
-          </template>
-          <div
-            v-else
-            v-for="person in activeRound.members"
-            :key="person.user_id"
-            class="round-member"
-          >
-            <MemberMark :id="person.marker_id" :size="24" /><strong>{{
-              person.nickname
-            }}</strong>
-            <span>{{ person.completed ? "已完成" : "还没做" }}</span>
-          </div>
+          <RoundProgress
+            :round="displayRound"
+            :active="roundOpen"
+            :celebrate="completionEpoch"
+          />
         </div>
       </ElasticSheet>
       <ElasticSheet
@@ -1456,7 +1655,7 @@ onUnmounted(() => {
               }}
             </p>
             <button data-testid="messages-close" @click="messagesOpen = false">
-              关闭消息
+              收起消息
             </button>
           </div>
           <p v-if="!board.reminders.length" class="messages-empty">
@@ -1514,7 +1713,8 @@ onUnmounted(() => {
         :version="board.version"
         :token="token"
         :initial-category="
-          section === 'water' ? 'water' : activeDutyTask?.key || 'floor'
+          settingsCategory ||
+          (section === 'water' ? 'water' : activeDutyTask?.key || 'floor')
         "
         @saved="load"
         @closed="presentNewReminders"
@@ -1598,6 +1798,20 @@ onUnmounted(() => {
   </div>
 </template>
 <style scoped>
+.current-identity {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #666;
+}
+.demo-exit {
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  order: 3;
+  white-space: nowrap;
+}
 .task-detail-card {
   position: relative;
   isolation: isolate;
@@ -1714,86 +1928,27 @@ onUnmounted(() => {
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
-.round-progress-display {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 148px;
-  aspect-ratio: 1;
-  margin: 0 auto 14px;
-}
-.round-progress-display svg {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-.round-progress-display circle {
-  fill: none;
-  stroke-width: 6;
-}
-.round-progress-track {
-  stroke: #eee;
-}
-.round-progress-value {
-  stroke: #111;
-  stroke-linecap: round;
-}
-.round-progress-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-}
-.round-progress-center strong {
-  font-size: 42px;
-  line-height: 1;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-.round-progress-center span {
-  color: #666;
-  font-size: 13px;
-}
-.round-summary {
-  margin: 0 0 24px;
-  color: #555;
-  font-size: 15px;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-.round-member {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 60px;
-  border-bottom: 1px solid #eee;
-}
-.round-member strong {
-  flex: 1;
-  min-width: 0;
-  font-size: 17px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.round-member > span {
-  color: #555;
-  font-size: 15px;
-  flex-shrink: 0;
-}
 /* One shared left edge and type scale across the three mobile pages. */
 .chore-board {
   min-width: 0;
   color: #111;
 }
 .chore-sync-status {
+  position: fixed;
+  z-index: 105;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  width: min(calc(100% - 40px), 480px);
+  border: 1px solid #eee;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 18px #0000000a;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0 16px;
+  padding: 8px 16px;
   color: #555;
   font-size: 14px;
 }
@@ -1849,23 +2004,20 @@ onUnmounted(() => {
 .board-focus {
   position: relative;
 }
+.board-focus {
+  touch-action: pan-y;
+}
 .board-focus :deep([data-section-swipe-handle]) {
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.board-focus.section-swipe-dragging :deep([data-section-swipe-handle]) {
-  transform: translateX(var(--section-swipe-offset));
+.board-focus > .focus-pane:not([inert]) {
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.board-focus.section-swipe-dragging > .focus-pane:not([inert]) {
+  opacity: var(--section-swipe-opacity);
   transition: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .board-focus :deep([data-section-swipe-handle]) {
-    transition: none;
-  }
-  .board-focus.section-swipe-dragging :deep([data-section-swipe-handle]) {
-    transform: none;
-  }
 }
 .focus-pane {
   width: 100%;
@@ -2162,14 +2314,14 @@ onUnmounted(() => {
 .board-loading {
   padding-top: 16px;
 }
-.board-loading span {
+.board-loading span:not(.galaxy-spinner) {
   display: block;
   border-radius: 8px;
   background: #f0f0f0;
   height: 92px;
   margin: 18px 0;
 }
-.board-loading span:first-child {
+.board-loading span:first-child:not(.galaxy-spinner) {
   height: 28px;
   width: 55%;
 }
@@ -2185,30 +2337,18 @@ onUnmounted(() => {
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .focus-next-enter-active,
-  .focus-prev-enter-active {
-    transition:
-      opacity 260ms ease,
-      transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  .focus-fade-enter-active {
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
   }
-  .focus-next-leave-active,
-  .focus-prev-leave-active {
+  .focus-fade-leave-active {
     position: absolute;
     top: 0;
     pointer-events: none;
-    transition:
-      opacity 100ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 160ms ease;
   }
-  .focus-next-enter-from,
-  .focus-prev-leave-to {
+  .focus-fade-enter-from,
+  .focus-fade-leave-to {
     opacity: 0;
-    transform: translateX(14px);
-  }
-  .focus-prev-enter-from,
-  .focus-next-leave-to {
-    opacity: 0;
-    transform: translateX(-14px);
   }
   .chore-complete-button,
   .water-remind {
@@ -2377,6 +2517,9 @@ onUnmounted(() => {
 <style scoped>
 .water-title-stage {
   width: min(100%, 300px);
+  min-height: clamp(55.2px, 19.55vw, 82.8px);
+  display: grid;
+  place-items: center;
 }
 .water-title-stage h2 {
   width: 100%;
@@ -2413,6 +2556,20 @@ onUnmounted(() => {
   .water-remind:active,
   .round-progress:active {
     transform: none;
+  }
+}
+</style>
+
+<style scoped>
+/* Keep the caption and name anchored when completing water reveals the next
+   roommate and the previous turn's completed button. Only the action area grows. */
+.water-pane {
+  justify-content: flex-start;
+  padding-top: clamp(72px, 15dvh, 130px);
+}
+@media (max-height: 730px) {
+  .water-pane {
+    padding-top: 48px;
   }
 }
 </style>
@@ -2470,5 +2627,449 @@ onUnmounted(() => {
 }
 .round-summary-line .round-summary {
   margin: 0;
+}
+</style>
+
+<style scoped>
+.board-loading {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+}
+.board-loading :deep(.board-spinner) {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border-width: 2px;
+}
+</style>
+<style scoped>
+.round-edit-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 18px;
+  background: #f6f6f6;
+  font: inherit;
+  font-size: 16px;
+  margin-top: 18px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: transform 160ms ease;
+}
+.round-edit-entry .van-icon:last-child {
+  margin-left: auto;
+  color: #999;
+}
+.round-edit-entry:active {
+  transform: scale(0.98);
+}
+</style>
+<style scoped>
+.chore-personal {
+  border-radius: 30px;
+  transition: background-color 280ms ease;
+}
+.chore-personal.completion-linked {
+  background-color: #f6f6f5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chore-personal {
+    transition: none;
+  }
+}
+</style>
+
+<style scoped>
+.quiet-pages > .focus-pane {
+  transition: none !important;
+  opacity: 1 !important;
+}
+</style>
+
+<style scoped>
+.p0-task-page {
+  display: grid;
+  align-content: center;
+  gap: var(--ui-space-md);
+  min-height: min(54svh, 420px);
+  padding: var(--ui-space-lg) 0;
+}
+.p0-page-title {
+  margin: 0;
+  font-size: var(--ui-title-size);
+  line-height: var(--ui-title-leading);
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  text-align: left;
+}
+.p0-task-focus {
+  display: grid;
+  gap: var(--ui-space-sm);
+  min-width: 0;
+}
+.p0-text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-card-gap);
+  min-height: 44px;
+  padding: 0 var(--ui-space-sm);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--ui-small-size);
+  color: var(--ui-text-muted);
+  cursor: pointer;
+}
+.p0-primary {
+  width: 100%;
+  min-height: var(--ui-action-height);
+  border: 0;
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-ink);
+  color: var(--ui-surface);
+  font: inherit;
+  font-size: var(--ui-body-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+.p0-primary,
+.p0-text-button {
+  transition: transform var(--ui-release-time) var(--ui-ease-out);
+}
+.p0-primary:active,
+.p0-text-button:active {
+  transform: var(--ui-press-small);
+}
+.p0-status {
+  font-size: var(--ui-small-size);
+  color: var(--ui-text-muted);
+  text-align: center;
+  margin: 0;
+}
+.p0-empty {
+  padding: var(--ui-space-lg) 0;
+  display: grid;
+  gap: var(--ui-space-sm);
+}
+.p0-empty h2 {
+  font-size: var(--ui-card-title-size);
+  line-height: var(--ui-title-leading);
+  margin: 0;
+}
+.p0-completed {
+  border-top: var(--ui-card-border);
+  margin-top: var(--ui-space-sm);
+  padding: var(--ui-space-sm) 0;
+}
+.p0-completed summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  list-style: none;
+  font-size: var(--ui-body-size);
+  cursor: pointer;
+}
+.p0-completed summary::-webkit-details-marker {
+  display: none;
+}
+.p0-completed summary span {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-card-gap);
+  color: var(--ui-text-muted);
+}
+.p0-completed-list {
+  display: grid;
+  gap: var(--ui-card-gap);
+  padding-top: var(--ui-space-sm);
+}
+.p0-completed-list article {
+  display: grid;
+  justify-items: end;
+}
+.p0-task-page .task-selector {
+  justify-content: flex-start;
+  gap: var(--ui-card-gap);
+  margin: 0;
+}
+.quiet-task-enter-active,
+.quiet-task-leave-active {
+  transition: opacity 200ms ease;
+}
+.quiet-task-enter-from,
+.quiet-task-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quiet-task-enter-active,
+  .quiet-task-leave-active,
+  .p0-primary,
+  .p0-text-button {
+    transition: none;
+  }
+  .p0-primary:active,
+  .p0-text-button:active {
+    transform: none;
+  }
+}
+</style>
+<style>
+.completion-praise {
+  position: fixed;
+  z-index: 110;
+  bottom: calc(120px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  color: #777;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.completion-praise-bubble {
+  display: block;
+  padding: 10px 18px;
+  border: 1px solid #ededed;
+  border-radius: 999px;
+  background: #fafafa;
+  transform-origin: center bottom;
+}
+.quiet-toast-enter-active,
+.quiet-toast-enter-active .completion-praise-bubble {
+  transition:
+    opacity 240ms var(--ui-ease-out),
+    transform 320ms var(--ui-ease-overshoot);
+}
+.quiet-toast-leave-active,
+.quiet-toast-leave-active .completion-praise-bubble {
+  transition:
+    opacity 180ms var(--ui-ease-out),
+    transform 180ms var(--ui-ease-out);
+}
+.quiet-toast-enter-from .completion-praise-bubble {
+  transform: translateY(8px) scale(0.9);
+}
+.quiet-toast-leave-to .completion-praise-bubble {
+  transform: translateY(5px) scale(0.97);
+}
+.quiet-toast-enter-from,
+.quiet-toast-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quiet-toast-enter-active,
+  .quiet-toast-leave-active {
+    transition: none;
+  }
+}
+</style>
+
+<style scoped>
+.focus-fade-enter-active,
+.focus-fade-leave-active {
+  transition: opacity 220ms var(--ui-ease-out) !important;
+  animation: none !important;
+  transform: none !important;
+}
+.focus-fade-enter-from,
+.focus-fade-leave-to {
+  opacity: 0;
+  transform: none !important;
+  clip-path: none !important;
+}
+</style>
+
+<style scoped>
+.p0-task-swap {
+  display: grid;
+  min-width: 0;
+}
+.p0-task-swap > .p0-task-focus,
+.p0-task-swap > .p0-empty {
+  grid-area: 1/1;
+}
+</style>
+
+<style scoped>
+.task-detail-card {
+  padding: var(--ui-card-padding);
+  border: var(--ui-card-border);
+  border-radius: var(--ui-card-radius);
+  background: var(--ui-surface);
+  transform: none;
+}
+.task-detail-card::after {
+  display: none;
+}
+</style>
+
+<style scoped>
+.chore-personal,
+.water-pane {
+  min-height: calc(100svh - 170px - env(safe-area-inset-bottom));
+  gap: var(--ui-space-md);
+  padding: var(--ui-space-md) 0 var(--ui-space-lg);
+  background: var(--ui-surface) !important;
+  transition: none !important;
+}
+.chore-personal.completion-linked {
+  background: var(--ui-surface) !important;
+}
+.focus-hero {
+  gap: var(--ui-space-md);
+}
+.focus-hero > .completion-surface {
+  width: min(100%, 300px);
+  height: 56px;
+}
+.round-progress {
+  min-height: 44px;
+  gap: var(--ui-card-gap);
+  margin: 0;
+}
+.calendar-pane {
+  padding: var(--ui-card-gap) 0 0;
+}
+@media (max-height: 650px) {
+  .chore-personal,
+  .water-pane {
+    min-height: calc(100svh - 155px);
+    gap: 16px;
+    padding: 12px 0 20px;
+  }
+  .focus-hero {
+    gap: 16px;
+  }
+  .focus-hero h2 {
+    font-size: clamp(44px, 14vw, 64px);
+  }
+}
+</style>
+<style scoped>
+.hero-caption {
+  width: 100%;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+</style>
+<style scoped>
+.water-pane {
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 24px;
+}
+.water-title-stage :deep(h2) {
+  font-size: clamp(60px, 18vw, 84px);
+  line-height: 1.15;
+}
+.water-title-stage {
+  min-height: 96px;
+}
+</style>
+<style>
+/* Informational notices never block a page swipe or task control underneath. */
+.chore-notice.van-toast {
+  pointer-events: none;
+}
+</style>
+<style scoped>
+/* Anchor the name independently of receipt/reminder rows, so completion never
+   recenters the whole stack when its action changes. */
+.water-pane {
+  position: relative;
+}
+.water-pane > .hero-caption {
+  position: absolute;
+  top: calc(50% - 136px);
+  left: 0;
+  margin: 0;
+}
+.water-pane > .chore-water {
+  position: absolute;
+  top: calc(50% - 90px);
+  left: 0;
+  width: 100%;
+}
+.water-title-stage {
+  height: 104px;
+  min-height: 104px;
+  display: grid;
+  align-items: center;
+}
+</style>
+
+<style scoped>
+/* Reserve each success icon before the first check-in. No task row rewrap. */
+.task-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 350px);
+}
+.task-selector button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  min-width: 0;
+  gap: 4px;
+  padding: 8px 7px;
+}
+.task-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-option-state {
+  width: 16px;
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 180ms var(--ui-ease-out),
+    transform 220ms var(--ui-ease-overshoot);
+}
+.task-option-state.is-complete {
+  opacity: 1;
+  transform: scale(1);
+}
+</style>
+
+<style scoped>
+/* Status rows and a second eligible receipt must never recenter the title. */
+.chore-personal {
+  position: relative;
+}
+.chore-personal > .hero-caption {
+  position: absolute;
+  top: calc(50% - 178px);
+  left: 0;
+  margin: 0;
+}
+.chore-personal > .task-selector {
+  position: absolute;
+  top: calc(50% - 123px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.chore-personal > .chore-task {
+  position: absolute;
+  top: calc(50% - 55px);
+  left: 0;
+}
+@media (max-height: 650px) {
+  .chore-personal > .hero-caption {
+    top: calc(50% - 150px);
+  }
+  .chore-personal > .task-selector {
+    top: calc(50% - 102px);
+  }
 }
 </style>

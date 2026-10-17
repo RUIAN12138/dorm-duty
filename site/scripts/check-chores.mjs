@@ -42,9 +42,23 @@ async function room(h, label = "三项值日验收") {
     data: { name: label, nickname: "创建者", members: ["室友甲", "室友乙"] },
   });
   secrets.push(created.access_token);
-  const initial = await api(h, `/chores/board?invite_code=${created.invite_code}&member_id=${created.member_id}`, { token: created.access_token });
-  await api(h, "/chores/settings", { method:"PATCH", token:created.access_token,
-    data:{version:initial.version,categories:[{key:"floor",mode:"scheduled"},{key:"toilet",mode:"scheduled"},{key:"sink",enabled:false}]} });
+  const initial = await api(
+    h,
+    `/chores/board?invite_code=${created.invite_code}&member_id=${created.member_id}`,
+    { token: created.access_token },
+  );
+  await api(h, "/chores/settings", {
+    method: "PATCH",
+    token: created.access_token,
+    data: {
+      version: initial.version,
+      categories: [
+        { key: "floor", mode: "scheduled" },
+        { key: "toilet", mode: "scheduled" },
+        { key: "sink", enabled: false },
+      ],
+    },
+  });
   return {
     ...created,
     token: created.access_token,
@@ -58,6 +72,9 @@ async function claim(h, r, id, marker_id) {
     data: {
       invite_code: r.invite_code,
       member_id: id,
+      nickname: h.db.sqlite
+        .prepare("SELECT nickname FROM users WHERE id=?")
+        .get(id).nickname,
       ...(marker_id ? { marker_id } : {}),
     },
   });
@@ -93,7 +110,7 @@ const marker = (h, person, marker_id, options = {}) =>
 export async function runChoreChecks() {
   const scenarios = [];
   const test = (name, run) => scenarios.push({ name, run });
-  test("old migration upgrades without changing old tasks, members, reminders or sessions", async () => {
+  test("old migration preserves business data and caps device expiry without rotating credentials", async () => {
     const db = new SQLiteD1();
     try {
       const migrationRoot = path.join(root, "site/drizzle");
@@ -172,7 +189,11 @@ export async function runChoreChecks() {
       db.sqlite.exec("COMMIT");
       for (const table of choreTables)
         equal(
-          db.sqlite.prepare(`SELECT * FROM ${table}`).all(),
+          db.sqlite
+            .prepare(
+              `SELECT ${Object.keys(choreBefore[table][0] || {}).join(",") || "*"} FROM ${table}`,
+            )
+            .all(),
           choreBefore[table],
           `migration preserves ${table} rows and ids`,
         );
@@ -182,6 +203,10 @@ export async function runChoreChecks() {
         INSERT INTO chore_tasks(dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,status,sequence)
           VALUES (1,'sink','round-1-1','洗手池','清洁洗手池','2026-10-02',1,'旧创建者','pixel-01','','pending',1);
       `);
+      for (const row of before.sessions)
+        row.expires_at = new Date(
+          Date.parse(row.created_at) + 90 * 86400000,
+        ).toISOString();
       for (const table of tables) {
         const oldFields = Object.keys(before[table][0]);
         equal(
@@ -365,9 +390,12 @@ export async function runChoreChecks() {
     const current = await board(h, r, creator);
     const changes = current.categories.map((category, i) => ({
       ...category,
-      content: ["地板：清扫并拖地", "厕所：刷洗便池与地漏", "洗手池：清洁池面与龙头", "抬水：从一楼抬水"][
-        i
-      ],
+      content: [
+        "地板：清扫并拖地",
+        "厕所：刷洗便池与地漏",
+        "洗手池：清洁池面与龙头",
+        "抬水：从一楼抬水",
+      ][i],
       deadline_time: ["20:15", "21:20", "21:40", "18:35"][i],
       weekdays: [1, 3, 5],
       rotation_days: 2,
@@ -397,8 +425,8 @@ export async function runChoreChecks() {
     }
     equal(
       next.water_task.assignee_id,
-      initial.water_task.assignee_id,
-      "editing water order keeps pending assignee",
+      changes.find((c) => c.key === "water").rotation_order[0],
+      "water order immediately recalculates the pending assignee",
     );
     equal(
       next.water_task.content,
@@ -445,17 +473,35 @@ export async function runChoreChecks() {
     const owner = { user_id: r.member_id, token: r.token };
     const initial = await board(h, r, owner);
     const order = [r.ids[2], r.ids[0], r.ids[1]];
-    await api(h, "/chores/settings", { method: "PATCH", token: r.token,
-      data: { version: initial.version, categories: [{ key: "water", rotation_order: order }] } });
+    await api(h, "/chores/settings", {
+      method: "PATCH",
+      token: r.token,
+      data: {
+        version: initial.version,
+        categories: [{ key: "water", rotation_order: order }],
+      },
+    });
     const reloaded = await board(h, r, owner);
-    equal(reloaded.categories.find(c => c.key === "water").rotation_order, order);
-    equal(reloaded.water_task.assignee_id, initial.water_task.assignee_id);
-    const actor = initial.water_task.assignee_id === owner.user_id ? owner : await claim(h, r, initial.water_task.assignee_id);
+    equal(
+      reloaded.categories.find((c) => c.key === "water").rotation_order,
+      order,
+    );
+    equal(reloaded.water_task.assignee_id, order[0]);
+    const actor =
+      reloaded.water_task.assignee_id === owner.user_id
+        ? owner
+        : await claim(h, r, reloaded.water_task.assignee_id);
     await complete(h, actor, reloaded.water_task);
     const next = await board(h, r, owner);
-    equal(next.water_task.assignee_id, order[(order.indexOf(actor.user_id) + 1) % order.length]);
-    equal(next.calendar.find(t => t.id === initial.water_task.id).assignee_id, actor.user_id);
-    equal(next.categories.find(c => c.key === "water").rotation_order, order);
+    equal(
+      next.water_task.assignee_id,
+      order[(order.indexOf(actor.user_id) + 1) % order.length],
+    );
+    equal(
+      next.calendar.find((t) => t.id === initial.water_task.id).assignee_id,
+      actor.user_id,
+    );
+    equal(next.categories.find((c) => c.key === "water").rotation_order, order);
   });
   test("calendar uses Shanghai completion day, including late completion and month boundary", async (h) => {
     now = new OriginalDate("2026-10-31T15:50:00Z").getTime();
@@ -717,7 +763,7 @@ export async function runChoreChecks() {
     );
     const password = "TemporaryJoinPassword!";
     secrets.push(password);
-    const added = await api(h, "/auth/register", {
+    await api(h, "/auth/register", {
       method: "POST",
       status: 201,
       data: { username: "new_roommate", nickname: "新室友", password },
@@ -727,6 +773,7 @@ export async function runChoreChecks() {
       data: { username: "new_roommate", password },
     });
     secrets.push(login.access_token);
+    const added = await api(h, "/auth/me", { token: login.access_token });
     await api(h, "/dorms/join", {
       method: "POST",
       token: login.access_token,

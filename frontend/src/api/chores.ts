@@ -15,6 +15,7 @@ export interface ChoreCategory {
   start_date: string;
   weekdays: number[];
   rotation_days: number;
+  reminder_interval_days?: number;
   rotation_order: number[];
   enabled: boolean;
   mode: "scheduled" | "self_round" | "completion";
@@ -36,6 +37,8 @@ export interface ChoreTask {
   mode: ChoreCategory["mode"];
 }
 export interface ChoreRecord {
+  revision?: number;
+  corrected?: boolean;
   id: number;
   key: string;
   name: string;
@@ -49,6 +52,12 @@ export interface ChoreCompletion {
   task: ChoreTask;
   next_water: ChoreTask | null;
   version: number;
+}
+export interface WaterHandoff {
+  id: number;
+  sequence: number;
+  from_member_id: number;
+  completed_at: string;
 }
 export interface ChoreReminder {
   id: number;
@@ -73,13 +82,16 @@ export interface ChoreBoardData {
     completed: number;
     total: number;
     members: (ChoreMember & { completed: boolean })[];
+    completions: (ChoreMember & { id: number; completed_at: string })[];
   }[];
   today_tasks: ChoreTask[];
   next_tasks: ChoreTask[];
   water_task: ChoreTask | null;
+  water_handoff?: WaterHandoff | null;
   undo_tasks: ChoreTask[];
   water_order: number[];
   calendar: ChoreRecord[];
+  calendar_neighbors?: Record<string, ChoreRecord[]>;
   reminders: ChoreReminder[];
 }
 export interface ChoreClaim {
@@ -154,11 +166,17 @@ export async function choreRequest<T>(
   }
 }
 export function claimChoreIdentity(
-  values: { invite_code: string; member_id: number; marker_id?: string },
+  values: {
+    invite_code: string;
+    nickname: string;
+    member_id?: number;
+    marker_id?: string;
+  },
   signal?: AbortSignal,
 ) {
   return choreRequest<ChoreClaim>("/chores/claim", "", {
     method: "POST",
+    headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
     signal,
   });
@@ -175,4 +193,13 @@ export function getChoreBoard(
     token,
     { signal },
   );
+}
+
+export interface ChoreActivity {
+  start: string;
+  today: string;
+  daily: { date: string; key: string; count: number }[];
+  last_completed?: { key: string; completed_at: string }[];
+  recent_records: ChoreRecord[];
+  recent_truncated: boolean;
 }

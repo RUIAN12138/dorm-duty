@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useSession } from "../stores/session";
+import { emailAccount, refreshEmailAccount } from "../api/email";
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   scrollBehavior() {
@@ -38,6 +39,17 @@ export const router = createRouter({
 });
 router.beforeEach(async (to) => {
   if (["/", "/water", "/calendar"].includes(to.path)) return;
+  try {
+    await refreshEmailAccount();
+    if (
+      emailAccount.required &&
+      (to.path === "/admin/login" || !emailAccount.loggedIn)
+    )
+      return "/";
+  } catch {
+    // Do not expose an obsolete login form when email policy cannot be checked.
+    return "/";
+  }
   const session = useSession();
   await session.init();
   if (!to.meta.public && !session.user)

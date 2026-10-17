@@ -285,7 +285,7 @@ try {
   const claimed = await api("/chores/claim", {
     method: "POST",
     status: 201,
-    data: { invite_code: created.invite_code, member_id: choreMemberId },
+    data: { invite_code: created.invite_code, member_id: choreMemberId, nickname: created.dorm.members.find(m => m.user_id === choreMemberId).nickname },
   });
   const memberToken = claimed.access_token;
   secrets.push(memberToken);

@@ -1,6 +1,8 @@
 # 轮到 · 安装版通知接入
 
-2026-10-14：安卓 APK、鸿蒙未签名 HAP 和原生设备绑定接口已实现。当前未创建推送应用、未配置厂商通道、未在安卓或鸿蒙真机验收，不能声称后台/锁屏通知已接通。iPhone PWA 继续使用已验收的 Web Push。
+2026-10-16 当前范围：按用户选择只做 Android / HarmonyOS 极光基础通知，暂不接厂商通道。Android 1.2.1 的基础测试通知已在模拟器实际显示并验证点击恢复宿舍；HarmonyOS 1.2.1 补齐基础连接初始化、注册等待与点击回调，构建和专用模拟器安装通过，真实送达单独记录。详见 [基础通知说明](../docs/BASIC_NOTIFICATIONS.md) 和 [Android 发布清单](../docs/ANDROID_RELEASE.md)。
+
+2026-10-14 历史记录：安卓 APK、鸿蒙未签名 HAP 和原生设备绑定接口已实现。当时尚未创建推送应用、未配置厂商通道、未在安卓或鸿蒙真机验收。iPhone PWA 继续使用已验收的 Web Push。
 
 2026-10-15：1.2.0 本地体验版补齐主页面连接失败 / 20 秒超时后的重试入口，保留原有身份和目标页面；子资源错误不替换整个界面。鸿蒙返回键改为先关闭网页最上层抽屉，安卓增加 Android 15 系统栏避让。网页收到鸿蒙迟到的原生桥后重新检测通知能力，通知面板的旧请求不覆盖新身份状态。两端构建通过，安卓单元测试 / lint 与桥接检查通过；真实手机 UI 和后台通知仍未验收。
 
@@ -45,7 +47,13 @@ GitHub 临时 runner 的调试签名可能随构建变化，这些附件不作�
 
 HarmonyOS 需要 DevEco Studio 与 SDK 6.1.1：在 `harmony` 执行 `ohpm install --all`，再执行 `hvigorw --mode module -p product=default -p buildMode=debug assembleHap --no-daemon`。当前未配置签名，生成 `entry-default-unsigned.hap`，不能直接安装真机。DevEco 会负责配置签名，不通过代码生成假 Profile。
 
-## 1.2.0 设备验收
+## 1.2.1 Android 推送注册修复
+
+Android 15 专用模拟器复现 1.2.0 注册超时：JCore 明确报告缺少自定义 JCommonService。1.2.1 补充内部独立进程服务、SDK 发现 action 和接收器 action，并在 CI 检查实际合并 Manifest。已覆盖安装并保留验收宿舍身份，主动开启通知后成功注册。
+
+2026-10-16 后续验收：所有者修正 AppKey 并为对应极光应用启用 Android 平台后，服务端与客户端配置一致，专用模拟器收到完整测试通知，点击恢复正确宿舍，强制停止后手动启动仍保留身份。Actions 公开 AppKey 变量与本机验收包已同步；详见 [验收记录](../docs/ANDROID_PUSH_ACCEPTANCE.md)。两位成员互发、抬水任务路由、厂商真机锁屏和固定发布签名仍在 [#37](https://github.com/RUIAN12138/dorm-duty/issues/37)、[#38](https://github.com/RUIAN12138/dorm-duty/issues/38)、[#39](https://github.com/RUIAN12138/dorm-duty/issues/39)、[#40](https://github.com/RUIAN12138/dorm-duty/issues/40) 跟踪。HarmonyOS 版本与服务端配置本轮不变。
+
+## 设备验收
 
 1. Android 安装调试 APK；HarmonyOS 先为 `cn.lundao.dorm` 配置本应用调试签名，再安装。重装 / 换设备时管理者用已保存的恢复码取回权限，不导入其他应用的签名。
 2. 正常创建 / 加入、选人、值日与抬水打卡；完全关闭再打开，确认身份仍保留。

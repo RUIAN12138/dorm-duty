@@ -158,13 +158,13 @@ try {
       )
     ).json();
     check(
-      room.id === created.dorm.id && room.members.length === 2,
-      "提供邀请码后在 D1 内查询对应宿舍",
+      room.id === created.dorm.id && room.members.length === 0,
+      "邀请码仅返回宿舍概要，不暴露名单",
     );
     const own = await (
       await call(
         `/guest/tasks?invite_code=${created.invite_code}&member_id=${created.member_id}`,
-        undefined,
+        { headers: {Authorization: `Bearer ${created.access_token}`} },
         harness.env,
       )
     ).json();

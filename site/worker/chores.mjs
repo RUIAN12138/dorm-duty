@@ -151,6 +151,16 @@ async function roomMembers(db, roomId) {
   );
 }
 export async function ensureChoreMarkers(db, roomId) {
+  // The common poll path is read-only; repair marks only after membership changes.
+  const repair = await first(
+    db,
+    `SELECT
+    EXISTS(SELECT 1 FROM member_marks mm WHERE mm.dorm_id=? AND NOT EXISTS(SELECT 1 FROM dorm_members m WHERE m.dorm_id=mm.dorm_id AND m.user_id=mm.user_id AND m.is_active=1))
+    OR EXISTS(SELECT 1 FROM dorm_members m LEFT JOIN member_marks mm ON mm.dorm_id=m.dorm_id AND mm.user_id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 AND mm.id IS NULL) AS needed`,
+    [roomId, roomId],
+  );
+  if (!repair.needed) return;
+
   // Matching two ranked sets assigns every unmarked member one still-free design in one statement.
   // Departed members release their live mark; completed records keep their immutable snapshot.
   await stmt(
@@ -189,6 +199,7 @@ function categoryView(row) {
     start_date: row.start_date,
     weekdays: parse(row.weekdays),
     rotation_days: row.rotation_days,
+    reminder_interval_days: row.reminder_interval_days,
     rotation_order: parse(row.rotation_order),
     enabled: Boolean(row.enabled),
     mode: row.mode,
@@ -204,6 +215,13 @@ async function categories(db, roomId) {
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
+  const initialized = await first(
+    db,
+    "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
+    [room.id, room.id],
+  );
+  if (initialized) return;
+
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "宿舍没有有效成员");
   const legacy = parse(room.rotation_order || "[]"),
@@ -268,6 +286,13 @@ async function actor(request, db, now, required = false) {
     is_creator: full.role === "admin" && full.admin_user_id === full.user_id,
     scoped: false,
   };
+}
+// Legacy read-only guest routes must respect the same member-session boundary.
+export async function choreGuestAccess(request, db, now, dormId) {
+  const who = await actor(request, db, now);
+  if (who && who.dorm_id !== dormId)
+    fail(403, "wrong_dorm", "请使用这个宿舍的身份进入");
+  return who;
 }
 function assertWrite(who) {
   if (who.is_demo)
@@ -540,6 +565,7 @@ async function maintain(db, room, now) {
       settings = await categories(db, room.id),
       members = await roomMembers(db, room.id),
       ids = members.map((member) => member.user_id);
+    if (!members.length) fail(409, "no_members", "宿舍没有有效成员");
     const replacements = [],
       mutation = new Mutation(db, room, state.version);
     for (const category of settings) {
@@ -694,6 +720,244 @@ function reminderView(row) {
     body: row.task_content_snapshot,
   };
 }
+// History is a projection. Corrections never update tasks, rounds or the water cursor.
+const historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
+ COALESCE(h.completed_at,t.completed_at) AS completed_at,COALESCE(h.revision,0) AS revision,
+ CASE WHEN h.id IS NULL THEN 0 ELSE 1 END AS corrected
+ FROM chore_tasks t LEFT JOIN chore_history_entries h ON h.task_id=t.id AND h.dorm_id=t.dorm_id
+ WHERE t.dorm_id=? AND t.status='completed' AND COALESCE(h.voided,0)=0
+ UNION ALL SELECT -h.id,h.key,h.name,h.assignee_id,h.assignee_name_snapshot,h.marker_id_snapshot,h.completed_at,h.revision,1
+ FROM chore_history_entries h WHERE h.dorm_id=? AND h.task_id IS NULL AND h.voided=0`;
+const historyView = (row) => ({
+  id: row.id,
+  key: row.key,
+  name: row.name,
+  assignee_id: row.assignee_id,
+  assignee_name: row.assignee_name_snapshot,
+  marker_id: row.marker_id_snapshot,
+  completed_at: row.completed_at,
+  completed_date: localDate(row.completed_at),
+  revision: row.revision || 0,
+  corrected: !!row.corrected,
+});
+async function activity(request, db, env, now, url) {
+  const who = await actor(request, db, now),
+    room = await roomByInvite(db, env, url.searchParams.get("invite_code"));
+  if (!room.is_demo && !who) fail(401, "member_required", "请先进入宿舍");
+  if (who && who.dorm_id !== room.id)
+    fail(403, "wrong_dorm", "只能查看自己的宿舍");
+  const today = localDate(now),
+    firstMonth = new Date(today.slice(0, 7) + "-01T00:00:00Z");
+  firstMonth.setUTCMonth(firstMonth.getUTCMonth() - 2);
+  const start = firstMonth.toISOString().slice(0, 10),
+    from = deadline(start, "00:00"),
+    end = deadline(addDate(today, 1), "00:00");
+  const daily = await all(
+    db,
+    `SELECT strftime('%Y-%m-%d',completed_at,'+8 hours') AS date,key,COUNT(*) AS count FROM (${historySQL}) WHERE completed_at>=? AND completed_at<? GROUP BY date,key ORDER BY date,key`,
+    [room.id, room.id, from, end],
+  );
+  const rows = await all(
+    db,
+    `SELECT * FROM (${historySQL}) WHERE completed_at>=? AND completed_at<? ORDER BY completed_at DESC,id DESC LIMIT 501`,
+    [room.id, room.id, deadline(addDate(today, -4), "00:00"), end],
+  );
+  const lastCompleted = await all(
+    db,
+    `SELECT key,MAX(completed_at) AS completed_at FROM (${historySQL}) WHERE completed_at<=? GROUP BY key`,
+    [room.id, room.id, new Date(now).toISOString()],
+  );
+  return json({
+    start,
+    today,
+    daily,
+    last_completed: lastCompleted,
+    recent_records: rows.slice(0, 500).map(historyView),
+    recent_truncated: rows.length > 500,
+  });
+}
+async function historyChange(request, db, room, who, now) {
+  if (request.method === "GET") {
+    const url = new URL(request.url),
+      id = Number(url.searchParams.get("id"));
+    if (!Number.isSafeInteger(id) || !id) invalid();
+    const row = await first(db, `SELECT * FROM (${historySQL}) WHERE id=?`, [
+      room.id,
+      room.id,
+      id,
+    ]);
+    if (!row) fail(404, "record_missing", "记录不存在");
+    if (row.assignee_id !== who.user_id && !who.is_creator)
+      fail(403, "not_owner", "只能修正自己的记录");
+    const entry = await first(
+      db,
+      id > 0
+        ? "SELECT id FROM chore_history_entries WHERE dorm_id=? AND task_id=?"
+        : "SELECT id FROM chore_history_entries WHERE dorm_id=? AND id=?",
+      [room.id, Math.abs(id)],
+    );
+    const audit = entry
+      ? await all(
+          db,
+          "SELECT actor_name,before_json,after_json,reason,created_at FROM chore_history_audit WHERE dorm_id=? AND entry_id=? ORDER BY id DESC",
+          [room.id, entry.id],
+        )
+      : [];
+    return json({
+      record: historyView(row),
+      audit: audit.map((a) => ({
+        ...a,
+        before: a.before_json ? JSON.parse(a.before_json) : null,
+        after: JSON.parse(a.after_json),
+        before_json: undefined,
+        after_json: undefined,
+      })),
+    });
+  }
+  if (!["POST", "PATCH", "DELETE"].includes(request.method))
+    fail(404, "not_found", "接口不存在");
+  const input = await body(
+    request,
+    request.method === "POST"
+      ? ["version", "member_id", "key", "completed_at", "reason"]
+      : request.method === "PATCH"
+        ? ["id", "revision", "version", "completed_at", "reason"]
+        : ["id", "revision", "version", "reason"],
+    request.method === "POST"
+      ? ["version", "member_id", "key", "completed_at", "reason"]
+      : request.method === "PATCH"
+        ? ["id", "revision", "version", "completed_at", "reason"]
+        : ["id", "revision", "version", "reason"],
+  );
+  const reason = str(input.reason, 1, 200),
+    version = integer(input.version, 0),
+    id = input.id;
+  const { state, settings, members } = await maintain(db, room, now);
+  if (state.version !== version)
+    fail(409, "stale_version", "记录或轮次已变化，请刷新后重试");
+  let original = null,
+    entry = null,
+    target,
+    key,
+    name,
+    marker,
+    nickname;
+  if (request.method !== "POST") {
+    if (!Number.isSafeInteger(id) || !id) invalid();
+    integer(input.revision, 0);
+    original = await first(db, `SELECT * FROM (${historySQL}) WHERE id=?`, [
+      room.id,
+      room.id,
+      id,
+    ]);
+    if (!original) fail(404, "record_missing", "记录不存在或已撤销");
+    if (original.revision !== input.revision)
+      fail(409, "history_changed", "这条记录已被修正，请重新打开");
+    entry = await first(
+      db,
+      id > 0
+        ? "SELECT * FROM chore_history_entries WHERE dorm_id=? AND task_id=?"
+        : "SELECT * FROM chore_history_entries WHERE dorm_id=? AND id=?",
+      [room.id, Math.abs(id)],
+    );
+    target = original.assignee_id;
+    key = original.key;
+    name = original.name;
+    marker = original.marker_id_snapshot;
+    nickname = original.assignee_name_snapshot;
+  } else {
+    target = integer(input.member_id);
+    key = input.key;
+    if (!KEYS.includes(key)) invalid();
+    const member = members.find((m) => m.user_id === target),
+      category = settings.find((c) => c.key === key);
+    if (!member || !category) invalid("请选择宿舍成员和任务");
+    name = category.name;
+    marker = member.marker_id;
+    nickname = member.nickname;
+  }
+  if (target !== who.user_id && !who.is_creator)
+    fail(403, "not_owner", "只能补记或修正自己的记录");
+  let timestamp = original?.completed_at;
+  if (request.method !== "DELETE") {
+    if (
+      typeof input.completed_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+08:00$/.test(input.completed_at)
+    )
+      invalid("请选择完成日期和时间");
+    date(input.completed_at.slice(0, 10));
+    time(input.completed_at.slice(11, 16));
+    const parsed = new Date(input.completed_at);
+    if (
+      !Number.isFinite(parsed.getTime()) ||
+      parsed > now ||
+      localDate(parsed) < "2020-01-01"
+    )
+      invalid("完成时间不能在未来，且不能早于2020年");
+    timestamp = parsed.toISOString();
+  }
+  const after = {
+      completed_at: timestamp,
+      voided: request.method === "DELETE",
+    },
+    op = random(),
+    stamp = now.toISOString();
+  const mutation = new Mutation(db, room, version, who, target !== who.user_id);
+  if (entry)
+    mutation.update(
+      "chore_history_entries",
+      {
+        completed_at: timestamp,
+        voided: after.voided ? 1 : 0,
+        revision: entry.revision + 1,
+        operation_key: op,
+        updated_at: stamp,
+      },
+      "id=? AND dorm_id=?",
+      [entry.id, room.id],
+    );
+  else
+    mutation.raw(
+      `INSERT INTO chore_history_entries(dorm_id,task_id,assignee_id,key,name,assignee_name_snapshot,marker_id_snapshot,completed_at,voided,revision,operation_key,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,1,?,?,? WHERE ${mutation.guard}`,
+      [
+        room.id,
+        id > 0 ? id : null,
+        target,
+        key,
+        name,
+        nickname,
+        marker,
+        timestamp,
+        after.voided ? 1 : 0,
+        op,
+        stamp,
+        stamp,
+        ...mutation.guardValues,
+      ],
+    );
+  mutation.raw(
+    `INSERT INTO chore_history_audit(entry_id,dorm_id,actor_id,actor_name,before_json,after_json,reason,created_at) SELECT id,?,?,?,?,?,?,? FROM chore_history_entries WHERE dorm_id=? AND operation_key=? AND ${mutation.guard}`,
+    [
+      room.id,
+      who.user_id,
+      who.nickname,
+      original
+        ? JSON.stringify({ completed_at: original.completed_at, voided: false })
+        : null,
+      JSON.stringify(after),
+      reason,
+      stamp,
+      room.id,
+      op,
+      ...mutation.guardValues,
+    ],
+  );
+  await mutation.finish();
+  return json(
+    { ok: true, version: version + 1 },
+    request.method === "POST" ? 201 : 200,
+  );
+}
 async function board(request, db, env, now, url) {
   const who = await actor(request, db, now),
     room = await roomByInvite(db, env, url.searchParams.get("invite_code"));
@@ -727,10 +991,22 @@ async function board(request, db, env, now, url) {
     "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
     [room.id],
   );
+  const waterHandoff = water
+    ? await first(
+        db,
+        "SELECT id,sequence,assignee_id,completed_at FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' AND sequence=?",
+        [room.id, water.sequence - 1],
+      )
+    : null;
+  const adjacentMonth = (delta) => {
+    const date = new Date(`${month}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + delta);
+    return date.toISOString().slice(0, 7);
+  };
   const calendarRows = await all(
     db,
-    "SELECT id,key,name,assignee_id,assignee_name_snapshot,marker_id_snapshot,completed_at FROM chore_tasks WHERE dorm_id=? AND status='completed' AND strftime('%Y-%m',completed_at,'+8 hours')=? ORDER BY completed_at,id",
-    [room.id, month],
+    `SELECT * FROM (${historySQL}) WHERE strftime('%Y-%m',completed_at,'+8 hours')>=? AND strftime('%Y-%m',completed_at,'+8 hours')<? ORDER BY completed_at,id`,
+    [room.id, room.id, adjacentMonth(-1), adjacentMonth(2)],
   );
   const reminders =
     who?.user_id === uid
@@ -764,6 +1040,18 @@ async function board(request, db, env, now, url) {
       total: members.length,
       completed: current.active.filter((row) => row.status === "completed")
         .length,
+      completions: current.active
+        .filter((row) => row.status === "completed")
+        .sort(
+          (a, b) => a.completed_at.localeCompare(b.completed_at) || a.id - b.id,
+        )
+        .map((row) => ({
+          id: row.id,
+          user_id: row.assignee_id,
+          nickname: row.assignee_name_snapshot,
+          marker_id: row.marker_id_snapshot,
+          completed_at: row.completed_at,
+        })),
       members: [...members]
         .sort(
           (a, b) =>
@@ -806,20 +1094,54 @@ async function board(request, db, env, now, url) {
       taskView(task, now, actorForTasks, settings, members),
     ),
     water_task: taskView(water, now, actorForTasks, settings, members),
+    water_handoff: waterHandoff
+      ? {
+          id: waterHandoff.id,
+          sequence: waterHandoff.sequence,
+          from_member_id: waterHandoff.assignee_id,
+          completed_at: waterHandoff.completed_at,
+        }
+      : null,
     undo_tasks: undoRows.map((task) =>
       taskView(task, now, actorForTasks, settings, members),
     ),
     water_order: settings.find((entry) => entry.key === "water").rotation_order,
-    calendar: calendarRows.map((row) => ({
-      id: row.id,
-      key: row.key,
-      name: row.name,
-      assignee_id: row.assignee_id,
-      assignee_name: row.assignee_name_snapshot,
-      marker_id: row.marker_id_snapshot,
-      completed_at: row.completed_at,
-      completed_date: localDate(row.completed_at),
-    })),
+    calendar: calendarRows
+      .filter((row) => localDate(row.completed_at).startsWith(month))
+      .map((row) => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        assignee_id: row.assignee_id,
+        assignee_name: row.assignee_name_snapshot,
+        marker_id: row.marker_id_snapshot,
+        completed_at: row.completed_at,
+        completed_date: localDate(row.completed_at),
+        revision: row.revision || 0,
+        corrected: !!row.corrected,
+      })),
+    calendar_neighbors: Object.fromEntries(
+      [-1, 1].map((delta) => {
+        const key = adjacentMonth(delta);
+        return [
+          key,
+          calendarRows
+            .filter((row) => localDate(row.completed_at).startsWith(key))
+            .map((row) => ({
+              id: row.id,
+              key: row.key,
+              name: row.name,
+              assignee_id: row.assignee_id,
+              assignee_name: row.assignee_name_snapshot,
+              marker_id: row.marker_id_snapshot,
+              completed_at: row.completed_at,
+              completed_date: localDate(row.completed_at),
+              revision: row.revision || 0,
+              corrected: !!row.corrected,
+            })),
+        ];
+      }),
+    ),
     reminders: reminders.map(reminderView),
   });
 }
@@ -846,16 +1168,26 @@ async function setMarker(db, room, who, marker, state) {
 async function claim(request, db, env, now) {
   const input = await body(
       request,
-      ["invite_code", "member_id", "marker_id"],
-      ["invite_code", "member_id"],
+      ["invite_code", "member_id", "nickname", "marker_id"],
+      ["invite_code"],
     ),
-    uid = integer(input.member_id),
     room = await roomByInvite(db, env, input.invite_code);
   if (room.is_demo)
     fail(403, "demo_read_only", "游客模式仅供体验，请创建或加入正式宿舍");
-  const { state, members } = await maintain(db, room, now),
-    member = members.find((entry) => entry.user_id === uid);
-  if (!member) fail(404, "member_missing", "请选择有效宿舍成员");
+  if (input.nickname === undefined)
+    fail(422, "name_required", "请更新页面，并输入你的完整名字进入宿舍");
+  const nickname = str(input.nickname, 1, 32),
+    uidHint = input.member_id === undefined ? null : integer(input.member_id),
+    { state, members } = await maintain(db, room, now),
+    matches = members.filter((entry) => entry.nickname === nickname);
+  if (matches.length > 1 && uidHint === null)
+    fail(409, "ambiguous_name", "这个名字对应多位室友，请联系宿舍创建者核对");
+  const member = matches.find(
+    (entry) => uidHint === null || entry.user_id === uidHint,
+  );
+  if (!member)
+    fail(403, "name_mismatch", "名字不匹配，请输入创建者填写的完整名字");
+  const uid = member.user_id;
   let marker = member.marker_id;
   if (input.marker_id !== undefined) {
     marker = validateMarker(input.marker_id);
@@ -870,7 +1202,7 @@ async function claim(request, db, env, now) {
   }
   const token = random(),
     hash = await digest(token),
-    expires = new Date(now.getTime() + 365 * DAY).toISOString();
+    expires = new Date(now.getTime() + 90 * DAY).toISOString();
   const result = await stmt(
     db,
     "INSERT INTO member_sessions(token_hash,dorm_id,user_id,created_at,expires_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM dorm_members m JOIN users u ON u.id=m.user_id JOIN dormitories d ON d.id=m.dorm_id WHERE m.dorm_id=? AND m.user_id=? AND m.is_active=1 AND u.current_dorm_id=m.dorm_id AND d.is_demo=0)",
@@ -898,6 +1230,7 @@ function normalizeCategory(input, current, ids, today) {
       "start_date",
       "weekdays",
       "rotation_days",
+      "reminder_interval_days",
       "rotation_order",
       "enabled",
       "mode",
@@ -932,6 +1265,7 @@ function normalizeCategory(input, current, ids, today) {
   value.weekdays.forEach((day) => integer(day, 1, 7));
   value.weekdays = [...value.weekdays].sort((a, b) => a - b);
   value.rotation_days = integer(value.rotation_days, 1, 30);
+  value.reminder_interval_days = integer(value.reminder_interval_days, 1, 365);
   if (
     !Array.isArray(value.rotation_order) ||
     value.rotation_order.length !== ids.length ||
@@ -942,15 +1276,62 @@ function normalizeCategory(input, current, ids, today) {
   if (typeof value.enabled !== "boolean") invalid();
   return value;
 }
-async function configure(request, db, room, who, now) {
-  if (!who.is_creator || who.scoped)
+async function reassignPendingWater(db, mutation, room, water, members, now) {
+  const pending = await first(
+    db,
+    "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
+    [room.id],
+  );
+  if (!pending) return;
+  const last = await first(
+    db,
+    "SELECT assignee_id FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
+    [room.id],
+  );
+  const next = last
+    ? (water.rotation_order.indexOf(last.assignee_id) + 1) %
+      water.rotation_order.length
+    : 0;
+  const member = members.find((m) => m.user_id === water.rotation_order[next]);
+  if (pending.assignee_id === member.user_id) return;
+  mutation.update(
+    "chore_tasks",
+    {
+      assignee_id: member.user_id,
+      assignee_name_snapshot: member.nickname,
+      marker_id_snapshot: member.marker_id,
+    },
+    "id=? AND status='pending'",
+    [pending.id],
+  );
+  mutation.update(
+    "chore_push_jobs",
+    { status: "cancelled" },
+    "dorm_id=? AND status='pending' AND reminder_id IN (SELECT id FROM chore_reminders WHERE dorm_id=? AND task_id=? AND target_member_id<>?)",
+    [room.id, room.id, pending.id, member.user_id],
+  );
+  mutation.update(
+    "chore_reminders",
+    { read_at: now.toISOString() },
+    "dorm_id=? AND task_id=? AND target_member_id<>? AND read_at IS NULL",
+    [room.id, pending.id, member.user_id],
+  );
+}
+async function configure(request, db, room, who, now, orderOnly = false) {
+  if (!orderOnly && (!who.is_creator || who.scoped))
     fail(403, "admin_required", "只有宿舍创建者可以修改任务设置");
-  const input = await body(
-      request,
-      ["version", "categories"],
-      ["version", "categories"],
-    ),
-    expected = integer(input.version),
+  const input = orderOnly
+    ? await body(
+        request,
+        ["version", "key", "rotation_order"],
+        ["version", "key", "rotation_order"],
+      )
+    : await body(request, ["version", "categories"], ["version", "categories"]);
+  if (orderOnly)
+    input.categories = [
+      { key: input.key, rotation_order: input.rotation_order },
+    ];
+  const expected = integer(input.version),
     { state, settings, members } = await maintain(db, room, now);
   if (expected !== state.version)
     fail(409, "stale_version", "任务已变化，请刷新设置后重试");
@@ -974,7 +1355,41 @@ async function configure(request, db, room, who, now) {
       (category) =>
         updated.find((entry) => entry.key === category.key) || category,
     ),
-    mutation = new Mutation(db, room, state.version, who, true);
+    mutation = new Mutation(db, room, state.version, who, !orderOnly);
+  const waterToReorder = updated.find(
+    (c) =>
+      c.key === "water" &&
+      (orderOnly ||
+        JSON.stringify(c.rotation_order) !==
+          JSON.stringify(
+            settings.find((old) => old.key === "water").rotation_order,
+          )),
+  );
+  if (waterToReorder)
+    await reassignPendingWater(
+      db,
+      mutation,
+      room,
+      waterToReorder,
+      members,
+      now,
+    );
+  if (orderOnly) {
+    for (const category of updated)
+      mutation.update(
+        "chore_categories",
+        { rotation_order: JSON.stringify(category.rotation_order) },
+        "dorm_id=? AND key=?",
+        [room.id, category.key],
+      );
+    const scheduledKeys = updated
+      .filter((c) => c.mode === "scheduled")
+      .map((c) => c.key);
+    if (scheduledKeys.length)
+      await planDaily(db, mutation, room, draft, members, now, scheduledKeys);
+    await mutation.finish();
+    return json({ version: state.version + 1, categories: draft });
+  }
   for (const category of updated)
     mutation.update(
       "chore_categories",
@@ -985,6 +1400,7 @@ async function configure(request, db, room, who, now) {
         start_date: category.start_date,
         weekdays: JSON.stringify(category.weekdays),
         rotation_days: category.rotation_days,
+        reminder_interval_days: category.reminder_interval_days,
         rotation_order: JSON.stringify(category.rotation_order),
         enabled: category.enabled ? 1 : 0,
         mode: category.mode,
@@ -1800,6 +2216,8 @@ export async function handleChores(request, env, now) {
     method = request.method;
   if (path === "/chores/claim" && method === "POST")
     return claim(request, db, env, now);
+  if (path === "/chores/activity" && method === "GET")
+    return activity(request, db, env, now, url);
   if (path === "/chores/board" && method === "GET")
     return board(request, db, env, now, url);
   if (path.startsWith("/chores/calendar/"))
@@ -1807,6 +2225,8 @@ export async function handleChores(request, env, now) {
   const who = await actor(request, db, now, true);
   assertWrite(who);
   const room = await roomByActor(db, who);
+  if (path === "/chores/history")
+    return historyChange(request, db, room, who, now);
   if (path === "/chores/calendar-subscription")
     return calendarSettings(request, { db, room, who, now });
   if (path === "/chores/reminder-plan")
@@ -1815,6 +2235,8 @@ export async function handleChores(request, env, now) {
     return nativePush(request, db, room, who, now, env, path);
   if (path.startsWith("/chores/push/"))
     return memberPush(request, db, room, who, now, env, path);
+  if (path === "/chores/order" && method === "PATCH")
+    return configure(request, db, room, who, now, true);
   if (path === "/chores/settings" && method === "PATCH")
     return configure(request, db, room, who, now);
   if (path === "/chores/marker" && method === "PATCH") {

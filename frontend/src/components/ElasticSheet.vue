@@ -10,11 +10,14 @@ import {
 } from "reka-ui";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { motionAllowed, motionTokens } from "../interaction/motion";
+import { createVelocityTracker, rubberBand } from "../interaction/gestures";
 
 const props = withDefaults(
   defineProps<{
     modelValue: boolean;
     modal?: boolean;
+    stickyHeader?: boolean;
+    contained?: boolean;
     title: string;
     origin?: DOMRect | null;
     motion?: "shared" | "bottom";
@@ -66,9 +69,7 @@ let gesture: {
   element: HTMLElement;
   start: number;
   baseline: number;
-  last: number;
-  time: number;
-  speed: number;
+  velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 function setPanel(value: unknown) {
   const candidate =
@@ -200,26 +201,25 @@ function down(event: PointerEvent) {
     element,
     start: event.clientY,
     baseline: pose.y,
-    last: event.clientY,
-    time: performance.now(),
-    speed: 0,
+    velocity: createVelocityTracker(event.clientY, performance.now()),
   };
   element.setPointerCapture(event.pointerId);
   phase.value = "dragging";
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
-  const now = performance.now();
-  gesture.speed =
-    (event.clientY - gesture.last) / Math.max(1, now - gesture.time);
-  gesture.last = event.clientY;
-  gesture.time = now;
+  gesture.velocity.add(event.clientY, performance.now());
   const delta = gesture.baseline + event.clientY - gesture.start;
-  paint({ ...pose, y: delta < 0 ? delta / (1 + Math.abs(delta) / 64) : delta });
+  paint({ ...pose, y: delta < 0 ? rubberBand(delta) : delta });
 }
 function up(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
-  const speed = performance.now() - gesture.time > 80 ? 0 : gesture.speed;
+  if (
+    event.type === "lostpointercapture" &&
+    gesture.element.hasPointerCapture(event.pointerId)
+  )
+    return;
+  const speed = gesture.velocity.read(performance.now());
   resetGesture();
   if (!cancelled && (pose.y > 130 || (pose.y > 35 && speed > 0.6))) close();
   else {
@@ -238,7 +238,7 @@ function restoreFocus(event: Event) {
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function settleWhenInactive() {
-  if (!present.value || (!document.hidden && !media.matches)) return;
+  if (!present.value || motionAllowed()) return;
   resetGesture();
   void go(
     props.modelValue ? opened : hiddenGoal(),
@@ -247,6 +247,7 @@ function settleWhenInactive() {
 }
 onMounted(() => {
   media.addEventListener("change", settleWhenInactive);
+  window.addEventListener("ui-motion-change", settleWhenInactive);
   document.addEventListener("visibilitychange", settleWhenInactive);
 });
 watch(
@@ -282,6 +283,7 @@ onBeforeUnmount(() => {
   stop();
   removeBack?.();
   media.removeEventListener("change", settleWhenInactive);
+  window.removeEventListener("ui-motion-change", settleWhenInactive);
   document.removeEventListener("visibilitychange", settleWhenInactive);
 });
 </script>
@@ -305,6 +307,7 @@ onBeforeUnmount(() => {
           :class="{ 'is-nonmodal': props.modal === false }"
           :data-motion="props.motion === 'bottom' ? 'bottom' : 'shared'"
           :data-phase="phase"
+          :inert="phase === 'closing' ? true : undefined"
           tabindex="-1"
         >
           <DialogOverlay v-if="props.modal !== false" as-child
@@ -313,7 +316,11 @@ onBeforeUnmount(() => {
           <section
             :ref="setPanel"
             class="elastic-sheet"
-            :class="{ 'is-bottom-sheet': props.motion === 'bottom' }"
+            :class="{
+              'is-bottom-sheet': props.motion === 'bottom',
+              'has-sticky-header': stickyHeader,
+              'has-contained-scroll': contained,
+            }"
             :style="{
               transformOrigin: 'top left',
               willChange: phase === 'open' ? 'auto' : 'transform',
@@ -340,11 +347,17 @@ onBeforeUnmount(() => {
               <div>
                 <DialogTitle as="h2">{{ title }}</DialogTitle>
               </div>
-              <button type="button" aria-label="关闭详情" @click="close">
-                <van-icon name="cross" />
-              </button>
+              <div class="sheet-heading-actions">
+                <slot name="header-actions" />
+                <button type="button" aria-label="关闭详情" @click="close">
+                  <van-icon name="cross" />
+                </button>
+              </div>
             </header>
-            <div class="sheet-content"><slot /></div>
+            <div class="sheet-content" data-sheet-scroll><slot /></div>
+            <footer v-if="$slots.footer" class="sheet-footer">
+              <slot name="footer" />
+            </footer>
           </section>
         </div>
       </DialogContent>
@@ -370,6 +383,65 @@ onBeforeUnmount(() => {
   max-height: min(55dvh, 460px);
   width: calc(100% - 24px);
   margin-bottom: calc(74px + env(safe-area-inset-bottom));
-  border-radius: 24px;
+  border-radius: var(--ui-panel-radius);
+}
+</style>
+
+<style scoped>
+.has-sticky-header .sheet-heading {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--canvas, #fff);
+  padding: 12px 0;
+  margin-top: 0;
+  margin-bottom: 16px;
+  box-shadow: 0 -14px 0 var(--canvas, #fff);
+}
+</style>
+
+<style scoped>
+.sheet-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.has-contained-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+  height: min(90dvh, 820px);
+}
+.has-contained-scroll .sheet-handle,
+.has-contained-scroll .sheet-heading {
+  flex-shrink: 0;
+}
+.has-contained-scroll .sheet-heading {
+  position: relative;
+  top: auto;
+  margin: 0;
+  padding: 8px 0 16px;
+  box-shadow: none;
+}
+.has-contained-scroll .sheet-content {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scroll-padding-block: 12px;
+  padding: 4px 3px 14px;
+  margin: 0 -3px;
+  isolation: isolate;
+}
+.sheet-footer {
+  position: relative;
+  z-index: 40;
+  flex-shrink: 0;
+  padding: 14px 0 calc(18px + env(safe-area-inset-bottom));
+  background: var(--canvas, #fff);
+  border-top: 1px solid #eee;
 }
 </style>

@@ -12,9 +12,10 @@ if stage.exists():
     raise SystemExit('Release staging directory already exists')
 stage.mkdir(parents=True)
 subprocess.run(['node', 'scripts/embed-frontend.mjs'], cwd=root / 'site', env={**__import__('os').environ, 'DORM_FRONTEND_DIST': '../frontend/dist-server', 'DORM_WORKER_OUTPUT': '../data/' + name + '/site/worker/index.js'}, check=True)
-files = ['scripts/local-server.mjs','scripts/native-push-provider.mjs','site/worker/backend.mjs','site/worker/chores.mjs','site/shared/member-marks.mjs','site/shared/push-endpoint.mjs','site/local/database.mjs','site/local/sqlite-d1.mjs','site/runtime/push-runtime.cjs','site/runtime/WEB_PUSH_LICENSE', 'site/scripts/check-native-push.mjs', 'site/scripts/check-cloud-backend.mjs']
+files = ['scripts/local-server.mjs','scripts/native-push-provider.mjs','site/worker/backend.mjs','site/worker/chores.mjs','site/shared/member-marks.mjs','site/shared/push-endpoint.mjs','site/local/database.mjs','site/local/sqlite-d1.mjs','site/runtime/push-runtime.cjs','site/runtime/WEB_PUSH_LICENSE', 'site/scripts/check-native-push.mjs', 'site/scripts/check-cloud-backend.mjs', 'site/scripts/check-history.mjs', 'site/scripts/check-recency.mjs']
 files += ['site/shared/notifications.mjs']
 files += ['site/shared/ical.mjs', 'site/worker/calendar.mjs']
+files += ['site/runtime/email-runtime.cjs', 'site/runtime/NODEMAILER_LICENSE']
 files += [str(p.relative_to(root)) for p in (root/'site/drizzle').glob('*.sql')]
 for filename in files:
     target = stage / filename

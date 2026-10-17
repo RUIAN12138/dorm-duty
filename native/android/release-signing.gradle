@@ -1,0 +1,48 @@
+// User-owned signing material stays outside this repository and command lines.
+def configurationPath = providers.environmentVariable('DORM_ANDROID_SIGNING_PROPERTIES').getOrNull()
+def signingReady = false
+if (configurationPath) {
+    def configurationFile = new File(configurationPath).canonicalFile
+    def repository = rootProject.projectDir.parentFile.parentFile.canonicalPath + File.separator
+    if (!configurationFile.isFile() || configurationFile.canonicalPath.startsWith(repository)) {
+        throw new GradleException('发布签名配置必须是仓库之外的本机文件')
+    }
+    def credentials = new Properties()
+    configurationFile.withInputStream { credentials.load(it) }
+    if (['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].any { !credentials.getProperty(it)?.trim() }) {
+        throw new GradleException('发布签名配置缺少必要字段；不要把密码传入命令行')
+    }
+    def keystore = new File(credentials.getProperty('storeFile'))
+    if (!keystore.isAbsolute()) keystore = new File(configurationFile.parentFile, credentials.getProperty('storeFile'))
+    keystore = keystore.canonicalFile
+    if (!keystore.isFile() || keystore.canonicalPath.startsWith(repository)) {
+        throw new GradleException('发布 keystore 必须是仓库之外的本机文件')
+    }
+    def releaseIdentity = android.signingConfigs.create('dormRelease') {
+        storeFile keystore
+        storePassword credentials.getProperty('storePassword')
+        keyAlias credentials.getProperty('keyAlias')
+        keyPassword credentials.getProperty('keyPassword')
+    }
+    android.buildTypes.release.signingConfig = releaseIdentity
+    signingReady = true
+}
+
+tasks.register('checkReleaseReadiness') {
+    doLast {
+        println(signingReady ? '固定发布签名：已接入；有效性仍需实际签名验证' : '固定发布签名：未配置，调试包不能用于长期升级')
+        println(providers.gradleProperty('JPUSH_APPKEY').getOrElse('') ? '公开推送应用标识：已注入' : '公开推送应用标识：未注入')
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def producesRelease = graph.allTasks.any { task ->
+        task.project == project && task.name ==~ /(?i)(assemble|bundle|package|install|sign).*release.*/
+    }
+    if (producesRelease && !signingReady) {
+        throw new GradleException('发布构建被阻止：请配置 DORM_ANDROID_SIGNING_PROPERTIES；不会分发未签名 APK')
+    }
+    if (producesRelease && !providers.gradleProperty('JPUSH_APPKEY').getOrElse('')) {
+        throw new GradleException('发布构建被阻止：需要通过 -PJPUSH_APPKEY 注入公开应用标识')
+    }
+}

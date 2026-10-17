@@ -4,10 +4,105 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+
+export const emailEntryPolicy = sqliteTable("email_entry_policy", {
+  id: integer("id").primaryKey(),
+  required: integer("required").notNull().default(0),
+  activatedAt: text("activated_at"),
+});
+export const emailAccounts = sqliteTable("email_accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull().unique(),
+  mailEnabled: integer("mail_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  mailEnabledAt: text("mail_enabled_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+export const emailChallenges = sqliteTable(
+  "email_challenges",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    clientHash: text("client_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    ready: integer("ready").notNull().default(0),
+    consumed: integer("consumed").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    index("email_challenges_email_time").on(table.email, table.createdAt),
+    index("email_challenges_client_time").on(table.clientHash, table.createdAt),
+  ],
+);
+export const emailSessions = sqliteTable(
+  "email_sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => emailAccounts.id),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [index("email_sessions_account").on(table.accountId)],
+);
+export const emailMembers = sqliteTable(
+  "email_members",
+  {
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => emailAccounts.id),
+    userId: integer("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id),
+    dormId: integer("dorm_id")
+      .notNull()
+      .references(() => dormitories.id),
+    creatorVerified: integer("creator_verified").notNull().default(0),
+    boundAt: text("bound_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.dormId] })],
+);
+export const emailGrants = sqliteTable("email_grants", {
+  tokenHash: text("token_hash").primaryKey(),
+  emailSessionHash: text("email_session_hash")
+    .notNull()
+    .references(() => emailSessions.tokenHash, { onDelete: "cascade" }),
+  fullSession: integer("full_session").notNull(),
+});
+export const emailJobs = sqliteTable(
+  "email_jobs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => emailAccounts.id),
+    reminderId: integer("reminder_id").references(() => choreReminders.id),
+    kind: text("kind").notNull().default("reminder"),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    leaseUntil: text("lease_until"),
+    acceptedAt: text("accepted_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("email_jobs_account_reminder").on(
+      table.accountId,
+      table.reminderId,
+    ),
+    index("email_jobs_due").on(table.status, table.nextAttemptAt),
+  ],
+);
 
 const created = () =>
   text("created_at")
@@ -229,6 +324,9 @@ export const choreCategories = sqliteTable(
     startDate: text("start_date").notNull(),
     weekdays: text("weekdays").notNull().default("[1,2,3,4,5,6,7]"),
     rotationDays: integer("rotation_days").notNull().default(1),
+    reminderIntervalDays: integer("reminder_interval_days")
+      .notNull()
+      .default(3),
     rotationOrder: text("rotation_order").notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     mode: text("mode").notNull().default("self_round"),
@@ -246,6 +344,10 @@ export const choreCategories = sqliteTable(
     check(
       "chore_rotation_days_check",
       sql`${table.rotationDays} BETWEEN 1 AND 30`,
+    ),
+    check(
+      "chore_reminder_interval_check",
+      sql`${table.reminderIntervalDays} BETWEEN 1 AND 365`,
     ),
   ],
 );

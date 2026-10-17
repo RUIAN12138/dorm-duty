@@ -30,7 +30,7 @@ try {
     await api(
       "/chores/claim",
       null,
-      { invite_code: room.invite_code, member_id: mid },
+      { invite_code: room.invite_code, member_id: mid, nickname: room.dorm.members.find(m => m.user_id === mid).nickname },
       201,
     )
   ).access_token;
@@ -160,6 +160,14 @@ try {
     );
     eq(value.audience, { registration_id: ["reg-123456"] });
     eq(value.platform, [platform === "harmony" ? "hmos" : "android"]);
+    eq(value.options.third_party_channel, Object.fromEntries(
+      (platform === "harmony" ? ["hmos"] : ["xiaomi", "huawei", "honor", "meizu", "oppo", "vivo", "fcm"])
+        .map(channel => [channel, {
+          distribution: "jpush",
+          ...(platform === "android" && channel !== "fcm" ? { distribution_fcm: "jpush" } : {}),
+        }]),
+    ));
+    eq(value.options.time_to_live, 86400);
     eq(
       value.notification[platform === "harmony" ? "hmos" : "android"].title,
       "值日提醒",

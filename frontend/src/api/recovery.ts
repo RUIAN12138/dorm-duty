@@ -30,6 +30,7 @@ export function recoverOwner(
 ) {
   return choreRequest<GuestCreation>("/guest/recover", "", {
     method: "POST",
+    headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify({
       invite_code: invite.trim(),
       recovery_code: code.trim(),

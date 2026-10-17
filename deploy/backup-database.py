@@ -40,6 +40,15 @@ if native_source.exists():
     with destination.with_suffix('.native-push.json').open('xb') as output:
         output.write(native_bytes)
     destination.with_suffix('.native-push.json').chmod(0o600)
+email_source = source.with_name('email.json')
+if email_source.exists():
+    email_bytes = email_source.read_bytes()
+    email_config = json.loads(email_bytes)
+    if not all(email_config.get(field) for field in ('host', 'user', 'password', 'from', 'publicOrigin', 'otpSecret')):
+        raise RuntimeError('Email configuration backup validation failed')
+    with destination.with_suffix('.email.json').open('xb') as output:
+        output.write(email_bytes)
+    destination.with_suffix('.email.json').chmod(0o600)
 os.link(staged, destination)
 staged.unlink()
 print('Verified database backup:', destination.name)

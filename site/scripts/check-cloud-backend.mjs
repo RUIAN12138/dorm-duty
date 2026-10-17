@@ -120,7 +120,7 @@ export async function runBackendChecks() {
     return response.json();
   }
   async function account(h, username, nickname = username) {
-    const user = await api(h, "/auth/register", {
+    await api(h, "/auth/register", {
       method: "POST",
       status: 201,
       data: { username, password, nickname },
@@ -131,6 +131,7 @@ export async function runBackendChecks() {
     });
     ok(login.access_token, "login token missing");
     secrets.push(login.access_token);
+    const user = await api(h, "/auth/me", {token: login.access_token});
     return { ...user, token: login.access_token };
   }
   const current = (h, a) => api(h, "/dorms/current", { token: a.token });
@@ -239,7 +240,7 @@ export async function runBackendChecks() {
     });
     await api(h, "/auth/register", {
       method: "POST",
-      status: 409,
+      status: 201,
       data: { username: "alice", password, nickname: "duplicate" },
     });
     await api(h, "/auth/register", {
@@ -737,14 +738,16 @@ export async function runBackendChecks() {
     );
     equal(Object.keys(viewed).sort(), ["id", "is_demo", "members", "name"]);
     equal(viewed.is_demo, false);
+    equal(viewed.members, [], "invite alone does not reveal names");
+    const authorized = await api(h, `/guest/dorm?invite_code=${dorm.invite_code}`, {token:a.token});
     equal(
-      viewed.members.map(({ user_id, nickname }) => ({ user_id, nickname })),
+      authorized.members.map(({ user_id, nickname }) => ({ user_id, nickname })),
       [
         { user_id: a.id, nickname: "张同学" },
         { user_id: b.id, nickname: "李同学" },
       ],
     );
-    for (const member of viewed.members) {
+    for (const member of authorized.members) {
       equal(Object.keys(member).sort(), ["marker_id", "nickname", "user_id"]);
       ok(
         MARK_IDS.includes(member.marker_id),
@@ -752,12 +755,13 @@ export async function runBackendChecks() {
       );
     }
     equal(
-      new Set(viewed.members.map((member) => member.marker_id)).size,
-      viewed.members.length,
+      new Set(authorized.members.map((member) => member.marker_id)).size,
+      authorized.members.length,
     );
     const personal = await api(
       h,
       `/guest/tasks?invite_code=${dorm.invite_code}&member_id=${a.id}`,
+      {token:a.token},
     );
     equal(personal.today, day);
     equal(personal.today_task.assignee_id, a.id);
@@ -773,11 +777,11 @@ export async function runBackendChecks() {
     await api(
       h,
       `/guest/tasks?invite_code=${other.invite_code}&member_id=${a.id}`,
-      { status: 404 },
+      { token:c.token, status: 404 },
     );
     await api(h, "/guest/dorm?invite_code=NOTREAL1", { status: 404 });
     await api(h, `/guest/tasks?invite_code=${dorm.invite_code}&member_id=0`, {
-      status: 422,
+      token:a.token, status: 422,
     });
     await api(h, "/dorms/current", { status: 401 });
     await api(h, "/dorms/current", {
@@ -792,10 +796,10 @@ export async function runBackendChecks() {
     await api(
       h,
       `/guest/tasks?invite_code=${dorm.invite_code}&member_id=${b.id}`,
-      { status: 404 },
+      { token:a.token, status: 404 },
     );
     equal(
-      (await api(h, `/guest/dorm?invite_code=${dorm.invite_code}`)).members
+      (await api(h, `/guest/dorm?invite_code=${dorm.invite_code}`, {token:a.token})).members
         .length,
       1,
     );
@@ -882,12 +886,14 @@ export async function runBackendChecks() {
     const guest = await api(
       h,
       `/guest/dorm?invite_code=${created.invite_code}`,
+      {token:created.access_token},
     );
     equal(guest.members.length, 3);
     const other = guest.members.find((member) => member.user_id !== owner.id);
     const tasks = await api(
       h,
       `/guest/tasks?invite_code=${created.invite_code}&member_id=${other.user_id}`,
+      {token:created.access_token},
     );
     ok(tasks.next_task && !tasks.next_task.can_complete);
     await api(h, "/dorms/current", {
@@ -925,7 +931,7 @@ export async function runBackendChecks() {
     });
     testNow += 31 * 86_400_000;
     const route = `/guest/tasks?invite_code=${created.invite_code}&member_id=${created.member_id}`;
-    const viewed = await api(h, route);
+    const viewed = await api(h, route, {token:created.access_token});
     equal(viewed.today, addDays(day, 31));
     ok(viewed.next_task && viewed.next_task.duty_date > viewed.today);
     equal(viewed.next_task.can_complete, false);
@@ -940,16 +946,18 @@ export async function runBackendChecks() {
     const count = h.db.sqlite
       .prepare("SELECT COUNT(*) AS count FROM duty_tasks WHERE dorm_id=?")
       .get(created.dorm.id).count;
-    await api(h, route);
+    await api(h, route, {token:created.access_token});
     equal(
       h.db.sqlite
         .prepare("SELECT COUNT(*) AS count FROM duty_tasks WHERE dorm_id=?")
         .get(created.dorm.id).count,
       count,
     );
+    const renewed = await api(h, "/auth/login", {method:"POST", data:{username:"empty_owner", password}});
     const untouched = await api(
       h,
       `/guest/tasks?invite_code=${empty.invite_code}&member_id=${emptyOwner.id}`,
+      {token:renewed.access_token},
     );
     equal(untouched.today_task, null);
     equal(untouched.next_task, null);

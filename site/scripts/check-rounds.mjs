@@ -16,7 +16,7 @@ async function room(h, names=['小林','小陈','小王']) {
   r.owner={user_id:r.member_id,token:r.access_token};
   r.people=[r.owner];
   for (const m of r.dorm.members.filter(m=>m.user_id!==r.member_id)) {
-    const claim=await api(h,'/chores/claim',{method:'POST',status:201,data:{invite_code:r.invite_code,member_id:m.user_id}});
+    const claim=await api(h,'/chores/claim',{method:'POST',status:201,data:{invite_code:r.invite_code,member_id:m.user_id,nickname:m.nickname}});
     r.people.push({...claim.member,token:claim.access_token});
   }
   return r;
@@ -91,10 +91,11 @@ test('joining current round adds a required member; departure preserves history 
   const r=await room(h,['小林','小陈']),[owner,other]=r.people;
   await complete(h,owner,task(await board(h,r),'floor'));
   const password='DisposableRoundTest!';
-  const joined=await api(h,'/auth/register',{method:'POST',status:201,data:{username:'round_join',nickname:'小王',password}});
+  await api(h,'/auth/register',{method:'POST',status:201,data:{username:'round_join',nickname:'小王',password}});
   const login=await api(h,'/auth/login',{method:'POST',data:{username:'round_join',password}});
   await api(h,'/dorms/join',{method:'POST',token:login.access_token,data:{invite_code:r.invite_code}});
   let b=await board(h,r);equal(round(b,'floor').total,3);equal(round(b,'floor').completed,1);equal(round(b,'floor').sequence,1);
+  const joined=await api(h,'/auth/me',{token:login.access_token});
   const newbie={user_id:joined.id,token:login.access_token};ok(task(await board(h,r,newbie),'floor').can_complete);
   await complete(h,other,task(await board(h,r,other),'floor'));
   b=await board(h,r);equal(round(b,'floor').sequence,1);equal(round(b,'floor').completed,2);
@@ -115,10 +116,10 @@ test('creator can switch modes while completed records and water sequence remain
   v=await board(h,r);equal(round(v,'floor').sequence,2);equal(round(v,'floor').completed,0);equal(v.calendar.length,1);
   await complete(h,r.owner,old,409);
   await configure(h,r,[{key:'water',rotation_order:r.people.map(p=>p.user_id).reverse()}]);
-  v=await board(h,r);equal(v.water_task.id,b.water_task.id);equal(v.water_task.assignee_id,r.owner.user_id);
+  v=await board(h,r);equal(v.water_task.id,b.water_task.id);equal(v.water_task.assignee_id,r.people[2].user_id);
   await complete(h,r.people[1],v.water_task,403);
   clock+=20*86400000;v=await board(h,r);equal(v.water_task.sequence,1);equal(v.water_task.deadline_at,'');
-  await complete(h,r.owner,v.water_task);v=await board(h,r);equal(v.water_task.assignee_id,r.people[2].user_id);equal(v.water_task.sequence,2);
+  await complete(h,r.people[2],v.water_task);v=await board(h,r);equal(v.water_task.assignee_id,r.people[1].user_id);equal(v.water_task.sequence,2);
 });
 test('round reminders stay private and old completed tasks cannot be reminded',async h=>{
   const r=await room(h),[a,b]=r.people,t=task(await board(h,r,b),'toilet');

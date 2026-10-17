@@ -1,3 +1,6 @@
+@import "./interaction/tokens.css";
+@import "./interaction/galaxy.css";
+
 :root {
   font-family:
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
@@ -13,8 +16,8 @@
   --van-cell-background: #ffffff;
   --van-field-label-width: 75px;
   --van-button-border-radius: 12px;
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: var(--ui-body-size);
+  line-height: var(--ui-body-leading);
 }
 * {
   box-sizing: border-box;
@@ -55,8 +58,8 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 31px;
-  line-height: 1.4;
+  font-size: var(--ui-title-size);
+  line-height: var(--ui-title-leading);
   letter-spacing: -1px;
 }
 h2 {
@@ -2588,4 +2591,31 @@ summary:focus-visible {
   margin-top: 16px;
   font-size: 12px;
   min-height: 42px;
+}
+
+/* Active task surfaces share one typography and feedback contract. */
+.guest-page .elastic-sheet,
+.hint-popover {
+  box-shadow: none !important;
+  border: var(--ui-card-border);
+  border-radius: var(--ui-panel-radius);
+}
+button:disabled:active {
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+html[data-interaction="keyboard"] *,
+html[data-interaction="keyboard"] *::before,
+html[data-interaction="keyboard"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }

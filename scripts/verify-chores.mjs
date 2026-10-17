@@ -181,7 +181,7 @@ async function identity(page) {
 async function openMenu(page) {
   diagnosticPage = page;
   await page.getByTestId("open-tools").click();
-  await page.locator(".elastic-sheet").waitFor();
+  await page.getByTestId("open-reminder").waitFor();
   assert.equal(
     await page
       .locator(".app-shell")
@@ -241,9 +241,7 @@ async function pane(page, key) {
     wanted.path,
   );
   await page.locator(wanted.selector).waitFor();
-  await page
-    .locator('.focus-pane[aria-hidden="true"]')
-    .waitFor({ state: "detached" });
+  await page.waitForFunction(()=>document.querySelectorAll('.focus-pane[aria-hidden="true"]').length===0);
   for (const [name, item] of Object.entries(panes)) {
     assert.equal(
       await page.locator(item.selector).count(),
@@ -272,7 +270,7 @@ async function pane(page, key) {
     );
   }
   assert.equal(
-    await page.locator(".chore-personal").count(),
+    await page.getByTestId("pane-duty").count(),
     key === "duty" ? 1 : 0,
     `duty content visibility on ${key}`,
   );
@@ -299,11 +297,40 @@ async function pane(page, key) {
   );
   await closeMenu(page);
 }
+const checkedReveal = new WeakSet();
 async function navigate(page, key) {
   expectedPane = key;
   navigationStep = `tap-navigation:${key}`;
+  const inspectReveal =
+    !checkedReveal.has(page) &&
+    (await page.evaluate(() => location.pathname)) !== panes[key].path;
+  if (inspectReveal)
+    await page.evaluate(() => {
+      window.__revealSeen = false;
+      const start = performance.now();
+      function sample() {
+        window.__revealSeen ||= document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.effect?.target?.classList?.contains("focus-pane") &&
+              a.effect
+                .getKeyframes()
+                .some((k) => k.opacity !== undefined && Number(k.opacity) < 1),
+          );
+        if (performance.now() - start < 600) requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
   await page.getByTestId(`nav-${key}`).tap();
   await pane(page, key);
+  if (inspectReveal) {
+    await page.waitForFunction(() => window.__revealSeen);
+    checkedReveal.add(page);
+    checks.push(
+      "tapping a page tab crossfades without translating or clipping its content",
+    );
+  }
 }
 async function swipeSection(page, deltaX) {
   navigationStep = `heading-swipe:${deltaX}`;
@@ -317,6 +344,50 @@ async function swipeSection(page, deltaX) {
   await page.mouse.move(x + deltaX, y, { steps: 8 });
   await page.mouse.up();
 }
+async function swipeBlank(page, dx, hold = 0) {
+  const point = await page.locator(".board-focus").evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    for (
+      let y = b.top + 35;
+      y < Math.min(b.bottom - 30, innerHeight - 130);
+      y += 28
+    ) {
+      const x = b.left + b.width * 0.55,
+        target = document.elementFromPoint(x, y);
+      if (
+        target &&
+        el.contains(target) &&
+        !target.closest(
+          "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll]",
+        )
+      )
+        return { x, y };
+    }
+    return null;
+  });
+  assert(point, "a blank area is available for page swiping");
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [point],
+    });
+    for (let i = 1; i <= 4; i++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: point.x + (dx * i) / 4, y: point.y }],
+      });
+      await page.waitForTimeout(12);
+    }
+    if (hold) await page.waitForTimeout(hold);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  } finally {
+    await cdp.detach();
+  }
+}
 async function dragBottomNav(page, from, to) {
   navigationStep = `drag-navigation:${from}:${to}`;
   const source = await page.getByTestId(`nav-${from}`).boundingBox();
@@ -325,6 +396,27 @@ async function dragBottomNav(page, from, to) {
   const y = source.y + source.height / 2;
   await page.mouse.move(source.x + source.width / 2, y);
   await page.mouse.down();
+  await page.evaluate(() => {
+    window.__scrubAnimated = false;
+    const start = performance.now();
+    function sample() {
+      if (
+        document.querySelector(".chore-bottom-nav.is-dragging") ||
+        document.querySelector('[data-testid="chore-bottom-nav"].is-dragging')
+      )
+        window.__scrubAnimated ||= document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.effect?.target?.classList?.contains("focus-pane") &&
+              a.effect
+                ?.getKeyframes()
+                .some((k) => k.opacity !== undefined && Number(k.opacity) < 1),
+          );
+      if (performance.now() - start < 700) requestAnimationFrame(sample);
+    }
+    requestAnimationFrame(sample);
+  });
   await page.mouse.move(destination.x + destination.width / 2, y, {
     steps: 8,
   });
@@ -336,6 +428,17 @@ async function dragBottomNav(page, from, to) {
     null,
     { timeout: 3000 },
   );
+  await page.waitForFunction(
+    (path) => location.pathname === path,
+    panes[to].path,
+  );
+  await page.locator(panes[to].selector).waitFor();
+  assert.equal(
+    await page.evaluate(() => window.__scrubAnimated),
+    true,
+    "held navigation animates the page, not only the tab indicator",
+  );
+  checks.push(`bottom navigation shows ${to} while the pointer is still held`);
   await page.mouse.up();
 }
 async function stableIdentity(page, before) {
@@ -382,7 +485,7 @@ async function navigationMotion(page) {
   });
   await page.mouse.move(target.x + target.width / 2, source.y - 80);
   await page.mouse.up();
-  await pane(page, "water");
+  await pane(page, "calendar");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await navigate(page, "calendar");
   assert.equal(
@@ -474,28 +577,30 @@ async function pageMatrix(page, role) {
   await page.waitForTimeout(300);
   await stableIdentity(page, before);
 }
-async function join(page, code, userId, mark) {
+async function join(page, code, userId, mark, nickname) {
   await page.goto(origin + "/");
   await page.getByTestId("guest-join-dorm").click();
   await page.getByTestId("guest-invite").fill(code);
   await page.getByTestId("guest-join-submit").click();
-  await page.getByTestId(`guest-member-${userId}`).waitFor();
+  await page.getByTestId("guest-member-name").waitFor();
+  assert.equal(await page.locator('[data-testid^="guest-member-"]:not(input)').count(), 0);
   await noNavigation(page);
-  await page.getByTestId(`guest-member-${userId}`).click();
-  await noNavigation(page);
-  await page.getByTestId(`marker-${mark}`).click();
-  const response = page.waitForResponse(
-    (r) =>
-      new URL(r.url()).pathname === "/chores/claim" &&
-      r.request().method() === "POST",
-  );
-  await page.getByTestId("marker-confirm").click();
+  await page.getByTestId("guest-member-name").fill("不在名单中的名字");
+  await page.getByTestId("guest-name-submit").click();
+  await page.getByRole("alert").filter({hasText:"名字不匹配"}).waitFor();
+  await page.getByTestId("guest-member-name").fill(nickname);
+  const response = page.waitForResponse(r => new URL(r.url()).pathname === "/chores/claim" && r.request().method() === "POST");
+  await page.getByTestId("guest-name-submit").click();
   const result = await (await response).json();
+  assert.equal(result.member.user_id, userId);
+  await page.getByTestId(`marker-${mark}`).click();
+  await page.getByTestId("marker-confirm").click();
   secrets.push(result.access_token);
   await pane(page, "duty");
   return result.access_token;
 }
 let checkedCompletionPress = false;
+let checkedWaterPress = false;
 async function complete(page, task) {
   const card = page.getByTestId(`chore-task-${task.key}-${task.id}`);
   if (!(await card.count()) && task.key !== "water") {
@@ -516,7 +621,7 @@ async function complete(page, task) {
       (error) => ({ error }),
     );
   const completeButton = page.getByTestId(`complete-${task.key}-${task.id}`);
-  if (!checkedCompletionPress) {
+  if (!checkedCompletionPress || (task.key === "water" && !checkedWaterPress)) {
     await page.waitForFunction((id) => {
       const b = document.querySelector(`[data-testid="complete-${id}"]`);
       return b && !b.disabled;
@@ -527,17 +632,37 @@ async function complete(page, task) {
       before.x + before.width / 2,
       before.y + before.height / 2,
     );
+    await page.evaluate(() => {
+      window.__completionFrames = [];
+      const start = performance.now();
+      const sample = () => {
+        const header = document.querySelector(".board-identity"),
+          title = document.querySelector(
+            ".task-title-stage, .water-title-stage",
+          );
+        window.__completionFrames.push({
+          header: header?.getBoundingClientRect().top,
+          title: title?.getBoundingClientRect().top,
+          scroll: scrollY,
+        });
+        if (performance.now() - start < 1200) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
     await page.mouse.down();
     await page.waitForTimeout(120);
     const pressed = await completeButton.boundingBox();
     assert(
-      pressed.height < before.height - 1 && pressed.width > before.width + 0.5,
-      "completion button compresses vertically and gently expands horizontally while held",
+      pressed.height < before.height - 0.2 &&
+        pressed.width < before.width - 0.5 &&
+        pressed.width > before.width * 0.94,
+      "completion button uses the shared 0.96 press without scaling the page",
     );
     await page.mouse.up();
     checkedCompletionPress = true;
+    if (task.key === "water") checkedWaterPress = true;
     checks.push(
-      "completion button has real press deformation and returns on release",
+      "completion button has restrained press feedback and returns on release",
     );
   } else await completeButton.click();
   const result = await response;
@@ -546,6 +671,27 @@ async function complete(page, task) {
   assert.equal(actual.status(), 200);
   const body = await actual.json();
   assert.equal(body.task.status, "completed");
+  if (await page.evaluate(() => !!window.__completionFrames)) {
+    await page.waitForTimeout(1250);
+    const span = await page.evaluate(() => {
+      const frames = window.__completionFrames;
+      delete window.__completionFrames;
+      return Object.fromEntries(
+        ["header", "title", "scroll"].map((key) => {
+          const values = frames.map((f) => f[key]).filter(Number.isFinite);
+          return [key, Math.max(...values) - Math.min(...values)];
+        }),
+      );
+    });
+    assert(
+      span.header < 1.5 && span.title < 1.5 && span.scroll < 1.5,
+      "completion must not move header, title, or scroll position: " +
+        JSON.stringify(span),
+    );
+    checks.push(
+      "completion keeps header, task title and scroll position stable throughout request and sync",
+    );
+  }
   return body;
 }
 const result = {
@@ -695,6 +841,7 @@ try {
     created.invite_code,
     otherId,
     "pixel-11",
+    created.dorm.members.find(m => m.user_id === otherId).nickname,
   );
   const board = (id, token) =>
     api(`/chores/board?invite_code=${created.invite_code}&member_id=${id}`, {
@@ -769,7 +916,8 @@ try {
   await openTool(b.page, "guest-change-dorm");
   await b.page.getByTestId("guest-invite").fill(secondRoom.invite_code);
   await b.page.getByTestId("guest-join-submit").click();
-  await b.page.getByTestId(`guest-member-${secondMember.user_id}`).click();
+  await b.page.getByTestId("guest-member-name").fill(secondMember.nickname);
+  await b.page.getByTestId("guest-name-submit").click();
   await b.page.getByTestId("marker-confirm").click();
   await pane(b.page, "duty");
   await b.page.reload();
@@ -788,44 +936,86 @@ try {
   checks.push(
     "ordinary member switches between two real dorms, reloads and returns with the original scoped identity without another invite",
   );
+  const memberOrderBefore = (await board(otherId, memberToken)).water_order;
+  await b.page.getByTestId("open-water-order").click();
+  await b.page.getByTestId("order-category-water").click();
+  await b.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
+  assert.equal(await b.page.getByTestId("water-order-save").count(), 1);
+  assert.equal(await b.page.getByTestId("order-recover-owner").count(), 0);
+  await b.page.getByTestId(`order-down-water-${ownerId}`).focus();
+  await b.page.keyboard.press("Enter");
+  await snapshot(b.page, "member-water-order-390");
+  await b.page.getByTestId("water-order-save").click();
+  await b.page
+    .getByRole("dialog", { name: "抬水轮序", exact: true })
+    .waitFor({ state: "hidden" });
+  const memberOrderAfter = await board(otherId, memberToken);
+  assert.notDeepEqual(memberOrderAfter.water_order, memberOrderBefore);
+  assert.equal(memberOrderAfter.water_task.assignee_id, memberOrderAfter.water_order[0]);
+  await api("/chores/order", {
+    method: "PATCH",
+    token: memberToken,
+    data: {
+      version: memberOrderAfter.version,
+      key: "water",
+      rotation_order: memberOrderBefore,
+    },
+  });
+  await a.page.reload();
+  await pane(a.page, "duty");
+  checks.push(
+    "ordinary scoped member reorders and saves without creator recovery; pending water assignee is recalculated immediately",
+  );
   await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId("order-category-water").click();
   await a.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   await snapshot(a.page, "independent-water-order-390");
-  await a.page.getByTestId(`order-down-water-${ownerId}`).click();
+  await a.page.getByTestId(`order-down-water-${ownerId}`).focus();
+  await a.page.keyboard.press("Enter");
   await a.page.getByTestId("water-order-save").click();
   await a.page
     .getByRole("dialog", { name: "抬水轮序", exact: true })
     .waitFor({ state: "hidden" });
   assert.equal(
     (await board(ownerId, ownerToken)).water_task.assignee_id,
-    ownerId,
+    otherId,
   );
   await a.page.getByTestId("open-water-order").click();
-  await a.page.getByTestId(`order-up-water-${ownerId}`).click();
+  await a.page.getByTestId("order-category-water").click();
+  await a.page.getByTestId(`order-up-water-${ownerId}`).focus();
+  await a.page.keyboard.press("Enter");
   await a.page.getByTestId("water-order-save").click();
   await a.page
     .getByRole("dialog", { name: "抬水轮序", exact: true })
     .waitFor({ state: "hidden" });
   checks.push(
-    "independent header order control persists a reorder while keeping the current water assignee",
+    "independent header order control persists a reorder and recalculates the pending water assignee",
   );
   await a.page.getByTestId("round-progress").click();
   await a.page.getByTestId("round-members").waitFor();
-  await a.page.getByRole("button", { name: "调整排列", exact: true }).click();
-  await a.page.getByRole("dialog", { name: "调整排列", exact: true }).waitFor();
-  await a.page.getByRole("button", { name: "知道了", exact: true }).click();
+  assert.equal(await a.page.getByTestId("edit-round-order").count(), 0);
+  assert.equal(
+    await a.page
+      .getByTestId("round-members")
+      .locator(".sort-list,.hint-trigger")
+      .count(),
+    0,
+  );
   await a.page
-    .getByRole("dialog", { name: "调整排列", exact: true })
-    .waitFor({ state: "hidden" });
-  assert.equal(await a.page.getByTestId("round-members").isVisible(), true);
+    .getByRole("dialog")
+    .getByRole("button", { name: "关闭详情", exact: true })
+    .click();
+  await a.page.getByTestId("round-members").waitFor({ state: "hidden" });
   const initialRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",
   );
-  await a.page.getByTestId(`order-down-floor-${ownerId}`).click();
-  await a.page.waitForTimeout(600);
-  await snapshot(a.page, "round-order-390");
+  await a.page.getByTestId("open-water-order").click();
+  await a.page.getByTestId("order-category-water").click();
+  await a.page.getByTestId("order-category-floor").click();
+  await a.page.getByTestId(`order-down-floor-${ownerId}`).focus();
+  await a.page.keyboard.press("Enter");
   await a.page.getByTestId("round-order-save").click();
-  await a.page.getByTestId("round-members").waitFor({ state: "hidden" });
+  await a.page.getByRole("dialog").waitFor({ state: "hidden" });
   const reorderedRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",
   );
@@ -841,8 +1031,9 @@ try {
     reorderedRound.members,
   );
   checks.push(
-    "creator reorders roommates in the round panel; member sees the same order and completed counts/round number stay unchanged",
+    "round progress contains only completion information; task order is edited from the separate header control",
   );
+
   await snapshot(a.page, "duty-polished-390");
   // During rapid task changes there must always be a readable outgoing/incoming title.
   for (let i = 0; i < 12; i++) {
@@ -853,11 +1044,9 @@ try {
       .click();
     assert(
       await a.page
-        .locator(".task-title-stage")
+        .locator(".task-title-stage h2").last()
         .evaluate((el) =>
-          [...el.querySelectorAll("h2")].some(
-            (h) => Number(getComputedStyle(h).opacity) > 0.1,
-          ),
+          Number(getComputedStyle(el).opacity)>0.1,
         ),
     );
   }
@@ -868,12 +1057,35 @@ try {
   checks.push(
     "rapid task-title switches keep at least one readable title instead of a serial exit/enter blank interval",
   );
+  for (const name of ["地板", "厕所", "洗手池"]) {
+    await a.page.locator(".task-selector").getByRole("button", {name, exact:true}).click();
+    await a.page.getByRole("button", {name:`查看${name}详情`, exact:true}).click();
+    const dialog = a.page.getByRole("dialog", {name,exact:true});
+    await dialog.waitFor();
+    await dialog.getByRole("button", {name:"关闭详情",exact:true}).click();
+    await dialog.waitFor({state:"hidden"});
+  }
+  checks.push("all three duty titles remain clickable and their detail dialogs dismiss independently");
+  await a.page.locator(".task-selector").getByRole("button", {name:"地板",exact:true}).click();
   phase = "three_page_navigation";
   await pageMatrix(a.page, "creator");
   await pageMatrix(b.page, "member");
   checks.push(
     "creator and member each have isolated duty, water and calendar pages without horizontal overflow at 320, 390 and 430 pixels",
     "bottom navigation, page-heading swipes, boundary hints, browser back/forward and reloads preserve both browser identities and device credentials",
+  );
+  await navigate(a.page, "duty");
+  const identityBeforeSwipe = await identity(a.page);
+  await swipeBlank(a.page, -32);
+  await pane(a.page, "water");
+  await swipeBlank(a.page, 24, 180);
+  await a.page.waitForTimeout(300);
+  assert.equal(new URL(a.page.url()).pathname, "/water");
+  await swipeBlank(a.page, 90);
+  await pane(a.page, "duty");
+  await stableIdentity(a.page, identityBeforeSwipe);
+  checks.push(
+    "content-area touch flick uses momentum to snap one page; a slow short pull returns; identity persists",
   );
   phase = "reminder";
   const floor = ownerBoard.today_tasks.find((t) => t.key === "floor");
@@ -917,53 +1129,25 @@ try {
   );
   phase = "complete_categories_calendar";
   await complete(a.page, floor);
-  await a.page.waitForFunction((id) => {
-    const button = document.querySelector(`[data-testid="undo-${id}"]`);
-    return button && !button.disabled;
-  }, floor.id);
-  assert.equal(
-    await a.page.getByTestId(`undo-${floor.id}`).innerText(),
-    "已完成",
-  );
-  assert.equal(
-    await a.page.getByRole("button", { name: "撤销", exact: true }).count(),
-    0,
-  );
-  assert.equal(
-    await a.page
-      .getByText("值日已完成，标记已留在日历上。", { exact: true })
-      .count(),
-    0,
-  );
-  await snapshot(a.page, "undo-receipt-390");
   await a.page.getByTestId(`undo-${floor.id}`).click();
   await a.page.getByTestId(`complete-floor-${floor.id}`).waitFor();
-  assert.equal(
-    (await board(ownerId, ownerToken)).today_tasks.find(
-      (t) => t.id === floor.id,
-    ).status,
-    "pending",
-  );
-  await complete(a.page, floor);
-  checks.push(
-    "tapping the completed button itself restores a mistaken check-in without a separate undo control or success toast",
-  );
+  assert.equal((await board(ownerId,ownerToken)).today_tasks.find(t=>t.id===floor.id).status,'pending');
+  await complete(a.page,floor);
+  await a.page.waitForTimeout(850);
+  assert.equal(await a.page.getByTestId(`undo-${floor.id}`).locator('.done-label').innerText(),'已完成');
+  assert(await a.page.getByTestId(`undo-${floor.id}`).locator('.done-label').evaluate(el=>Number(getComputedStyle(el).opacity)>.99));
+  assert(await a.page.getByTestId(`undo-${floor.id}`).locator('.pending-label').evaluate(el=>Number(getComputedStyle(el).opacity)<.01));
+  await snapshot(a.page,'undo-receipt-390');
+  checks.push('completed duty keeps the familiar button; tapping it again restores the actual pending task');
   ownerBoard = await board(ownerId, ownerToken);
   await navigate(a.page, "water");
   await complete(a.page, ownerBoard.water_task);
   const originalWater = ownerBoard.water_task;
-  await a.page.waitForFunction((id) => {
-    const button = document.querySelector(`[data-testid="undo-${id}"]`);
-    return button && !button.disabled;
-  }, originalWater.id);
-  assert.equal(
-    await a.page.getByTestId(`undo-${originalWater.id}`).innerText(),
-    "已抬水",
-  );
-  await snapshot(a.page, "water-nudge-focus-390");
   await a.page.getByTestId(`undo-${originalWater.id}`).click();
   await a.page.getByTestId(`complete-water-${originalWater.id}`).waitFor();
-  await complete(a.page, originalWater);
+  await complete(a.page,originalWater);
+  await a.page.waitForTimeout(850);
+  await snapshot(a.page,'water-nudge-focus-390');
   await a.page.getByRole("button", { name: "查看任务", exact: true }).click();
   await a.page.locator(".sheet-layer.is-nonmodal").waitFor();
   assert.equal(await a.page.locator(".sheet-scrim").count(), 0);
@@ -993,7 +1177,8 @@ try {
   await day.click();
   const details = a.page.getByTestId("calendar-day-details");
   assert.equal(await details.locator(".calendar-record").count(), 5);
-  assert.equal(await day.locator(".member-mark").count(), 2);
+  assert.equal(await day.locator(".member-mark").count(), 0);
+  assert.equal(await day.getAttribute("data-heat"), "4");
   assert.match(await details.textContent(), /创建者/);
   assert.match(await details.textContent(), /室友甲/);
   await a.page.getByTestId(`calendar-undo-${floor.id}`).click();
@@ -1021,7 +1206,7 @@ try {
       5,
   );
   checks.push(
-    "clicking the own completed calendar row restores that task without a separate undo button; completing again restores the calendar",
+    "explicit Undo in an eligible own calendar record restores the task; completing again restores the calendar",
   );
   ownerBoard = await board(ownerId, ownerToken);
   await snapshot(a.page, "calendar-completed-390");
@@ -1068,7 +1253,8 @@ try {
   await a.page
     .getByTestId("settings-content-water")
     .fill("抬水：从一楼运一桶饮用水");
-  await a.page.getByTestId(`order-up-water-${otherId}`).click();
+  await a.page.getByTestId(`order-up-water-${otherId}`).focus();
+  await a.page.keyboard.press("Enter");
   const draftOrder = await a.page
     .locator(".sort-list .sort-person")
     .allTextContents();
@@ -1156,6 +1342,7 @@ try {
   assert.equal(
     (await board(otherId, memberToken)).member.marker_id,
     "pixel-11",
+    created.dorm.members.find(m => m.user_id === otherId).nickname,
   );
   await snapshot(a.page, "restored-after-restart-390");
   for (const key of Object.keys(panes)) {
@@ -1181,28 +1368,26 @@ try {
       await a.page.locator(".sheet-layer").waitFor({ state: "detached" });
       await a.page.getByTestId("calendar-view-list").click();
       await a.page.getByTestId("calendar-list").waitFor();
-      assert.equal(
-        await a.page.locator('[data-testid^="calendar-list-record-"]').count(),
-        restored.calendar.length,
-      );
-      await a.page.evaluate(() => {
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: "instant",
-        });
-      });
-      const navigation = await a.page
-        .getByTestId("chore-bottom-nav")
-        .boundingBox();
-      for (const record of await a.page
-        .locator(".calendar-list .record-row")
-        .all()) {
-        const bounds = await record.boundingBox();
-        assert(
-          bounds && bounds.y >= 0 && bounds.y + bounds.height <= navigation.y,
-          "all calendar list records must be reachable above the fixed bottom navigation",
-        );
+      const seenRecords=new Set();
+      while(true){
+        for(const heading of await a.page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+        await a.page.waitForTimeout(420);
+        for(const record of await a.page.locator('[data-testid^="calendar-list-record-"]').all())seenRecords.add(await record.getAttribute('data-testid'));
+        const next=a.page.getByRole('button',{name:'下一页记录',exact:true});
+        if(!await next.count()||!await next.isEnabled())break;
+        await next.click();
       }
+      assert.equal(seenRecords.size,restored.calendar.length,'all completed records remain available through folded date groups');
+      for (const [width, height] of [[320, 568], [390, 667], [390, 844], [430, 932]]) {
+        await a.page.setViewportSize({width, height});
+        for (const mode of ['grid', 'list', 'stats']) {
+          await a.page.getByTestId(`calendar-view-${mode}`).click();
+          await a.page.waitForTimeout(240);
+          assert(await a.page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `${mode} full application has no redundant vertical scrolling at ${width}x${height}`);
+        }
+      }
+      await a.page.setViewportSize({width:390,height:844});
+      await a.page.getByTestId('calendar-view-list').click();
       await a.page.screenshot({
         path: path.join(evidence, "final-calendar-records-390.jpg"),
         type: "jpeg",
@@ -1213,7 +1398,8 @@ try {
   }
   checks.push(
     "restart of the temporary persistent server restores custom rules, water turn, member marks and completed records in both browser contexts",
-    "calendar list shows person, task and time; its rows remain reachable above the fixed bottom navigation",
+    "calendar list restores folded date groups; all records remain accessible",
+    "all three full-application calendar modes fit four portrait viewports without redundant vertical scrolling",
   );
   assert.deepEqual(issues, [], "browser JavaScript errors");
   Object.assign(result, {

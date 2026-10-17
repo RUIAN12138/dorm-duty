@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { registerSW } from "virtual:pwa-register";
 import { useSession } from "./stores/session";
 import { networkState } from "./api/network";
+import { logoutEvent } from "./api/logout";
 import { installNativeBack } from "./interactions/nativeBack";
 let removeNativeBack: (() => void) | undefined;
 const route = useRoute(),
@@ -32,9 +33,21 @@ function network() {
 }
 function keyboardMode() {
   document.documentElement.dataset.interaction = "keyboard";
+  window.dispatchEvent(new Event("ui-motion-change"));
+  for (const animation of document.getAnimations()) {
+    try {
+      animation.finish();
+    } catch {
+      animation.cancel();
+    }
+  }
 }
 function pointerMode() {
   document.documentElement.dataset.interaction = "pointer";
+}
+function signedOut() {
+  session.clear();
+  if (!route.meta.public) void router.replace("/");
 }
 function expired() {
   session.clear();
@@ -46,6 +59,7 @@ onMounted(() => {
   window.addEventListener("online", network);
   window.addEventListener("offline", network);
   window.addEventListener("auth-expired", expired);
+  window.addEventListener(logoutEvent, signedOut);
   window.addEventListener("keydown", keyboardMode);
   window.addEventListener("pointerdown", pointerMode);
 });
@@ -54,6 +68,7 @@ onUnmounted(() => {
   window.removeEventListener("online", network);
   window.removeEventListener("offline", network);
   window.removeEventListener("auth-expired", expired);
+  window.removeEventListener(logoutEvent, signedOut);
   window.removeEventListener("keydown", keyboardMode);
   window.removeEventListener("pointerdown", pointerMode);
 });

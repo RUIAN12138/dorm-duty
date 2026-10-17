@@ -246,6 +246,7 @@ export async function verifyCloudflare(rawOrigin, options = {}) {
         data: {
           invite_code: created.invite_code,
           member_id: id,
+          nickname: created.dorm.members.find(m => m.user_id === id).nickname,
           marker_id: marker,
         },
       });

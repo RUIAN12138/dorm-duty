@@ -28,14 +28,17 @@ export interface GuestCreation {
   dorm: GuestDorm;
 }
 
-// The viewing identity is separate from the authenticated management session.
-// A guest request never carries a stored account token or changes that session.
+// Public lookup exposes only a room summary. Restore may carry the explicitly
+// selected room's member/owner token; it never changes the management session.
 export async function guestApi<T>(
   path: "/guest/dorm" | "/guest/tasks",
   params: { invite_code?: string; member_id?: number },
   signal: AbortSignal,
+  token = "",
 ): Promise<T> {
-  return guestRequest<T>(path, params, signal);
+  return guestRequest<T>(path, params, signal, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
 }
 export function createGuestDorm(
   values: {
@@ -48,7 +51,7 @@ export function createGuestDorm(
 ) {
   return guestRequest<GuestCreation>("/guest/create", {}, signal, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
   });
 }
