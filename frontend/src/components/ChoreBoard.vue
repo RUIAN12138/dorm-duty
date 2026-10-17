@@ -1621,6 +1621,9 @@ onUnmounted(() => {
       </ElasticSheet>
       <ElasticSheet
         v-model="roundOpen"
+        contained
+        fixed-content
+        motion="bottom"
         :title="`${activeDutyTask?.name || '值日'} · 第 ${displayRound?.sequence || 1} 轮`"
         @closed="presentNewReminders"
       >

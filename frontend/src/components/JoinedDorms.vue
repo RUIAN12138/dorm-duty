@@ -14,7 +14,7 @@ defineEmits<{ select: [room: JoinedDorm] }>();
       :disabled="disabled"
       @click="$emit('select', room)"
     >
-      <MemberMark :id="room.marker" :size="30" />
+      <MemberMark inline :id="room.marker" :size="30" />
       <span
         ><strong>{{ room.name }}</strong
         ><span

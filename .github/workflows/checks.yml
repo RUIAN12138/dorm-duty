@@ -82,6 +82,7 @@ jobs:
           node scripts/check-round-calendar-motion.mjs
           node scripts/check-order-boundaries.mjs
           node scripts/check-entry-handoff.mjs
+          node scripts/check-entry-layout.mjs
       - name: Keep interaction failure screenshot
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -209,7 +209,7 @@ onBeforeUnmount(() => {
         :style="{ '--rank-delay': `${Math.min(index, 8) * 55}ms` }"
       >
         <span class="rank-number">{{ String(index + 1).padStart(2, "0") }}</span
-        ><MemberMark :id="person.marker_id" :size="28" /><strong>{{
+        ><MemberMark inline :id="person.marker_id" :size="28" /><strong>{{
           person.nickname
         }}</strong
         ><van-icon name="success" aria-hidden="true" />
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
   inset: 0;
   transform-origin: center;
 }
-svg {
+.round-ring-visual > svg {
   width: 100%;
   height: 100%;
   transform: rotate(-90deg);
@@ -434,5 +434,30 @@ circle {
     animation: none !important;
     transition: none !important;
   }
+}
+</style>
+
+<style scoped>
+.has-fixed-content .round-achievement {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.has-fixed-content .round-progress-display {
+  flex-shrink: 0;
+  width: min(224px, 27dvh);
+}
+.has-fixed-content .round-summary {
+  flex-shrink: 0;
+  margin: 8px 0 16px;
+}
+.has-fixed-content .round-ranking {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  touch-action: pan-y;
 }
 </style>

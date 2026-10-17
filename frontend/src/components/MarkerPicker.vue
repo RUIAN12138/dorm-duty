@@ -33,7 +33,7 @@ const selected = computed(() =>
         :data-testid="`marker-${mark.id}`"
         @click="emit('update:modelValue', mark.id)"
       >
-        <MemberMark :id="mark.id" :size="28" />
+        <MemberMark inline :id="mark.id" :size="28" />
       </button>
     </div>
     <div class="marker-caption">

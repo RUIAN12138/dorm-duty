@@ -18,6 +18,7 @@ const props = withDefaults(
     modal?: boolean;
     stickyHeader?: boolean;
     contained?: boolean;
+    fixedContent?: boolean;
     title: string;
     origin?: DOMRect | null;
     motion?: "shared" | "bottom";
@@ -321,6 +322,7 @@ onBeforeUnmount(() => {
               'is-bottom-sheet': props.motion === 'bottom',
               'has-sticky-header': stickyHeader,
               'has-contained-scroll': contained,
+              'has-fixed-content': fixedContent,
             }"
             :style="{
               transformOrigin: 'top left',
@@ -444,5 +446,17 @@ onBeforeUnmount(() => {
   padding: 14px 0 calc(18px + env(safe-area-inset-bottom));
   background: var(--canvas, #fff);
   border-top: 1px solid #eee;
+}
+</style>
+
+<style scoped>
+.has-fixed-content .sheet-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.has-fixed-content .sheet-content > :deep(*) {
+  min-height: 0;
+  flex: 1;
 }
 </style>

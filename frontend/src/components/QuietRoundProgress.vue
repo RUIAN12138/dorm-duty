@@ -20,7 +20,7 @@ defineProps<{ round: ChoreBoardData["rounds"][number]; compact?: boolean }>();
     />
     <ul>
       <li v-for="person in round.members" :key="person.user_id">
-        <MemberMark :id="person.marker_id" :size="28" /><span>{{
+        <MemberMark inline :id="person.marker_id" :size="28" /><span>{{
           person.nickname
         }}</span
         ><span class="member-state">{{
