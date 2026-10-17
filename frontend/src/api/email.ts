@@ -17,6 +17,7 @@ export interface EmailEntry extends EmailRoom {
 }
 export const emailAccount = reactive({
   available: false,
+  version: "",
   // Until config is known, never expose the legacy entry as a fallback.
   required: true,
   loaded: false,
@@ -54,7 +55,7 @@ function clearUnboundIdentity(room: EmailRoom) {
   const token = savedChoreToken(room.invite_code, room.member_id);
   saveChoreToken(room.invite_code, room.member_id, "");
   for (const [storage, key] of [
-    [localStorage, "dorm-owner-token"],
+    [localStorage, "dorm-email-admin-grant"],
     [sessionStorage, "dorm-token"],
   ] as const)
     if (token && storage.getItem(key) === token) storage.removeItem(key);
@@ -109,9 +110,11 @@ export async function refreshEmailAccount() {
   }
   const epoch = accountEpoch;
   const [config, account] = await Promise.all([
-    choreRequest<{ available: boolean; registration_required: boolean }>(
-      "/email/config",
-    ),
+    choreRequest<{
+      available: boolean;
+      registration_required: boolean;
+      version?: string;
+    }>("/email/config"),
     choreRequest<{
       logged_in: boolean;
       email?: string;
@@ -121,6 +124,7 @@ export async function refreshEmailAccount() {
   ]);
   if (epoch !== accountEpoch || pendingLogout()) return;
   emailAccount.available = config.available;
+  emailAccount.version = config.version || "";
   emailAccount.required = config.registration_required;
   emailAccount.loggedIn = account.logged_in;
   emailAccount.email = account.email || "";

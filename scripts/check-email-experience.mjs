@@ -224,6 +224,7 @@ try {
     "email submit keeps press feedback",
   );
   await page.mouse.up();
+  let checkedWrongCodeMotion = false;
   async function login(p, address = "ui-qa@example.invalid", gate = false) {
     await p.getByLabel("邮箱", { exact: true }).fill(address);
     await p.evaluate(() => {
@@ -256,6 +257,53 @@ try {
       "email input options and confirmation have a thumb-friendly gap",
     );
     const code = deliveries.at(-1).text.match(/验证码是：(\d{6})/)[1];
+    if (!checkedWrongCodeMotion) {
+      checkedWrongCodeMotion = true;
+      await p
+        .getByLabel("验证码", { exact: true })
+        .fill(String((Number(code) + 1) % 1000000).padStart(6, "0"));
+      await p.waitForTimeout(220);
+      await p.evaluate(() => {
+        window.__wrongCodeFrames = [];
+        const until = performance.now() + 1400;
+        function sample() {
+          const input = document.querySelector("#account-code"),
+            error = document.querySelector("#email-error"),
+            main = document.querySelector("main");
+          if (input && main)
+            window.__wrongCodeFrames.push({
+              x: new DOMMatrix(getComputedStyle(input).transform).m41,
+              top: main.getBoundingClientRect().top,
+              errorOpacity: error
+                ? Number(getComputedStyle(error).opacity)
+                : null,
+            });
+          if (performance.now() < until) requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      });
+      await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
+      await p.locator("#email-error").waitFor();
+      await p.waitForTimeout(350);
+      const frames = await p.evaluate(() => window.__wrongCodeFrames);
+      check(
+        frames.some((f) => Math.abs(f.x) > 0.01),
+        true,
+        "wrong OTP shakes only the input",
+      );
+      check(
+        Math.max(...frames.map((f) => f.top)) -
+          Math.min(...frames.map((f) => f.top)) <
+          1,
+        true,
+        "wrong OTP never shakes the page",
+      );
+      check(
+        frames.some((f) => f.errorOpacity > 0 && f.errorOpacity < 1),
+        true,
+        "wrong OTP message visibly enters",
+      );
+    }
     await p.getByLabel("验证码", { exact: true }).fill(code);
     await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
     if (!gate)
@@ -688,17 +736,21 @@ try {
       `${width}px unlink setting has no overflow`,
     );
   }
+  await newcomer.evaluate(() => {
+    window.__unbindFrames = [];
+    const until = performance.now() + 1200;
+    function sample() {
+      const el = document.querySelector(".email-unbind-confirm");
+      if (el) window.__unbindFrames.push(Number(getComputedStyle(el).opacity));
+      if (performance.now() < until) requestAnimationFrame(sample);
+    }
+    requestAnimationFrame(sample);
+  });
   await newcomer.getByTestId("email-unbind").click();
   const unbindConfirm = newcomer.locator(".email-unbind-confirm");
   await unbindConfirm.waitFor();
-  const unbindFrames = await unbindConfirm.evaluate(async (el) => {
-    const samples = [];
-    for (let i = 0; i < 18; i++) {
-      await new Promise(requestAnimationFrame);
-      samples.push(Number(getComputedStyle(el).opacity));
-    }
-    return samples;
-  });
+  await newcomer.waitForTimeout(320);
+  const unbindFrames = await newcomer.evaluate(() => window.__unbindFrames);
   check(
     unbindFrames.some((value) => value > 0 && value < 1),
     true,
@@ -729,10 +781,22 @@ try {
     .click();
   await newcomer.getByTestId("guest-member-name").waitFor();
   await memberSibling.getByTestId("guest-member-name").waitFor();
+  // The closing sheet deliberately retains its content until exit finishes.
+  await newcomer.locator(".sheet-layer").waitFor({ state: "hidden" });
   check(
-    await newcomer.getByLabel("邮箱", { exact: true }).count(),
+    await newcomer
+      .getByLabel("邮箱", { exact: true })
+      .filter({ visible: true })
+      .count(),
     0,
     "unlink keeps email logged in and returns to same room name entry",
+  );
+  check(
+    await newcomer
+      .getByTestId("guest-member-name")
+      .evaluate((el) => el.getBoundingClientRect().top >= 80),
+    true,
+    "name field remains below mobile safe area",
   );
   await newcomer.getByTestId("guest-member-name").fill("界面测试甲");
   await newcomer.getByTestId("guest-name-submit").click();

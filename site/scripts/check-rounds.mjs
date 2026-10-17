@@ -13,6 +13,9 @@ async function api(h, route, {status=200,...options}={}) {
 }
 async function room(h, names=['小林','小陈','小王']) {
   const r = await api(h,'/guest/create',{method:'POST',status:201,data:{name:'独立轮次验收',nickname:names[0],members:names.slice(1)}});
+  // Keep this isolated business fixture authenticated across its simulated 20 days.
+  // Real account expiry and renewal are exercised by the auth/email suites.
+  h.db.sqlite.prepare("UPDATE sessions SET expires_at=? WHERE user_id=?").run(new Date(clock+30*86400000).toISOString(),r.member_id);
   r.owner={user_id:r.member_id,token:r.access_token};
   r.people=[r.owner];
   for (const m of r.dorm.members.filter(m=>m.user_id!==r.member_id)) {

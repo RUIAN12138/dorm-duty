@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ref, watch, nextTick, onMounted, onBeforeUnmount, provide } from "vue";
 import { animate } from "motion-v";
 import {
   DialogRoot,
@@ -30,6 +30,7 @@ const emit = defineEmits<{
 }>();
 const present = ref(false);
 const phase = ref<"opening" | "open" | "closing" | "dragging">("opening");
+provide("sheet-motion-phase", phase);
 const panel = ref<HTMLElement>();
 const layer = ref<HTMLElement>();
 const scrim = ref<HTMLElement>();
@@ -139,7 +140,7 @@ async function go(goal: Goal, kind: "enter" | "exit" | "settle") {
     // Full transform strings let Motion use native element animation. Dragging
     // writes the same pose directly; no six per-frame Vue/MotionValue updates.
     const transition =
-      kind === "settle" ? motionTokens.settle : motionTokens[kind];
+      kind === "settle" ? motionTokens.settle : motionTokens.drawer;
     const running = [
       animate(
         panel.value,

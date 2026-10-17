@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   emailAccount,
   emailPost,
@@ -9,6 +9,12 @@ import {
   type EmailRoom,
   unbindEmailIdentity,
 } from "../api/email";
+import { choreRequest } from "../api/chores";
+import {
+  motionAllowed,
+  motionTiming,
+  motionEaseCss,
+} from "../interaction/motion";
 import { ApiError } from "../api";
 import HintPopover from "./HintPopover.vue";
 import { logoutAll } from "../api/logout";
@@ -29,8 +35,54 @@ const emit = defineEmits<{
   entered: [entry: EmailEntry];
   logout: [];
   recover: [];
+  reenter: [];
 }>();
 const codeField = ref<HTMLInputElement>();
+const operations = ref<{
+  failed: number;
+  pending: number;
+  counters: { name: string; count: number; updated_at: string }[];
+} | null>(null);
+const mailFailure = computed(() =>
+  operations.value?.counters.find((item) => item.name === "mail_failed"),
+);
+let fieldAnimation: Animation | undefined;
+function animateCode(error = false) {
+  fieldAnimation?.cancel();
+  if (!motionAllowed() || !codeField.value) return;
+  const transforms = error
+    ? [
+        "translateX(0)",
+        "translateX(-4px)",
+        "translateX(4px)",
+        "translateX(-2px)",
+        "translateX(0)",
+      ]
+    : ["scale(1)", "scale(0.985)", "scale(1)"];
+  fieldAnimation = codeField.value.animate(
+    transforms.map((transform) => ({ transform })),
+    {
+      duration: motionTiming.page * 1000,
+      easing: motionEaseCss,
+    },
+  );
+}
+onUnmounted(() => fieldAnimation?.cancel());
+watch(
+  () => emailAccount.rooms.some((room) => room.is_creator),
+  async (creator) => {
+    if (!creator) {
+      operations.value = null;
+      return;
+    }
+    try {
+      operations.value = await choreRequest("/email/operations");
+    } catch {
+      /* Optional diagnostics never block identity entry. */
+    }
+  },
+  { immediate: true },
+);
 const pendingUnbind = ref<EmailRoom | null>(null);
 const confirmUnbindRoom = ref<EmailRoom | null>(null);
 const keepBindingButton = ref<HTMLButtonElement>();
@@ -90,6 +142,7 @@ async function act(fn: () => Promise<void>) {
     await fn();
   } catch (e) {
     error.value = (e as Error).message;
+    if (challenge.value) animateCode(true);
   } finally {
     busy.value = false;
   }
@@ -157,7 +210,18 @@ async function verify() {
       showToast("已解除绑定，请输入你自己的名字");
       return;
     }
-    if (props.memberToken || props.gate) await bindIdentity();
+    if (props.memberToken || props.gate) {
+      try {
+        await bindIdentity();
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          showToast("邮箱验证成功，旧设备身份已停用，请重新输入邀请码与姓名");
+          emit("reenter");
+          return;
+        }
+        throw e;
+      }
+    }
     await enterBoundRoom();
     showToast(props.memberToken ? "邮箱已绑定当前身份" : "邮箱验证成功");
   });
@@ -243,8 +307,8 @@ onMounted(() => {
         <p>
           {{
             confirmUnbindRoom.is_creator
-              ? "邮箱账号和宿舍记录会保留，所有设备将退出此身份。重新绑定创建者需要管理恢复凭证。"
-              : "邮箱账号和打卡记录会保留，所有设备将退出此身份。随后可绑定尚未绑定邮箱的成员。"
+              ? "邮箱账号和宿舍记录会保留，所有设备退出本宿舍的此身份，其他宿舍不受影响。重新进入时验证邮箱并输入邀请码与姓名。"
+              : "邮箱账号和打卡记录会保留，所有设备退出本宿舍的此身份，其他宿舍不受影响。随后可绑定尚未绑定邮箱的成员。"
           }}
         </p>
         <button class="guest-primary" :disabled="busy" @click="confirmUnbind">
@@ -263,7 +327,7 @@ onMounted(() => {
           <h2>{{ memberToken ? "绑定你的邮箱" : "用邮箱进入轮到" }}</h2>
           <HintPopover
             title="邮箱验证说明"
-            text="首次验证会创建账号。绑定现有宿舍身份后，换设备可用邮箱登录找回。验证码十分钟有效。"
+            text="首次验证会创建账号。绑定后换设备可用邮箱找回。验证码十分钟有效；重发不会废止其他验证页面的旧码，请在获取该码的页面输入。"
           />
         </div>
         <p class="email-message">首次验证即创建账号，已有账号直接登录。</p>
@@ -273,7 +337,7 @@ onMounted(() => {
             ><HintPopover
               v-if="hideTitle"
               title="邮箱验证说明"
-              text="首次验证会创建账号。绑定现有宿舍身份后，换设备可用邮箱找回。验证码十分钟有效。"
+              text="首次验证会创建账号。绑定后换设备可用邮箱找回。验证码十分钟有效；重发不会废止其他验证页面的旧码，请在获取该码的页面输入。"
             />
           </div>
           <input
@@ -295,6 +359,10 @@ onMounted(() => {
                 ref="codeField"
                 id="account-code"
                 v-model="code"
+                @focus="animateCode()"
+                @input="animateCode()"
+                :aria-invalid="!!error"
+                aria-describedby="email-error"
                 inputmode="numeric"
                 autocomplete="one-time-code"
                 pattern="[0-9]{6}"
@@ -327,7 +395,11 @@ onMounted(() => {
               :disabled="busy || remaining > 0"
               @click="sendCode"
             >
-              {{ remaining > 0 ? `${remaining} 秒后重发` : "重新发送" }}
+              <Transition name="email-label" mode="out-in"
+                ><span :key="remaining" class="email-countdown">{{
+                  remaining > 0 ? `${remaining} 秒后重发` : "重新发送"
+                }}</span></Transition
+              >
             </button>
             <button
               type="button"
@@ -440,14 +512,16 @@ onMounted(() => {
         </div>
       </section>
     </Transition>
-    <p v-if="error" class="email-error" role="alert">
-      {{ error
-      }}<span v-if="reverify && emailAccount.loggedIn"
-        >。当前仍是旧登录状态（{{
-          emailAccount.email
-        }}），验证成功后才切换。</span
-      >
-    </p>
+    <Transition name="email-code"
+      ><p v-if="error" id="email-error" class="email-error" role="alert">
+        {{ error
+        }}<span v-if="reverify && emailAccount.loggedIn"
+          >。当前仍是旧登录状态（{{
+            emailAccount.email
+          }}），验证成功后才切换。</span
+        >
+      </p></Transition
+    >
     <button
       v-if="gate && error.includes('管理权限')"
       class="email-reverify"
@@ -455,6 +529,19 @@ onMounted(() => {
     >
       恢复旧宿舍管理权限
     </button>
+    <p v-if="mailFailure && operations" class="email-message" role="status">
+      邮件服务曾发生发送失败，待重试 {{ operations.pending }} 封，最终失败
+      {{ operations.failed }} 封。最近失败：{{
+        new Date(mailFailure.updated_at).toLocaleString()
+      }}
+    </p>
+    <p
+      v-if="emailAccount.version && emailAccount.loggedIn"
+      class="email-message"
+      data-testid="release-version"
+    >
+      版本 {{ emailAccount.version }}
+    </p>
   </div>
 </template>
 
@@ -527,13 +614,13 @@ onMounted(() => {
 }
 .email-code-enter-active {
   transition:
-    opacity 240ms var(--ui-ease-enter),
-    transform 240ms var(--ui-ease-enter);
+    opacity var(--ui-drawer-time) var(--ui-ease-out),
+    transform var(--ui-drawer-time) var(--ui-ease-out);
 }
 .email-code-leave-active {
   transition:
-    opacity 180ms var(--ui-ease-out),
-    transform 180ms var(--ui-ease-out);
+    opacity var(--ui-page-time) var(--ui-ease-out),
+    transform var(--ui-page-time) var(--ui-ease-out);
 }
 .email-code-enter-from {
   opacity: 0;
@@ -544,7 +631,7 @@ onMounted(() => {
   transform: translateY(-4px);
 }
 .email-panel > section {
-  animation: email-arrive 240ms var(--ui-ease-enter) both;
+  animation: email-arrive var(--ui-drawer-time) var(--ui-ease-out) both;
 }
 @keyframes email-arrive {
   from {
@@ -667,13 +754,13 @@ onMounted(() => {
 }
 .email-step-enter-active {
   transition:
-    transform 240ms var(--ui-ease-enter),
-    opacity 240ms var(--ui-ease-enter);
+    transform var(--ui-drawer-time) var(--ui-ease-out),
+    opacity var(--ui-drawer-time) var(--ui-ease-out);
 }
 .email-step-leave-active {
   transition:
-    transform 180ms var(--ui-ease-out),
-    opacity 180ms var(--ui-ease-out);
+    transform var(--ui-page-time) var(--ui-ease-out),
+    opacity var(--ui-page-time) var(--ui-ease-out);
 }
 .email-step-enter-from {
   opacity: 0;
@@ -686,8 +773,8 @@ onMounted(() => {
 .email-label-enter-active,
 .email-label-leave-active {
   transition:
-    opacity 120ms var(--ui-ease-out),
-    transform 120ms var(--ui-ease-out);
+    opacity var(--ui-page-time) var(--ui-ease-out),
+    transform var(--ui-page-time) var(--ui-ease-out);
 }
 .email-label-enter-from {
   opacity: 0;
@@ -696,5 +783,12 @@ onMounted(() => {
 .email-label-leave-to {
   opacity: 0;
   transform: translateY(-3px);
+}
+</style>
+
+<style scoped>
+.email-countdown {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
+import { EMAIL_GATE_CAPABILITY } from "../site/worker/backend.mjs";
 import worker from "../site/worker/index.js";
 import pushRuntimeModule from "../site/runtime/push-runtime.cjs";
 import emailRuntimeModule from "../site/runtime/email-runtime.cjs";
@@ -16,6 +17,9 @@ const databasePath = path.resolve(
 const databaseId = createHash("sha256").update(databasePath).digest("hex");
 const host = process.env.DORM_LOCAL_HOST || "0.0.0.0";
 const port = Number(process.env.DORM_LOCAL_PORT ?? "8081");
+let releaseInfo = { version: "development" };
+try { releaseInfo = JSON.parse(await fs.readFile(path.join(root, "site/release.json"), "utf8")); }
+catch (error) { if (error.code !== "ENOENT") throw error; }
 const serverDeployment = process.env.DORM_DEPLOYMENT === "server";
 const webBase = process.env.DORM_WEB_BASE || "/";
 if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(webBase))
@@ -125,6 +129,8 @@ try {
   }
   emailRuntime = emailRuntimeModule.createEmailRuntime(db, {
     config: emailConfig,
+    version: releaseInfo.version,
+    requireRegistration: serverDeployment,
     base: webBase,
   });
   try {
@@ -193,7 +199,7 @@ try {
           : Buffer.concat(chunks),
       });
       let response = await emailRuntime.wrap(request, (next, emailCreator) =>
-        worker.fetch(next, { ...env, EMAIL_CREATOR: emailCreator }, ctx),
+        worker.fetch(next, { ...env, EMAIL_CREATOR: emailCreator, EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY }, ctx),
       );
       if (url.pathname === "/health" && response.ok && req.method === "GET") {
         response = new Response(
@@ -204,6 +210,7 @@ try {
             storage: "sqlite",
             persistent: true,
             database_id: databaseId,
+            release: releaseInfo,
           }),
           { status: 200, headers: response.headers },
         );

@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import { computed, inject, ref, onMounted, type Ref } from "vue";
 import { motion } from "motion-v";
-import { motionAllowed, motionTokens } from "../interaction/motion";
-defineProps<{
+import {
+  motionAllowed,
+  motionTokens,
+  motionTiming,
+} from "../interaction/motion";
+const props = defineProps<{
   label: string;
   icon: string;
   tile?: boolean;
@@ -9,21 +14,46 @@ defineProps<{
   disabled?: boolean;
   delay?: number;
 }>();
+const phase = inject<Ref<string>>("sheet-motion-phase", ref("open"));
+const item = ref<{ $el?: HTMLElement }>();
+const index = ref(0),
+  total = ref(1);
+onMounted(() => {
+  const el = item.value?.$el;
+  const items = el?.closest(".sheet-content")?.querySelectorAll(".action-item");
+  if (el && items) {
+    index.value = Array.from(items).indexOf(el);
+    total.value = items.length;
+  }
+});
+const closing = computed(() => phase.value === "closing");
+const transition = computed(() =>
+  motionAllowed()
+    ? {
+        ...motionTokens.enter,
+        duration: motionTiming.drawer - 4 * motionTiming.stagger,
+        delay:
+          Math.min(
+            4,
+            closing.value ? total.value - 1 - index.value : index.value,
+          ) * motionTiming.stagger,
+      }
+    : { duration: 0 },
+);
 </script>
 <template>
   <motion.button
+    ref="item"
     type="button"
     class="action-item"
     :class="{ tile }"
     :disabled="disabled"
-    :while-press="motionAllowed() ? { scale: 0.97 } : {}"
+    :while-press="!props.disabled && motionAllowed() ? { scale: 0.97 } : {}"
     :initial="motionAllowed() ? { opacity: 0, y: 6 } : false"
-    :animate="{ opacity: 1, y: 0 }"
-    :transition="
-      motionAllowed()
-        ? { ...motionTokens.layout, delay: delay || 0 }
-        : { duration: 0 }
+    :animate="
+      closing && motionAllowed() ? { opacity: 0, y: 6 } : { opacity: 1, y: 0 }
     "
+    :transition="transition"
   >
     <span class="action-icon"><van-icon :name="icon" aria-hidden="true" /></span
     ><span class="action-label">{{ label }}</span
@@ -121,7 +151,7 @@ defineProps<{
 @media (prefers-reduced-motion: no-preference) {
   .action-arrow {
     transition:
-      transform 180ms var(--ui-ease-out),
+      transform var(--ui-page-time) var(--ui-ease-out),
       color 180ms ease;
   }
   .action-item:active .action-arrow {
@@ -129,7 +159,7 @@ defineProps<{
     color: #111;
   }
   .action-icon {
-    transition: transform 180ms var(--ui-ease-out);
+    transition: transform var(--ui-page-time) var(--ui-ease-out);
   }
   .action-item:active .action-icon {
     transform: scale(0.94);

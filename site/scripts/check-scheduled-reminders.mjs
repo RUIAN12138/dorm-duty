@@ -9,7 +9,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { SQLiteD1 } from "../local/sqlite-d1.mjs";
 import { openDatabase } from "../local/database.mjs";
-import { handleApi } from "../worker/backend.mjs";
+import { handleApi, EMAIL_GATE_CAPABILITY } from "../worker/backend.mjs";
 
 const RealDate = Date;
 let clock = new RealDate("2026-10-15T07:59:00+08:00").getTime(),
@@ -488,7 +488,9 @@ test("migration from the previous release retains tasks, sessions, reminders and
           new Date().toISOString(),
         );
     }
-    const env = { DB: old, DEFAULT_DORM_INVITE_CODE: "" };
+    // Current auth queries require this additive column while constructing old-schema fixtures.
+      old.sqlite.exec("ALTER TABLE sessions ADD COLUMN dorm_id INTEGER REFERENCES dormitories(id)");
+      const env = { DB: old, DEFAULT_DORM_INVITE_CODE: "", EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY };
     const h = {
       db: old,
       env,
@@ -521,6 +523,7 @@ test("migration from the previous release retains tasks, sessions, reminders and
       201,
       "POST",
     );
+      old.sqlite.exec("ALTER TABLE sessions DROP COLUMN dorm_id");
     const tables = [
       "users",
       "dormitories",
@@ -545,6 +548,7 @@ test("migration from the previous release retains tasks, sessions, reminders and
         .prepare(`SELECT * FROM ${name} ORDER BY rowid`)
         .all()
         .map((row) => {
+          if (name === "sessions") { const {dorm_id, ...legacy} = row; return legacy; }
           if (name === "chore_reminders") {
             eq(row.source, "member");
             const { source, ...legacy } = row;

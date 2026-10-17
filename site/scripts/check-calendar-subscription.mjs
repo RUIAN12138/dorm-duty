@@ -8,7 +8,7 @@ import os from "node:os";
 import pathModule from "node:path";
 import { SQLiteD1 } from "../local/sqlite-d1.mjs";
 import { openDatabase } from "../local/database.mjs";
-import { handleApi } from "../worker/backend.mjs";
+import { handleApi, EMAIL_GATE_CAPABILITY } from "../worker/backend.mjs";
 import { calendarFeed } from "../worker/calendar.mjs";
 import { renderCalendar } from "../shared/ical.mjs";
 const RealDate = Date;
@@ -516,7 +516,9 @@ try {
             new Date().toISOString(),
           );
       }
-      const env = { DB: db, DEFAULT_DORM_INVITE_CODE: "" };
+      // Current auth queries require this additive column while constructing old-schema fixtures.
+      db.sqlite.exec("ALTER TABLE sessions ADD COLUMN dorm_id INTEGER REFERENCES dormitories(id)");
+      const env = { DB: db, DEFAULT_DORM_INVITE_CODE: "", EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY };
       const h = {
         request(route, { token, method = "GET", data } = {}) {
           return handleApi(
@@ -550,6 +552,7 @@ try {
         { enabled: false, times: ["08:30"], version: 0 },
         "PATCH",
       );
+      db.sqlite.exec("ALTER TABLE sessions DROP COLUMN dorm_id");
       const tables = [
         "users",
         "dormitories",
@@ -571,7 +574,7 @@ try {
       env.DB = db;
       for (const name of tables)
         eq(
-          db.sqlite.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all(),
+          db.sqlite.prepare(`SELECT ${Object.keys(before[name][0] || {}).join(",") || "*"} FROM ${name} ORDER BY rowid`).all(),
           before[name],
           name,
         );

@@ -10,7 +10,6 @@ import {
 } from "./chores.mjs";
 const DAY = 86_400_000;
 const SESSION_DAYS = 7;
-const DEVICE_DAYS = 90;
 const ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 const DEFAULT_RULES = {
@@ -271,8 +270,8 @@ async function currentUser(request, db, now) {
   const tokenHash = await digest(match[1]);
   const user = await first(
     db,
-    "SELECT u.*,s.kind AS session_kind FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND (s.kind!='device' OR julianday(s.created_at,'+90 days')>julianday(?))",
-    [tokenHash, now.toISOString(), now.toISOString()],
+    "SELECT u.*,s.kind AS session_kind FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND s.kind='account' AND (s.dorm_id IS NULL OR s.dorm_id=u.current_dorm_id)",
+    [tokenHash, now.toISOString()],
   );
   if (!user) fail(401, "unauthorized", "登录已过期，请重新登录");
   user.session_hash = tokenHash;
@@ -676,7 +675,7 @@ async function guestCreate(request, db, now, emailCreator) {
   const current = now.toISOString(),
     expires =
       emailSession?.expires_at ||
-      new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString();
+      new Date(now.getTime() + 7 * DAY).toISOString();
   const today = localDate(now),
     usernamesJson = JSON.stringify(usernames),
     ops = [];
@@ -736,7 +735,7 @@ async function guestCreate(request, db, now, emailCreator) {
   ops.push(
     stmt(
       db,
-      "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) SELECT ?,id,?,?,'device' FROM users WHERE username=?",
+      "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) SELECT ?,id,?,?,'account' FROM users WHERE username=?",
       [tokenHash, current, expires, usernames[0]],
     ),
   );
@@ -749,6 +748,7 @@ async function guestCreate(request, db, now, emailCreator) {
       ),
     );
   if (emailCreator) {
+    ops.push(stmt(db, "UPDATE sessions SET dorm_id=(SELECT current_dorm_id FROM users WHERE username=?) WHERE token_hash=?", [usernames[0], tokenHash]));
     // Ownership, room and email linkage commit together. A concurrently revoked
     // email login makes the NOT NULL subquery fail and rolls the entire batch back.
     ops.push(
@@ -856,14 +856,14 @@ async function recoverCreator(request, db, now) {
   // A rotated code or a departed former owner cannot issue an administrator session.
   const result = await stmt(
     db,
-    `INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind)
-    SELECT ?,u.id,?,?,'device' FROM creator_recovery r JOIN dormitories d ON d.id=r.dorm_id
+    `INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind,dorm_id)
+    SELECT ?,u.id,?,?,'account',d.id FROM creator_recovery r JOIN dormitories d ON d.id=r.dorm_id
     JOIN users u ON u.id=r.owner_user_id JOIN dorm_members m ON m.dorm_id=d.id AND m.user_id=u.id
     WHERE r.code_hash=? AND d.invite_code=? AND d.is_demo=0 AND d.admin_user_id=u.id AND u.current_dorm_id=d.id AND m.is_active=1 AND m.role='admin'`,
     [
       tokenHash,
       at,
-      new Date(now.getTime() + DEVICE_DAYS * DAY).toISOString(),
+      new Date(now.getTime() + 7 * DAY).toISOString(),
       hash,
       invite,
     ],
@@ -1925,7 +1925,12 @@ async function dispatch(request, env, ctx) {
   fail(404, "not_found", "接口不存在");
 }
 
+// A symbol cannot be supplied by HTTP headers or serialized Wrangler vars.
+// Symbol.for keeps the embedded Worker and Node gateway in the same process aligned.
+export const EMAIL_GATE_CAPABILITY = Symbol.for("dorm-duty.email-gateway.checked");
 export async function handleApi(request, env, ctx) {
+  if (env.EMAIL_GATE_VERIFIED !== EMAIL_GATE_CAPABILITY)
+    return json({ detail: { code: "email_gateway_required", message: "此部署未接入邮箱准入服务，请使用正式网站" } }, 503);
   try {
     return await dispatch(request, env, ctx);
   } catch (error) {

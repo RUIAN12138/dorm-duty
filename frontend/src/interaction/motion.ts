@@ -14,6 +14,30 @@ export const navigationOrigin = ref<{
   time: number;
 } | null>(null);
 
+// Durations are seconds for Motion; CSS consumes these same values at startup.
+export const motionTiming = {
+  drawer: 0.25,
+  page: 0.2,
+  reorder: 0.3,
+  completion: 0.4,
+  press: 0.09,
+  release: 0.36,
+  stagger: 0.025,
+} as const;
+export const motionEase = [0.22, 1, 0.36, 1] as [
+  number,
+  number,
+  number,
+  number,
+];
+export const motionEaseCss = "cubic-bezier(0.22, 1, 0.36, 1)";
+export function installMotionTokens() {
+  for (const [key, seconds] of Object.entries(motionTiming))
+    document.documentElement.style.setProperty(
+      `--ui-${key}-time`,
+      `${seconds * 1000}ms`,
+    );
+}
 export const motionTokens = {
   press: { scaleX: 1.02, scaleY: 0.94 },
   selection: {
@@ -25,14 +49,23 @@ export const motionTokens = {
     restSpeed: 0.01,
   },
   settle: { type: "spring" as const, stiffness: 540, damping: 42, mass: 0.8 },
-  layout: { type: "spring" as const, stiffness: 540, damping: 40, mass: 0.8 },
+  layout: {
+    type: "spring" as const,
+    duration: motionTiming.reorder,
+    bounce: 0.12,
+  },
+  drawer: {
+    type: "spring" as const,
+    duration: motionTiming.drawer,
+    bounce: 0.1,
+  },
   enter: {
-    duration: 0.24,
-    ease: [0.32, 0.72, 0, 1] as [number, number, number, number],
+    duration: motionTiming.drawer,
+    ease: motionEase,
   },
   exit: {
-    duration: 0.18,
-    ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+    duration: motionTiming.drawer,
+    ease: motionEase,
   },
 };
 
