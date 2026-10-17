@@ -120,7 +120,7 @@ export async function runBackendChecks() {
     return response.json();
   }
   async function account(h, username, nickname = username) {
-    const user = await api(h, "/auth/register", {
+    await api(h, "/auth/register", {
       method: "POST",
       status: 201,
       data: { username, password, nickname },
@@ -131,6 +131,7 @@ export async function runBackendChecks() {
     });
     ok(login.access_token, "login token missing");
     secrets.push(login.access_token);
+    const user = await api(h, "/auth/me", {token: login.access_token});
     return { ...user, token: login.access_token };
   }
   const current = (h, a) => api(h, "/dorms/current", { token: a.token });
@@ -239,7 +240,7 @@ export async function runBackendChecks() {
     });
     await api(h, "/auth/register", {
       method: "POST",
-      status: 409,
+      status: 201,
       data: { username: "alice", password, nickname: "duplicate" },
     });
     await api(h, "/auth/register", {

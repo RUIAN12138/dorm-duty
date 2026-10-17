@@ -12,6 +12,7 @@ import {
 } from "../frontend/node_modules/@playwright/test/index.mjs";
 import { createHarness } from "../site/scripts/check-cloud-backend.mjs";
 import { handleApi } from "../site/worker/backend.mjs";
+import { ensureLocalDemo } from "../site/local/database.mjs";
 import module from "../site/runtime/email-runtime.cjs";
 const h = await createHarness(),
   temporary = await fs.mkdtemp(path.join(os.tmpdir(), "dorm-email-ui-"));
@@ -138,12 +139,29 @@ try {
       serviceWorkers: "block",
     });
   }
+  h.env.DEFAULT_DORM_INVITE_CODE = ensureLocalDemo(h.db);
   const first = await context(),
     page = await first.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
+  let startupFailures = 0;
+  await page.route("**/email/config", async (route) => {
+    if (startupFailures++ < 2) return route.abort();
+    return route.continue();
+  });
   await page.goto(url);
   await page.getByLabel("邮箱", { exact: true }).waitFor();
   await page.waitForTimeout(350);
+  check(
+    startupFailures >= 3,
+    true,
+    "first-open transient failures recover without reload",
+  );
+  await page.unroute("**/email/config");
+  check(
+    await page.locator(".email-check input").isChecked(),
+    false,
+    "email reminders default to opt-in",
+  );
   const evidence = path.join(root, "docs/evidence/email-accounts");
   await fs.mkdir(evidence, { recursive: true });
   await page.screenshot({ path: path.join(evidence, "entry.png") });
@@ -163,7 +181,7 @@ try {
     0,
     "entry has no persistent corner brand",
   );
-  await page.getByRole("button", { name: "邮箱账号", exact: true }).click();
+  await page.getByRole("button", { name: "邮箱验证说明", exact: true }).click();
   const hint = page.locator(".hint-popover");
   await hint.waitFor();
   const hintFrames = await hint.evaluate(async (el) => {
@@ -208,18 +226,21 @@ try {
   await page.mouse.up();
   async function login(p, address = "ui-qa@example.invalid", gate = false) {
     await p.getByLabel("邮箱", { exact: true }).fill(address);
+    await p.evaluate(() => {
+      window.__emailCodeFrames = [];
+      const end = performance.now() + 1800;
+      function sample() {
+        const el = document.querySelector(".email-code-field");
+        if (el)
+          window.__emailCodeFrames.push(Number(getComputedStyle(el).opacity));
+        if (performance.now() < end) requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
     await p.getByRole("button", { name: "获取验证码", exact: true }).click();
     await p.getByLabel("验证码", { exact: true }).waitFor();
-    const codeFrames = await p
-      .locator(".email-code-field")
-      .evaluate(async (el) => {
-        const frames = [];
-        for (let i = 0; i < 18; i++) {
-          await new Promise(requestAnimationFrame);
-          frames.push(Number(getComputedStyle(el).opacity));
-        }
-        return frames;
-      });
+    await p.waitForTimeout(280);
+    const codeFrames = await p.evaluate(() => window.__emailCodeFrames);
     check(
       codeFrames.some((v) => v > 0 && v < 1),
       true,
@@ -509,15 +530,120 @@ try {
     "email settings fit a 320px sheet",
   );
   await other.screenshot({ path: path.join(evidence, "account-sheet.png") });
-  await other
-    .getByRole("button", { name: "退出邮箱账号", exact: true })
-    .click();
+  const oldToken = await other.evaluate(() =>
+    sessionStorage.getItem("dorm-token"),
+  );
+  const oldCookie = (await second.cookies()).find(
+    (c) => c.name === "dorm_email_session",
+  ).value;
+  const sibling = await second.newPage();
+  await sibling.goto(url);
+  await sibling.getByTestId("open-tools").waitFor();
+  let revokeRequests = [];
+  other.on("request", (req) => {
+    if (
+      req.url().endsWith("/auth/logout") ||
+      req.url().endsWith("/email/logout")
+    )
+      revokeRequests.push(req.url());
+  });
+  // Both failures: exit must still hide identity and must never revive the old cookie.
+  await other.route("**/auth/logout", (route) => route.abort());
+  await other.route("**/email/logout", (route) => route.abort());
+  await other.getByRole("button", { name: "退出登录", exact: true }).click();
   await other.getByLabel("邮箱", { exact: true }).waitFor();
   check(
     await other.getByRole("button", { name: "更多操作", exact: true }).count(),
     0,
     "logout clears current identity view",
   );
+  await sibling.getByLabel("邮箱", { exact: true }).waitFor();
+  check(
+    await sibling.evaluate(() => sessionStorage.getItem("dorm-token")),
+    null,
+    "logout clears the other tab identity too",
+  );
+  await other.waitForFunction(() =>
+    document.body.innerText.includes("服务端会话未撤销"),
+  );
+  check(
+    revokeRequests.some((u) => u.endsWith("/auth/logout")) &&
+      revokeRequests.some((u) => u.endsWith("/email/logout")),
+    true,
+    "both logout endpoints attempted despite individual failures",
+  );
+  check(
+    await other.evaluate(
+      () => !!localStorage.getItem("dorm-pending-logout-v1"),
+    ),
+    true,
+    "failed revocation remains pending",
+  );
+  await other.unroute("**/auth/logout");
+  await other.unroute("**/email/logout");
+  await other.reload();
+  await other.getByLabel("邮箱", { exact: true }).waitFor();
+  await other.waitForFunction(
+    () => !localStorage.getItem("dorm-pending-logout-v1"),
+  );
+  check(
+    h.db.sqlite
+      .prepare("SELECT COUNT(*) n FROM sessions WHERE token_hash=?")
+      .get(createHash("sha256").update(oldToken).digest("hex")).n,
+    0,
+    "retry actually revokes administrator token",
+  );
+  check(
+    h.db.sqlite
+      .prepare("SELECT COUNT(*) n FROM email_sessions WHERE token_hash=?")
+      .get(createHash("sha256").update(oldCookie).digest("hex")).n,
+    0,
+    "retry actually revokes email cookie session",
+  );
+  await other.goto(url + "admin/login");
+  await other.getByLabel("邮箱", { exact: true }).waitFor();
+  check(
+    await other.getByLabel("密码", { exact: true }).count(),
+    0,
+    "legacy login redirects to email entry",
+  );
+  // Gate opened from guest tools may close, but only onto the safe entry.
+  await other.getByTestId("guest-demo-entry").click();
+  await other.locator(".guest-member-list button").first().click();
+  await other.getByTestId("open-tools").waitFor();
+  check(
+    await other
+      .locator(".current-identity")
+      .innerText()
+      .then((t) => t.includes("游客")),
+    true,
+    "guest identity stays visible",
+  );
+  await other.getByTestId("open-tools").click();
+  await other.getByTestId("open-preferences").click();
+  await other.getByRole("button", { name: "创建宿舍", exact: true }).click();
+  await other
+    .getByRole("dialog")
+    .filter({ has: other.getByLabel("邮箱", { exact: true }) })
+    .waitFor();
+  await other.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await other.getByLabel("邮箱", { exact: true }).waitFor();
+  check(
+    await other.getByTestId("open-tools").count(),
+    0,
+    "closing required verification returns to entry, not the board",
+  );
+  await other.getByTestId("guest-demo-entry").click();
+  await other.locator(".guest-member-list button").first().click();
+  await other.getByRole("button", { name: "退出游客", exact: true }).click();
+  await other.reload();
+  await other.getByLabel("邮箱", { exact: true }).waitFor();
+  check(
+    await other.getByTestId("open-tools").count(),
+    0,
+    "guest exit survives reload",
+  );
+  await sibling.close();
   const createdRoom = h.db.sqlite
     .prepare("SELECT invite_code,id FROM dormitories WHERE name='邮箱界面 QA'")
     .get();
@@ -546,6 +672,33 @@ try {
     "verified newcomer joins by invite and exact name as an ordinary member",
   );
   await newMemberContext.close();
+  const profileToken = await page.evaluate(() =>
+    sessionStorage.getItem("dorm-token"),
+  );
+  const profileCookie = (await first.cookies()).find(
+    (c) => c.name === "dorm_email_session",
+  ).value;
+  await page.goto(url + "profile");
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await page.getByLabel("邮箱", { exact: true }).waitFor();
+  await page.waitForFunction(
+    () => !localStorage.getItem("dorm-pending-logout-v1"),
+  );
+  check(
+    h.db.sqlite
+      .prepare("SELECT COUNT(*) n FROM sessions WHERE token_hash=?")
+      .get(createHash("sha256").update(profileToken).digest("hex")).n,
+    0,
+    "legacy Profile exit revokes its administrator token",
+  );
+  check(
+    h.db.sqlite
+      .prepare("SELECT COUNT(*) n FROM email_sessions WHERE token_hash=?")
+      .get(createHash("sha256").update(profileCookie).digest("hex")).n,
+    0,
+    "legacy Profile exit also revokes email session",
+  );
+
   // A saved pre-email creator identity must go through verification, then bind
   // with its original full proof, never create a duplicate room or user.
   const oldRoom = await h

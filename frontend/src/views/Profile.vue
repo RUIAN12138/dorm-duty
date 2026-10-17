@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { logoutAll } from "../api/logout";
 import { useRouter } from "vue-router";
-import { showToast, showConfirmDialog } from "vant";
+import { showToast } from "vant";
 import { useSession } from "../stores/session";
 import { api, patch, post } from "../api";
 import { enablePush, disableDevice, pushCapability } from "../api/push";
@@ -36,23 +37,21 @@ async function act(fn: () => Promise<unknown>, message: string) {
 }
 async function logout() {
   busy.value = true;
+  let warning = "";
   try {
     await disableDevice();
+  } catch {
+    warning = "本设备通知订阅未撤销。";
+  }
+  try {
+    await logoutAll();
+  } catch (e) {
+    warning += (e as Error).message;
+  } finally {
     session.clear();
     await router.replace("/");
-  } catch (e) {
-    showToast((e as Error).message);
-    try {
-      await showConfirmDialog({
-        title: "未能取消本设备通知",
-        message:
-          "当前设备订阅尚未撤销。仍要退出登录吗？联网后请在系统设置中关闭通知。",
-      });
-      session.clear();
-      await router.replace("/");
-    } catch {}
-  } finally {
     busy.value = false;
+    if (warning) showToast({ message: warning, duration: 5000 });
   }
 }
 </script>
@@ -172,8 +171,6 @@ async function logout() {
     <van-button block plain class="spaced" :loading="busy" @click="logout"
       >退出登录</van-button
     >
-    <p class="helper">
-      登录在本标签页有效；刷新会恢复身份。退出时取消本设备通知。
-    </p>
+    <p class="helper">退出会撤销本设备的登录凭据和邮箱会话。</p>
   </main>
 </template>

@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { logoutAll, pendingLogout, logoutEvent } from "./logout";
 import { choreRequest, savedChoreToken } from "./chores";
 
 export interface EmailRoom {
@@ -15,19 +16,26 @@ export interface EmailEntry extends EmailRoom {
 }
 export const emailAccount = reactive({
   available: false,
-  required: false,
+  // Until config is known, never expose the legacy entry as a fallback.
+  required: true,
   loaded: false,
   loggedIn: false,
   email: "",
   mailEnabled: false,
   rooms: [] as EmailRoom[],
 });
-export const emailPost = <T>(path: string, values: unknown = {}) =>
-  choreRequest<T>(`/email/${path}`, "", {
+export async function emailPost<T>(
+  path: string,
+  values: unknown = {},
+): Promise<T> {
+  // Finish an interrupted sign-out before allowing verification to create a new cookie.
+  if (pendingLogout()) await logoutAll();
+  return choreRequest<T>(`/email/${path}`, "", {
     method: "POST",
     headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
   });
+}
 export function enterEmailRoom(dormId: number) {
   const room = emailAccount.rooms.find((room) => room.id === dormId);
   const token = room ? savedChoreToken(room.invite_code, room.member_id) : "";
@@ -36,7 +44,27 @@ export function enterEmailRoom(dormId: number) {
     ...(token ? { member_token: token } : {}),
   });
 }
+let accountEpoch = 0;
+function resetAccount() {
+  accountEpoch++;
+  emailAccount.loggedIn = false;
+  emailAccount.email = "";
+  emailAccount.rooms = [];
+  emailAccount.mailEnabled = false;
+}
+window.addEventListener(logoutEvent, resetAccount);
+window.addEventListener("storage", (event) => {
+  if (event.key === "dorm-pending-logout-v1" && event.newValue !== null) {
+    resetAccount();
+    window.dispatchEvent(new Event(logoutEvent));
+  }
+});
 export async function refreshEmailAccount() {
+  if (pendingLogout()) {
+    resetAccount();
+    await logoutAll();
+  }
+  const epoch = accountEpoch;
   const [config, account] = await Promise.all([
     choreRequest<{ available: boolean; registration_required: boolean }>(
       "/email/config",
@@ -48,6 +76,7 @@ export async function refreshEmailAccount() {
       rooms?: EmailRoom[];
     }>("/email/me"),
   ]);
+  if (epoch !== accountEpoch || pendingLogout()) return;
   emailAccount.available = config.available;
   emailAccount.required = config.registration_required;
   emailAccount.loggedIn = account.logged_in;

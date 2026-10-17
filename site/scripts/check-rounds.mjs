@@ -91,10 +91,11 @@ test('joining current round adds a required member; departure preserves history 
   const r=await room(h,['小林','小陈']),[owner,other]=r.people;
   await complete(h,owner,task(await board(h,r),'floor'));
   const password='DisposableRoundTest!';
-  const joined=await api(h,'/auth/register',{method:'POST',status:201,data:{username:'round_join',nickname:'小王',password}});
+  await api(h,'/auth/register',{method:'POST',status:201,data:{username:'round_join',nickname:'小王',password}});
   const login=await api(h,'/auth/login',{method:'POST',data:{username:'round_join',password}});
   await api(h,'/dorms/join',{method:'POST',token:login.access_token,data:{invite_code:r.invite_code}});
   let b=await board(h,r);equal(round(b,'floor').total,3);equal(round(b,'floor').completed,1);equal(round(b,'floor').sequence,1);
+  const joined=await api(h,'/auth/me',{token:login.access_token});
   const newbie={user_id:joined.id,token:login.access_token};ok(task(await board(h,r,newbie),'floor').can_complete);
   await complete(h,other,task(await board(h,r,other),'floor'));
   b=await board(h,r);equal(round(b,'floor').sequence,1);equal(round(b,'floor').completed,2);

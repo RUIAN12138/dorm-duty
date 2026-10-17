@@ -1202,7 +1202,7 @@ async function claim(request, db, env, now) {
   }
   const token = random(),
     hash = await digest(token),
-    expires = new Date(now.getTime() + 365 * DAY).toISOString();
+    expires = new Date(now.getTime() + 90 * DAY).toISOString();
   const result = await stmt(
     db,
     "INSERT INTO member_sessions(token_hash,dorm_id,user_id,created_at,expires_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM dorm_members m JOIN users u ON u.id=m.user_id JOIN dormitories d ON d.id=m.dorm_id WHERE m.dorm_id=? AND m.user_id=? AND m.is_active=1 AND u.current_dorm_id=m.dorm_id AND d.is_demo=0)",

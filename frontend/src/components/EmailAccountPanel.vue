@@ -8,6 +8,7 @@ import {
   type EmailEntry,
 } from "../api/email";
 import HintPopover from "./HintPopover.vue";
+import { logoutAll } from "../api/logout";
 import { showToast } from "../interaction/notice";
 
 const props = withDefaults(
@@ -30,7 +31,7 @@ const codeField = ref<HTMLInputElement>();
 const email = ref(""),
   code = ref(""),
   challenge = ref(""),
-  mailEnabled = ref(true);
+  mailEnabled = ref(false);
 const busy = ref(false),
   reverify = ref(false),
   error = ref(""),
@@ -157,9 +158,11 @@ function test() {
 }
 function logout() {
   void act(async () => {
-    await emailPost("logout");
-    await refreshEmailAccount();
-    emit("logout");
+    try {
+      await logoutAll();
+    } finally {
+      emit("logout");
+    }
   });
 }
 onMounted(() => {
@@ -174,16 +177,17 @@ onMounted(() => {
         <div v-if="!hideTitle" class="email-heading">
           <h2>{{ memberToken ? "绑定你的邮箱" : "用邮箱进入轮到" }}</h2>
           <HintPopover
-            title="邮箱账号"
+            title="邮箱验证说明"
             text="首次验证会创建账号。绑定现有宿舍身份后，换设备可用邮箱登录找回。验证码十分钟有效。"
           />
         </div>
+        <p class="email-message">首次验证即创建账号，已有账号直接登录。</p>
         <form @submit.prevent="challenge ? verify() : sendCode()">
           <div class="email-field-heading">
             <label for="account-email">邮箱</label
             ><HintPopover
               v-if="hideTitle"
-              title="邮箱账号"
+              title="邮箱验证说明"
               text="首次验证会创建账号。绑定现有宿舍身份后，换设备可用邮箱找回。验证码十分钟有效。"
             />
           </div>
@@ -221,7 +225,7 @@ onMounted(() => {
               v-model="mailEnabled"
               type="checkbox"
               :disabled="busy"
-            />接收邮件提醒</label
+            />接收室友催促和已设置的定时提醒（可选）</label
           >
           <button
             class="guest-primary"
@@ -333,11 +337,18 @@ onMounted(() => {
           >
             发送测试邮件
           </button>
-          <button :disabled="busy" @click="logout">退出邮箱账号</button>
+          <button :disabled="busy" @click="logout">退出登录</button>
         </div>
       </section>
     </Transition>
-    <p v-if="error" class="email-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="email-error" role="alert">
+      {{ error
+      }}<span v-if="reverify && emailAccount.loggedIn"
+        >。当前仍是旧登录状态（{{
+          emailAccount.email
+        }}），验证成功后才切换。</span
+      >
+    </p>
     <button
       v-if="gate && error.includes('管理权限')"
       class="email-reverify"

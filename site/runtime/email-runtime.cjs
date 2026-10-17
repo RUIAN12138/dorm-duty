@@ -12635,12 +12635,12 @@ function createEmailRuntime(db, {
     sql.prepare("SELECT required FROM email_entry_policy WHERE id=1").get()?.required
   );
   const cookie = (token, age = 30 * 86400) => `${cookieName}=${token}; Path=${base2}; HttpOnly; SameSite=Strict; Max-Age=${age}${config?.publicOrigin.startsWith("https:") ? "; Secure" : ""}`;
-  function session(request) {
+  function session(request, includeExpired = false) {
     const token = (request.headers.get("Cookie") || "").split(";").map((v) => v.trim()).find((v) => v.startsWith(cookieName + "="))?.slice(cookieName.length + 1);
     if (!/^[a-f0-9]{64}$/.test(token || "")) return null;
     return sql.prepare(
-      "SELECT a.*,s.token_hash AS session_hash,s.created_at AS verified_at,s.expires_at AS session_expires FROM email_sessions s JOIN email_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at>?"
-    ).get(hash(token), stamp()) || null;
+      "SELECT a.*,s.token_hash AS session_hash,s.created_at AS verified_at,s.expires_at AS session_expires FROM email_sessions s JOIN email_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND (s.expires_at>? OR ?=1)"
+    ).get(hash(token), stamp(), Number(includeExpired)) || null;
   }
   const required = (request) => {
     const who = session(request);
@@ -12835,7 +12835,9 @@ function createEmailRuntime(db, {
         ).get(new Date(now().getTime() - 36e5).toISOString());
         if (recent.n >= 5 || ips.n >= 30 || total.n >= 100 || recent.last && now().getTime() - Date.parse(recent.last) < 6e4)
           fail(429, "\u9A8C\u8BC1\u7801\u53D1\u9001\u8FC7\u4E8E\u9891\u7E41\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5");
-        sql.prepare("UPDATE email_challenges SET consumed=1 WHERE email=?").run(email);
+        sql.prepare(
+          "UPDATE email_challenges SET consumed=1 WHERE email=? AND expires_at<=?"
+        ).run(email, stamp());
         sql.prepare(
           "INSERT INTO email_challenges(id,email,code_hash,client_hash,created_at,expires_at) VALUES (?,?,?,?,?,?)"
         ).run(
@@ -12879,7 +12881,7 @@ function createEmailRuntime(db, {
         invalid();
       sql.prepare("UPDATE email_challenges SET attempts=attempts+1 WHERE id=?").run(record.id);
       const digest = (0, import_node_crypto8.createHmac)("sha256", config.otpSecret).update(`${record.id}:${email}:${data.code}`).digest();
-      if (!(0, import_node_crypto8.timingSafeEqual)(digest, Buffer.from(record.code_hash, "hex")))
+      if (typeof record.code_hash !== "string" || !/^[a-f0-9]{64}$/i.test(record.code_hash) || !(0, import_node_crypto8.timingSafeEqual)(digest, Buffer.from(record.code_hash, "hex")))
         invalid();
       const token = secret();
       transaction(() => {
@@ -12910,11 +12912,11 @@ function createEmailRuntime(db, {
       });
       return reply({ ok: true }, 200, { "Set-Cookie": cookie(token) });
     }
-    const who = required(request);
     if (pathname === "/email/logout") {
-      logout(who);
+      logout(session(request, true));
       return reply({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
     }
+    const who = required(request);
     if (pathname === "/email/bind") {
       const data = await input(request, ["member_token", "member_id"]);
       bind(who, data.member_token, data.member_id);
@@ -12997,6 +12999,8 @@ function createEmailRuntime(db, {
     try {
       const p = new URL(request.url).pathname;
       if (p.startsWith("/email/")) return await route(request);
+      if (p === "/auth/logout" && request.method === "POST")
+        return await dispatch(request);
       if (request.method === "POST" && (p === "/chores/claim" || p === "/guest/create" || p === "/guest/recover")) {
         let who = session(request);
         if (registrationRequired() || who) {
