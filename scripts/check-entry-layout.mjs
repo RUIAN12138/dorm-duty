@@ -89,7 +89,7 @@ const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地
       if(total===0) {
         check(await page.getByTestId('round-ranking').count(),0,'empty round reserves no roster area');
         const empty=await page.locator('.round-empty').boundingBox();
-        check(box.y+box.height-empty.y-empty.height<65,true,'empty hint is close to bottom without dead space');
+        check(empty.y+empty.height<=box.y+box.height && box.y+box.height-empty.y-empty.height<65,true,'empty hint is close to bottom without dead space');
         if(width===390) await page.screenshot({path:path.join(evidence,'round-empty.png')});
       } else check(box.height>lastHeight+50,true,'drawer grows with short roster');
       lastHeight=box.height;

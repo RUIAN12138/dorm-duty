@@ -191,7 +191,7 @@ onBeforeUnmount(() => {
         >+1</span
       >
     </div>
-    <p v-if="!compact" class="round-summary">
+    <p v-if="!compact && completed" class="round-summary">
       {{ completed === round.total ? "全员完成" : "本轮已完成" }}
     </p>
     <TransitionGroup
