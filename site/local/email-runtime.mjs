@@ -576,6 +576,63 @@ export function createEmailRuntime(
       return reply({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
     }
     const who = required(request);
+    if (pathname === "/email/unbind") {
+      const data = await input(request, ["dorm_id", "member_id"]);
+      if (
+        !Number.isSafeInteger(data.dorm_id) ||
+        !Number.isSafeInteger(data.member_id)
+      )
+        fail(422, "请选择要解除的宿舍身份");
+      if (now().getTime() - Date.parse(who.verified_at) > 10 * 60000)
+        fail(401, "解除身份前请重新验证邮箱");
+      transaction(() => {
+        const link = sql
+          .prepare(
+            "SELECT * FROM email_members WHERE account_id=? AND dorm_id=? AND user_id=?",
+          )
+          .get(who.id, data.dorm_id, data.member_id);
+        if (!link) fail(409, "此身份已解除或不属于当前邮箱，请刷新后重试");
+        // Revoke every device holding this identity, including other email sessions.
+        sql
+          .prepare(
+            `DELETE FROM email_grants WHERE token_hash IN (
+          SELECT token_hash FROM sessions WHERE user_id=? UNION
+          SELECT token_hash FROM member_sessions WHERE user_id=? AND dorm_id=?)`,
+          )
+          .run(link.user_id, link.user_id, link.dorm_id);
+        sql.prepare("DELETE FROM sessions WHERE user_id=?").run(link.user_id);
+        sql
+          .prepare("DELETE FROM member_sessions WHERE user_id=? AND dorm_id=?")
+          .run(link.user_id, link.dorm_id);
+        sql
+          .prepare(
+            "UPDATE chore_push_subscriptions SET is_active=0,revision=revision+1,updated_at=? WHERE user_id=? AND dorm_id=?",
+          )
+          .run(stamp(), link.user_id, link.dorm_id);
+        sql
+          .prepare(
+            "UPDATE chore_push_jobs SET status='cancelled' WHERE user_id=? AND dorm_id=? AND status IN ('pending','sending')",
+          )
+          .run(link.user_id, link.dorm_id);
+        sql
+          .prepare(
+            `UPDATE email_jobs SET status='cancelled' WHERE account_id=? AND status IN ('pending','sending')
+          AND reminder_id IN (SELECT id FROM chore_reminders WHERE target_member_id=? AND dorm_id=?)`,
+          )
+          .run(who.id, link.user_id, link.dorm_id);
+        sql
+          .prepare(
+            "UPDATE chore_calendar_subscriptions SET enabled=0,token_hash=NULL,version=version+1,updated_at=? WHERE user_id=? AND dorm_id=?",
+          )
+          .run(stamp(), link.user_id, link.dorm_id);
+        sql
+          .prepare(
+            "DELETE FROM email_members WHERE account_id=? AND dorm_id=? AND user_id=?",
+          )
+          .run(who.id, link.dorm_id, link.user_id);
+      });
+      return reply({ ok: true });
+    }
     if (pathname === "/email/bind") {
       const data = await input(request, ["member_token", "member_id"]);
       bind(who, data.member_token, data.member_id);
@@ -747,7 +804,7 @@ export function createEmailRuntime(
                 )
                 .get(who.id, member.dorm_id)
             )
-              fail(403, "这个邮箱已绑定本宿舍其他身份，不能切换为室友");
+              fail(403, "请先在邮箱设置中解除当前身份，再绑定未绑定邮箱的成员");
             if (who && member.admin_user_id === member.id)
               fail(403, "创建者请先在原设备绑定邮箱，或恢复管理权限后再绑定");
           }

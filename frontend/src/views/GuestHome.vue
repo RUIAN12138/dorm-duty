@@ -22,6 +22,8 @@ import {
   refreshEmailAccount,
   enterEmailRoom,
   type EmailEntry,
+  type EmailRoom,
+  identityUnboundEvent,
 } from "../api/email";
 import { showToast } from "vant";
 import { ApiError } from "../api";
@@ -125,6 +127,30 @@ function emailLogout() {
   choreToken.value = "";
   inviteCode.value = "";
   viewMode.value = "entry";
+}
+function identityUnbound(event: Event) {
+  const room = (event as CustomEvent<EmailRoom>).detail;
+  savedDorms.value = joinedDorms();
+  if (session.user?.id === room.member_id) session.clear();
+  if (
+    inviteCode.value !== room.invite_code &&
+    migrationMemberId.value !== room.member_id
+  )
+    return;
+  cancelSelection();
+  emailOpen.value = false;
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
+  member.value = null;
+  choreToken.value = "";
+  dorm.value = null;
+  viewMode.value = "entry";
+  inviteCode.value = room.invite_code;
+  draftCode.value = room.invite_code;
+  void loadDorm(room.invite_code).then((loaded) => {
+    if (loaded) notice.value = "请输入你自己的名字，只能绑定未绑定邮箱的成员。";
+  });
 }
 const section = computed(() =>
   route.path === "/water"
@@ -367,6 +393,8 @@ async function submitName() {
       );
     }
     if (!isCurrent(id, signal)) return;
+    await refreshEmailAccount();
+    if (!isCurrent(id, signal)) return;
     dorm.value = room;
     pendingClaimToken.value = token;
     pendingPerson.value = result.member;
@@ -478,6 +506,13 @@ function identityExpired() {
     : "这台设备的身份已失效，请重新输入你的名字。";
 }
 function changeMember() {
+  if (
+    emailAccount.loggedIn &&
+    emailAccount.rooms.some((room) => room.id === dorm.value?.id)
+  ) {
+    emailOpen.value = true;
+    return;
+  }
   cancelSelection();
   choosingMember.value = true;
   notice.value = "";
@@ -718,6 +753,7 @@ watch(emailOpen, (open, previous) => {
   }
 });
 window.addEventListener(logoutEvent, emailLogout);
+window.addEventListener(identityUnboundEvent, identityUnbound);
 let bootRunning = false;
 let bootReady = false;
 let disposed = false;
@@ -798,6 +834,7 @@ onMounted(() => {
 onUnmounted(() => {
   disposed = true;
   window.removeEventListener(logoutEvent, emailLogout);
+  window.removeEventListener(identityUnboundEvent, identityUnbound);
   ++requestId;
   controller?.abort();
   document.removeEventListener("visibilitychange", visibleRefresh);

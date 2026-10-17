@@ -276,7 +276,7 @@ try {
   await page.getByTestId("guest-create-dorm").click();
   await page.getByTestId("guest-create-name").fill("邮箱界面 QA");
   await page.getByTestId("guest-create-nickname").fill("界面测试甲");
-  await page.getByTestId("guest-create-members").fill("界面测试乙");
+  await page.getByTestId("guest-create-members").fill("界面测试乙\n界面测试丙");
   await page.getByTestId("guest-create-submit").click();
   await page.getByRole("button", { name: "更多操作", exact: true }).waitFor();
   check(
@@ -671,6 +671,95 @@ try {
     0,
     "verified newcomer joins by invite and exact name as an ordinary member",
   );
+  const memberSibling = await newMemberContext.newPage();
+  await memberSibling.goto(url);
+  await memberSibling.getByTestId("open-tools").waitFor();
+  await newcomer.getByRole("button", { name: "更多操作", exact: true }).click();
+  await newcomer.getByTestId("open-preferences").click();
+  await newcomer.getByTestId("open-email-account").click();
+  await newcomer.getByTestId("email-unbind").waitFor();
+  for (const width of [320, 390, 430]) {
+    await newcomer.setViewportSize({ width, height: 844 });
+    check(
+      await newcomer
+        .getByTestId("email-account-panel")
+        .evaluate((e) => e.scrollWidth <= e.clientWidth),
+      true,
+      `${width}px unlink setting has no overflow`,
+    );
+  }
+  await newcomer.getByTestId("email-unbind").click();
+  const unbindConfirm = newcomer.locator(".email-unbind-confirm");
+  await unbindConfirm.waitFor();
+  const unbindFrames = await unbindConfirm.evaluate(async (el) => {
+    const samples = [];
+    for (let i = 0; i < 18; i++) {
+      await new Promise(requestAnimationFrame);
+      samples.push(Number(getComputedStyle(el).opacity));
+    }
+    return samples;
+  });
+  check(
+    unbindFrames.some((value) => value > 0 && value < 1),
+    true,
+    "unbind confirmation visibly fades in within its sheet",
+  );
+  await newcomer.screenshot({
+    path: path.join(evidence, "unbind-confirm.png"),
+  });
+  await newcomer.getByRole("button", { name: "保留绑定", exact: true }).click();
+  await newcomer.getByTestId("email-unbind").waitFor();
+  check(
+    await newcomer.getByTestId("email-unbind").count(),
+    1,
+    "cancel keeps current binding",
+  );
+  // An older login must reverify before unlinking; verification continues the action.
+  clock += 11 * 60000;
+  await newcomer.getByTestId("email-unbind").click();
+  await newcomer.getByRole("button", { name: "解除绑定", exact: true }).click();
+  await newcomer
+    .getByRole("button", { name: "获取验证码", exact: true })
+    .click();
+  await newcomer
+    .getByLabel("验证码", { exact: true })
+    .fill(deliveries.at(-1).text.match(/验证码是：(\d{6})/)[1]);
+  await newcomer
+    .getByRole("button", { name: "验证并解除绑定", exact: true })
+    .click();
+  await newcomer.getByTestId("guest-member-name").waitFor();
+  await memberSibling.getByTestId("guest-member-name").waitFor();
+  check(
+    await newcomer.getByLabel("邮箱", { exact: true }).count(),
+    0,
+    "unlink keeps email logged in and returns to same room name entry",
+  );
+  await newcomer.getByTestId("guest-member-name").fill("界面测试甲");
+  await newcomer.getByTestId("guest-name-submit").click();
+  await newcomer
+    .getByText("此成员已绑定邮箱，请使用本人的邮箱登录", { exact: true })
+    .waitFor();
+  check(
+    await newcomer.getByTestId("marker-confirm").count(),
+    0,
+    "another email-bound identity cannot be selected",
+  );
+  await newcomer.getByTestId("guest-member-name").fill("界面测试丙");
+  await newcomer.getByTestId("guest-name-submit").click();
+  await newcomer.getByTestId("marker-confirm").click();
+  await newcomer.getByTestId("open-tools").waitFor();
+  check(
+    h.db.sqlite
+      .prepare(
+        "SELECT u.nickname FROM email_members em JOIN users u ON u.id=em.user_id JOIN email_accounts a ON a.id=em.account_id WHERE a.email='new-member@example.invalid'",
+      )
+      .get().nickname,
+    "界面测试丙",
+    "unlinked email binds an available identity",
+  );
+  await newcomer.reload();
+  await newcomer.getByTestId("open-tools").waitFor();
+  await memberSibling.close();
   await newMemberContext.close();
   const profileToken = await page.evaluate(() =>
     sessionStorage.getItem("dorm-token"),

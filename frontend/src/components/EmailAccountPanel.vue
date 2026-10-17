@@ -6,7 +6,10 @@ import {
   enterEmailRoom,
   refreshEmailAccount,
   type EmailEntry,
+  type EmailRoom,
+  unbindEmailIdentity,
 } from "../api/email";
+import { ApiError } from "../api";
 import HintPopover from "./HintPopover.vue";
 import { logoutAll } from "../api/logout";
 import { showToast } from "../interaction/notice";
@@ -28,6 +31,26 @@ const emit = defineEmits<{
   recover: [];
 }>();
 const codeField = ref<HTMLInputElement>();
+const pendingUnbind = ref<EmailRoom | null>(null);
+const confirmUnbindRoom = ref<EmailRoom | null>(null);
+const keepBindingButton = ref<HTMLButtonElement>();
+const unbindButton = ref<HTMLButtonElement>();
+let restoreUnbindFocus = false;
+function stepEntered() {
+  if (confirmUnbindRoom.value)
+    keepBindingButton.value?.focus({ preventScroll: true });
+  else if (restoreUnbindFocus) {
+    restoreUnbindFocus = false;
+    unbindButton.value?.focus({ preventScroll: true });
+  }
+}
+const currentRoom = computed(() =>
+  emailAccount.rooms.find(
+    (room) =>
+      room.id === props.dormId ||
+      (props.gate && room.member_id === props.memberId),
+  ),
+);
 const email = ref(""),
   code = ref(""),
   challenge = ref(""),
@@ -52,9 +75,11 @@ const submitLabel = computed(() =>
   busy.value
     ? "正在处理…"
     : challenge.value
-      ? props.memberToken
-        ? "验证并绑定"
-        : "验证并进入"
+      ? pendingUnbind.value
+        ? "验证并解除绑定"
+        : props.memberToken
+          ? "验证并绑定"
+          : "验证并进入"
       : "获取验证码",
 );
 async function act(fn: () => Promise<void>) {
@@ -126,6 +151,12 @@ async function verify() {
     code.value = "";
     await refreshEmailAccount();
     reverify.value = false;
+    if (pendingUnbind.value) {
+      await unbindEmailIdentity(pendingUnbind.value);
+      pendingUnbind.value = null;
+      showToast("已解除绑定，请输入你自己的名字");
+      return;
+    }
     if (props.memberToken || props.gate) await bindIdentity();
     await enterBoundRoom();
     showToast(props.memberToken ? "邮箱已绑定当前身份" : "邮箱验证成功");
@@ -165,6 +196,33 @@ function logout() {
     }
   });
 }
+async function unbind(room: EmailRoom) {
+  if (busy.value) return;
+  confirmUnbindRoom.value = room;
+}
+async function cancelUnbind() {
+  restoreUnbindFocus = true;
+  confirmUnbindRoom.value = null;
+}
+async function confirmUnbind() {
+  const room = confirmUnbindRoom.value;
+  if (!room || busy.value) return;
+  confirmUnbindRoom.value = null;
+  await act(async () => {
+    try {
+      await unbindEmailIdentity(room);
+      showToast("已解除绑定，请输入你自己的名字");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        pendingUnbind.value = room;
+        email.value = emailAccount.email;
+        mailEnabled.value = emailAccount.mailEnabled;
+        reverify.value = true;
+      }
+      throw e;
+    }
+  });
+}
 onMounted(() => {
   if (!emailAccount.loaded) void act(refreshEmailAccount);
 });
@@ -172,8 +230,35 @@ onMounted(() => {
 
 <template>
   <div class="email-panel" data-testid="email-account-panel" :aria-busy="busy">
-    <Transition name="email-step" mode="out-in">
-      <section v-if="!emailAccount.loggedIn || reverify" key="login">
+    <Transition name="email-step" mode="out-in" @after-enter="stepEntered">
+      <section
+        v-if="confirmUnbindRoom"
+        key="unbind"
+        class="email-unbind-confirm"
+        aria-labelledby="unbind-title"
+      >
+        <h2 id="unbind-title">
+          解除与「{{ confirmUnbindRoom.nickname }}」的绑定？
+        </h2>
+        <p>
+          {{
+            confirmUnbindRoom.is_creator
+              ? "邮箱账号和宿舍记录会保留，所有设备将退出此身份。重新绑定创建者需要管理恢复凭证。"
+              : "邮箱账号和打卡记录会保留，所有设备将退出此身份。随后可绑定尚未绑定邮箱的成员。"
+          }}
+        </p>
+        <button class="guest-primary" :disabled="busy" @click="confirmUnbind">
+          解除绑定
+        </button>
+        <button
+          ref="keepBindingButton"
+          class="email-reverify"
+          @click="cancelUnbind"
+        >
+          保留绑定
+        </button>
+      </section>
+      <section v-else-if="!emailAccount.loggedIn || reverify" key="login">
         <div v-if="!hideTitle" class="email-heading">
           <h2>{{ memberToken ? "绑定你的邮箱" : "用邮箱进入轮到" }}</h2>
           <HintPopover
@@ -328,6 +413,20 @@ onMounted(() => {
             }}</span></Transition
           >
         </button>
+        <button
+          v-if="currentRoom"
+          ref="unbindButton"
+          class="email-setting email-unbind"
+          :disabled="busy"
+          data-testid="email-unbind"
+          @click="unbind(currentRoom)"
+        >
+          <span
+            ><strong>{{ currentRoom.nickname }}</strong
+            ><span class="email-bound-label">当前身份</span></span
+          >
+          <span>解除身份绑定</span>
+        </button>
         <div class="email-secondary">
           <button
             :disabled="
@@ -363,6 +462,39 @@ onMounted(() => {
 .email-panel {
   width: 100%;
   text-align: left;
+}
+.email-unbind {
+  margin-top: 16px;
+}
+.email-unbind-confirm {
+  display: grid;
+  gap: 24px;
+}
+.email-unbind-confirm h2 {
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}
+.email-unbind-confirm p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #666;
+}
+.email-unbind > span:first-child {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.email-unbind > span:last-child {
+  flex-shrink: 0;
+}
+.email-bound-label {
+  font-size: 13px;
+  color: #777;
 }
 .email-heading {
   display: flex;
