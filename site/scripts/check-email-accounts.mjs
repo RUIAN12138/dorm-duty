@@ -82,6 +82,11 @@ try {
   });
   await api("/guest/create", { name: "未注册", nickname: "甲" }, 401);
   const first = await login("FIRST@example.invalid");
+  // Mail notification previews may remove all whitespace, including blank lines.
+  const compactPreview = delivered.at(-1).text.replace(/\s+/g, "");
+  eq(compactPreview.match(/\d+/g), [first.digits]);
+  eq(compactPreview.startsWith(`你的验证码是：${first.digits}。`), true);
+  eq(compactPreview.includes("十分钟内有效"), true);
   const firstCookie = cookie;
   eq((await api("/email/me")).email, "first@example.invalid");
   eq(delivered[0].to, "first@example.invalid");
