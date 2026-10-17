@@ -10,13 +10,27 @@ import emailRuntimeModule from "../site/runtime/email-runtime.cjs";
 import { openDatabase, ensureLocalDemo } from "../site/local/database.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const minimumNode = [22, 13, 0];
+const currentNode = process.versions.node.split(".").map(Number);
+const supportedNode =
+  currentNode[0] > minimumNode[0] ||
+  (currentNode[0] === minimumNode[0] && currentNode[1] > minimumNode[1]) ||
+  (currentNode[0] === minimumNode[0] &&
+    currentNode[1] === minimumNode[1] &&
+    currentNode[2] >= minimumNode[2]);
+if (!supportedNode)
+  throw new Error(`正式 Web 链路要求 Node.js 22.13.0 或更新版本，当前为 ${process.version}`);
+const deploymentMode = process.env.DORM_DEPLOYMENT || "local";
+if (!new Set(["local", "server"]).has(deploymentMode))
+  throw new Error("DORM_DEPLOYMENT 只允许 local 或 server");
 const databasePath = path.resolve(
   process.env.DORM_LOCAL_DATABASE || path.join(root, "data/dorm-local.db"),
 );
+if (databasePath.includes("\u0000")) throw new Error("数据库路径无效");
 const databaseId = createHash("sha256").update(databasePath).digest("hex");
 const host = process.env.DORM_LOCAL_HOST || "0.0.0.0";
 const port = Number(process.env.DORM_LOCAL_PORT ?? "8081");
-const serverDeployment = process.env.DORM_DEPLOYMENT === "server";
+const serverDeployment = deploymentMode === "server";
 const webBase = process.env.DORM_WEB_BASE || "/";
 if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(webBase))
   throw new Error("DORM_WEB_BASE 必须是安全的 /路径/ 格式");
@@ -201,6 +215,9 @@ try {
             ...(await response.json()),
             application: serverDeployment ? "dorm-duty" : "dorm-duty-local",
             runtime: serverDeployment ? "node-server" : "node-worker-local",
+            deployment_mode: deploymentMode,
+            node_version: process.versions.node,
+            web_base: webBase,
             storage: "sqlite",
             persistent: true,
             database_id: databaseId,
@@ -230,6 +247,9 @@ try {
     server.listen(port, host, resolve);
   });
   const actualPort = server.address().port;
+  console.log(
+    `运行配置：模式=${deploymentMode}；Node=${process.version}；Web Base=${webBase}；数据库=${databasePath}`,
+  );
   console.log(
     `轮到 · ${serverDeployment ? "服务器版" : "本地版"}：http://127.0.0.1:${actualPort}${webBase}`,
   );

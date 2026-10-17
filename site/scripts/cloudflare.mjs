@@ -12,7 +12,10 @@ const configPath = path.join(root, "wrangler.json");
 const version = "4.149.0";
 const args = process.argv.slice(2);
 const command = args[0] || "check";
-if (command === "deploy") throw new Error("旧 Cloudflare 业务部署已停用；正式发布请使用 deploy/ 的 Node 邮箱准入服务。");
+if (command === "deploy") {
+  console.error("旧 Cloudflare 业务部署已停用；正式发布请使用 deploy/ 的 Node 邮箱准入服务。");
+  process.exit(1);
+}
 const environment = { ...process.env, WRANGLER_SEND_METRICS: "false" };
 
 function wrangler(arguments_, { quiet = false, allowLoggedOut = false } = {}) {
