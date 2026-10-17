@@ -117,6 +117,7 @@ function exitDemo() {
   localStorage.removeItem(storageKey);
 }
 function emailLogout() {
+  identityFrame = undefined;
   migrationToken.value = "";
   migrationOwnerToken.value = "";
   migrationMemberId.value = undefined;
@@ -207,6 +208,13 @@ function animateEntryBack() {
     );
 }
 function restoreEntry(kind: string) {
+  if (
+    emailAccount.required &&
+    !emailAccount.loggedIn &&
+    (["rooms", "join", "create"].includes(kind) ||
+      (kind === "identity" && identityFrame?.mode !== "demo"))
+  )
+    kind = "welcome";
   restoringEntry = true;
   if (kind === "welcome") {
     cancelSelection();
