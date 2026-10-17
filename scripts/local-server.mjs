@@ -174,6 +174,7 @@ try {
           url.pathname = `/${url.pathname.slice(webBase.length)}`;
       }
       const requestHeaders = new Headers(req.headers);
+      requestHeaders.delete("CF-Connecting-IP");
       // Strip caller-controlled values. A loopback reverse proxy may supply X-Real-IP.
       const loopback = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
         req.socket.remoteAddress,

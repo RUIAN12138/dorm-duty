@@ -157,7 +157,7 @@ export function createEmailRuntime(
     );
   const cookie = (token, age = 30 * 86400) =>
     `${cookieName}=${token}; Path=${base}; HttpOnly; SameSite=Strict; Max-Age=${age}${config?.publicOrigin.startsWith("https:") ? "; Secure" : ""}`;
-  function session(request) {
+  function session(request, includeExpired = false) {
     const token = (request.headers.get("Cookie") || "")
       .split(";")
       .map((v) => v.trim())
@@ -167,9 +167,9 @@ export function createEmailRuntime(
     return (
       sql
         .prepare(
-          "SELECT a.*,s.token_hash AS session_hash,s.created_at AS verified_at,s.expires_at AS session_expires FROM email_sessions s JOIN email_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at>?",
+          "SELECT a.*,s.token_hash AS session_hash,s.created_at AS verified_at,s.expires_at AS session_expires FROM email_sessions s JOIN email_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND (s.expires_at>? OR ?=1)",
         )
-        .get(hash(token), stamp()) || null
+        .get(hash(token), stamp(), Number(includeExpired)) || null
     );
   }
   const required = (request) => {
@@ -459,8 +459,10 @@ export function createEmailRuntime(
         )
           fail(429, "验证码发送过于频繁，请稍后再试");
         sql
-          .prepare("UPDATE email_challenges SET consumed=1 WHERE email=?")
-          .run(email);
+          .prepare(
+            "UPDATE email_challenges SET consumed=1 WHERE email=? AND expires_at<=?",
+          )
+          .run(email, stamp());
         sql
           .prepare(
             "INSERT INTO email_challenges(id,email,code_hash,client_hash,created_at,expires_at) VALUES (?,?,?,?,?,?)",
@@ -522,7 +524,11 @@ export function createEmailRuntime(
       const digest = createHmac("sha256", config.otpSecret)
         .update(`${record.id}:${email}:${data.code}`)
         .digest();
-      if (!timingSafeEqual(digest, Buffer.from(record.code_hash, "hex")))
+      if (
+        typeof record.code_hash !== "string" ||
+        !/^[a-f0-9]{64}$/i.test(record.code_hash) ||
+        !timingSafeEqual(digest, Buffer.from(record.code_hash, "hex"))
+      )
         invalid();
       const token = secret();
       transaction(() => {
@@ -565,11 +571,11 @@ export function createEmailRuntime(
       });
       return reply({ ok: true }, 200, { "Set-Cookie": cookie(token) });
     }
-    const who = required(request);
     if (pathname === "/email/logout") {
-      logout(who);
+      logout(session(request, true));
       return reply({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
     }
+    const who = required(request);
     if (pathname === "/email/bind") {
       const data = await input(request, ["member_token", "member_id"]);
       bind(who, data.member_token, data.member_id);
@@ -677,6 +683,9 @@ export function createEmailRuntime(
     try {
       const p = new URL(request.url).pathname;
       if (p.startsWith("/email/")) return await route(request);
+      // Revocation does not grant access and must work even for expired/migration tokens.
+      if (p === "/auth/logout" && request.method === "POST")
+        return await dispatch(request);
       if (
         request.method === "POST" &&
         (p === "/chores/claim" ||

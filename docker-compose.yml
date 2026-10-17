@@ -1,5 +1,7 @@
+# DEPRECATED: historical Python stack only. Production uses deploy/ Node runtime.
 services:
   migrate:
+    profiles: ["legacy"]
     build: ./backend
     command: ["alembic", "upgrade", "head"]
     environment: &backend-env
@@ -10,6 +12,7 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     volumes: ["dorm-data:/data"]
   api:
+    profiles: ["legacy"]
     build: ./backend
     environment: *backend-env
     volumes: ["dorm-data:/data"]
@@ -28,6 +31,7 @@ services:
       timeout: 6s
       retries: 3
   worker:
+    profiles: ["legacy"]
     build: ./backend
     command: ["python", "-m", "app.scheduler"]
     environment: *backend-env
@@ -36,6 +40,7 @@ services:
       api: { condition: service_healthy }
     restart: unless-stopped
   web:
+    profiles: ["legacy"]
     build: ./frontend
     # Only the HTTPS edge should accept public traffic. This port is for local checks.
     ports: ["127.0.0.1:${WEB_PORT:-8080}:80"]

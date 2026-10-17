@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
+import { emailAccount, refreshEmailAccount } from "../api/email";
 import { useRouter, useRoute } from "vue-router";
 import { showToast } from "vant";
 import { post } from "../api";
@@ -13,16 +14,32 @@ const register = ref(false),
 const session = useSession(),
   router = useRouter(),
   route = useRoute();
+onMounted(async () => {
+  try {
+    await refreshEmailAccount();
+    if (emailAccount.required) await router.replace("/");
+  } catch {
+    error.value = "暂时无法确认登录方式，请重试或返回邮箱入口。";
+  }
+});
 async function submit() {
   busy.value = true;
   error.value = "";
   try {
-    if (register.value)
+    await refreshEmailAccount();
+    if (emailAccount.required) {
+      await router.replace("/");
+      return;
+    }
+    if (register.value) {
       await post("/auth/register", {
         username: username.value,
         password: password.value,
         nickname: nickname.value,
       });
+      register.value = false;
+      showToast("请使用账号密码登录；已有账号请使用原密码。");
+    }
     await session.login(username.value, password.value);
     showToast(register.value ? "注册成功" : "欢迎回来");
     const next = String(route.query.next || "/dorm");

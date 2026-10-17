@@ -47,7 +47,8 @@ router.beforeEach(async (to) => {
     )
       return "/";
   } catch {
-    // Keep the route's normal session checks when the server is unreachable.
+    // Do not expose an obsolete login form when email policy cannot be checked.
+    return "/";
   }
   const session = useSession();
   await session.init();

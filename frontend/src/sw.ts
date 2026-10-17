@@ -13,7 +13,7 @@ registerRoute(
   new NavigationRoute(createHandlerBoundToURL(`${base}index.html`), {
     denylist: [
       new RegExp(
-        `^${basePattern}(guest|chores|auth|dorms|duties|notifications|push|health|docs|openapi\\.json)(/|\\?|$)`,
+        `^${basePattern}(email|guest|chores|auth|dorms|duties|notifications|push|health|docs|openapi\\.json)(/|\\?|$)`,
       ),
     ],
   }),

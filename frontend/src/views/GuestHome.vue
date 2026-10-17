@@ -25,6 +25,7 @@ import {
 } from "../api/email";
 import { showToast } from "vant";
 import { ApiError } from "../api";
+import { logoutEvent, pendingLogout } from "../api/logout";
 import { useSession } from "../stores/session";
 import {
   guestApi,
@@ -87,7 +88,28 @@ async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   saveChoreToken(entry.invite_code, entry.member_id, entry.access_token);
   await loadDorm(entry.invite_code, entry.member_id, entry.access_token, quiet);
 }
+function exitDemo() {
+  ++requestId;
+  controller?.abort();
+  loading.value = false;
+  cancelSelection();
+  member.value = null;
+  dorm.value = null;
+  choreToken.value = "";
+  inviteCode.value = "";
+  viewMode.value = "entry";
+  localStorage.removeItem(storageKey);
+}
 function emailLogout() {
+  migrationToken.value = "";
+  migrationOwnerToken.value = "";
+  migrationMemberId.value = undefined;
+  ++requestId;
+  controller?.abort();
+  loading.value = false;
+  changingDorm.value = false;
+  creatingRoom.value = false;
+  savedDorms.value = [];
   emailOpen.value = false;
   cancelSelection();
   session.clear();
@@ -461,7 +483,7 @@ function changeMember() {
   notice.value = "";
 }
 function retryEntry() {
-  window.location.reload();
+  void boot();
 }
 async function refresh() {
   if (
@@ -644,6 +666,13 @@ async function returnToDorm(room: JoinedDorm) {
 }
 function visibleRefresh() {
   if (
+    (!bootReady || pendingLogout()) &&
+    document.visibilityState === "visible"
+  ) {
+    void boot();
+    return;
+  }
+  if (
     document.visibilityState === "visible" &&
     viewMode.value !== "entry" &&
     !member.value &&
@@ -673,7 +702,36 @@ function removeSharedInvite() {
 }
 watch(() => route.query.invite_code, removeSharedInvite);
 
-onMounted(async () => {
+watch(emailOpen, (open, previous) => {
+  if (!open && previous && emailAccount.required && !emailAccount.loggedIn) {
+    ++requestId;
+    controller?.abort();
+    loading.value = false;
+    cancelSelection();
+    member.value = null;
+    dorm.value = null;
+    choreToken.value = "";
+    viewMode.value = "entry";
+    changingDorm.value = false;
+    creatingRoom.value = false;
+    error.value = "";
+  }
+});
+window.addEventListener(logoutEvent, emailLogout);
+let bootRunning = false;
+let bootReady = false;
+let disposed = false;
+async function boot() {
+  if (bootRunning || disposed) return;
+  bootRunning = true;
+  try {
+    await bootEntry();
+  } finally {
+    bootRunning = false;
+  }
+}
+async function bootEntry() {
+  const epoch = requestId;
   loading.value = true;
   const saved = storedChoice();
   const sharedLink = route.query.invite_code !== undefined;
@@ -683,10 +741,24 @@ onMounted(async () => {
   removeSharedInvite();
   inviteCode.value = code;
   try {
-    await refreshEmailAccount();
-  } catch {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await refreshEmailAccount();
+        break;
+      } catch (failure) {
+        if (attempt >= 2 || disposed || !navigator.onLine) throw failure;
+        await new Promise((resolve) =>
+          setTimeout(resolve, 600 * (attempt + 1)),
+        );
+      }
+    }
+    if (disposed || epoch !== requestId) return;
+    bootReady = true;
+    error.value = "";
+  } catch (failure) {
     loading.value = false;
-    error.value = "暂时无法验证身份，请联网重试。";
+    error.value =
+      (failure as Error).message || "暂时无法验证身份，请联网重试。";
     return;
   }
   loading.value = false;
@@ -716,11 +788,16 @@ onMounted(async () => {
       code === saved.invite_code ? saved.member_id : undefined,
     );
   else if (sharedLink) openDormChange();
+}
+onMounted(() => {
+  void boot();
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
 });
 onUnmounted(() => {
+  disposed = true;
+  window.removeEventListener(logoutEvent, emailLogout);
   ++requestId;
   controller?.abort();
   document.removeEventListener("visibilitychange", visibleRefresh);
@@ -1087,6 +1164,7 @@ onUnmounted(() => {
             @create-dorm="openCreate"
             @recover-owner="recoveryOpen = true"
             @email-account="emailOpen = true"
+            @exit-demo="exitDemo"
           />
         </section>
       </template>
@@ -1102,7 +1180,11 @@ onUnmounted(() => {
       <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
     </footer>
     <ChoreBottomNav v-if="navVisible" :section="section" />
-    <ElasticSheet v-model="emailOpen" title="邮箱账号" motion="bottom">
+    <ElasticSheet
+      v-model="emailOpen"
+      title="邮箱登录与提醒设置"
+      motion="bottom"
+    >
       <EmailAccountPanel
         v-if="emailOpen"
         hide-title

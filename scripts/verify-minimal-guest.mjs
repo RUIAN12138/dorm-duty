@@ -94,7 +94,7 @@ async function account(label, nickname) {
   const username = `guestqa_${label}_${suffix}`;
   const password = randomBytes(18).toString("base64url");
   secrets.push(password);
-  const user = await api("/auth/register", {
+  await api("/auth/register", {
     method: "POST",
     status: 201,
     data: { username, password, nickname },
@@ -104,6 +104,7 @@ async function account(label, nickname) {
     data: { username, password },
   });
   secrets.push(auth.access_token);
+  const user = await api("/auth/me", { token: auth.access_token });
   return { ...user, token: auth.access_token, username, password };
 }
 

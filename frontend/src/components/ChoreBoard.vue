@@ -54,6 +54,7 @@ const emit = defineEmits<{
   "create-dorm": [];
   "recover-owner": [];
   "email-account": [];
+  "exit-demo": [];
 }>();
 const board = ref<ChoreBoardData | null>(null),
   loading = ref(false),
@@ -1078,7 +1079,15 @@ onUnmounted(() => {
     </div>
     <template v-if="board">
       <div class="board-identity">
-        <span class="identity-name">{{ dormName }}</span>
+        <button v-if="demo" class="demo-exit" @click="emit('exit-demo')">
+          退出游客
+        </button>
+        <span class="identity-name"
+          ><span>{{ dormName }}</span
+          ><span class="current-identity"
+            >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+          ></span
+        >
         <div class="identity-actions">
           <button
             class="order-trigger"
@@ -1530,6 +1539,7 @@ onUnmounted(() => {
             @click="fromPreferences(() => emit('email-account'))"
           />
           <ActionItem
+            v-if="!demo"
             label="切换我的身份"
             icon="friends-o"
             data-testid="guest-change-member"
@@ -1788,6 +1798,20 @@ onUnmounted(() => {
   </div>
 </template>
 <style scoped>
+.current-identity {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #666;
+}
+.demo-exit {
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  order: 3;
+  white-space: nowrap;
+}
 .task-detail-card {
   position: relative;
   isolation: isolate;
