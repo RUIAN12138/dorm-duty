@@ -130,6 +130,7 @@ try {
   emailRuntime = emailRuntimeModule.createEmailRuntime(db, {
     config: emailConfig,
     version: releaseInfo.version,
+    requireRegistration: serverDeployment,
     base: webBase,
   });
   try {

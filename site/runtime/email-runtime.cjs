@@ -12604,7 +12604,8 @@ function createEmailRuntime(db, {
   base: base2 = "/",
   autoStart = true,
   intervalMs = 1e4,
-  version: version2 = "development"
+  version: version2 = "development",
+  requireRegistration = false
 } = {}) {
   const sql = db.sqlite;
   if (config) validateEmailConfig(config);
@@ -12642,7 +12643,7 @@ function createEmailRuntime(db, {
       throw error2;
     }
   };
-  if (available)
+  if (available || requireRegistration)
     transaction(() => {
       const activated = sql.prepare(
         "UPDATE email_entry_policy SET required=1,activated_at=? WHERE id=1 AND required=0"

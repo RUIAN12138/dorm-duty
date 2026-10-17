@@ -10,9 +10,14 @@ try {
     assert.equal(response.status, 503);
     assert.equal((await response.json()).detail.code, "email_gateway_required");
   }
-  const runtime = emailModule.createEmailRuntime(h.db, {autoStart:false, version:"fixture-release"});
+  const runtime = emailModule.createEmailRuntime(h.db, {autoStart:false, version:"fixture-release", requireRegistration:true});
   const config = await runtime.wrap(new Request("https://test.invalid/email/config"), () => {throw Error("must not dispatch")});
-  assert.equal((await config.json()).version, "fixture-release");
+  const configuration = await config.json();
+  assert.equal(configuration.version, "fixture-release");
+  assert.equal(configuration.registration_required, true);
+  assert.equal(configuration.available, false);
+  const blocked = await runtime.wrap(new Request("https://test.invalid/auth/login", {method:"POST"}), () => {throw Error("must not dispatch")});
+  assert.equal(blocked.status,409);
   const ops = await runtime.wrap(new Request("https://test.invalid/email/operations"), () => {});
   assert.equal(ops.status, 401);
   await runtime.close();

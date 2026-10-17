@@ -117,6 +117,7 @@ export function createEmailRuntime(
     autoStart = true,
     intervalMs = 10000,
     version = "development",
+    requireRegistration = false,
   } = {},
 ) {
   const sql = db.sqlite;
@@ -159,7 +160,7 @@ export function createEmailRuntime(
       throw error;
     }
   };
-  if (available)
+  if (available || requireRegistration)
     transaction(() => {
       const activated = sql
         .prepare(
