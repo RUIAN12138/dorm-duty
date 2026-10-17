@@ -39,14 +39,19 @@ for (const file of composeFiles) {
   }
 }
 
-const docker = spawnSync("docker", ["compose", "config", "--services"], {
-  cwd: root,
-  encoding: "utf8",
-});
-if (!docker.error) {
-  assert.equal(docker.status, 0, docker.stderr || "Docker Compose config failed");
-  assert.equal(docker.stdout.trim(), "", "default Compose exposes legacy services");
-  console.log("Web architecture isolation passed with Docker Compose CLI.");
-} else {
-  console.log("Web architecture isolation passed statically; Docker is unavailable.");
+for (const files of [["docker-compose.yml"], composeFiles]) {
+  const docker = spawnSync("docker", ["compose", ...files.flatMap((file) => ["-f", file]), "config", "--services"], {
+    cwd: root,
+    encoding: "utf8",
+    // Compose interpolates even disabled profiles. These are test-only placeholders.
+    env: { ...process.env, JWT_SECRET: "architecture-check-only-not-a-real-secret", DOMAIN: "dorm.example.test", COMPOSE_PROFILES: "" },
+  });
+  if (!docker.error) {
+    assert.equal(docker.status, 0, docker.stderr || "Docker Compose config failed");
+    assert.equal(docker.stdout.trim(), "", "default Compose exposes legacy services");
+    console.log(`Web architecture isolation passed with Docker Compose CLI: ${files.join(", ")}.`);
+  } else if (docker.error.code === "ENOENT") {
+    console.log("Web architecture isolation passed statically; Docker is unavailable.");
+    break;
+  } else throw docker.error;
 }

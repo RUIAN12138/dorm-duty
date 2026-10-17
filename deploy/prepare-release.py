@@ -7,11 +7,13 @@ import json
 from datetime import datetime, timezone
 root = Path(__file__).resolve().parent.parent
 name = sys.argv[1]
-frontend_dist = Path(sys.argv[2] if len(sys.argv) > 2 else '../frontend/dist-server')
+frontend_dist = Path(sys.argv[2] if len(sys.argv) > 2 else 'frontend/dist-server')
 if not frontend_dist.is_absolute():
     frontend_dist = root / frontend_dist
 if not name.replace('-', '').replace('_', '').isalnum():
     raise SystemExit('Invalid release name')
+if not (frontend_dist / 'index.html').is_file():
+    raise SystemExit('Frontend build not found: ' + str(frontend_dist))
 stage = root / 'data' / name
 if stage.exists():
     raise SystemExit('Release staging directory already exists')

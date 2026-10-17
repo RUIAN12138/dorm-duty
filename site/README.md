@@ -4,11 +4,10 @@
 
 Cloudflare Worker/Pages 代码只保留历史兼容与停用提示，禁止单独发布；`backend/` FastAPI 同样属于历史实现。正式发布只使用根目录 `npm run web:release -- <名称>` 生成包，再交给 `deploy/install-release.py` 安装。
 
-- `worker/backend.mjs`：排班、宿舍、匿名创建、本人打卡、历史、消息与管理权限。
+- `worker/backend.mjs`：宿舍、排班、本人打卡、历史、消息与管理权限；正式调用要求 Node 邮箱网关能力。
+- `local/email-runtime.mjs`：邮箱验证码、Cookie 会话、成员绑定与解绑、准入和邮件投递。
 - `worker/chores.mjs`：地板、厕所、洗手池、抬水、专用成员身份、创建者配置、定向提醒及完成日历。
-- `db/schema.ts`：原六张业务表加 `sessions`，以及六张新 chores / 成员身份表；令牌只保存 SHA-256 哈希。
-- `drizzle/`：不可改写的 `0000` 初始结构及新增 `0001` 迁移；迁移仅含结构，演示数据另行初始化。
-- `.openai/hosting.json`：原 project_id，`d1: "DB"`、`r2: null`。
+- `db/schema.ts`、`drizzle/`：业务、邮箱、会话、通知与审计结构；迁移只新增，已应用文件不得改写。实际迁移清单以目录为准。
 
 ## 构建与检查
 
@@ -27,7 +26,9 @@ npm run web:verify
 
 新增结构时更新 `db/schema.ts`，运行 `npm run db:generate` 并检查 SQL；已部署的 SQL / journal / snapshot 不得覆盖。成员可主动发送站内提醒，页面打开时获取。
 
-匿名创建返回当前设备的管理员令牌。正式宿舍通过邀请码选择名字、确认图案，可领取只绑定该成员的专用 chores 令牌，用于本人打卡、提醒同宿舍成员及修改本人图案；它不能访问原账号管理 API。选择创建者名字也不授予管理员权限。这是熟人宿舍的信任式选人流程，不提供强身份验证。管理设置校验创建者权限，游客示例只读。业务响应 `no-store`，SW 不缓存 API；含邀请码页面使用 `Referrer-Policy: no-referrer`。完整规则见 [CHORES](../docs/CHORES.md)。
+正式用户先验证邮箱，再创建宿舍，或凭邀请码与完整姓名绑定未被其他邮箱绑定的成员。创建者权限来自邮箱关联，不再签发独立设备管理员会话。邮箱会话固定有效期，退出会撤销相应会话；解绑只撤销目标宿舍的关联授权，不改写打卡历史。完整身份与边界见 [准入审计](../docs/AUTH_RELEASE_AUDIT.md)。
+
+仅“知道邀请码与姓名”仍不是实名证明，未绑定身份存在被知情者先认领的边界。游客示例只读。业务响应 `no-store`，SW 不缓存 API；含邀请码页面使用 `Referrer-Policy: no-referrer`。
 
 ## 历史代码
 

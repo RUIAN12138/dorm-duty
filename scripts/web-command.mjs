@@ -54,15 +54,16 @@ function buildFrontend(output, { server = false } = {}) {
   return run(npm, args, { env });
 }
 
+function embed(frontend, worker) {
+  return run(process.execPath, ["site/scripts/embed-frontend.mjs"], {
+    env: { DORM_FRONTEND_DIST: frontend, DORM_WORKER_OUTPUT: worker },
+  });
+}
+
 function build({ frontend, worker, server = false }) {
   const frontendStatus = buildFrontend(frontend, { server });
   if (frontendStatus !== 0) process.exit(frontendStatus);
-  const workerStatus = run(process.execPath, ["site/scripts/embed-frontend.mjs"], {
-    env: {
-      DORM_FRONTEND_DIST: frontend,
-      DORM_WORKER_OUTPUT: worker,
-    },
-  });
+  const workerStatus = embed(frontend, worker);
   if (workerStatus !== 0) process.exit(workerStatus);
 }
 
@@ -79,6 +80,12 @@ const verificationScripts = [
   "site/scripts/check-email-entry-policy.mjs",
   "site/scripts/check-auth-boundaries.mjs",
   "site/scripts/check-email-unbind.mjs",
+  "site/scripts/check-email-hardening.mjs",
+  "site/scripts/check-round-order.mjs",
+  "site/scripts/check-water-reassign.mjs",
+  "site/scripts/check-undo.mjs",
+  "site/scripts/check-native-push.mjs",
+  "site/scripts/check-member-push.mjs",
   "site/scripts/check-scheduled-reminders.mjs",
   "site/scripts/check-reminder-runtime.mjs",
 ];
@@ -99,20 +106,22 @@ if (action === "dev") {
 } else if (action === "verify") {
   const temporary = mkdtempSync(join(tmpdir(), "dorm-web-verify-"));
   const frontend = join(temporary, "frontend");
+  const worker = join(temporary, "site/worker/index.mjs");
   const results = [];
   try {
     const buildStatus = buildFrontend(frontend);
     results.push(["frontend build", buildStatus]);
     if (buildStatus === 0) {
+      const workerStatus = embed(frontend, worker);
+      results.push(["worker build", workerStatus]);
       results.push([
         "email runtime build",
         run(process.execPath, ["site/scripts/build-email-runtime.mjs"]),
       ]);
       for (const script of verificationScripts) {
+        if (workerStatus !== 0) break;
         const env = {
-          ...(script.endsWith("check-worker.mjs")
-            ? { DORM_WORKER_INPUT: "worker/index.js" }
-            : {}),
+          DORM_WORKER_INPUT: worker,
           DORM_FRONTEND_DIST: frontend,
         };
         results.push([script, run(process.execPath, [script], { env })]);

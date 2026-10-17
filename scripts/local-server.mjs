@@ -2,10 +2,9 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 import { EMAIL_GATE_CAPABILITY } from "../site/worker/backend.mjs";
-import worker from "../site/worker/index.js";
 import pushRuntimeModule from "../site/runtime/push-runtime.cjs";
 import emailRuntimeModule from "../site/runtime/email-runtime.cjs";
 import { openDatabase, ensureLocalDemo } from "../site/local/database.mjs";
@@ -24,6 +23,11 @@ if (!supportedNode)
 const deploymentMode = process.env.DORM_DEPLOYMENT || "local";
 if (!new Set(["local", "server"]).has(deploymentMode))
   throw new Error("DORM_DEPLOYMENT 只允许 local 或 server");
+// Isolated builds and HTTP checks must load the same generated artifact.
+// Installed releases keep their package-local entry unless explicitly overridden.
+const { default: worker } = await import(
+  pathToFileURL(path.resolve(root, "site", process.env.DORM_WORKER_INPUT || "worker/index.js")).href
+);
 const databasePath = path.resolve(
   process.env.DORM_LOCAL_DATABASE || path.join(root, "data/dorm-local.db"),
 );
