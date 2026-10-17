@@ -480,7 +480,7 @@ export function createEmailRuntime(
         await deliver({
           to: email,
           subject: "轮到 · 邮箱验证码",
-          text: `你的验证码是：${code}\n\n10 分钟内有效，仅可使用一次。用于注册或登录轮到。\n如果不是你本人操作，请忽略此邮件。`,
+          text: `你的验证码是：${code}。\n\n验证码为六位数字，十分钟内有效，仅可使用一次。用于注册或登录轮到。\n如果不是你本人操作，请忽略此邮件。`,
         });
       } catch {
         sql
