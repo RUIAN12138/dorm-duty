@@ -457,9 +457,11 @@ try {
     "expired member grant never strands the user on a reload-only error",
   );
   await page.unroute("**/email/enter");
+  // Treat going offline as a new foreground event, outside the recovery burst.
+  await page.waitForTimeout(1600);
   await first.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await page.locator(".chore-inline-error").waitFor();
+  await page.getByTestId("board-refresh-notice").waitFor();
   check(
     await page.evaluate(
       () =>
@@ -478,7 +480,7 @@ try {
     window.dispatchEvent(new Event("focus"));
   });
   await resumedRead;
-  await page.locator(".chore-inline-error").waitFor({ state: "hidden" });
+  await page.getByTestId("board-refresh-notice").waitFor({ state: "hidden" });
   check(
     await page
       .getByRole("heading", { name: "暂时无法查看", exact: true })
