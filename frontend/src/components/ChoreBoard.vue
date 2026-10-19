@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import LoadingSkeleton from "./LoadingSkeleton.vue";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import { completionFeedback } from "../interaction/completionFeedback";
 import { showToast } from "../interaction/notice";
 import { createVelocityTracker, rubberBand } from "../interaction/gestures";
@@ -19,23 +27,41 @@ import {
 import RoundProgress from "./RoundProgress.vue";
 import WaterNudge from "./WaterNudge.vue";
 import WaterHandoffName from "./WaterHandoffName.vue";
-import { baselineWaterHandoff } from "../interaction/waterHandoff";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
 import CompletionAction from "./CompletionAction.vue";
 import GalaxySpinner from "./GalaxySpinner.vue";
-import ActionItem from "./ActionItem.vue";
+import ChoreMenu, { type MenuAction } from "./ChoreMenu.vue";
+import ChoreMessages from "./ChoreMessages.vue";
+import ReminderBanner from "./ReminderBanner.vue";
+import { useReminderBanner } from "../composables/useReminderBanner";
+import ChoreReminderSheet from "./ChoreReminderSheet.vue";
+import RefreshNotice from "./RefreshNotice.vue";
 
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
-import ChoreCalendar from "./ChoreCalendar.vue";
+import AsyncPageError from "./AsyncPageError.vue";
+const ChoreCalendar = defineAsyncComponent({
+  loader: () => import("./ChoreCalendar.vue"),
+  loadingComponent: LoadingSkeleton,
+  errorComponent: AsyncPageError,
+  delay: 0,
+  timeout: 15000,
+});
 import ChoreSettings from "./ChoreSettings.vue";
 import ChorePushSettings from "./ChorePushSettings.vue";
 import CreatorRecovery from "./CreatorRecovery.vue";
 import { syncMemberPush } from "../api/memberPush";
+import {
+  createBackgroundRefresh,
+  createPushSyncGate,
+} from "../interaction/backgroundRefresh";
 import { onNativePushReady } from "../api/nativePush";
 import ElasticSheet from "./ElasticSheet.vue";
 import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
+import { useReminderInbox } from "../composables/useReminderInbox";
+import { createCalendarViewMemory } from "../interaction/calendarViewMemory";
+import { useMarkerEditor } from "../composables/useMarkerEditor";
 import { createTaskSwipe } from "../interaction/taskSwipe";
 import { navigationOrigin, motionAllowed } from "../interaction/motion";
 const props = defineProps<{
@@ -47,6 +73,7 @@ const props = defineProps<{
   section: "duty" | "water" | "calendar";
 }>();
 const router = useRouter();
+const pushSync = createPushSyncGate(syncMemberPush);
 const emit = defineEmits<{
   expired: [];
   member: [value: ChoreMember];
@@ -98,6 +125,7 @@ watch(completionSyncPending, (pending) => {
     }, 700);
 });
 onUnmounted(() => clearTimeout(syncStatusTimer));
+const calendarMemory = ref(createCalendarViewMemory());
 const month = ref(
   new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -118,8 +146,7 @@ const messagesOpen = ref(false),
   settingsOpen = ref(false),
   settingsCategory = ref<ChoreTask["key"]>(),
   reminderOpen = ref(false),
-  markerOpen = ref(false),
-  markerDraft = ref("");
+  markerOpen = ref(false);
 const toolsOpen = ref(false),
   preferencesOpen = ref(false),
   orderOpen = ref(false);
@@ -143,6 +170,37 @@ function fromTools(action: () => void) {
 function fromPreferences(action: () => void) {
   queuedTool = action;
   preferencesOpen.value = false;
+}
+function menuAction(action: MenuAction) {
+  const actions: Record<MenuAction, () => void> = {
+    reminder: () => openReminder(),
+    messages: () => {
+      messagesOpen.value = true;
+    },
+    join: () => emit("join-dorm"),
+    push: () => {
+      pushOpen.value = true;
+    },
+    preferences: () => {
+      preferencesOpen.value = true;
+    },
+    settings: () => {
+      settingsCategory.value = undefined;
+      settingsOpen.value = true;
+    },
+    email: () => emit("email-account"),
+    identity: () => emit("switch-member"),
+    marker: openMarker,
+    create: () => emit("create-dorm"),
+    recovery: () =>
+      board.value?.is_creator
+        ? (recoveryOpen.value = true)
+        : emit("recover-owner"),
+    refresh: () => {
+      void refreshArrangements();
+    },
+  };
+  (preferencesOpen.value ? fromPreferences : fromTools)(actions[action]);
 }
 function runQueuedTool() {
   const action = queuedTool;
@@ -271,6 +329,7 @@ function sectionSwipeCancel(event: PointerEvent) {
 function sectionHidden() {
   if (document.hidden) {
     resetSectionSwipe();
+    backgroundRefresh.interrupt();
     // Suspended mobile fetches may otherwise hold `loading` through resume.
     // Only the read request is cancelled; task mutations have their own flow.
     if (loading.value) {
@@ -304,6 +363,13 @@ function openTask(task: ChoreTask, event: MouseEvent) {
   detailTask.value = task;
   detailOpen.value = true;
 }
+function remindDetailTask() {
+  const task = detailTask.value;
+  if (!task || task.status !== "pending" || task.assignee_id === props.memberId)
+    return;
+  queuedTool = () => openReminder(task);
+  detailOpen.value = false;
+}
 function showEntered(element: Element) {
   element.removeAttribute("aria-hidden");
   element.removeAttribute("inert");
@@ -313,13 +379,7 @@ function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
   element.setAttribute("inert", "");
 }
-const targetId = ref<number | null>(null),
-  targetTaskId = ref<number | null>(null),
-  targetTasks = ref<ChoreTask[]>([]),
-  targetLoading = ref(false),
-  targetError = ref("");
 let controller: AbortController | null = null,
-  targetController: AbortController | null = null,
   requestId = 0;
 let poll: ReturnType<typeof setInterval> | null = null,
   midnight: ReturnType<typeof setTimeout> | null = null;
@@ -508,40 +568,13 @@ const todayComplete = computed(
 const unread = computed(
   () => board.value?.reminders.filter((note) => !note.read_at) || [],
 );
-const reminderSeenKey = `dorm-reminder-presented-v1:${props.invite}:${props.memberId}`;
-const presentedReminders = new Set<number>();
-try {
-  const saved = JSON.parse(sessionStorage.getItem(reminderSeenKey) || "[]");
-  if (Array.isArray(saved))
-    for (const id of saved)
-      if (Number.isSafeInteger(id)) presentedReminders.add(id);
-} catch {
-  /* Presentation still works when browser storage is unavailable. */
-}
-function rememberPresentedReminders() {
-  for (const note of unread.value) presentedReminders.add(note.id);
-  try {
-    sessionStorage.setItem(
-      reminderSeenKey,
-      JSON.stringify([...presentedReminders].slice(-200)),
-    );
-  } catch {
-    /* Keep the in-memory deduplication for this visit. */
-  }
-}
-function presentNewReminders() {
-  if (
-    props.demo ||
-    document.visibilityState !== "visible" ||
-    !unread.value.length
-  )
-    return;
-  if (messagesOpen.value) {
-    rememberPresentedReminders();
-    return;
-  }
-  if (
-    busy.value ||
+const reminderBanner = useReminderBanner(() => ({
+  identity: `${props.invite}:${props.memberId}`,
+  notes: unread.value,
+  visible: !props.demo && document.visibilityState === "visible",
+  inboxOpen: messagesOpen.value,
+  blocked:
+    !!busy.value ||
     settingsOpen.value ||
     reminderOpen.value ||
     markerOpen.value ||
@@ -551,15 +584,17 @@ function presentNewReminders() {
     roundOpen.value ||
     pushOpen.value ||
     recoveryOpen.value ||
-    detailTask.value ||
-    document.querySelector(".sheet-layer")
-  )
-    return;
-  if (unread.value.some((note) => !presentedReminders.has(note.id))) {
-    messagesOpen.value = true;
-    rememberPresentedReminders();
-  }
+    !!detailTask.value ||
+    !!document.querySelector(".sheet-layer"),
+}));
+function presentNewReminders() {
+  reminderBanner.refresh();
 }
+function openBannerMessages() {
+  messagesOpen.value = true;
+  reminderBanner.dismiss();
+}
+
 watch(
   [
     unread,
@@ -642,7 +677,7 @@ async function load(): Promise<boolean> {
   controller = requestController;
   const id = ++requestId;
   loading.value = true;
-  error.value = "";
+  if (!board.value) error.value = "";
   try {
     const result = await getChoreBoard(
       props.invite,
@@ -655,18 +690,17 @@ async function load(): Promise<boolean> {
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
 
-    baselineWaterHandoff(
-      `${props.invite}:${props.memberId}`,
-      result.water_handoff,
-    );
+    result.reminders = reconcileMessages(result.reminders);
     board.value = result;
+    backgroundRefresh.markSuccessful();
+    error.value = "";
     if (
       waterReceipt.value &&
       !result.undo_tasks.some((t) => t.id === waterReceipt.value?.id)
     )
       waterReceipt.value = null;
     completionSyncPending.value = false;
-    if (!props.demo) void syncMemberPush(props.token).catch(() => {});
+    if (!props.demo) void pushSync.run(props.token);
     emit("member", result.member);
     scheduleMidnight(result.server_time);
     return true;
@@ -893,118 +927,80 @@ async function nudgeWater() {
     if (error instanceof ApiError && error.status === 409) void load();
   }
 }
-function openReminder() {
+const reminderContext = ref<{ memberId: number; taskId: number } | null>(null);
+function openReminder(task?: ChoreTask) {
   if (props.demo) {
     demoNotice();
     return;
   }
-  targetId.value = null;
-  targetTaskId.value = null;
-  targetTasks.value = [];
-  targetError.value = "";
+  reminderContext.value = task
+    ? { memberId: task.assignee_id, taskId: task.id }
+    : null;
   reminderOpen.value = true;
 }
-async function chooseTarget(person: ChoreMember) {
-  targetController?.abort();
-  targetController = new AbortController();
-  const signal = targetController.signal;
-  targetId.value = person.user_id;
-  targetTaskId.value = null;
-  targetTasks.value = [];
-  targetLoading.value = true;
-  targetError.value = "";
-  try {
-    const result = await getChoreBoard(
-      props.invite,
-      person.user_id,
-      month.value,
-      props.token,
-      signal,
-    );
-    if (signal.aborted) return;
-    const tasks = [
-      ...result.today_tasks,
-      ...result.next_tasks,
-      ...(result.water_task?.assignee_id === person.user_id
-        ? [result.water_task]
-        : []),
-    ].filter((task) => task.status === "pending");
-    targetTasks.value = [
-      ...new Map(tasks.map((task) => [task.id, task])).values(),
-    ];
-    targetTaskId.value = targetTasks.value[0]?.id || null;
-  } catch (e) {
-    if (!signal.aborted) targetError.value = (e as Error).message;
-  } finally {
-    if (!signal.aborted) targetLoading.value = false;
-  }
-}
-async function sendReminder() {
-  if (busy.value || !targetId.value || !targetTaskId.value) return;
-  busy.value = "reminder";
-  targetError.value = "";
-  try {
-    await choreRequest("/chores/remind", props.token, {
-      method: "POST",
-      body: JSON.stringify({
-        target_member_id: targetId.value,
-        task_id: targetTaskId.value,
-      }),
-    });
-    reminderOpen.value = false;
-    showToast("提醒已发送");
-    await load();
-  } catch (e) {
-    targetError.value = (e as Error).message;
-  } finally {
-    busy.value = "";
-  }
-}
-async function markRead(id: number) {
-  if (busy.value) return;
-  busy.value = `read-${id}`;
-  try {
-    await choreRequest(`/chores/reminders/${id}/read`, props.token, {
-      method: "PATCH",
-      body: "{}",
-    });
-    await load();
-  } catch (e) {
-    actionError.value = (e as Error).message;
-  } finally {
-    busy.value = "";
-  }
-}
+const {
+  error: messageError,
+  read: markRead,
+  reconcile: reconcileMessages,
+} = useReminderInbox(
+  () => ({
+    open: messagesOpen.value,
+    token: props.token,
+    invite: props.invite,
+    memberId: props.memberId,
+  }),
+  busy,
+  {
+    confirmed: (id, readAt) => {
+      const note = board.value?.reminders.find((note) => note.id === id);
+      if (note) note.read_at = readAt;
+      void load();
+    },
+  },
+);
+const {
+  draft: markerDraft,
+  error: markerError,
+  save: saveMarker,
+} = useMarkerEditor(
+  () => ({
+    open: markerOpen.value,
+    token: props.token,
+    memberId: props.memberId,
+    current: board.value?.member.marker_id || "",
+  }),
+  busy,
+  {
+    close: () => {
+      markerOpen.value = false;
+    },
+    saved: (marker) => {
+      if (board.value) {
+        board.value.member.marker_id = marker;
+        const person = board.value.members.find(
+          (m) => m.user_id === props.memberId,
+        );
+        if (person) person.marker_id = marker;
+        emit("member", board.value.member);
+      }
+      showToast("标记已保存");
+      void load();
+    },
+  },
+);
 function openMarker() {
   if (props.demo) {
     demoNotice();
     return;
   }
-  markerDraft.value = board.value?.member.marker_id || "";
-  actionError.value = "";
   markerOpen.value = true;
 }
-async function saveMarker() {
-  if (busy.value || !markerDraft.value) return;
-  busy.value = "marker";
-  actionError.value = "";
-  try {
-    await choreRequest("/chores/marker", props.token, {
-      method: "PATCH",
-      body: JSON.stringify({ marker_id: markerDraft.value }),
-    });
-    markerOpen.value = false;
-    await load();
-  } catch (e) {
-    actionError.value = (e as Error).message;
-  } finally {
-    busy.value = "";
-  }
-}
-function visibleRefresh() {
+const backgroundRefresh = createBackgroundRefresh(load);
+function visibleRefresh(event?: Event) {
   presentNewReminders();
   if (
     document.visibilityState === "visible" &&
+    navigator.onLine &&
     !loading.value &&
     !busy.value &&
     !settingsOpen.value &&
@@ -1019,7 +1015,13 @@ function visibleRefresh() {
     !detailTask.value &&
     (!document.querySelector(".sheet-layer") || messagesOpen.value)
   )
-    void load();
+    void backgroundRefresh.run(
+      event?.type === "online" ? "online" : event ? "foreground" : "poll",
+    );
+}
+function pushOnline() {
+  if (!props.demo && !document.hidden && board.value)
+    void pushSync.run(props.token, true);
 }
 watch(month, () => void load());
 watch(
@@ -1027,33 +1029,42 @@ watch(
   () => void load(),
 );
 const removeNativeReady = onNativePushReady(() => {
-  if (!props.demo) void syncMemberPush(props.token).catch(() => {});
+  if (!props.demo && board.value) void pushSync.run(props.token, true);
 });
 onMounted(() => {
-  void load();
+  void backgroundRefresh.run("foreground");
   poll = setInterval(visibleRefresh, 10000);
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
+  window.addEventListener("online", pushOnline);
   window.addEventListener("pageshow", visibleRefresh);
 });
 onUnmounted(() => {
   alive = false;
+  backgroundRefresh.dispose();
+  pushSync.dispose();
   removeNativeReady();
   resetSectionSwipe();
   ++requestId;
   controller?.abort();
-  targetController?.abort();
   if (poll) clearInterval(poll);
   if (midnight) clearTimeout(midnight);
   document.removeEventListener("visibilitychange", visibleRefresh);
   window.removeEventListener("focus", visibleRefresh);
   window.removeEventListener("online", visibleRefresh);
+  window.removeEventListener("online", pushOnline);
   window.removeEventListener("pageshow", visibleRefresh);
 });
 </script>
 <template>
   <div class="chore-board" data-testid="chore-board">
+    <ReminderBanner
+      :note="reminderBanner.active.value"
+      @dismiss="reminderBanner.dismiss"
+      @open="openBannerMessages"
+      @settled="reminderBanner.settled"
+    />
     <LoadingSkeleton v-if="loading && !board" />
     <div
       v-if="completionSyncPending && showSyncStatus"
@@ -1068,7 +1079,7 @@ onUnmounted(() => {
         {{ loading ? "同步中" : "重试同步" }}
       </button>
     </div>
-    <div v-else-if="error" class="chore-inline-error" role="alert">
+    <div v-else-if="error && !board" class="chore-inline-error" role="alert">
       {{ error }}<button :disabled="loading" @click="load">重新加载</button>
     </div>
     <template v-if="board">
@@ -1083,6 +1094,11 @@ onUnmounted(() => {
           ></span
         >
         <div class="identity-actions">
+          <RefreshNotice
+            :error="completionSyncPending ? '' : error"
+            :loading="loading"
+            @retry="load"
+          />
           <button
             class="order-trigger"
             aria-label="任务轮序"
@@ -1142,6 +1158,7 @@ onUnmounted(() => {
               data-testid="pane-calendar"
             >
               <ChoreCalendar
+                :memory="calendarMemory"
                 :month="month"
                 :invite="invite"
                 :token="demo ? '' : token"
@@ -1448,133 +1465,18 @@ onUnmounted(() => {
       >
         {{ actionError }}
       </p>
-      <ElasticSheet
-        v-model="toolsOpen"
-        :title="dormName || '宿舍'"
-        motion="bottom"
+      <ChoreMenu
+        v-model:tools="toolsOpen"
+        v-model:preferences="preferencesOpen"
+        :dorm-name="dormName"
+        :member="board.member"
+        :creator="board.is_creator"
+        :demo="demo"
+        :unread-count="unread.length"
+        :disabled="loading || !!busy"
+        @action="menuAction"
         @closed="runQueuedTool"
-      >
-        <div class="menu-profile">
-          <MemberMark :id="board.member.marker_id" :size="34" />
-          <div>
-            <strong>{{ board.member.nickname }}</strong
-            ><span>{{
-              demo ? "游客体验" : board.is_creator ? "宿舍创建者" : "宿舍成员"
-            }}</span>
-          </div>
-        </div>
-        <div class="menu-quick">
-          <ActionItem
-            tile
-            label="提醒室友"
-            icon="chat-o"
-            data-testid="open-reminder"
-            @click="fromTools(openReminder)"
-          />
-          <ActionItem
-            tile
-            :delay="0.02"
-            label="室友消息"
-            icon="comment-o"
-            :badge="unread.length"
-            data-testid="open-messages"
-            @click="fromTools(() => (messagesOpen = true))"
-          />
-          <ActionItem
-            tile
-            :delay="0.04"
-            label="切换宿舍"
-            icon="exchange"
-            data-testid="guest-change-dorm"
-            @click="fromTools(() => emit('join-dorm'))"
-          />
-          <ActionItem
-            tile
-            :delay="0.06"
-            label="系统通知"
-            icon="bell"
-            data-testid="open-system-notifications"
-            @click="fromTools(() => (pushOpen = true))"
-          />
-        </div>
-        <div class="menu-section">
-          <ActionItem
-            v-if="board.is_creator && !demo"
-            label="任务设置"
-            icon="setting-o"
-            data-testid="open-chore-settings"
-            @click="
-              fromTools(() => {
-                settingsCategory = undefined;
-                settingsOpen = true;
-              })
-            "
-          />
-          <ActionItem
-            label="个人与更多"
-            icon="contact-o"
-            data-testid="open-preferences"
-            @click="fromTools(() => (preferencesOpen = true))"
-          />
-        </div>
-      </ElasticSheet>
-      <ElasticSheet
-        v-model="preferencesOpen"
-        title="个人与更多"
-        motion="bottom"
-        @closed="runQueuedTool"
-      >
-        <div class="menu-section">
-          <ActionItem
-            v-if="!demo"
-            label="邮箱账号与提醒"
-            icon="envelop-o"
-            data-testid="open-email-account"
-            @click="fromPreferences(() => emit('email-account'))"
-          />
-          <ActionItem
-            v-if="!demo"
-            label="切换我的身份"
-            icon="friends-o"
-            data-testid="guest-change-member"
-            @click="fromPreferences(() => emit('switch-member'))"
-          />
-          <ActionItem
-            label="更换标记"
-            icon="smile-o"
-            data-testid="open-marker"
-            @click="fromPreferences(openMarker)"
-          />
-        </div>
-        <div class="menu-section">
-          <ActionItem
-            label="创建宿舍"
-            icon="plus"
-            data-testid="guest-create-dorm"
-            @click="fromPreferences(() => emit('create-dorm'))"
-          />
-          <ActionItem
-            v-if="!demo"
-            :label="board.is_creator ? '管理恢复码' : '恢复管理权限'"
-            icon="shield-o"
-            data-testid="open-creator-recovery"
-            @click="
-              fromPreferences(() =>
-                board?.is_creator
-                  ? (recoveryOpen = true)
-                  : emit('recover-owner'),
-              )
-            "
-          />
-          <ActionItem
-            label="刷新安排"
-            icon="replay"
-            :disabled="loading || !!busy"
-            data-testid="chore-refresh"
-            @click="fromPreferences(() => void refreshArrangements())"
-          />
-        </div>
-      </ElasticSheet>
+      />
       <WaterOrderSheet
         v-if="board.categories.find((c) => c.key === 'water')"
         v-model="orderOpen"
@@ -1614,6 +1516,20 @@ onUnmounted(() => {
               {{ clock(detailTask.deadline_at) }} 前</span
             >
           </div>
+          <button
+            v-if="
+              !demo &&
+              detailTask.status === 'pending' &&
+              detailTask.assignee_id !== memberId
+            "
+            type="button"
+            class="order-trigger"
+            :disabled="!!busy"
+            data-testid="remind-detail-task"
+            @click="remindDetailTask"
+          >
+            提醒{{ detailTask.assignee_name }}
+          </button>
           <p v-if="detailTask.completed_at" class="chore-completed">
             {{ clock(detailTask.completed_at) }} 已完成
           </p>
@@ -1640,58 +1556,19 @@ onUnmounted(() => {
           />
         </div>
       </ElasticSheet>
-      <ElasticSheet
+      <ChoreMessages
         v-model="messagesOpen"
-        title="室友消息"
+        :reminders="board.reminders"
+        :unread-count="unread.length"
+        :busy="!!busy"
+        :format-time="clock"
+        :error="messageError"
+        :pending-id="
+          busy.startsWith('read-') ? Number(busy.slice(5)) : undefined
+        "
+        @read="markRead"
         @closed="presentNewReminders"
-      >
-        <div class="chore-reminders" data-testid="chore-reminders">
-          <div class="messages-heading">
-            <p>
-              {{
-                unread.length ? `还有 ${unread.length} 条未读提醒` : "全部已读"
-              }}
-            </p>
-            <button data-testid="messages-close" @click="messagesOpen = false">
-              收起消息
-            </button>
-          </div>
-          <p v-if="!board.reminders.length" class="messages-empty">
-            还没有室友提醒。
-          </p>
-          <article
-            v-for="note in board.reminders"
-            :key="note.id"
-            :data-testid="`reminder-${note.id}`"
-          >
-            <p class="reminder-sender">
-              {{ note.sender_name || "室友" }}提醒你
-            </p>
-            <h3 class="reminder-task-name">
-              {{ note.task_name || "完成宿舍任务" }}
-            </h3>
-            <p
-              class="reminder-content"
-              v-if="note.body && note.body !== note.task_name"
-            >
-              {{ note.body }}
-            </p>
-            <div>
-              <time :datetime="note.created_at">{{
-                clock(note.created_at)
-              }}</time
-              ><button
-                v-if="!note.read_at"
-                :disabled="!!busy"
-                :data-testid="`reminder-read-${note.id}`"
-                @click="markRead(note.id)"
-              >
-                知道了</button
-              ><span v-else class="message-read">已读</span>
-            </div>
-          </article>
-        </div>
-      </ElasticSheet>
+      />
       <ChorePushSettings
         v-model="pushOpen"
         :token="token"
@@ -1717,71 +1594,26 @@ onUnmounted(() => {
         @saved="load"
         @closed="presentNewReminders"
       />
-      <ElasticSheet v-model="reminderOpen" title="提醒一位室友"
-        ><div class="reminder-form">
-          <p class="guest-muted">
-            选一位室友和一项任务。提醒会显示在对方的网页里。
-          </p>
-          <div class="reminder-people">
-            <button
-              v-for="person in board.members.filter(
-                (person) => person.user_id !== memberId,
-              )"
-              :key="person.user_id"
-              :class="{ selected: targetId === person.user_id }"
-              :data-testid="`reminder-member-${person.user_id}`"
-              @click="chooseTarget(person)"
-            >
-              <MemberMark :id="person.marker_id" :size="22" />{{
-                person.nickname
-              }}
-            </button>
-          </div>
-          <div v-if="targetLoading" class="board-loading" role="status">
-            正在查看这位室友的任务…
-          </div>
-          <div v-else-if="targetId" class="reminder-task-list">
-            <p v-if="!targetTasks.length" class="guest-muted">
-              这位室友当前没有待完成任务。
-            </p>
-            <button
-              v-for="task in targetTasks"
-              :key="task.id"
-              :class="{ selected: targetTaskId === task.id }"
-              :data-testid="`reminder-task-${task.id}`"
-              @click="targetTaskId = task.id"
-            >
-              <span>{{ task.name }}</span
-              ><small>{{
-                task.key === "water"
-                  ? "轮到抬水"
-                  : task.mode === "self_round"
-                    ? "本轮待完成"
-                    : dateText(task.duty_date)
-              }}</small>
-            </button>
-          </div>
-          <p v-if="targetError" class="chore-inline-error" role="alert">
-            {{ targetError }}
-          </p>
-          <button
-            class="guest-primary"
-            data-testid="reminder-submit"
-            :disabled="!!busy || targetLoading || !targetTaskId"
-            @click="sendReminder"
-          >
-            {{ busy === "reminder" ? "发送中…" : "发送提醒" }}
-          </button>
-        </div></ElasticSheet
-      >
+      <ChoreReminderSheet
+        v-model="reminderOpen"
+        :invite="invite"
+        :token="token"
+        :member-id="memberId"
+        :members="board.members"
+        :context="reminderContext"
+        :month="month"
+        :busy="!!busy"
+        :date-text="dateText"
+        @sent="load"
+      />
       <ElasticSheet v-model="markerOpen" title="你的日历标记"
         ><MarkerPicker
           v-model="markerDraft"
           :occupied="occupied"
           :disabled="!!busy"
         />
-        <p v-if="actionError" class="chore-inline-error" role="alert">
-          {{ actionError }}
+        <p v-if="markerError" class="chore-inline-error" role="alert">
+          {{ markerError }}
         </p>
         <button
           class="guest-primary"
@@ -1844,6 +1676,7 @@ onUnmounted(() => {
   }
 }
 .identity-actions {
+  position: relative;
   display: flex;
   gap: 4px;
   align-items: center;
@@ -1871,38 +1704,6 @@ onUnmounted(() => {
 }
 .order-trigger:active {
   transform: scale(0.96);
-}
-.menu-profile {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 4px 24px;
-}
-.menu-profile > div {
-  display: grid;
-  gap: 5px;
-}
-.menu-profile strong {
-  font-size: 20px;
-  font-weight: 600;
-}
-.menu-profile span {
-  font-size: 14px;
-  color: #777;
-}
-.menu-quick {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.menu-section {
-  padding: 7px;
-  margin-top: 16px;
-  border-radius: 22px;
-  background: #fafafa;
-}
-.menu-section + .menu-section {
-  margin-top: 12px;
 }
 .water-title-stage {
   display: grid;
@@ -1964,6 +1765,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  margin-top: 10px;
   margin-bottom: 8px;
 }
 .identity-name {
@@ -2254,31 +2056,6 @@ onUnmounted(() => {
   border-radius: 50%;
   font-size: 13px;
 }
-.messages-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.messages-heading p,
-.messages-empty {
-  font-size: 16px;
-  color: #555;
-  line-height: 1.6;
-}
-.messages-heading button {
-  border: 0;
-  background: none;
-  color: #555;
-  min-height: 44px;
-  font-size: 15px;
-  padding: 8px 0;
-}
-.message-read {
-  font-size: 14px;
-  color: #666;
-  padding: 12px 0;
-}
 .chore-inline-error {
   border-left: 2px solid #111;
   padding: 10px 12px;
@@ -2398,112 +2175,6 @@ onUnmounted(() => {
       transform: rotate(360deg);
     }
   }
-}
-.chore-reminders {
-  border-top: 1px solid #111;
-  margin-top: 0;
-  padding-top: 16px;
-}
-.chore-reminders header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-.chore-reminders h2 {
-  font-size: 14px;
-  font-weight: 550;
-  margin: 0;
-}
-.chore-reminders header span {
-  font-size: 10px;
-  color: #777;
-}
-.chore-reminders article {
-  border-bottom: 1px solid #eee;
-  padding: 12px 0;
-}
-.chore-reminders article p {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-.chore-reminders .reminder-sender {
-  color: #555;
-}
-.chore-reminders .reminder-task-name {
-  font-size: 32px;
-  letter-spacing: -0.8px;
-  line-height: 1.25;
-  margin: 8px 0 12px;
-  overflow-wrap: anywhere;
-}
-.chore-reminders .reminder-content {
-  margin-bottom: 12px;
-}
-.chore-reminders article div {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.chore-reminders time {
-  font-size: 10px;
-  color: #777;
-}
-.chore-reminders article button {
-  background: none;
-  border: 0;
-  min-height: 40px;
-  color: #555;
-  font-size: 11px;
-  padding: 7px 0;
-}
-.reminder-form {
-  color: #111;
-}
-.reminder-people {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 20px 0;
-}
-.reminder-people button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
-  color: #111;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-.reminder-people button.selected,
-.reminder-task-list button.selected {
-  border-color: #111;
-  background: #f7f7f7;
-}
-.reminder-task-list button {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
-  padding: 11px 12px;
-  color: #111;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 7px;
-  margin-top: 8px;
-  font-size: 13px;
-}
-.reminder-task-list small {
-  font-size: 10px;
-  color: #777;
 }
 @media (prefers-reduced-motion: no-preference) {
   .chore-complete-button {

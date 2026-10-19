@@ -65,6 +65,7 @@ watch(
       if (id === epoch) busy.value = false;
     }
   },
+  { immediate: true },
 );
 async function generate() {
   if (busy.value || !status.value) return;

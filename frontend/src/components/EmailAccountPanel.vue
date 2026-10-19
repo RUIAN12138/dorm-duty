@@ -19,6 +19,7 @@ import { ApiError } from "../api";
 import HintPopover from "./HintPopover.vue";
 import { logoutAll } from "../api/logout";
 import { showToast } from "../interaction/notice";
+import { preferredEntryRoom } from "../interaction/entryRoom";
 
 const props = withDefaults(
   defineProps<{
@@ -28,6 +29,8 @@ const props = withDefaults(
     gate?: boolean;
     dormId?: number;
     hideTitle?: boolean;
+    autoEnter?: boolean;
+    preferredInvite?: string;
   }>(),
   { memberToken: "" },
 );
@@ -70,14 +73,30 @@ function animateCode(error = false) {
 }
 onUnmounted(() => fieldAnimation?.cancel());
 watch(
-  () => emailAccount.rooms.some((room) => room.is_creator),
-  async (creator) => {
-    if (!creator) {
-      operations.value = null;
+  () =>
+    JSON.stringify([
+      emailAccount.loggedIn,
+      emailAccount.email,
+      emailAccount.rooms
+        .filter((room) => room.is_creator)
+        .map((room) => room.id),
+    ]),
+  async (_, __, onCleanup) => {
+    const controller = new AbortController();
+    onCleanup(() => controller.abort());
+    operations.value = null;
+    if (
+      !emailAccount.loggedIn ||
+      !emailAccount.rooms.some((room) => room.is_creator)
+    )
       return;
-    }
     try {
-      operations.value = await choreRequest("/email/operations");
+      const result = await choreRequest<typeof operations.value>(
+        "/email/operations",
+        "",
+        { signal: controller.signal },
+      );
+      if (!controller.signal.aborted) operations.value = result;
     } catch {
       /* Optional diagnostics never block identity entry. */
     }
@@ -211,6 +230,10 @@ async function enterBoundRoom() {
     (room) => room.member_id === props.memberId,
   );
   if (props.gate && room) emit("entered", await enterEmailRoom(room.id));
+  else if (props.autoEnter && !props.memberToken && !props.gate) {
+    const next = preferredEntryRoom(emailAccount.rooms, props.preferredInvite);
+    if (next) emit("entered", await enterEmailRoom(next.id));
+  }
 }
 async function verify() {
   await act(async () => {

@@ -1,6 +1,5 @@
-import { ApiError, query } from "./index";
-import { networkState } from "./network";
-import { appPath } from "./path";
+import { query } from "./index";
+import { requestJson } from "./transport";
 
 export interface ChoreMember {
   user_id: number;
@@ -126,45 +125,12 @@ export async function choreRequest<T>(
   token = "",
   options: RequestInit = {},
 ): Promise<T> {
-  const controller = new AbortController();
-  const signal = options.signal;
-  const cancel = () => controller.abort();
-  signal?.addEventListener("abort", cancel, { once: true });
-  if (signal?.aborted) controller.abort();
-  const timer = setTimeout(cancel, 15000);
-  try {
-    const response = await fetch(appPath(path), {
-      ...options,
-      signal: controller.signal,
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
-    });
-    networkState.unreachable = false;
-    const data = await response.json().catch(() => null);
-    if (!response.ok)
-      throw new ApiError(
-        response.status,
-        data?.detail?.message || "操作失败，请稍后重试",
-      );
-    return data as T;
-  } catch (error) {
-    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
-    if (error instanceof ApiError) throw error;
-    networkState.unreachable = true;
-    throw new Error(
-      navigator.onLine ? "连接服务失败，请稍后重试" : "当前离线，请联网后重试",
-    );
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener("abort", cancel);
-  }
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  new Headers(options.headers).forEach((value, key) => headers.set(key, value));
+  return requestJson<T>(path, { ...options, headers });
 }
+
 export function claimChoreIdentity(
   values: {
     invite_code: string;

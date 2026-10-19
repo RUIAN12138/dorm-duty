@@ -16,10 +16,11 @@ const session = useSession(),
   total = ref(0),
   busy = ref(0),
   today = ref(currentDay());
-const { loading, error, refresh } = useLoad(async () => {
+const { loading, error, refresh } = useLoad(async (signal) => {
   await session.refresh();
+  if (signal.aborted) return;
   if (!session.dorm) return;
-  today.value = (await api<Today>("/duties/today")).today;
+  today.value = (await api<Today>("/duties/today", { signal })).today;
   const result = await api<Page<Duty>>(
     "/duties?" +
       query({
@@ -30,6 +31,7 @@ const { loading, error, refresh } = useLoad(async () => {
         page: page.value,
         page_size: 20,
       }),
+    { signal },
   );
   rows.value = result.items;
   total.value = result.total;

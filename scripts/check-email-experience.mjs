@@ -265,7 +265,7 @@ try {
   );
   await page.mouse.up();
   let checkedWrongCodeMotion = false;
-  async function login(p, address = "ui-qa@example.invalid", gate = false) {
+  async function login(p, address = "ui-qa@example.invalid", gate = false, autoEntry = false) {
     await p.getByLabel("邮箱", { exact: true }).fill(address);
     await p.evaluate(() => {
       window.__emailCodeFrames = [];
@@ -346,8 +346,10 @@ try {
     }
     await p.getByLabel("验证码", { exact: true }).fill(code);
     await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
-    if (!gate)
-      await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
+    if (!gate) {
+      if (autoEntry) await p.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+      else await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
+    }
   }
   await login(page);
   await page.getByTestId("guest-create-dorm").click();
@@ -484,6 +486,8 @@ try {
     0,
     "reconnected foreground recovers without manually reloading",
   );
+  // Keep this suspension probe outside the reconnect event coalescing window.
+  await page.waitForTimeout(1600);
   let releaseSuspended, suspendedStarted;
   const suspended = new Promise((resolve) => {
     suspendedStarted = resolve;
@@ -609,8 +613,7 @@ try {
     other = await second.newPage();
   other.on("pageerror", (e) => errors.push(e.message));
   await other.goto(url);
-  await login(other);
-  await other.getByRole("button", { name: /邮箱界面 QA/ }).click();
+  await login(other, "ui-qa@example.invalid", false, true);
   await other.getByRole("button", { name: "更多操作", exact: true }).waitFor();
   check(
     (await other.getByText("邮箱界面 QA", { exact: true }).count()) > 0,

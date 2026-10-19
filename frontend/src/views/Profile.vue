@@ -16,10 +16,13 @@ const session = useSession(),
     "Notification" in window ? Notification.permission : "unsupported",
   ),
   cap = pushCapability();
-const { loading, error, refresh } = useLoad(async () => {
+const { loading, error, refresh } = useLoad(async (signal) => {
   await session.refresh();
-  nickname.value = session.user!.nickname;
-  pushConfig.value = await api<{ available: boolean }>("/push/public-key");
+  if (signal.aborted) return;
+  nickname.value = session.user?.nickname || "";
+  pushConfig.value = await api<{ available: boolean }>("/push/public-key", {
+    signal,
+  });
 });
 async function act(fn: () => Promise<unknown>, message: string) {
   busy.value = true;

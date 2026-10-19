@@ -11,9 +11,10 @@ const notes = ref<Note[]>([]),
   page = ref(1),
   total = ref(0),
   only = ref(false);
-const { loading, error, refresh } = useLoad(async () => {
+const { loading, error, refresh } = useLoad(async (signal) => {
   const result = await api<Page<Note> & { unread_count: number }>(
     `/notifications?page=${page.value}&unread_only=${only.value}&page_size=20`,
+    { signal },
   );
   notes.value = result.items;
   total.value = result.total;

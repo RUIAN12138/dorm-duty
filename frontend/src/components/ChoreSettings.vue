@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import { ApiError } from "../api";
+import { showToast } from "../interaction/notice";
 import {
   choreRequest,
   type ChoreCategory,
@@ -13,6 +14,12 @@ import SortableMembers from "./SortableMembers.vue";
 import HintPopover from "./HintPopover.vue";
 const scheduleOpen = ref(false),
   orderOpen = ref(false);
+let draftEpoch = 0,
+  alive = true;
+onUnmounted(() => {
+  alive = false;
+  draftEpoch++;
+});
 const props = defineProps<{
   modelValue: boolean;
   categories: ChoreCategory[];
@@ -30,11 +37,14 @@ const draft = ref<ChoreCategory[]>([]),
   selectedCategory = ref("floor"),
   saving = ref(false),
   error = ref("");
+let draftVersion = 0;
 const days = ["一", "二", "三", "四", "五", "六", "日"];
 watch(
   () => props.modelValue,
   (open) => {
+    draftEpoch++;
     if (open) {
+      draftVersion = props.version;
       draft.value = JSON.parse(JSON.stringify(props.categories)).map(
         (c: ChoreCategory) => ({
           ...c,
@@ -47,6 +57,7 @@ watch(
       error.value = "";
     }
   },
+  { immediate: true },
 );
 function move(category: ChoreCategory, index: number, amount: number) {
   const next = index + amount;
@@ -90,20 +101,25 @@ async function save() {
   }
   saving.value = true;
   error.value = "";
+  const epoch = draftEpoch;
   try {
     await choreRequest("/chores/settings", props.token, {
       method: "PATCH",
-      body: JSON.stringify({ version: props.version, categories: draft.value }),
+      body: JSON.stringify({ version: draftVersion, categories: draft.value }),
     });
+    if (!alive) return;
     emit("saved");
-    emit("update:modelValue", false);
+    showToast("任务设置已保存");
+    if (draftEpoch === epoch && props.modelValue)
+      emit("update:modelValue", false);
   } catch (e) {
+    if (!alive || draftEpoch !== epoch || !props.modelValue) return;
     error.value =
       e instanceof ApiError && e.status === 409
         ? "室友刚刚更新了排班。关闭并刷新页面后，再修改设置。"
         : (e as Error).message;
   } finally {
-    saving.value = false;
+    if (alive) saving.value = false;
   }
 }
 </script>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from "vue";
-import { showConfirmDialog } from "vant";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { confirmInSheet } from "../interactions/confirm";
+import { useHistoryMutation } from "../composables/useHistoryMutation";
+import { showToast } from "../interaction/notice";
 import {
   choreRequest,
   type ChoreRecord,
@@ -26,8 +28,9 @@ const when = ref(""),
   key = ref("floor"),
   member = ref(props.memberId),
   reason = ref(""),
-  busy = ref(false),
-  error = ref(""),
+  loading = ref(false),
+  loadError = ref(""),
+  draftVersion = ref(props.version),
   revision = ref(0);
 const audit = ref<
   {
@@ -42,86 +45,96 @@ let controller: AbortController | undefined;
 const localTime = (s: string) =>
   new Date(new Date(s).getTime() + 8 * 3600000).toISOString().slice(0, 16);
 const display = (s: string) => localTime(s).replace("T", " ");
+const retryRead = ref(0);
+let readEpoch = 0;
 watch(
-  () => props.modelValue,
-  async (open) => {
+  [
+    () => props.modelValue,
+    () => props.token,
+    () => props.record?.id,
+    () => props.memberId,
+    () => retryRead.value,
+  ],
+  async ([open]) => {
+    const generation = ++readEpoch;
     controller?.abort();
-    busy.value = false;
+    loading.value = false;
     if (!open) return;
+    draftVersion.value = props.version;
     when.value = props.record
       ? localTime(props.record.completed_at)
       : `${props.date || props.today}T12:00`;
     key.value = props.record?.key || "floor";
     member.value = props.record?.assignee_id || props.memberId;
     reason.value = "";
-    error.value = "";
+    loadError.value = "";
     audit.value = [];
     revision.value = props.record?.revision || 0;
     if (props.record) {
-      controller = new AbortController();
-      const current = controller;
-      busy.value = true;
+      const current = new AbortController();
+      controller = current;
+      loading.value = true;
       try {
         const data = await choreRequest<{
           record: ChoreRecord;
           audit: typeof audit.value;
         }>(`/chores/history?id=${props.record.id}`, props.token, {
-          signal: controller.signal,
+          signal: current.signal,
         });
-        if (current !== controller || current.signal.aborted) return;
+        if (generation !== readEpoch || current.signal.aborted) return;
         revision.value = data.record.revision || 0;
         when.value = localTime(data.record.completed_at);
         audit.value = data.audit;
       } catch (e) {
-        if (current === controller && (e as Error).name !== "AbortError")
-          error.value = (e as Error).message;
+        if (generation === readEpoch && !current.signal.aborted)
+          loadError.value = (e as Error).message;
       } finally {
-        if (current === controller) busy.value = false;
+        if (generation === readEpoch) loading.value = false;
       }
     }
   },
+  { immediate: true, flush: "sync" },
 );
-onBeforeUnmount(() => controller?.abort());
-async function save(remove = false) {
-  if (busy.value) return;
-  if (!reason.value.trim()) {
-    error.value = "请填写补记或修正原因";
-    return;
-  }
-  if (remove) {
-    try {
-      await showConfirmDialog({
+const {
+  pending,
+  error: saveError,
+  save,
+} = useHistoryMutation(
+  () => ({
+    open: props.modelValue,
+    token: props.token,
+    memberId: props.memberId,
+    blocked: loading.value || !!loadError.value,
+    version: draftVersion.value,
+    recordId: props.record?.id,
+    revision: revision.value,
+    member: member.value,
+    key: key.value,
+    reason: reason.value,
+    when: when.value,
+    today: props.today,
+  }),
+  {
+    confirm: () =>
+      confirmInSheet({
         title: "删除这条历史记录？",
         message: "仅从日历和统计移除，原记录与修正日志保留。当前轮次不变。",
         confirmButtonText: "删除记录",
         cancelButtonText: "保留记录",
-      });
-    } catch {
-      return;
-    }
-  }
-  busy.value = true;
-  error.value = "";
-  try {
-    await choreRequest("/chores/history", props.token, {
-      method: remove ? "DELETE" : props.record ? "PATCH" : "POST",
-      body: JSON.stringify({
-        version: props.version,
-        reason: reason.value.trim(),
-        ...(props.record
-          ? { id: props.record.id, revision: revision.value }
-          : { member_id: member.value, key: key.value }),
-        ...(!remove ? { completed_at: `${when.value}:00+08:00` } : {}),
       }),
-    });
-    emit("saved");
-    emit("update:modelValue", false);
-  } catch (e) {
-    error.value = (e as Error).message;
-  } finally {
-    busy.value = false;
-  }
-}
+    saved: () => {
+      emit("saved");
+      showToast("历史记录已保存");
+    },
+    close: () => emit("update:modelValue", false),
+  },
+);
+const busy = computed(() => loading.value || pending.value);
+const error = computed(() => saveError.value || loadError.value);
+onBeforeUnmount(() => {
+  readEpoch++;
+  controller?.abort();
+});
 </script>
 <template>
   <ElasticSheet
@@ -133,7 +146,7 @@ async function save(remove = false) {
   >
     <form class="history-editor" @submit.prevent="save()">
       <label v-if="creator && !record"
-        >成员<select v-model="member" aria-label="成员">
+        >成员<select v-model="member" aria-label="成员" :disabled="busy">
           <option
             v-for="person in members"
             :key="person.user_id"
@@ -144,7 +157,7 @@ async function save(remove = false) {
         </select></label
       >
       <label v-if="!record"
-        >任务<select v-model="key" aria-label="任务">
+        >任务<select v-model="key" aria-label="任务" :disabled="busy">
           <option value="floor">地板</option>
           <option value="toilet">厕所</option>
           <option value="sink">洗手池</option>
@@ -172,6 +185,14 @@ async function save(remove = false) {
           :disabled="busy"
       /></label>
       <p v-if="error" role="alert">{{ error }}</p>
+      <button
+        v-if="loadError"
+        type="button"
+        :disabled="busy"
+        @click="retryRead++"
+      >
+        重新读取
+      </button>
       <details v-if="audit.length">
         <summary>修正记录 · {{ audit.length }}</summary>
         <article v-for="(entry, i) in audit" :key="i">
@@ -190,7 +211,7 @@ async function save(remove = false) {
         v-if="record"
         type="button"
         class="history-delete"
-        :disabled="busy"
+        :disabled="busy || !!loadError"
         @click="save(true)"
       >
         删除历史记录
@@ -199,7 +220,7 @@ async function save(remove = false) {
     <template #footer
       ><button
         class="history-save"
-        :disabled="busy || !reason.trim() || !when"
+        :disabled="busy || !!loadError || !reason.trim() || !when"
         @click="save()"
       >
         {{ busy ? "正在保存…" : record ? "保存修正" : "保存补记" }}

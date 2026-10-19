@@ -32,11 +32,14 @@ export async function emailPost<T>(
 ): Promise<T> {
   // Finish an interrupted sign-out before allowing verification to create a new cookie.
   if (pendingLogout()) await logoutAll();
-  return choreRequest<T>(`/email/${path}`, "", {
+  const result = await choreRequest<T>(`/email/${path}`, "", {
     method: "POST",
     headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
   });
+  if (["verify", "bind", "preferences", "unbind"].includes(path))
+    invalidateAccountRead();
+  return result;
 }
 export function enterEmailRoom(dormId: number) {
   const room = emailAccount.rooms.find((room) => room.id === dormId);
@@ -47,10 +50,15 @@ export function enterEmailRoom(dormId: number) {
   });
 }
 let accountEpoch = 0;
+let accountRead: { epoch: number; promise: Promise<void> } | null = null;
+function invalidateAccountRead() {
+  accountEpoch++;
+  accountRead = null;
+}
 export const identityUnboundEvent = "dorm-email-identity-unbound";
 const unboundStorageKey = "dorm-email-unbound-v1";
 function clearUnboundIdentity(room: EmailRoom) {
-  accountEpoch++;
+  invalidateAccountRead();
   emailAccount.rooms = emailAccount.rooms.filter((r) => r.id !== room.id);
   const token = savedChoreToken(room.invite_code, room.member_id);
   saveChoreToken(room.invite_code, room.member_id, "");
@@ -83,7 +91,7 @@ export async function unbindEmailIdentity(room: EmailRoom) {
   );
 }
 function resetAccount() {
-  accountEpoch++;
+  invalidateAccountRead();
   emailAccount.loggedIn = false;
   emailAccount.email = "";
   emailAccount.rooms = [];
@@ -109,26 +117,37 @@ export async function refreshEmailAccount() {
     await logoutAll();
   }
   const epoch = accountEpoch;
-  const [config, account] = await Promise.all([
-    choreRequest<{
-      available: boolean;
-      registration_required: boolean;
-      version?: string;
-    }>("/email/config"),
-    choreRequest<{
-      logged_in: boolean;
-      email?: string;
-      mail_enabled?: boolean;
-      rooms?: EmailRoom[];
-    }>("/email/me"),
-  ]);
-  if (epoch !== accountEpoch || pendingLogout()) return;
-  emailAccount.available = config.available;
-  emailAccount.version = config.version || "";
-  emailAccount.required = config.registration_required;
-  emailAccount.loggedIn = account.logged_in;
-  emailAccount.email = account.email || "";
-  emailAccount.mailEnabled = !!account.mail_enabled;
-  emailAccount.rooms = account.rooms || [];
-  emailAccount.loaded = true;
+  if (accountRead?.epoch === epoch) return accountRead.promise;
+  const promise = (async () => {
+    const [config, account] = await Promise.all([
+      choreRequest<{
+        available: boolean;
+        registration_required: boolean;
+        version?: string;
+      }>("/email/config"),
+      choreRequest<{
+        logged_in: boolean;
+        email?: string;
+        mail_enabled?: boolean;
+        rooms?: EmailRoom[];
+      }>("/email/me"),
+    ]);
+    if (epoch !== accountEpoch || pendingLogout()) return;
+    emailAccount.available = config.available;
+    emailAccount.version = config.version || "";
+    emailAccount.required = config.registration_required;
+    emailAccount.loggedIn = account.logged_in;
+    emailAccount.email = account.email || "";
+    emailAccount.mailEnabled = !!account.mail_enabled;
+    emailAccount.rooms = account.rooms || [];
+    emailAccount.loaded = true;
+  })()
+    .catch((error) => {
+      if (epoch === accountEpoch) throw error;
+    })
+    .finally(() => {
+      if (accountRead?.promise === promise) accountRead = null;
+    });
+  accountRead = { epoch, promise };
+  return promise;
 }

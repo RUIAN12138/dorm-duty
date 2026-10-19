@@ -1,6 +1,5 @@
-import { ApiError, query } from "./index";
-import { networkState } from "./network";
-import { appPath } from "./path";
+import { query } from "./index";
+import { requestJson } from "./transport";
 import type { Duty } from "./types";
 
 export interface GuestMember {
@@ -61,40 +60,10 @@ async function guestRequest<T>(
   signal: AbortSignal,
   options: RequestInit = {},
 ): Promise<T> {
-  const controller = new AbortController();
-  const cancel = () => controller.abort();
-  signal.addEventListener("abort", cancel, { once: true });
-  if (signal.aborted) controller.abort();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-  try {
-    const suffix = query(params);
-    const response = await fetch(
-      `${appPath(path)}${suffix ? `?${suffix}` : ""}`,
-      {
-        ...options,
-        signal: controller.signal,
-        headers: { Accept: "application/json", ...options.headers },
-        credentials: "same-origin",
-        cache: "no-store",
-      },
-    );
-    networkState.unreachable = false;
-    const data = await response.json().catch(() => null);
-    if (!response.ok)
-      throw new ApiError(
-        response.status,
-        data?.detail?.message || "无法查看任务，请稍后重试",
-      );
-    return data as T;
-  } catch (error) {
-    if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
-    if (error instanceof ApiError) throw error;
-    networkState.unreachable = true;
-    throw new Error(
-      navigator.onLine ? "连接服务失败，请稍后重试" : "当前离线，请联网后重试",
-    );
-  } finally {
-    clearTimeout(timeout);
-    signal.removeEventListener("abort", cancel);
-  }
+  const suffix = query(params);
+  return requestJson<T>(
+    `${path}${suffix ? `?${suffix}` : ""}`,
+    { ...options, signal },
+    "无法查看任务，请稍后重试",
+  );
 }

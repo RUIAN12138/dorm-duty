@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ref,
+  reactive,
   computed,
   watch,
   nextTick,
@@ -10,7 +11,9 @@ import {
 import { motionAllowed } from "../interaction/motion";
 import type { ChoreRecord } from "../api/chores";
 import RecordTimeline from "./RecordTimeline.vue";
+import type { CalendarViewMemory } from "../interaction/calendarViewMemory";
 const props = defineProps<{
+  memory?: CalendarViewMemory["list"];
   records: ChoreRecord[];
   today: string;
   month: string;
@@ -25,11 +28,29 @@ const emit = defineEmits<{
   undo: [id: number];
   edit: [record: ChoreRecord];
 }>();
+const memory =
+  props.memory ||
+  reactive({
+    month: props.month,
+    page: 0,
+    scrollTop: 0,
+    expanded: [] as string[],
+    collapsedToday: "",
+  });
+if (memory.month !== props.month)
+  Object.assign(memory, {
+    month: props.month,
+    page: 0,
+    scrollTop: 0,
+    expanded: [],
+    collapsedToday: "",
+  });
+const scrollArea = ref<HTMLElement>();
 const root = ref<HTMLElement>(),
-  page = ref(0),
+  page = ref(memory.page),
   capacity = ref(3),
-  expanded = ref(new Set<string>()),
-  collapsedToday = ref("");
+  expanded = ref(new Set<string>(memory.expanded)),
+  collapsedToday = ref(memory.collapsedToday);
 const groups = computed(() => {
   const dates = new Map<string, ChoreRecord[]>();
   for (const record of props.records) {
@@ -139,10 +160,18 @@ function toggle(date: string) {
   void nextTick(settleLayout);
 }
 function setPage(value: number) {
-  page.value = Math.max(0, Math.min(total.value - 1, value));
+  const next = Math.max(0, Math.min(total.value - 1, value));
+  if (next !== page.value) {
+    memory.scrollTop = 0;
+    if (scrollArea.value) scrollArea.value.scrollTop = 0;
+  }
+  page.value = next;
 }
 let observer: ResizeObserver | undefined;
 onMounted(() => {
+  void nextTick(() => {
+    if (scrollArea.value) scrollArea.value.scrollTop = memory.scrollTop;
+  });
   observer = new ResizeObserver(() => {
     capacity.value = Math.max(
       1,
@@ -160,7 +189,14 @@ onBeforeUnmount(() => {
 });
 watch(
   () => props.month,
-  () => (page.value = 0),
+  () => {
+    page.value = 0;
+    memory.month = props.month;
+    memory.scrollTop = 0;
+    memory.expanded = [];
+    expanded.value = new Set();
+    collapsedToday.value = "";
+  },
 );
 watch(total, () => setPage(page.value));
 watch(
@@ -171,6 +207,21 @@ watch(
     expanded.value = next;
     collapsedToday.value = "";
   },
+);
+watch(
+  page,
+  (value) => {
+    memory.page = value;
+  },
+  { flush: "sync" },
+);
+watch(
+  [expanded, collapsedToday],
+  () => {
+    memory.expanded = [...expanded.value];
+    memory.collapsedToday = collapsedToday.value;
+  },
+  { flush: "sync" },
 );
 const label = (date: string) =>
   date === props.today
@@ -189,7 +240,13 @@ const label = (date: string) =>
       <h2>这个月还没有记录</h2>
       <p>完成值日后，会留在这里。</p>
     </div>
-    <div v-else class="folded-record-page" :data-page="page">
+    <div
+      v-else
+      ref="scrollArea"
+      class="folded-record-page"
+      :data-page="page"
+      @scroll="memory.scrollTop = ($event.target as HTMLElement).scrollTop"
+    >
       <RecordTimeline
         v-for="(group, index) in visible"
         :key="group.date"

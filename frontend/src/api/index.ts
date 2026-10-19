@@ -1,56 +1,38 @@
-import { networkState } from "./network";
-import { appPath } from "./path";
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { ApiError, requestJson } from "./transport";
+export { ApiError } from "./transport";
 export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
   const token = sessionStorage.getItem("dorm-token");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  new Headers(options.headers).forEach((value, key) => headers.set(key, value));
   try {
-    const response = await fetch(appPath(path), {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
-    });
-    networkState.unreachable = false;
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      if (response.status === 401 && path !== "/auth/login") {
-        sessionStorage.removeItem("dorm-token");
-        try {
-          localStorage.removeItem("dorm-email-admin-grant");
-        } catch {
-          /* Optional persistence. */
-        }
-        window.dispatchEvent(new Event("auth-expired"));
-      }
-      throw new ApiError(
-        response.status,
-        data?.detail?.message || "请求失败，请稍后重试",
-      );
-    }
-    return data as T;
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    networkState.unreachable = true;
-    throw new Error(
-      navigator.onLine ? "连接服务失败，请稍后重试" : "当前离线，请联网后重试",
+    return await requestJson<T>(
+      path,
+      { ...options, headers },
+      "请求失败，请稍后重试",
     );
-  } finally {
-    clearTimeout(timer);
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 401 &&
+      path !== "/auth/login" &&
+      !!token &&
+      headers.get("Authorization") === `Bearer ${token}` &&
+      sessionStorage.getItem("dorm-token") === token
+    ) {
+      sessionStorage.removeItem("dorm-token");
+      try {
+        if (localStorage.getItem("dorm-email-admin-grant") === token)
+          localStorage.removeItem("dorm-email-admin-grant");
+      } catch {
+        /* Optional persistence. */
+      }
+      window.dispatchEvent(new Event("auth-expired"));
+    }
+    throw error;
   }
 }
 export function post<T>(path: string, data: unknown = {}) {

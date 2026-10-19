@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, onMounted } from "vue";
+import {
+  computed,
+  reactive,
+  ref,
+  watch,
+  onBeforeUnmount,
+  onMounted,
+} from "vue";
 import { TabsRoot, TabsContent } from "reka-ui";
 import {
-  choreRequest,
   type ChoreMember,
   type ChoreRecord,
-  type ChoreActivity,
   type ChoreBoardData,
   type ChoreCategory,
 } from "../api/chores";
+import { useChoreActivity } from "../composables/useChoreActivity";
+import {
+  mergeCalendarRecords,
+  indexCalendarRecords,
+} from "../interaction/calendarRecords";
 import CompactRecordList from "./CompactRecordList.vue";
 import HintPopover from "./HintPopover.vue";
 import ActivitySummary from "./ActivitySummary.vue";
@@ -19,7 +29,12 @@ import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 import ElasticSegments from "./ElasticSegments.vue";
 import RecordTimeline from "./RecordTimeline.vue";
 import { useMonthCarousel, shiftMonth } from "../interaction/monthCarousel";
+import {
+  createCalendarViewMemory,
+  type CalendarViewMemory,
+} from "../interaction/calendarViewMemory";
 const props = defineProps<{
+  memory?: CalendarViewMemory;
   month: string;
   invite?: string;
   token?: string;
@@ -44,12 +59,16 @@ const emit = defineEmits<{
   refresh: [];
   settings: [key: ChoreCategory["key"]];
 }>();
+const memory = props.memory || reactive(createCalendarViewMemory());
 const selected = ref("");
 const detailDate = ref("");
 watch(
   selected,
   (value) => {
-    if (value) detailDate.value = value;
+    if (value) {
+      detailDate.value = value;
+      memory.focusedDate = value;
+    }
   },
   { flush: "sync" },
 );
@@ -80,35 +99,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", fitViewport);
   window.visualViewport?.removeEventListener("resize", fitViewport);
 });
-const activity = ref<ChoreActivity | null>(null),
-  activityError = ref(""),
-  activityLoading = ref(false);
-let activityController: AbortController | undefined;
-async function loadActivity() {
-  activityController?.abort();
-  const current = new AbortController();
-  activityController = current;
-  activityError.value = "";
-  activityLoading.value = true;
-  try {
-    const result = await choreRequest<ChoreActivity>(
-      `/chores/activity?invite_code=${encodeURIComponent(props.invite || "")}`,
-      props.token || "",
-      { signal: current.signal },
-    );
-    if (!current.signal.aborted) activity.value = result;
-  } catch (e) {
-    if (!current.signal.aborted) activityError.value = (e as Error).message;
-  } finally {
-    if (!current.signal.aborted) activityLoading.value = false;
-  }
-}
-watch(
-  () => [props.invite, props.token, props.version, props.today],
-  () => void loadActivity(),
-  { immediate: true },
-);
-onBeforeUnmount(() => activityController?.abort());
 const historyOpen = ref(false),
   historyRecord = ref<ChoreRecord | null>(null),
   historyDate = ref("");
@@ -160,33 +150,35 @@ watch(
     collapsedToday.value = "";
   },
 );
-const view = ref<"calendar" | "list" | "stats">("calendar");
+const view = ref<"calendar" | "list" | "stats">(memory.view);
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
   { value: "list", label: "列表", testId: "calendar-view-list" },
   { value: "stats", label: "统计", testId: "calendar-view-stats" },
 ];
-try {
-  if (sessionStorage.getItem("dorm-calendar-view-v1") === "list")
-    view.value = "list";
-} catch {
-  /* Use the calendar default when storage is unavailable. */
-}
 watch(view, (value) => {
   selected.value = "";
-  try {
-    sessionStorage.setItem("dorm-calendar-view-v1", value);
-  } catch {
-    /* This visit still works. */
-  }
+  memory.view = value;
 });
+const {
+  activity,
+  error: activityError,
+  loading: activityLoading,
+  refresh: loadActivity,
+} = useChoreActivity(() => ({
+  invite: props.invite || "",
+  token: props.token || "",
+  version: props.version || 0,
+  today: props.today,
+  active: view.value === "stats",
+}));
+const allRecords = computed(() =>
+  mergeCalendarRecords(props.records, props.neighbors),
+);
 const listRecords = computed(() =>
-  props.records
-    .filter((record) => record.completed_date.startsWith(`${props.month}-`))
-    .slice()
-    .sort(
-      (a, b) => b.completed_at.localeCompare(a.completed_at) || b.id - a.id,
-    ),
+  allRecords.value.filter((record) =>
+    record.completed_date.startsWith(`${props.month}-`),
+  ),
 );
 const groups = computed(() => {
   const map = new Map<string, ChoreRecord[]>();
@@ -207,34 +199,12 @@ const monthText = computed(
   () =>
     `${Number(props.month.slice(0, 4))}年 ${Number(props.month.slice(5))}月`,
 );
-const recordsByDate = computed(() => {
-  const dates = new Map<string, ChoreRecord[]>();
-  for (const record of [...props.records].sort(
-    (a, b) => b.completed_at.localeCompare(a.completed_at) || b.id - a.id,
-  )) {
-    const records = dates.get(record.completed_date) || [];
-    records.push(record);
-    dates.set(record.completed_date, records);
-  }
-  return dates;
-});
+const recordsByDate = computed(() => indexCalendarRecords(allRecords.value));
 const months = computed(() =>
   [-1, 0, 1].map((delta) => {
     const key = shiftMonth(props.month, delta);
     const [year = 2026, month = 1] = key.split("-").map(Number);
-    // During a month commit the board request is still in flight. Keep the
-    // already-loaded adjacent month's heat cells instead of briefly painting
-    // the old month's records into the new centre panel.
-    const records = [
-      ...props.records,
-      ...Object.values(props.neighbors || {}).flat(),
-    ].filter((record) => record.completed_date.startsWith(key));
-    const byDate = new Map<string, ChoreRecord[]>();
-    for (const record of records) {
-      const list = byDate.get(record.completed_date) || [];
-      list.push(record);
-      byDate.set(record.completed_date, list);
-    }
+    // Reuse the same preloaded neighbor records as the list and day drawer.
     const first = new Date(Date.UTC(year, month - 1, 1));
     const before = (first.getUTCDay() + 6) % 7;
     const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -243,7 +213,7 @@ const months = computed(() =>
       const day = index - before + 1;
       if (day < 1 || day > count) return null;
       const date = `${key}-${String(day).padStart(2, "0")}`;
-      const records = byDate.get(date) || [];
+      const records = recordsByDate.value.get(date) || [];
       const marks = [
         ...new Map(
           records.map((record) => {
@@ -397,11 +367,14 @@ watch(
                         :class="{
                           'is-today': cell.date === today,
                           'has-records': !!cell.records.length,
-                          'is-selected': cell.date === selected,
+                          'is-selected':
+                            cell.date === (selected || memory.focusedDate),
                         }"
                         :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
                         :data-heat="Math.min(4, cell.records.length)"
-                        :aria-pressed="cell.date === selected"
+                        :aria-pressed="
+                          cell.date === (selected || memory.focusedDate)
+                        "
                         :data-testid="
                           page.delta === 0
                             ? `calendar-day-${cell.date}`
@@ -438,6 +411,7 @@ watch(
       </TabsContent>
       <TabsContent value="list" as-child
         ><CompactRecordList
+          :memory="memory.list"
           :records="listRecords"
           :today="today"
           :month="month"
@@ -452,16 +426,22 @@ watch(
       /></TabsContent>
       <TabsContent value="stats" class="stats-mode"
         ><ActivitySummary
-          v-if="activity && !activityError"
+          v-if="activity"
           :activity="activity"
           :rounds="rounds || []"
           :categories="categories"
           :creator="creator"
           @settings="emit('settings', $event)"
         />
-        <p v-if="activityLoading" role="status">正在读取统计…</p></TabsContent
+        <p v-if="activityLoading && !activity" role="status">
+          正在读取统计…
+        </p></TabsContent
       >
-      <p v-if="activityError" role="alert" class="activity-error">
+      <p
+        v-if="activityError && view === 'stats'"
+        role="alert"
+        class="activity-error"
+      >
         {{ activityError
         }}<button class="calendar-ghost" @click="loadActivity">重试</button>
       </p>
