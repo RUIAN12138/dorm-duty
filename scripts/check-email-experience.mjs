@@ -463,6 +463,11 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page.getByTestId("board-refresh-notice").waitFor();
   check(
+    await page.getByTestId("board-refresh-notice").getByRole("button").getAttribute("aria-label"),
+    "当前离线，请联网后重试，重试刷新安排",
+    "offline guard explains the preserved board instead of silently skipping refresh",
+  );
+  check(
     await page.evaluate(
       () =>
         window.originalBoard ===

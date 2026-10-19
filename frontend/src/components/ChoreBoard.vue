@@ -998,6 +998,20 @@ function openMarker() {
 const backgroundRefresh = createBackgroundRefresh(load);
 function visibleRefresh(event?: Event) {
   presentNewReminders();
+  if (document.visibilityState === "visible" && !navigator.onLine) {
+    if (board.value) {
+      backgroundRefresh.interrupt();
+      // Keep the last confirmed board while releasing a suspended read so
+      // the next online event can refresh immediately. Writes are unaffected.
+      if (loading.value) {
+        ++requestId;
+        controller?.abort();
+        loading.value = false;
+      }
+      error.value = "当前离线，请联网后重试";
+    }
+    return;
+  }
   if (
     document.visibilityState === "visible" &&
     navigator.onLine &&
@@ -1037,6 +1051,7 @@ onMounted(() => {
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
+  window.addEventListener("offline", visibleRefresh);
   window.addEventListener("online", pushOnline);
   window.addEventListener("pageshow", visibleRefresh);
 });
@@ -1053,6 +1068,7 @@ onUnmounted(() => {
   document.removeEventListener("visibilitychange", visibleRefresh);
   window.removeEventListener("focus", visibleRefresh);
   window.removeEventListener("online", visibleRefresh);
+  window.removeEventListener("offline", visibleRefresh);
   window.removeEventListener("online", pushOnline);
   window.removeEventListener("pageshow", visibleRefresh);
 });
