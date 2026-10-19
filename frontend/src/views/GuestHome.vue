@@ -8,6 +8,7 @@ import {
   saveChoreToken,
 } from "../api/chores";
 import EntryBack from "../components/EntryBack.vue";
+import { preferredEntryRoom } from "../interaction/entryRoom";
 import {
   motionAllowed,
   motionEaseCss,
@@ -944,6 +945,19 @@ async function bootEntry() {
     return;
   }
   loading.value = false;
+  if (!code && !sharedLink && emailAccount.loggedIn) {
+    const room = preferredEntryRoom(emailAccount.rooms);
+    if (room) {
+      try {
+        const entry = await enterEmailRoom(room.id);
+        if (!disposed && epoch === requestId) await acceptEmailEntry(entry);
+      } catch (e) {
+        if (!disposed && epoch === requestId)
+          error.value = (e as Error).message;
+      }
+      return;
+    }
+  }
   if (code && saved.guest_mode !== "demo" && emailAccount.required) {
     const linked = emailAccount.rooms.find((room) => room.invite_code === code);
     if (emailAccount.loggedIn && linked) {
@@ -1158,6 +1172,8 @@ onUnmounted(() => {
         </h1>
         <EmailAccountPanel
           ref="entryEmail"
+          auto-enter
+          :preferred-invite="storedChoice().invite_code"
           @verification="emailVerifying = $event"
           v-if="
             (emailAccount.required || emailAccount.loggedIn) &&

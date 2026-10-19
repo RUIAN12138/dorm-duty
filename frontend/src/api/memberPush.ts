@@ -80,11 +80,16 @@ async function registration() {
   );
 }
 async function saveDevice(token: string, sub: PushSubscription) {
+  requireIdentity(token);
   const value = sub.toJSON();
   await choreRequest("/chores/push/subscribe", token, {
     method: "POST",
     body: JSON.stringify({ endpoint: value.endpoint, keys: value.keys }),
   });
+}
+function requireIdentity(token: string) {
+  if (identity !== token)
+    throw new Error("身份已切换，请在当前成员下重试通知操作");
 }
 export function syncMemberPush(token: string) {
   identity = token;
@@ -186,17 +191,20 @@ export async function enableMemberPush(
 }
 export function disableMemberPush(token: string) {
   return serial(async () => {
+    requireIdentity(token);
     if (hasNativePush()) {
       await nativePush("disable", token);
       return;
     }
     const reg = await registration(),
       sub = await reg.pushManager.getSubscription();
+    requireIdentity(token);
     if (sub) {
       await choreRequest("/chores/push/unsubscribe", token, {
         method: "POST",
         body: JSON.stringify({ endpoint: sub.endpoint }),
       });
+      requireIdentity(token);
       if (!(await sub.unsubscribe()))
         throw new Error("设备关闭通知失败，请再试一次");
     }
@@ -205,11 +213,13 @@ export function disableMemberPush(token: string) {
 }
 export function testMemberPush(token: string) {
   return serial(async () => {
+    requireIdentity(token);
     if (hasNativePush()) {
       await nativePush("test", token);
       return;
     }
     const sub = await (await registration()).pushManager.getSubscription();
+    requireIdentity(token);
     if (!sub) throw new Error("请先开启系统通知");
     await choreRequest("/chores/push/test", token, {
       method: "POST",

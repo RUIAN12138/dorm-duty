@@ -75,10 +75,11 @@ const days = computed(() =>
 );
 const byDay = computed(() => new Map(tasks.value.map((t) => [t.duty_date, t])));
 const chosen = computed(() => byDay.value.get(selected.value));
-const { loading, error, refresh } = useLoad(async () => {
+const { loading, error, refresh } = useLoad(async (signal) => {
   await session.refresh();
+  if (signal.aborted) return;
   if (!session.dorm) return;
-  today.value = (await api<Today>("/duties/today")).today;
+  today.value = (await api<Today>("/duties/today", { signal })).today;
   tasks.value = (
     await api<Page<Duty>>(
       "/duties?" +
@@ -87,6 +88,7 @@ const { loading, error, refresh } = useLoad(async () => {
           end_date: range.value.end,
           page_size: 100,
         }),
+      { signal },
     )
   ).items;
 });

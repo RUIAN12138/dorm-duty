@@ -196,6 +196,15 @@ async function closeMenu(page) {
   await menu.waitFor({ state: "hidden" });
 }
 async function closePresentedReminder(page) {
+  for (let i = 0; i < 100; i++) {
+    const banner = page.getByTestId("reminder-banner");
+    if (!(await banner.isVisible().catch(() => false))) break;
+    const current = banner.getAttribute("data-reminder-id");
+    const id = await current;
+    await banner.getByRole("button", { name: "收起提醒", exact: true }).click();
+    await page.locator(`[data-testid="reminder-banner"][data-reminder-id="${id}"]`).waitFor({state:"hidden"});
+    await page.waitForTimeout(50);
+  }
   const panel = page.getByTestId("chore-reminders");
   if (!(await panel.isVisible().catch(() => false))) return;
   const read = panel.locator('[data-testid^="reminder-read-"]').first();
@@ -1093,6 +1102,7 @@ try {
   // A reminder delivered during the long page matrix is intentionally shown
   // immediately; acknowledge it before opening another sheet in this flow.
   await closePresentedReminder(b.page);
+  await closePresentedReminder(a.page);
   await openTool(b.page, "open-reminder");
   await b.page.getByTestId(`reminder-member-${ownerId}`).click();
   await b.page.getByTestId(`reminder-task-${floor.id}`).click();
@@ -1107,6 +1117,9 @@ try {
   const reminder = await sent.json();
   await a.page.reload();
   await a.page.getByTestId("pane-duty").waitFor();
+  await a.page.locator(`[data-testid="reminder-banner"][data-reminder-id="${reminder.id}"]`).waitFor();
+  assert.equal((await board(ownerId, ownerToken)).reminders.find(note => note.id === reminder.id)?.read_at, null, "banner does not mark the reminder read");
+  await a.page.getByTestId("reminder-banner").getByRole("button", { name: /查看消息/ }).click();
   await a.page.getByTestId("chore-reminders").waitFor();
   assert.match(
     await a.page.getByTestId("chore-reminders").textContent(),

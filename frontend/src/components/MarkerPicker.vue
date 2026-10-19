@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import marks from "../data/member-marks.json";
 import MemberMark from "./MemberMark.vue";
 const props = withDefaults(
@@ -13,7 +13,15 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const expanded = ref(false);
-const shown = computed(() => (expanded.value ? marks : marks.slice(0, 16)));
+const gridId = `marker-grid-${useId()}`;
+const shown = computed(() => {
+  if (expanded.value) return marks;
+  const initial = marks.slice(0, 16);
+  const current = marks.find((mark) => mark.id === props.modelValue);
+  if (current && !initial.some((mark) => mark.id === current.id))
+    initial[initial.length - 1] = current;
+  return initial;
+});
 const selected = computed(() =>
   marks.find((item) => item.id === props.modelValue),
 );
@@ -21,7 +29,12 @@ const selected = computed(() =>
 <template>
   <fieldset class="marker-picker" :disabled="disabled">
     <legend>{{ title }}</legend>
-    <div class="marker-grid" role="group" aria-label="个人像素标记">
+    <div
+      :id="gridId"
+      class="marker-grid"
+      role="group"
+      aria-label="个人像素标记"
+    >
       <button
         v-for="mark in shown"
         :key="mark.id"
@@ -38,7 +51,12 @@ const selected = computed(() =>
     </div>
     <div class="marker-caption">
       <span>{{ selected?.name || "请选择一个图案" }}</span
-      ><button type="button" @click="expanded = !expanded">
+      ><button
+        type="button"
+        :aria-expanded="expanded"
+        :aria-controls="gridId"
+        @click="expanded = !expanded"
+      >
         {{ expanded ? "收起图案" : "更多图案" }}
       </button>
     </div>

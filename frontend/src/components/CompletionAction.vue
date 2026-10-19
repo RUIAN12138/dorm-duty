@@ -38,11 +38,13 @@ onMounted(() => {
 });
 let started = 0,
   pressed: number | null = null,
+  settlementId: number | null = null,
   receiptAtPress: ChoreTask | null | undefined,
   timer: ReturnType<typeof setTimeout> | undefined,
   resetTimer: ReturnType<typeof setTimeout> | undefined,
   settledTimer: ReturnType<typeof setTimeout> | undefined;
 function click() {
+  if (props.busy || props.disabled) return;
   if (props.task.status === "completed") {
     settle();
     undoing.value = true;
@@ -71,6 +73,7 @@ watch(
       if (!timer)
         timer = setTimeout(
           () => {
+            if (!motionAllowed()) return interruptMotion();
             ready.value = true;
             cancelFeedback = completionFeedback(
               button.value?.getBoundingClientRect(),
@@ -96,6 +99,7 @@ function settle(keepCheck = false) {
   clearTimeout(resetTimer);
   clearTimeout(settledTimer);
   timer = undefined;
+  settlementId = null;
   round.value = false;
   if (!keepCheck) {
     ready.value = false;
@@ -103,21 +107,39 @@ function settle(keepCheck = false) {
     cancelFeedback = undefined;
   }
   pressed = null;
-  if (keepCheck && id !== null)
+  if (keepCheck && id !== null) {
+    settlementId = id;
     settledTimer = setTimeout(
-      () => emit("settled", id),
+      () => {
+        settlementId = null;
+        emit("settled", id);
+      },
       motionAllowed() ? motionTiming.reorder * 1000 : 0,
     );
+  }
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
-function preference() {
-  if (media.matches) settle();
+function interruptMotion() {
+  if (motionAllowed()) return;
+  const id = pressed ?? settlementId;
+  const confirmed =
+    id !== null &&
+    props.task.id === id &&
+    (props.task.status === "completed" ||
+      (props.receipt !== receiptAtPress && props.receipt?.id === id));
+  settle();
+  // Release a confirmed receipt immediately; interruption never confirms a write.
+  if (confirmed) emit("settled", id!);
 }
-media.addEventListener("change", preference);
+media.addEventListener("change", interruptMotion);
+document.addEventListener("visibilitychange", interruptMotion);
+window.addEventListener("ui-motion-change", interruptMotion);
 onBeforeUnmount(() => {
   observer?.disconnect();
   settle();
-  media.removeEventListener("change", preference);
+  media.removeEventListener("change", interruptMotion);
+  document.removeEventListener("visibilitychange", interruptMotion);
+  window.removeEventListener("ui-motion-change", interruptMotion);
 });
 </script>
 <template>
@@ -135,11 +157,17 @@ onBeforeUnmount(() => {
     :disabled="busy || disabled"
     :aria-busy="busy"
     :aria-label="
-      task.status === 'completed'
-        ? `${task.key === 'water' ? '已抬水' : '已完成'}，再次点击撤销打卡`
-        : task.key === 'water'
-          ? '我已抬水'
-          : '我已完成'
+      busy
+        ? undoing
+          ? '正在撤销打卡'
+          : '正在记录打卡'
+        : syncing
+          ? '正在同步打卡结果'
+          : task.status === 'completed'
+            ? `${task.key === 'water' ? '已抬水' : '已完成'}，再次点击撤销打卡`
+            : task.key === 'water'
+              ? '我已抬水'
+              : '我已完成'
     "
     :data-testid="
       task.status === 'completed'

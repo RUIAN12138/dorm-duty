@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onUnmounted } from "vue";
 import { TabsRoot } from "reka-ui";
 import { ApiError } from "../api";
+import { showToast } from "../interaction/notice";
 import {
   choreRequest,
   type ChoreCategory,
@@ -12,6 +13,12 @@ import SortableMembers from "./SortableMembers.vue";
 import MemberMark from "./MemberMark.vue";
 import ElasticSegments from "./ElasticSegments.vue";
 import HintPopover from "./HintPopover.vue";
+let draftEpoch = 0,
+  alive = true;
+onUnmounted(() => {
+  alive = false;
+  draftEpoch++;
+});
 const props = defineProps<{
   modelValue: boolean;
   members: ChoreMember[];
@@ -68,6 +75,7 @@ let version = 0,
 watch(
   () => [props.modelValue, selectedKey.value] as const,
   ([open]) => {
+    draftEpoch++;
     if (open) {
       order.value = [...selectedCategory.value.rotation_order];
       category = JSON.parse(JSON.stringify(selectedCategory.value));
@@ -75,11 +83,13 @@ watch(
       error.value = "";
     }
   },
+  { immediate: true },
 );
 async function save() {
   if (saving.value || !props.editable) return;
   saving.value = true;
   error.value = "";
+  const epoch = draftEpoch;
   try {
     await choreRequest("/chores/order", props.token, {
       method: "PATCH",
@@ -89,15 +99,19 @@ async function save() {
         rotation_order: order.value,
       }),
     });
+    if (!alive) return;
     emit("saved");
-    emit("update:modelValue", false);
+    showToast("轮序已保存");
+    if (draftEpoch === epoch && props.modelValue)
+      emit("update:modelValue", false);
   } catch (e) {
+    if (!alive || draftEpoch !== epoch || !props.modelValue) return;
     error.value =
       e instanceof ApiError && e.status === 409
         ? "轮序已被更新，请关闭后重新打开再调整。"
         : (e as Error).message;
   } finally {
-    saving.value = false;
+    if (alive) saving.value = false;
   }
 }
 </script>

@@ -30,9 +30,9 @@ try {
   await fs.writeFile(
     vue,
     `<script setup lang="ts">
-import {ref} from 'vue';import Name from './src/components/WaterHandoffName.vue';import {baselineWaterHandoff} from './src/interaction/waterHandoff';import Order from './src/components/WaterOrderSheet.vue';import Reminder from './src/components/TimedReminderSettings.vue';
+import {ref} from 'vue';import Name from './src/components/WaterHandoffName.vue';import Order from './src/components/WaterOrderSheet.vue';import Reminder from './src/components/TimedReminderSettings.vue';
 const people=[1,2,3].map(id=>({user_id:id,nickname:['小林','小陈','小王'][id-1],marker_id:'pixel-0'+id}));const event=ref<any>(null),target=ref(1),visible=ref(true),available=ref(true),open=ref(false),initial=ref('toilet');
-const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地板','厕所','洗手池','抬水'][i],enabled:true,rotation_order:[1,2,3]}));baselineWaterHandoff('fixture',null);
+const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地板','厕所','洗手池','抬水'][i],enabled:true,rotation_order:[1,2,3]}));
 (window as any).qa={cover:(value:boolean)=>available.value=!value,handoff:(seq:number,to:number)=>{event.value={id:seq,sequence:seq,from_member_id:target.value,completed_at:'2026-10-16T00:00:00Z'};target.value=to},poll:()=>event.value={...event.value},reorder:()=>target.value=3,toggle:()=>visible.value=!visible.value,water:()=>{initial.value='water';open.value=true}};
 </script><template><main style="max-width:390px;margin:auto;padding:24px"><h1 style="font-size:64px;text-align:center;margin:80px 0"><Name v-if="visible" scope="fixture" :active="available" :event="event" :members="people" :target-id="target" :target-name="people[target-1]!.nickname"><button data-testid="real-name" style="font:inherit;background:none;border:0">{{people[target-1]!.nickname}}</button></Name></h1><button data-testid="open" @click="open=true">轮序</button><Order v-model="open" :members="people" :categories="categories" :category="categories[3]!" :initial-key="initial" :current-id="2" :last-water-id="1" editable :version="1" token="fixture"/><Reminder active token="fixture"/></main></template>`,
   );

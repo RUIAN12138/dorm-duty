@@ -42,6 +42,10 @@ export function rememberDorm(room: JoinedDorm) {
 }
 export function forgetDorm(code: string) {
   const rooms = joinedDorms().filter((room) => room.code !== code);
-  localStorage.setItem(key, JSON.stringify(rooms));
+  try {
+    localStorage.setItem(key, JSON.stringify(rooms));
+  } catch {
+    /* The current list can still be updated when storage is unavailable. */
+  }
   return rooms;
 }

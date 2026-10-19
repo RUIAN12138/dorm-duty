@@ -14,8 +14,9 @@ const session = useSession(),
   invite = ref(""),
   mode = ref("join"),
   busy = ref(false);
-const { loading, error, refresh } = useLoad(async () => {
+const { loading, error, refresh } = useLoad(async (signal) => {
   await session.refresh();
+  if (signal.aborted) return;
   if (session.dorm) {
     name.value = session.dorm.name;
   }

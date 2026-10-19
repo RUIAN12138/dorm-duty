@@ -67,7 +67,26 @@ function build({ frontend, worker, server = false }) {
   if (workerStatus !== 0) process.exit(workerStatus);
 }
 
+const frontendStateScripts = [
+  "scripts/check-api-transport.mjs",
+  "scripts/check-water-handoff-receipts.mjs",
+  "scripts/check-calendar-data.mjs",
+  "scripts/check-background-refresh.mjs",
+  "scripts/check-settings-save-lifecycle.mjs",
+  "scripts/check-identity-races.mjs",
+  "scripts/check-reminder-composer.mjs",
+  "scripts/check-reminder-inbox.mjs",
+  "scripts/check-reminder-banner.mjs",
+  "scripts/check-navigation-components.mjs",
+  "scripts/check-marker-editor.mjs",
+  "scripts/check-completion-state.mjs",
+  "scripts/check-history-mutation.mjs",
+  "scripts/check-view-load.mjs",
+  "scripts/check-push-identity.mjs",
+];
+
 const verificationScripts = [
+  ...frontendStateScripts,
   "scripts/check-web-architecture.mjs",
   "site/scripts/check-worker.mjs",
   "site/scripts/check-cloud-backend.mjs",
@@ -103,6 +122,15 @@ if (action === "dev") {
   const output = resolve(root, process.env.DORM_WEB_BUILD_DIR || `data/${buildName}`);
   build({ frontend: join(output, "frontend"), worker: join(output, "site/worker/index.js") });
   console.log(`构建产物：${output}`);
+} else if (action === "test-state") {
+  const failed = [];
+  for (const script of frontendStateScripts) {
+    if (run(process.execPath, [script]) !== 0) failed.push(script);
+  }
+  if (failed.length) {
+    console.error(`前端状态回归失败：${failed.join(", ")}`);
+    process.exitCode = 1;
+  } else console.log(`前端状态回归通过：${frontendStateScripts.length}项`);
 } else if (action === "verify") {
   const temporary = mkdtempSync(join(tmpdir(), "dorm-web-verify-"));
   const frontend = join(temporary, "frontend");
@@ -152,5 +180,5 @@ if (action === "dev") {
   if (status !== 0) process.exit(status);
   console.log("仅生成发布包，未连接服务器、未安装、未上线。");
 } else {
-  fail("用法：npm run web:dev | web:build | web:verify | web:release -- <发布包名>");
+  fail("用法：npm run web:dev | web:build | web:test-state | web:verify | web:release -- <发布包名>");
 }

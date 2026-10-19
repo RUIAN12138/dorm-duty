@@ -40,7 +40,7 @@ async function submit() {
       register.value = false;
       showToast("请使用账号密码登录；已有账号请使用原密码。");
     }
-    await session.login(username.value, password.value);
+    if (!(await session.login(username.value, password.value))) return;
     showToast(register.value ? "注册成功" : "欢迎回来");
     const next = String(route.query.next || "/dorm");
     await router.replace(

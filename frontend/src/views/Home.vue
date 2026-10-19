@@ -22,11 +22,16 @@ const session = useSession(),
   data = ref<Today | null>(null),
   unread = ref(0),
   busy = ref(false);
-const { loading, error, refresh } = useLoad(async () => {
+const { loading, error, refresh } = useLoad(async (signal) => {
   await session.refresh();
-  data.value = session.dorm ? await api<Today>("/duties/today") : null;
+  if (signal.aborted) return;
+  data.value = session.dorm
+    ? await api<Today>("/duties/today", { signal })
+    : null;
   unread.value = (
-    await api<{ unread_count: number }>("/notifications?page_size=1")
+    await api<{ unread_count: number }>("/notifications?page_size=1", {
+      signal,
+    })
   ).unread_count;
 });
 onActivated(refresh);

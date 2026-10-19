@@ -37,6 +37,8 @@ jobs:
           DORM_WORKER_INPUT=../data/web-build/site/worker/index.js \
           DORM_FRONTEND_DIST=../data/web-build/frontend \
             node site/scripts/check-worker.mjs
+      - name: Verify frontend state and lifecycle
+        run: npm run web:test-state
       - name: Verify business and notification behavior
         env:
           DORM_WORKER_INPUT: ${{ github.workspace }}/data/web-build/site/worker/index.js
