@@ -629,11 +629,25 @@ h1 > span {
   font-variant-numeric: tabular-nums;
 }
 .is-today .calendar-day-number {
-  background: transparent;
-  color: var(--ui-ink);
-  border: 1px solid var(--ui-ink);
-  border-radius: 6px;
+  background: var(--ui-ink);
+  color: var(--ui-surface);
+  border: 0;
+  border-radius: 50%;
   box-sizing: border-box;
+  width: 28px;
+  min-width: 0;
+  height: 28px;
+  flex-shrink: 1;
+  align-self: center;
+}
+@supports (width: 1cqh) {
+  .chore-calendar-grid button {
+    container-type: size;
+  }
+  .is-today .calendar-day-number {
+    width: min(32px, calc(100cqw - 4px), calc(100cqh - 4px));
+    height: min(32px, calc(100cqw - 4px), calc(100cqh - 4px));
+  }
 }
 .calendar-more {
   position: absolute;
@@ -1239,5 +1253,18 @@ h1 small {
 }
 .chore-calendar-grid button:active:not(:disabled) {
   background: var(--app-tone-he7e7e7, #e7e7e7);
+}
+</style>
+
+<style scoped>
+/* Later compact-date font rules must not distort today's bounded circle. */
+.compact-calendar .is-today .calendar-day-number {
+  flex-shrink: 1;
+}
+@supports (width: 1cqh) {
+  .compact-calendar .is-today .calendar-day-number {
+    width: min(32px, calc(100cqw - 4px), calc(100cqh - 4px));
+    height: min(32px, calc(100cqw - 4px), calc(100cqh - 4px));
+  }
 }
 </style>

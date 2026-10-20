@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>今天日期改为框线标识</li>
-          <li>值日标题、操作和轮次稍下移</li>
-          <li>统计可分别选择日夜、各项任务的颜色</li>
+          <li>修复旧历史修正覆盖地板新打卡日期</li>
+          <li>今天日期改为格内实心圆</li>
+          <li>原有记录与修正审计完整保留</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

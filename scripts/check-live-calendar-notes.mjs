@@ -37,6 +37,38 @@ try {
         { token: room.access_token },
       )
     ).json();
+  // A pre-existing date correction survives undo on the same floor task ID.
+  // This mirrors the production incident without touching real history.
+  const priorBoard = await board(),
+    priorFloor = priorBoard.today_tasks.find((t) => t.key === "floor");
+  await h.request(`/chores/tasks/${priorFloor.id}/complete`, {
+    method: "PATCH",
+    token: room.access_token,
+    data: {},
+  });
+  const correctedBoard = await board();
+  const correctionDate = new Date(Date.now() - 4 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  await h.request("/chores/history", {
+    method: "PATCH",
+    token: room.access_token,
+    data: {
+      id: priorFloor.id,
+      revision: 0,
+      version: correctedBoard.version,
+      completed_at: correctionDate + "T12:00:00+08:00",
+      reason: "旧地板修正隔离复现",
+    },
+  });
+  await h.request(`/chores/tasks/${priorFloor.id}/undo`, {
+    method: "PATCH",
+    token: room.access_token,
+    data: {},
+  });
+  h.db.sqlite
+    .prepare("UPDATE chore_history_entries SET updated_at=? WHERE task_id=?")
+    .run(correctionDate + "T06:00:00.000Z", priorFloor.id);
   await fs.mkdir(evidence, { recursive: true });
   await fs.writeFile(
     html,
@@ -176,6 +208,12 @@ try {
     .getByRole("button", { name: /关闭/ })
     .click();
   failBoard = false;
+  check(
+    (await board()).calendar.some(
+      (r) => r.id === task.id && r.completed_date === initial.today,
+    ),
+    "server projection keeps re-completed floor today despite an old correction",
+  );
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await page.waitForTimeout(500);
   await page.getByTestId("nav-duty").click();

@@ -7982,6 +7982,16 @@ async function maintain(db, room, now) {
   }
   fail(409, "stale_version", "\u5BBF\u820D\u6B63\u5728\u66F4\u65B0\uFF0C\u8BF7\u7A0D\u540E\u5237\u65B0");
 }
+var correctionApplies = "h.id IS NOT NULL AND julianday(h.updated_at)>=julianday(t.completed_at)";
+var historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
+ CASE WHEN ${correctionApplies} THEN h.completed_at ELSE t.completed_at END AS completed_at,
+ COALESCE(h.revision,0) AS revision,
+ CASE WHEN ${correctionApplies} THEN 1 ELSE 0 END AS corrected
+ FROM chore_tasks t LEFT JOIN chore_history_entries h ON h.task_id=t.id AND h.dorm_id=t.dorm_id
+ WHERE t.dorm_id=? AND t.status='completed'
+ AND (NOT (${correctionApplies}) OR COALESCE(h.voided,0)=0)
+ UNION ALL SELECT -h.id,h.key,h.name,h.assignee_id,h.assignee_name_snapshot,h.marker_id_snapshot,h.completed_at,h.revision,1
+ FROM chore_history_entries h WHERE h.dorm_id=? AND h.task_id IS NULL AND h.voided=0`;
 
 // ../scripts/reminder-scheduler.mjs
 var DAY2 = 864e5;

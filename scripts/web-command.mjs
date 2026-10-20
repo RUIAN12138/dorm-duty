@@ -94,6 +94,7 @@ const frontendStateScripts = [
 const verificationScripts = [
   ...frontendStateScripts,
   "site/scripts/check-roommate-notes.mjs",
+  "site/scripts/check-recompletion-history.mjs",
   "scripts/check-web-architecture.mjs",
   "site/scripts/check-worker.mjs",
   "site/scripts/check-cloud-backend.mjs",

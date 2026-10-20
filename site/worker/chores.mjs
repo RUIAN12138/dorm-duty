@@ -723,11 +723,18 @@ function reminderView(row) {
   };
 }
 // History is a projection. Corrections never update tasks, rounds or the water cursor.
+// A correction belongs to the completion that existed when it was edited.
+// Undo/re-complete keeps the task ID, so an older correction must not move or
+// hide the new completion. Keep its revision/audit for concurrency and review.
+const correctionApplies =
+  "h.id IS NOT NULL AND julianday(h.updated_at)>=julianday(t.completed_at)";
 const historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
- COALESCE(h.completed_at,t.completed_at) AS completed_at,COALESCE(h.revision,0) AS revision,
- CASE WHEN h.id IS NULL THEN 0 ELSE 1 END AS corrected
+ CASE WHEN ${correctionApplies} THEN h.completed_at ELSE t.completed_at END AS completed_at,
+ COALESCE(h.revision,0) AS revision,
+ CASE WHEN ${correctionApplies} THEN 1 ELSE 0 END AS corrected
  FROM chore_tasks t LEFT JOIN chore_history_entries h ON h.task_id=t.id AND h.dorm_id=t.dorm_id
- WHERE t.dorm_id=? AND t.status='completed' AND COALESCE(h.voided,0)=0
+ WHERE t.dorm_id=? AND t.status='completed'
+ AND (NOT (${correctionApplies}) OR COALESCE(h.voided,0)=0)
  UNION ALL SELECT -h.id,h.key,h.name,h.assignee_id,h.assignee_name_snapshot,h.marker_id_snapshot,h.completed_at,h.revision,1
  FROM chore_history_entries h WHERE h.dorm_id=? AND h.task_id IS NULL AND h.voided=0`;
 const historyView = (row) => ({

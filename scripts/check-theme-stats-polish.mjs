@@ -258,20 +258,37 @@ try {
     "top browser chrome follows the current light theme",
   );
   await page.getByTestId("nav-calendar").click();
-  check(
-    await page
-      .locator('[data-testid^="calendar-day-"].is-today .calendar-day-number')
-      .evaluate((el) => {
-        const style = getComputedStyle(el);
-        return (
-          style.borderTopWidth === "1px" &&
-          style.borderTopStyle === "solid" &&
-          ["rgba(0, 0, 0, 0)", "transparent"].includes(style.backgroundColor) &&
-          style.borderRadius === "6px"
-        );
-      }),
-    "today uses a thin outlined frame instead of a filled ball",
-  );
+  for (const [width, height] of [
+    [320, 568],
+    [390, 844],
+    [430, 932],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(80);
+    check(
+      await page
+        .locator('[data-testid^="calendar-day-"].is-today .calendar-day-number')
+        .evaluate((el) => {
+          const s = getComputedStyle(el),
+            circle = el.getBoundingClientRect(),
+            cell = el.parentElement.getBoundingClientRect();
+          return (
+            s.borderRadius === "50%" &&
+            !s.backgroundColor.includes("rgba") &&
+            s.borderTopWidth === "0px" &&
+            Math.abs(circle.width - circle.height) < 1 &&
+            circle.width >= 16 &&
+            circle.width <= 32.1 &&
+            circle.left >= cell.left &&
+            circle.right <= cell.right &&
+            circle.top >= cell.top &&
+            circle.bottom <= cell.bottom
+          );
+        }),
+      `${width}x${height}: today's filled circle stays round and entirely within its date cell`,
+    );
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByTestId("calendar-view-stats").click();
   await page.getByTestId("stats-floor").waitFor();
   await page.waitForTimeout(400);
