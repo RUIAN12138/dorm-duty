@@ -159,6 +159,27 @@ html[data-theme="dark"] {
   background: #16171b;
   color: #ebebef;
 }
+
+/* Restore the original button-origin reveal, without additive snapshot blending. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-reveal-lifetime 320ms linear;
+}
+@keyframes theme-reveal-lifetime {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root) {
+    animation-duration: 0s !important;
+  }
+}
 html[data-theme="dark"] .stat-card[data-tone="empty"] {
   background: #25262c;
   color: #b0b1bc;

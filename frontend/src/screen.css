@@ -69,6 +69,18 @@
 .app-stage .screen-surface .focus-hero > .completion-surface {
   height: clamp(44px, 9cqh, 56px);
 }
+/* Keep title anchors; lower only the action/round group on roomy screens. */
+@container page (min-height: 400px) {
+  .app-stage .screen-surface .focus-hero > .completion-surface {
+    margin-top: clamp(20px, 5cqh, 42px);
+  }
+  .app-stage .screen-surface .chore-personal .round-progress {
+    margin-top: clamp(12px, 3cqh, 24px);
+  }
+  .app-stage .screen-surface .water-nudge-actions {
+    margin-top: clamp(20px, 5cqh, 42px);
+  }
+}
 .app-stage .screen-surface .water-pane > .hero-caption {
   top: calc(var(--hero-anchor) - 45px);
 }
@@ -247,6 +259,7 @@ body:has(.app-stage),
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  background: var(--app-tone-hfff, #fff);
 }
 .app-stage .screen-surface .guest-personal {
   height: 100%;

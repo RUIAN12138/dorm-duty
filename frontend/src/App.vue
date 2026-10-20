@@ -6,6 +6,7 @@ import { useSession } from "./stores/session";
 import { networkState } from "./api/network";
 import { logoutEvent } from "./api/logout";
 import { installNativeBack } from "./interactions/nativeBack";
+import ReleaseNotice from "./components/ReleaseNotice.vue";
 let removeNativeBack: (() => void) | undefined;
 const route = useRoute(),
   router = useRouter(),
@@ -82,6 +83,7 @@ onUnmounted(() => {
       有新版本可用 <button @click="applyUpdate(true)">更新页面</button>
     </div>
     <router-view />
+    <ReleaseNotice :update-ready="update" :apply-update="() => applyUpdate(true)" />
     <nav
       v-if="session.user && !route.meta.public"
       class="bottom-nav"

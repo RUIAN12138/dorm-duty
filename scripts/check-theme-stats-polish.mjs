@@ -71,7 +71,7 @@ try {
   );
   await fs.writeFile(
     vue,
-    `<script setup lang="ts">import{computed,ref,nextTick}from'vue';import{useRoute}from'vue-router';import Stage from'./src/components/ScreenStage.vue';import Board from'./src/components/ChoreBoard.vue';import Nav from'./src/components/ChoreBottomNav.vue';import Deck from'./src/components/SwipeCardDeck.vue';import{setThemeMode}from'./src/interaction/theme';const route=useRoute(),current=ref(0),deckVisible=ref(true),deckMemory={pausedUntil:0};const section=computed(()=>route.path==='/calendar'?'calendar':'duty');(window as any).qa={theme:setThemeMode,remount:async()=>{deckVisible.value=false;await nextTick();deckVisible.value=true;}};</script><template><div v-if="route.query.deck" style="height:360px;padding:30px"><Deck v-if="deckVisible" v-model="current" :autoplay-memory="deckMemory" :labels="['一','二','三','四']" label="自动切换验收" autoplay :autoplay-delay="600" :resume-delay="1800"><template #default="{index}"><h2>{{index}}</h2></template></Deck></div><template v-else><Stage signed-in><main class="guest-page"><Board invite="${room.invite_code}" dorm-name="交互验收" :member-id="${room.member_id}" token="${room.access_token}" :demo="false" :section="section"/></main></Stage><Nav :section="section"/></template></template><style>.swipe-card-deck .deck-stage{min-height:180px}</style>`,
+    `<script setup lang="ts">import{computed,ref,nextTick}from'vue';import{useRoute}from'vue-router';import Stage from'./src/components/ScreenStage.vue';import Board from'./src/components/ChoreBoard.vue';import Nav from'./src/components/ChoreBottomNav.vue';import Deck from'./src/components/SwipeCardDeck.vue';import{setThemeMode}from'./src/interaction/theme';const route=useRoute(),current=ref(0),deckVisible=ref(true),deckMemory={pausedUntil:0};const section=computed(()=>route.path==='/calendar'?'calendar':route.path==='/water'?'water':'duty');(window as any).qa={theme:setThemeMode,remount:async()=>{deckVisible.value=false;await nextTick();deckVisible.value=true;}};</script><template><div v-if="route.query.deck" style="height:360px;padding:30px"><Deck v-if="deckVisible" v-model="current" :autoplay-memory="deckMemory" :labels="['一','二','三','四']" label="自动切换验收" autoplay :autoplay-delay="600" :resume-delay="1800"><template #default="{index}"><h2>{{index}}</h2></template></Deck></div><template v-else><Stage signed-in><main class="guest-page"><Board invite="${room.invite_code}" dorm-name="交互验收" :member-id="${room.member_id}" token="${room.access_token}" :demo="false" :section="section"/></main></Stage><Nav :section="section"/></template></template><style>.swipe-card-deck .deck-stage{min-height:180px}</style>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -136,7 +136,33 @@ try {
     "actual duty title sits slightly above screen centre with room for progress",
   );
   await page.evaluate(() => window.qa.theme("dark", { x: 350, y: 30 }));
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(100);
+  const reveal = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((a) => a.effect?.pseudoElement === "::view-transition-new(root)")
+      .map((a) => ({
+        progress: a.effect.getComputedTiming().progress,
+        frames: a.effect.getKeyframes(),
+      })),
+  );
+  if (await page.evaluate(() => !!document.startViewTransition)) {
+    check(
+      reveal.some(
+        (a) =>
+          a.progress > 0 &&
+          a.progress < 1 &&
+          a.frames.some((f) => f.clipPath?.startsWith("circle(")),
+      ),
+      "theme reveal has real intermediate circular clipping frames",
+    );
+  }
+  await page.waitForTimeout(400);
+  check(
+    (await page.locator("meta[name=theme-color]").getAttribute("content")) ===
+      "#151515",
+    "dark browser chrome updates with the page theme",
+  );
   await page.screenshot({
     path: path.join(
       evidence,
@@ -218,7 +244,6 @@ try {
         rendered:
           !!nav.querySelector(".nav-selection") ||
           getComputedStyle(lens).opacity === "1",
-        snapshot: !!document.querySelector("html::view-transition"),
       });
     }
     return rows;
@@ -230,7 +255,7 @@ try {
   check(
     (await page.locator("meta[name=theme-color]").getAttribute("content")) ===
       "#ffffff",
-    "top browser chrome stays white as requested",
+    "top browser chrome follows the current light theme",
   );
   await page.getByTestId("nav-calendar").click();
   await page.getByTestId("calendar-view-stats").click();
@@ -261,11 +286,9 @@ try {
       )
         .backgroundColor.match(/\d+/g)
         .map(Number);
-      return (
-        light[0] === light[1] && light[1] === light[2] && deep[0] < light[0]
-      );
+      return light[0] > light[1] && light[1] > light[2] && deep[0] < light[0];
     }),
-    "default warnings share one grey palette and deepen with the completion interval",
+    "daytime warnings use one brown/yellow palette that deepens with the interval",
   );
   await page.evaluate(() => window.qa.theme("dark"));
   await page.waitForTimeout(250);
@@ -277,9 +300,16 @@ try {
   const oldNightColor = await color("floor");
   await page.getByLabel("统计基色", { exact: true }).fill("#444444");
   check(
-    (await color("floor")) !== oldNightColor,
-    "custom warning colour immediately updates the actual card",
+    (await color("floor")) === oldNightColor,
+    "daytime colour customisation leaves the nighttime grey/white palette intact",
   );
+  await page.evaluate(() => window.qa.theme("light"));
+  await page.waitForTimeout(150);
+  check(
+    (await color("floor")) !== lightColor,
+    "custom daytime colour updates the actual card",
+  );
+  await page.evaluate(() => window.qa.theme("dark"));
   await page.getByRole("button", { name: "关闭详情", exact: true }).click();
   await page.locator(".sheet-layer").waitFor({ state: "detached" });
   await page.screenshot({
@@ -308,7 +338,9 @@ try {
     check(
       await nativeScroll.evaluate((el) => {
         const event = new WheelEvent("wheel", {
-          deltaY: 240, bubbles: true, cancelable: true,
+          deltaY: 240,
+          bubbles: true,
+          cancelable: true,
         });
         el.dispatchEvent(event);
         return !event.defaultPrevented;
@@ -321,16 +353,19 @@ try {
     const x = scrollBox.x + scrollBox.width / 2;
     const y = scrollBox.y + scrollBox.height * 0.8;
     await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchStart", touchPoints: [{x, y}],
+      type: "touchStart",
+      touchPoints: [{ x, y }],
     });
     for (let step = 1; step <= 12; step++) {
       await cdp.send("Input.dispatchTouchEvent", {
-        type: "touchMove", touchPoints: [{x, y: y - step * 15}],
+        type: "touchMove",
+        touchPoints: [{ x, y: y - step * 15 }],
       });
       await page.waitForTimeout(16);
     }
     await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchEnd", touchPoints: [],
+      type: "touchEnd",
+      touchPoints: [],
     });
     await cdp.detach();
   }
@@ -355,8 +390,24 @@ try {
       .evaluate((el) => getComputedStyle(el).touchAction.includes("pan-y")),
     "touch targets allow vertical native scrolling",
   );
+  await page.getByTestId("nav-water").click();
+  await page.getByTestId("pane-water").waitFor();
+  check(
+    await page
+      .locator(".water-nudge-actions, .water-pane .completion-surface")
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).marginTop) >= 20),
+    "water secondary actions move down without shifting the name",
+  );
   await page.getByTestId("nav-duty").click();
   await page.getByTestId("pane-duty").waitFor();
+  check(
+    await page
+      .locator(".completion-surface")
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).marginTop) >= 20),
+    "duty action moves down while title retains its anchor",
+  );
   for (const [width, height] of [
     [320, 568],
     [390, 844],

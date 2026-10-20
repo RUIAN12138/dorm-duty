@@ -1,5 +1,5 @@
 import { ref } from "vue";
-export const defaultStatsColor = "#555555";
+export const defaultStatsColor = "#b98a48";
 const key = "lundao-stats-colors-v1";
 export const validColor = (value: unknown): value is string =>
   typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
@@ -7,7 +7,9 @@ export function readStatsColor(value: string | null) {
   try {
     const saved = JSON.parse(value || "null");
     return validColor(saved?.base)
-      ? saved.base.toLowerCase()
+      ? saved.base.toLowerCase() === "#555555"
+        ? defaultStatsColor
+        : saved.base.toLowerCase()
       : defaultStatsColor;
   } catch {
     return defaultStatsColor;
@@ -37,13 +39,13 @@ export function statsFill(base: string, progress: number, dark: boolean) {
     .slice(1)
     .match(/../g)!
     .map((v) => parseInt(v, 16));
-  // One hue, continuous depth. Night mode moves towards charcoal instead of
-  // emitting a bright warning surface. No discrete orange/red status colours.
-  const rgb = channels.map((v) =>
+  // Warm brown/yellow by day, neutral grey/white by night. Warning depth stays
+  // continuous; the night surface never inherits the custom daytime hue.
+  const rgb = channels.map((v, index) =>
     Math.round(
       dark
-        ? Math.max(38, v * 0.6) * (1 - p) + 17 * p
-        : 248 * (1 - p) + Math.min(224, v) * p,
+        ? 242 * (1 - p) + 176 * p
+        : [255, 248, 237][index]! * (1 - p) + Math.min(224, v) * p,
     ),
   );
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
