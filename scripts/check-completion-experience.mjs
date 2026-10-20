@@ -251,6 +251,26 @@ try {
   async function completeAndInspect(task, label) {
     const button = page.getByTestId(`complete-${task.key}-${task.id}`);
     await button.waitFor();
+    if (task.key !== "water") {
+      await page
+        .getByRole("button", { name: `查看${task.name}详情`, exact: true })
+        .waitFor();
+      // Vue inserts the new keyed title before CSS transitions are registered.
+      // Observe two frames, then wait for the real transition rather than a delay.
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll(".task-title-stage h2")].every((el) =>
+          el
+            .getAnimations()
+            .every((animation) => animation.playState !== "running"),
+        ),
+      );
+    }
     const trace = frames(1500);
     await button.tap();
     const rows = await trace;

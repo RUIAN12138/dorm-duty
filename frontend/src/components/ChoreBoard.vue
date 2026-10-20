@@ -1413,6 +1413,7 @@ onUnmounted(() => {
                     activeDutyTask.can_complete ||
                     demo
                   "
+                  :key="activeDutyTask.id"
                   :task="activeDutyTask"
                   :busy="!!busy"
                   :syncing="completionSyncPending"
