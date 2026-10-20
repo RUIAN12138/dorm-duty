@@ -40,13 +40,13 @@ export function statsFill(base: string, progress: number, dark: boolean) {
     .slice(1)
     .match(/../g)!
     .map((v) => parseInt(v, 16));
-  // Neutral grey by day and grey/white by night, both with dark default ink.
+  // Fresh completions start white; elapsed time deepens toward a medium grey.
   // Smooth endpoints avoid sudden depth changes near fresh/overdue states.
   const rgb = channels.map((v) =>
     Math.round(
       dark
-        ? 242 * (1 - depth) + 176 * depth
-        : 224 * (1 - depth) + Math.min(220, v) * depth,
+        ? 255 * (1 - depth) + 176 * depth
+        : 255 * (1 - depth) + Math.min(220, v) * depth,
     ),
   );
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
