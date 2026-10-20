@@ -94,6 +94,15 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   const page = await context.newPage();
   page.setDefaultTimeout(10000);
   page.on("pageerror", (e) => errors.push(e.message));
+  // Verify the CSS selection/spring fallback explicitly. Optical WebGL uses
+  // a canvas instead of .nav-selection and has separate geometry coverage.
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      if (type === "webgl" || type === "webgl2") return null;
+      return original.call(this, type, ...args);
+    };
+  });
   await page.goto(origin + "/" + name + ".html");
   await page.getByTestId("nav-duty").waitFor();
   const waitOpen = () =>
@@ -415,7 +424,8 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   // A vertical touch gesture on the name must scroll before a hold is recognised.
   await page.evaluate(() => window.qa.long());
   await page.waitForTimeout(100);
-  const sheet = page.locator(".elastic-sheet");
+  const sheet = page.locator(".elastic-sheet [data-sheet-scroll]");
+  const fixedHeading = await page.locator("[data-sheet-header]").boundingBox();
   const scroller = await sheet.boundingBox();
   const personBounds = await page
     .getByTestId("order-person-water-1")
@@ -442,8 +452,10 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   eq(
     await sheet.evaluate((el) => el.scrollTop > 0),
     true,
-    "ordinary vertical name swipe scrolls",
+    "ordinary vertical name swipe scrolls the sheet content",
   );
+  const headingAfterScroll = await page.locator("[data-sheet-header]").boundingBox();
+  eq(Math.abs(fixedHeading.y - headingAfterScroll.y) < 1, true, "heading stays fixed while ordinary name swipe scrolls");
   eq((await order())[0], 1, "scrolling does not reorder");
   await sheet.evaluate((el) => (el.scrollTop = 0));
   await page.waitForTimeout(150);

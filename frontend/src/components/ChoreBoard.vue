@@ -1,10 +1,25 @@
 <script setup lang="ts">
+import {
+  revealPage,
+  cancelPageReveal,
+  pageLayers,
+} from "../interaction/pageReveal";
+import CompanionNotes from "./CompanionNotes.vue";
+import DormCompanion from "./DormCompanion.vue";
+import CompanionSettings from "./CompanionSettings.vue";
+import {
+  companionPreview,
+  companionEnabled,
+  errorEmotion,
+  companionEntering,
+} from "../interaction/companion";
 import LoadingSkeleton from "./LoadingSkeleton.vue";
 import {
   computed,
   defineAsyncComponent,
   nextTick,
   onMounted,
+  onBeforeUnmount,
   onUnmounted,
   ref,
   watch,
@@ -34,9 +49,9 @@ import GalaxySpinner from "./GalaxySpinner.vue";
 import ChoreMenu, { type MenuAction } from "./ChoreMenu.vue";
 import ChoreMessages from "./ChoreMessages.vue";
 import ReminderBanner from "./ReminderBanner.vue";
+import RefreshNotice from "./RefreshNotice.vue";
 import { useReminderBanner } from "../composables/useReminderBanner";
 import ChoreReminderSheet from "./ChoreReminderSheet.vue";
-import RefreshNotice from "./RefreshNotice.vue";
 
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import AsyncPageError from "./AsyncPageError.vue";
@@ -149,6 +164,8 @@ const messagesOpen = ref(false),
   markerOpen = ref(false);
 const toolsOpen = ref(false),
   preferencesOpen = ref(false),
+  companionOpen = ref(false),
+  noteOpen = ref(false),
   orderOpen = ref(false);
 let alive = true;
 const roundOpen = ref(false);
@@ -173,6 +190,9 @@ function fromPreferences(action: () => void) {
 }
 function menuAction(action: MenuAction) {
   const actions: Record<MenuAction, () => void> = {
+    order: () => {
+      orderOpen.value = true;
+    },
     reminder: () => openReminder(),
     messages: () => {
       messagesOpen.value = true;
@@ -180,6 +200,9 @@ function menuAction(action: MenuAction) {
     join: () => emit("join-dorm"),
     push: () => {
       pushOpen.value = true;
+    },
+    companion: () => {
+      companionOpen.value = true;
     },
     preferences: () => {
       preferencesOpen.value = true;
@@ -209,9 +232,15 @@ function runQueuedTool() {
 }
 const selectedTaskId = ref<number | null>(null);
 const selectedTaskKey = ref<ChoreTask["key"] | null>(null);
-const titleAnimation = ref(true);
+const titleAnimation = ref(true),
+  titleDirection = ref(1);
 function chooseDutyTask(id: number, event: MouseEvent) {
-  titleAnimation.value = event.detail !== 0;
+  titleAnimation.value = true;
+  const previous = personalTasks.value.findIndex(
+      (task) => task.id === activeDutyTask.value?.id,
+    ),
+    next = personalTasks.value.findIndex((task) => task.id === id);
+  titleDirection.value = next < previous ? -1 : 1;
   if (settlingTask.value && settlingTask.value.id !== id)
     settleCompletion(settlingTask.value.id);
   selectedTaskId.value = id;
@@ -231,6 +260,7 @@ const taskSwipe = createTaskSwipe(
     );
     const next = personalTasks.value[index + direction];
     if (next) {
+      titleDirection.value = direction;
       titleAnimation.value = true;
       selectedTaskId.value = next.id;
       selectedTaskKey.value = next.key;
@@ -375,6 +405,13 @@ function showEntered(element: Element) {
   element.removeAttribute("inert");
   navigationOrigin.value = null;
 }
+const boardRoot = ref<HTMLElement>();
+onBeforeUnmount(() => {
+  if (boardRoot.value) cancelPageReveal(boardRoot.value);
+});
+function enterPage(element: Element) {
+  if (!companionEntering.value) revealPage(element, pageLayers);
+}
 function hideLeaving(element: Element) {
   element.setAttribute("aria-hidden", "true");
   element.setAttribute("inert", "");
@@ -410,6 +447,75 @@ const completedTasks = computed(() => {
   );
 });
 const praiseTask = ref<ChoreTask | null>(null);
+const arrivalReveal = ref(companionEntering.value);
+let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
+watch(companionEntering, (pending) => {
+  if (!pending && arrivalReveal.value)
+    arrivalTimer = setTimeout(() => (arrivalReveal.value = false), 1200);
+  if (!pending)
+    void nextTick(() =>
+      revealPage(
+        boardRoot.value?.querySelector(
+          ".board-focus>.focus-pane:not([inert])",
+        ) || null,
+        pageLayers,
+      ),
+    );
+});
+onUnmounted(() => clearTimeout(arrivalTimer));
+function openNote() {
+  if (!busy.value && !completionSyncPending.value) noteOpen.value = true;
+}
+const companionPulse = ref("");
+let companionPulseTimer: ReturnType<typeof setTimeout> | undefined;
+function pulseCompanion(id: string, duration = 2600) {
+  clearTimeout(companionPulseTimer);
+  companionPulse.value = id;
+  companionPulseTimer = setTimeout(() => (companionPulse.value = ""), duration);
+}
+onUnmounted(() => clearTimeout(companionPulseTimer));
+watch(
+  () => props.section,
+  (section) =>
+    pulseCompanion(
+      section === "calendar" ? "40" : section === "water" ? "31" : "03",
+    ),
+);
+watch(busy, (current, previous) => {
+  if (!current && previous.startsWith("undo-") && !actionError.value)
+    pulseCompanion("18");
+});
+const companionMood = computed(
+  () =>
+    companionPreview.value ||
+    (error.value || actionError.value
+      ? errorEmotion(error.value || actionError.value)
+      : praiseTask.value
+        ? "33"
+        : /失败|稍后重试/.test(nudgeStatus.value)
+          ? "11"
+          : busy.value
+            ? "32"
+            : loading.value
+              ? "36"
+              : companionPulse.value ||
+                (reminderOpen.value
+                  ? "35"
+                  : messagesOpen.value
+                    ? "39"
+                    : settingsOpen.value || orderOpen.value
+                      ? "30"
+                      : detailOpen.value
+                        ? "16"
+                        : completedOpen.value
+                          ? "37"
+                          : personalToday.value.length &&
+                              personalToday.value.every(
+                                (t) => t.status === "completed",
+                              )
+                            ? "19"
+                            : "02")),
+);
 const praiseElement = ref<HTMLElement>();
 const praiseTop = ref<number | null>(null);
 let praiseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -580,6 +686,8 @@ const reminderBanner = useReminderBanner(() => ({
     markerOpen.value ||
     toolsOpen.value ||
     preferencesOpen.value ||
+    companionOpen.value ||
+    noteOpen.value ||
     orderOpen.value ||
     roundOpen.value ||
     pushOpen.value ||
@@ -604,6 +712,8 @@ watch(
     markerOpen,
     toolsOpen,
     preferencesOpen,
+    companionOpen,
+    noteOpen,
     orderOpen,
     roundOpen,
     pushOpen,
@@ -1022,6 +1132,8 @@ function visibleRefresh(event?: Event) {
     !markerOpen.value &&
     !toolsOpen.value &&
     !preferencesOpen.value &&
+    !companionOpen.value &&
+    !noteOpen.value &&
     !orderOpen.value &&
     !roundOpen.value &&
     !pushOpen.value &&
@@ -1074,7 +1186,15 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <div class="chore-board" data-testid="chore-board">
+  <div
+    ref="boardRoot"
+    class="chore-board"
+    :class="{
+      'arrival-pending': companionEntering,
+      'arrival-reveal': arrivalReveal,
+    }"
+    data-testid="chore-board"
+  >
     <ReminderBanner
       :note="reminderBanner.active.value"
       @dismiss="reminderBanner.dismiss"
@@ -1103,39 +1223,46 @@ onUnmounted(() => {
         <button v-if="demo" class="demo-exit" @click="emit('exit-demo')">
           退出游客
         </button>
-        <span class="identity-name"
-          ><span>{{ dormName }}</span
-          ><span class="current-identity"
-            >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
-          ></span
-        >
-        <div class="identity-actions">
-          <RefreshNotice
-            :error="completionSyncPending ? '' : error"
-            :loading="loading"
-            @retry="load"
+        <div class="companion-identity">
+          <DormCompanion
+            v-if="companionEnabled"
+            :mood="companionMood"
+            :automatic="!companionPreview"
+            :track="true"
+            :size="52"
+            intent="message"
+            :tips="true"
+            :scene="section"
+            :muted="
+              toolsOpen ||
+              preferencesOpen ||
+              companionOpen ||
+              noteOpen ||
+              reminderOpen ||
+              messagesOpen ||
+              settingsOpen ||
+              !!detailTask
+            "
+            @message="openNote"
           />
-          <button
-            class="order-trigger"
-            aria-label="任务轮序"
-            data-testid="open-water-order"
-            @click="orderOpen = true"
+          <span class="identity-name"
+            ><span>{{ dormName }}</span
+            ><span class="current-identity"
+              >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+            ></span
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 6h12M8 12h12M8 18h12M3 5v2M3 11v2M3 17v2" /></svg
-            ><span>轮序</span>
-          </button>
+        </div>
+        <div class="identity-actions">
+          <RefreshNotice :error="error" :loading="loading" @retry="load" />
           <button
             class="tools-button"
             :aria-label="
-              unread.length
-                ? `更多操作，${unread.length} 条未读消息`
-                : '更多操作'
+              unread.length ? `设置，${unread.length} 条未读消息` : '设置'
             "
             data-testid="open-tools"
             @click="openTools"
           >
-            <van-icon name="ellipsis" aria-hidden="true" />
+            <van-icon name="setting-o" aria-hidden="true" />
             <span
               v-if="unread.length"
               class="tools-unread"
@@ -1164,8 +1291,11 @@ onUnmounted(() => {
       >
         <Transition
           name="focus-fade"
+          appear
           @before-leave="hideLeaving"
           @before-enter="showEntered"
+          @enter="enterPage"
+          @after-leave="cancelPageReveal"
         >
           <div :key="section" class="focus-pane">
             <section
@@ -1263,6 +1393,7 @@ onUnmounted(() => {
                   <TaskTitle
                     :value="`${activeDutyTask.key}:${activeDutyTask.name}`"
                     :animated="titleAnimation"
+                    :direction="titleDirection"
                   >
                     <button
                       class="task-title-button"
@@ -1282,6 +1413,7 @@ onUnmounted(() => {
                     activeDutyTask.can_complete ||
                     demo
                   "
+                  :key="activeDutyTask.id"
                   :task="activeDutyTask"
                   :busy="!!busy"
                   :syncing="completionSyncPending"
@@ -1375,6 +1507,8 @@ onUnmounted(() => {
                           !orderOpen &&
                           !toolsOpen &&
                           !preferencesOpen &&
+                          !companionOpen &&
+                          !noteOpen &&
                           !pushOpen &&
                           !settingsOpen &&
                           !recoveryOpen &&
@@ -1572,6 +1706,23 @@ onUnmounted(() => {
           />
         </div>
       </ElasticSheet>
+      <CompanionNotes
+        v-model="noteOpen"
+        :members="board.members"
+        :member-id="memberId"
+        :token="token"
+        :invite="invite"
+        @sent="load"
+        @closed="presentNewReminders"
+      />
+      <ElasticSheet
+        v-model="companionOpen"
+        title="球球设置"
+        motion="bottom"
+        @closed="presentNewReminders"
+      >
+        <CompanionSettings />
+      </ElasticSheet>
       <ChoreMessages
         v-model="messagesOpen"
         :reminders="board.reminders"
@@ -1649,7 +1800,7 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.5;
-  color: #666;
+  color: var(--app-tone-h666, #666);
 }
 .demo-exit {
   background: transparent;
@@ -1663,9 +1814,9 @@ onUnmounted(() => {
   isolation: isolate;
   padding: 20px;
   margin: 2px 0;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--app-tone-he8e8e8, #e8e8e8);
   border-radius: 22px;
-  background: #f8f8f8;
+  background: var(--app-tone-hf8f8f8, #f8f8f8);
   transform: perspective(900px) rotateX(var(--tilt-x, 0deg))
     rotateY(var(--tilt-y, 0deg));
 }
@@ -1678,7 +1829,7 @@ onUnmounted(() => {
   opacity: var(--shine-opacity, 0);
   background: radial-gradient(
     circle at var(--shine-x, 50%) var(--shine-y, 50%),
-    #fff 0,
+    var(--app-tone-hfff, #fff) 0,
     transparent 65%
   );
   z-index: -1;
@@ -1705,8 +1856,8 @@ onUnmounted(() => {
   border: 0;
   border-radius: 16px;
   padding: 8px 11px;
-  background: #f5f5f5;
-  color: #222;
+  background: var(--app-tone-hf5f5f5, #f5f5f5);
+  color: var(--app-tone-h222, #222);
   font-size: 14px;
   cursor: pointer;
 }
@@ -1737,7 +1888,7 @@ onUnmounted(() => {
   gap: 8px;
   border: 0;
   background: none;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   padding: 10px 4px;
   min-height: 44px;
   font-size: 16px;
@@ -1746,7 +1897,7 @@ onUnmounted(() => {
 /* One shared left edge and type scale across the three mobile pages. */
 .chore-board {
   min-width: 0;
-  color: #111;
+  color: var(--app-tone-h111, #111);
 }
 .chore-sync-status {
   position: fixed;
@@ -1755,16 +1906,16 @@ onUnmounted(() => {
   transform: translateX(-50%);
   bottom: calc(82px + env(safe-area-inset-bottom));
   width: min(calc(100% - 40px), 480px);
-  border: 1px solid #eee;
+  border: 1px solid var(--app-tone-heee, #eee);
   border-radius: 16px;
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   box-shadow: 0 4px 18px #0000000a;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 8px 16px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 14px;
 }
 .chore-sync-status button {
@@ -1773,8 +1924,17 @@ onUnmounted(() => {
   min-height: 44px;
   border: 0;
   background: none;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font: inherit;
+}
+.companion-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.identity-actions {
+  flex-shrink: 0;
 }
 .board-identity {
   display: flex;
@@ -1801,7 +1961,7 @@ onUnmounted(() => {
   background: none;
   border: 0;
   font-size: 24px;
-  color: #111;
+  color: var(--app-tone-h111, #111);
 }
 .tools-unread {
   position: absolute;
@@ -1811,8 +1971,8 @@ onUnmounted(() => {
   height: 18px;
   padding: 0 4px;
   border-radius: 9px;
-  background: #111;
-  color: #fff;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
   font-size: 11px;
   line-height: 18px;
   font-weight: 600;
@@ -1908,7 +2068,7 @@ onUnmounted(() => {
 }
 .water-nudge-actions .water-remind {
   background: transparent;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   border: 0;
   min-height: 44px;
   width: auto;
@@ -1919,7 +2079,7 @@ onUnmounted(() => {
   padding: 0;
   border: 0;
   background: none;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font: inherit;
   letter-spacing: inherit;
   text-align: center;
@@ -1931,9 +2091,9 @@ onUnmounted(() => {
   display: block;
   width: min(100%, 300px);
   min-height: 54px;
-  background: #111;
-  color: #fff;
-  border: 1px solid #111;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
+  border: 1px solid var(--app-tone-h111, #111);
   border-radius: 16px;
   font-size: 18px;
   font-weight: 550;
@@ -1946,7 +2106,7 @@ onUnmounted(() => {
   display: flex;
   gap: 10px;
   align-items: center;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-size: 20px;
   line-height: 1.5;
   margin: 0;
@@ -1956,7 +2116,7 @@ onUnmounted(() => {
 }
 .hero-date {
   font-size: 17px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   margin: 0;
   text-align: center;
 }
@@ -1976,16 +2136,16 @@ onUnmounted(() => {
   min-height: 44px;
   padding: 8px 18px;
   font-size: 16px;
-  color: #666;
-  background: #fff;
+  color: var(--app-tone-h666, #666);
+  background: var(--app-tone-hfff, #fff);
   transition:
     background-color 180ms ease,
     color 180ms ease,
     transform 180ms ease;
 }
 .task-selector button[aria-pressed="true"] {
-  color: #111;
-  background: #f0f0f0;
+  color: var(--app-tone-h111, #111);
+  background: var(--app-tone-hf0f0f0, #f0f0f0);
 }
 .water-empty {
   text-align: center;
@@ -1994,7 +2154,7 @@ onUnmounted(() => {
   margin-top: 28px;
 }
 .water-order {
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--app-tone-he5e5e5, #e5e5e5);
   margin-top: 20px;
 }
 .water-order summary {
@@ -2037,12 +2197,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   font-size: 15px;
   min-width: 0;
 }
 .water-order > div > span.current {
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-weight: 600;
 }
 .board-tools {
@@ -2057,25 +2217,25 @@ onUnmounted(() => {
   padding: 10px 0;
   background: none;
   border: 0;
-  border-bottom: 1px solid #eee;
-  color: #111;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
+  color: var(--app-tone-h111, #111);
   font-size: 18px;
   text-align: left;
 }
 .message-count {
   display: grid;
   place-items: center;
-  background: #111;
-  color: #fff;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
   min-width: 22px;
   height: 22px;
   border-radius: 50%;
   font-size: 13px;
 }
 .chore-inline-error {
-  border-left: 2px solid #111;
+  border-left: 2px solid var(--app-tone-h111, #111);
   padding: 10px 12px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 15px;
   line-height: 1.6;
   margin-bottom: 12px;
@@ -2085,7 +2245,7 @@ onUnmounted(() => {
   min-height: 44px;
   border: 0;
   background: none;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-size: 15px;
   padding: 8px 0;
 }
@@ -2102,7 +2262,7 @@ onUnmounted(() => {
   gap: 12px;
   margin-top: 24px;
   font-size: 15px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .board-loading {
   padding-top: 16px;
@@ -2110,7 +2270,7 @@ onUnmounted(() => {
 .board-loading span:not(.galaxy-spinner) {
   display: block;
   border-radius: 8px;
-  background: #f0f0f0;
+  background: var(--app-tone-hf0f0f0, #f0f0f0);
   height: 92px;
   margin: 18px 0;
 }
@@ -2221,7 +2381,7 @@ onUnmounted(() => {
 .water-nudge-actions .hero-date {
   min-height: 24px;
   font-size: 16px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 
 .water-remind:active,
@@ -2272,10 +2432,10 @@ onUnmounted(() => {
   max-width: calc(100vw - 40px);
   min-height: 44px;
   padding: 12px 18px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--app-tone-he8e8e8, #e8e8e8);
   border-radius: 18px;
-  color: #222;
-  background: #fff;
+  color: var(--app-tone-h222, #222);
+  background: var(--app-tone-hfff, #fff);
   box-shadow: 0 8px 28px #0000000c;
   font-size: 14px;
   line-height: 1.5;
@@ -2343,7 +2503,7 @@ onUnmounted(() => {
   min-height: 52px;
   border: 0;
   border-radius: 18px;
-  background: #f6f6f6;
+  background: var(--app-tone-hf6f6f6, #f6f6f6);
   font: inherit;
   font-size: 16px;
   margin-top: 18px;
@@ -2353,7 +2513,7 @@ onUnmounted(() => {
 }
 .round-edit-entry .van-icon:last-child {
   margin-left: auto;
-  color: #999;
+  color: var(--app-tone-h999, #999);
 }
 .round-edit-entry:active {
   transform: scale(0.98);
@@ -2365,7 +2525,7 @@ onUnmounted(() => {
   transition: background-color 280ms ease;
 }
 .chore-personal.completion-linked {
-  background-color: #f6f6f5;
+  background-color: var(--app-tone-hf6f6f5, #f6f6f5);
 }
 @media (prefers-reduced-motion: reduce) {
   .chore-personal {
@@ -2518,7 +2678,7 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   margin: 0;
-  color: #777;
+  color: var(--app-tone-h777, #777);
   font-size: 16px;
   line-height: 24px;
   text-align: center;
@@ -2528,9 +2688,9 @@ onUnmounted(() => {
 .completion-praise-bubble {
   display: block;
   padding: 10px 18px;
-  border: 1px solid #ededed;
+  border: 1px solid var(--app-tone-hededed, #ededed);
   border-radius: 999px;
-  background: #fafafa;
+  background: var(--app-tone-hfafafa, #fafafa);
   transform-origin: center bottom;
 }
 .quiet-toast-enter-active,
@@ -2765,6 +2925,87 @@ onUnmounted(() => {
   }
   .chore-personal > .task-selector {
     top: calc(50% - 102px);
+  }
+}
+</style>
+
+<style scoped>
+.arrival-pending .identity-name,
+.arrival-pending .identity-actions,
+.arrival-pending .board-focus {
+  opacity: 0;
+  pointer-events: none;
+}
+.arrival-reveal:not(.arrival-pending) .identity-name {
+  animation: companion-arrival-rise 440ms both;
+}
+.arrival-reveal:not(.arrival-pending) .identity-actions {
+  animation: companion-arrival-rise 440ms 70ms both;
+}
+.arrival-reveal:not(.arrival-pending) .board-focus {
+  animation: companion-arrival-rise 540ms 160ms both;
+}
+@keyframes companion-arrival-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arrival-reveal:not(.arrival-pending) .identity-name,
+  .arrival-reveal:not(.arrival-pending) .identity-actions,
+  .arrival-reveal:not(.arrival-pending) .board-focus {
+    animation: none;
+  }
+}
+</style>
+
+<style scoped>
+.focus-fade-enter-active {
+  transition: opacity 720ms linear !important;
+}
+.focus-fade-leave-active {
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease !important;
+}
+.focus-fade-enter-from,
+.focus-fade-enter-to {
+  opacity: 1;
+  transform: none;
+}
+.focus-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-fade-enter-active,
+  .focus-fade-leave-active {
+    transition: none !important;
+  }
+  .focus-fade-leave-to {
+    transform: none;
+  }
+}
+</style>
+
+<style scoped>
+@media (max-width: 360px) {
+  .identity-actions .order-trigger span {
+    display: none;
+  }
+  .identity-actions .order-trigger {
+    width: 40px;
+    justify-content: center;
+    padding: 8px;
+  }
+  .identity-actions .theme-toggle {
+    width: 36px;
+    height: 36px;
   }
 }
 </style>

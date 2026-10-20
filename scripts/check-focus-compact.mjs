@@ -57,8 +57,15 @@ try {
   }
   const initial = await board(),
     waterId = initial.water_task.id;
-  const configured=await h.request('/chores/settings',{token:room.access_token,method:'PATCH',data:{version:initial.version,categories:[{key:'floor',reminder_interval_days:2}]}});
-  assert.equal(configured.status,200);
+  const configured = await h.request("/chores/settings", {
+    token: room.access_token,
+    method: "PATCH",
+    data: {
+      version: initial.version,
+      categories: [{ key: "floor", reminder_interval_days: 2 }],
+    },
+  });
+  assert.equal(configured.status, 200);
   const html = path.join(front, name + ".html"),
     vue = path.join(front, name + ".vue");
   await fs.writeFile(
@@ -131,7 +138,7 @@ try {
       body: await response.text(),
     });
   });
-  await page.route('**/marks/*.svg',route=>route.abort());
+  await page.route("**/marks/*.svg", (route) => route.abort());
   await page.goto(origin + "/" + name + ".html");
   await page.getByTestId("pane-duty").waitFor();
   check(
@@ -185,14 +192,46 @@ try {
     0,
     "failed completion never celebrates",
   );
-  check(await page.getByTestId('completion-toast').count(),0,'failed completion never shows encouragement');
+  check(
+    await page.getByTestId("completion-toast").count(),
+    0,
+    "failed completion never shows encouragement",
+  );
   await page.getByTestId(`complete-${task.key}-${task.id}`).click();
-  const praise=page.getByTestId('completion-toast');
+  const praise = page.getByTestId("completion-toast");
   await praise.waitFor();
-  check((await praise.innerText()).trim(),'你真棒👍！','successful completion uses the requested quiet encouragement');
-  check(await praise.locator('button').count(),0,'encouragement has no extra controls');
-  check(await praise.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','encouragement has no toast background');
-  check(await praise.evaluate(el=>{const r=el.getBoundingClientRect(),nav=document.querySelector('.chore-bottom-nav').getBoundingClientRect(),action=document.querySelector('.completion-surface').getBoundingClientRect();return r.bottom<nav.top-10&&(r.top>=action.bottom||r.bottom<=action.top);}),true,'encouragement fits the empty area above navigation without overlapping the action');
+  check(
+    (await praise.innerText()).trim(),
+    "你真棒👍！",
+    "successful completion uses the requested quiet encouragement",
+  );
+  check(
+    await praise.locator("button").count(),
+    0,
+    "encouragement has no extra controls",
+  );
+  check(
+    await praise.evaluate((el) => getComputedStyle(el).backgroundColor),
+    "rgba(0, 0, 0, 0)",
+    "encouragement has no toast background",
+  );
+  check(
+    await praise.evaluate((el) => {
+      const r = el.getBoundingClientRect(),
+        nav = document
+          .querySelector(".chore-bottom-nav")
+          .getBoundingClientRect(),
+        action = document
+          .querySelector(".completion-surface")
+          .getBoundingClientRect();
+      return (
+        r.bottom < nav.top - 10 &&
+        (r.top >= action.bottom || r.bottom <= action.top)
+      );
+    }),
+    true,
+    "encouragement fits the empty area above navigation without overlapping the action",
+  );
   await page.waitForTimeout(850);
   check(
     (await board()).today_tasks.find((t) => t.id === task.id).status,
@@ -204,7 +243,12 @@ try {
     true,
     "completed task keeps its reversible button",
   );
-  await page.screenshot({path:path.join(evidence,`${safari?'webkit':'chromium'}-completion-praise.png`)});
+  await page.screenshot({
+    path: path.join(
+      evidence,
+      `${safari ? "webkit" : "chromium"}-completion-praise.png`,
+    ),
+  });
   await page.getByTestId(`undo-${task.id}`).click();
   await page.getByTestId(`complete-${task.key}-${task.id}`).waitFor();
   check(
@@ -230,72 +274,227 @@ try {
     1,
     "only one statistics card accepts interaction",
   );
-  check(await page.getByTestId('stats-floor').getAttribute('data-tone'),'warm','task-specific interval colors the elapsed-time card');
-  check(await page.getByTestId('stats-toilet').getAttribute('data-tone'),'empty','missing history is not marked overdue');
-  check(await page.locator('.calendar-task-mark,.calendar-more,.day-record-dots').count(),0,'calendar hides tiny people and task markers');
-  check(await page.getByRole("button",{name:"下一张统计卡片",exact:true}).count(),0,"statistics has no arrow controls");
-  await page.getByRole('button',{name:'设置间隔',exact:true}).click();
-  const intervalSheet=page.getByRole('dialog',{name:'宿舍任务设置',exact:true});
+  check(
+    await page.getByTestId("stats-floor").getAttribute("data-tone"),
+    "warm",
+    "task-specific interval colors the elapsed-time card",
+  );
+  check(
+    await page.getByTestId("stats-toilet").getAttribute("data-tone"),
+    "empty",
+    "missing history is not marked overdue",
+  );
+  check(
+    await page
+      .locator(".calendar-task-mark,.calendar-more,.day-record-dots")
+      .count(),
+    0,
+    "calendar hides tiny people and task markers",
+  );
+  check(
+    await page
+      .getByRole("button", { name: "下一张统计卡片", exact: true })
+      .count(),
+    0,
+    "statistics has no arrow controls",
+  );
+  await page.getByRole("button", { name: "设置间隔", exact: true }).click();
+  const intervalSheet = page.getByRole("dialog", {
+    name: "宿舍任务设置",
+    exact: true,
+  });
   await intervalSheet.waitFor();
-  await page.getByTestId('settings-interval-floor').fill('365');
-  await intervalSheet.getByRole('button',{name:'保存设置',exact:true}).click();
-  await intervalSheet.waitFor({state:'hidden'});
-  await page.waitForFunction(()=>document.querySelector('[data-testid="stats-floor"]')?.getAttribute('data-tone')==='neutral');
-  check((await board()).categories.find(c=>c.key==='floor').reminder_interval_days,365,'creator saves a per-task interval from statistics');
-  await page.getByRole('button',{name:'设置间隔',exact:true}).click();
-  await page.getByTestId('settings-interval-floor').fill('2');
-  await intervalSheet.getByRole('button',{name:'保存设置',exact:true}).click();
-  await intervalSheet.waitFor({state:'hidden'});
-  await page.waitForFunction(()=>document.querySelector('[data-testid="stats-floor"]')?.getAttribute('data-tone')==='warm');
-  const touchSession=process.env.DORM_TOUCH==='1'&&!safari?await page.context().newCDPSession(page):null;
-  async function swipeCard(direction=-1){
-    const bounds=await page.locator('.deck-stage').boundingBox();
-    const x=bounds.x+bounds.width*(direction<0?.8:.2),y=bounds.y+bounds.height*.5;
-    if(touchSession){
-      await touchSession.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]});
-      for(let i=1;i<=12;i++){await touchSession.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+direction*bounds.width*.64*i/12,y,id:1}]});await page.waitForTimeout(16);}
-    }else{
-      await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+direction*bounds.width*.64,y,{steps:12});
+  await page.getByTestId("settings-interval-floor").fill("365");
+  await intervalSheet
+    .getByRole("button", { name: "保存设置", exact: true })
+    .click();
+  await intervalSheet.waitFor({ state: "hidden" });
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-testid="stats-floor"]')
+        ?.getAttribute("data-tone") === "neutral",
+  );
+  check(
+    (await board()).categories.find((c) => c.key === "floor")
+      .reminder_interval_days,
+    365,
+    "creator saves a per-task interval from statistics",
+  );
+  await page.getByRole("button", { name: "设置间隔", exact: true }).click();
+  await page.getByTestId("settings-interval-floor").fill("2");
+  await intervalSheet
+    .getByRole("button", { name: "保存设置", exact: true })
+    .click();
+  await intervalSheet.waitFor({ state: "hidden" });
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-testid="stats-floor"]')
+        ?.getAttribute("data-tone") === "warm",
+  );
+  const touchSession =
+    process.env.DORM_TOUCH === "1" && !safari
+      ? await page.context().newCDPSession(page)
+      : null;
+  async function swipeCard(direction = -1) {
+    const bounds = await page.locator(".deck-stage").boundingBox();
+    const x = bounds.x + bounds.width * (direction < 0 ? 0.8 : 0.2),
+      y = bounds.y + bounds.height * 0.5;
+    if (touchSession) {
+      await touchSession.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x, y, id: 1 }],
+      });
+      for (let i = 1; i <= 12; i++) {
+        await touchSession.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [
+            { x: x + (direction * bounds.width * 0.64 * i) / 12, y, id: 1 },
+          ],
+        });
+        await page.waitForTimeout(16);
+      }
+    } else {
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + direction * bounds.width * 0.64, y, {
+        steps: 12,
+      });
     }
-    check(await page.locator('.deck-card.is-front').evaluate(e=>Math.abs(new DOMMatrix(getComputedStyle(e).transform).m41)>10),true,'stacked front card follows the pointer before release');
-    const weights=await page.locator('.deck-dot-fill').evaluateAll(els=>els.map(e=>Number(getComputedStyle(e).opacity)));
-    check(weights.filter(v=>v>0.01&&v<0.99).length,2,'adjacent pagination dots crossfade continuously during the gesture');
-    if(touchSession)await touchSession.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});else await page.mouse.up();
+    check(
+      await page
+        .locator(".deck-card.is-front")
+        .evaluate(
+          (e) =>
+            Math.abs(new DOMMatrix(getComputedStyle(e).transform).m41) > 10,
+        ),
+      true,
+      "stacked front card follows the pointer before release",
+    );
+    const weights = await page
+      .locator(".deck-dot-fill")
+      .evaluateAll((els) =>
+        els.map((e) => Number(getComputedStyle(e).opacity)),
+      );
+    check(
+      weights.filter((v) => v > 0.01 && v < 0.99).length,
+      2,
+      "adjacent pagination dots crossfade continuously during the gesture",
+    );
+    if (touchSession)
+      await touchSession.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+    else await page.mouse.up();
     await page.waitForTimeout(500);
-    check(await page.locator('.deck-dots .is-current .deck-dot-fill').evaluate(e=>Number(getComputedStyle(e).opacity)),1,'pagination dots settle on the visible card');
+    check(
+      await page
+        .locator(".deck-dots .is-current .deck-dot-fill")
+        .evaluate((e) => Number(getComputedStyle(e).opacity)),
+      1,
+      "pagination dots settle on the visible card",
+    );
   }
   await swipeCard(1);
-  check(await page.locator('.deck-card.is-front h2').innerText(),'抬水','rightward gesture wraps from the first card');
+  check(
+    await page.locator(".deck-card.is-front h2").innerText(),
+    "抬水",
+    "rightward gesture wraps from the first card",
+  );
   await swipeCard(-1);
-  check(await page.locator('.deck-card.is-front h2').innerText(),'地板','leftward gesture wraps back to the first card');
+  check(
+    await page.locator(".deck-card.is-front h2").innerText(),
+    "地板",
+    "leftward gesture wraps back to the first card",
+  );
   await swipeCard();
-  check(await page.locator('.deck-card.is-front h2').innerText(),'厕所','swipe changes the focused card');
+  check(
+    await page.locator(".deck-card.is-front h2").innerText(),
+    "厕所",
+    "swipe changes the focused card",
+  );
   await swipeCard();
-  check(await page.locator('.deck-card.is-front h2').innerText(),'洗手池','successive swipe changes the focused card');
+  check(
+    await page.locator(".deck-card.is-front h2").innerText(),
+    "洗手池",
+    "successive swipe changes the focused card",
+  );
   check(
     new URL(page.url()).pathname,
     "/calendar",
     "statistics card swipe never changes the bottom page",
   );
 
-  await page.getByTestId('calendar-view-grid').click();
+  await page.getByTestId("calendar-view-grid").click();
   await page.getByTestId(`calendar-day-${seedDate}`).click();
-  const detailLayer=page.locator('.sheet-layer');
-  check(await detailLayer.getAttribute('data-motion'),'bottom','date detail explicitly uses a bottom drawer');
-  const detail=page.getByTestId('calendar-day-details');
-  const incoming=await detail.locator('.record-stagger').evaluateAll(els=>els.slice(0,3).map(el=>({opacity:Number(getComputedStyle(el).opacity),x:new DOMMatrix(getComputedStyle(el).transform).m41,delay:parseFloat(getComputedStyle(el).transitionDelay)})));
-  check(incoming.some(r=>r.opacity<1&&r.x>0),true,'drawer cards appear with a fade and right-to-left movement');
-  check(incoming[2].delay>incoming[1].delay&&incoming[1].delay>incoming[0].delay,true,'drawer entrance is progressively staggered');
+  const detailLayer = page.locator(".sheet-layer");
+  check(
+    await detailLayer.getAttribute("data-motion"),
+    "bottom",
+    "date detail explicitly uses a bottom drawer",
+  );
+  const detail = page.getByTestId("calendar-day-details");
+  const incoming = await detail
+    .locator(".record-stagger")
+    .evaluateAll((els) =>
+      els
+        .slice(0, 3)
+        .map((el) => ({
+          opacity: Number(getComputedStyle(el).opacity),
+          x: new DOMMatrix(getComputedStyle(el).transform).m41,
+          delay: parseFloat(getComputedStyle(el).transitionDelay),
+        })),
+    );
+  check(
+    incoming.some((r) => r.opacity < 1 && r.x > 0),
+    true,
+    "drawer cards appear with a fade and right-to-left movement",
+  );
+  check(
+    incoming[2].delay > incoming[1].delay &&
+      incoming[1].delay > incoming[0].delay,
+    true,
+    "drawer entrance is progressively staggered",
+  );
   await page.waitForTimeout(600);
-  const finalRecord=detail.locator('.record-stagger').last();
+  const finalRecord = detail.locator(".record-stagger").last();
   await finalRecord.scrollIntoViewIfNeeded();
-  check(await detail.locator('img.member-mark').count(),0,'record markers never depend on image loads');
-  check(await detail.locator('svg.member-mark path').count(),7,'all markers survive deliberately blocked image requests');
-  check(await finalRecord.evaluate(el=>{const r=el.getBoundingClientRect(),b=el.closest('.sheet-content').getBoundingClientRect();return r.bottom<=b.bottom+1&&r.top>=b.top;}),true,'last record is fully visible inside the drawer scroll area');
-  await page.screenshot({path:path.join(evidence,`${safari?'webkit':'chromium'}-details-bottom.png`)});
-  await detailLayer.getByRole('button',{name:'关闭详情',exact:true}).click();
-  check(await detail.count(),1,'drawer retains its cards during the exit animation');
-  await detailLayer.waitFor({state:'detached'});
+  check(
+    await detail.locator("img.member-mark").count(),
+    0,
+    "record markers never depend on image loads",
+  );
+  check(
+    await detail.locator("svg.member-mark path").count(),
+    7,
+    "all markers survive deliberately blocked image requests",
+  );
+  check(
+    await finalRecord.evaluate((el) => {
+      const r = el.getBoundingClientRect(),
+        b = el.closest(".sheet-content").getBoundingClientRect();
+      return r.bottom <= b.bottom + 1 && r.top >= b.top;
+    }),
+    true,
+    "last record is fully visible inside the drawer scroll area",
+  );
+  await page.screenshot({
+    path: path.join(
+      evidence,
+      `${safari ? "webkit" : "chromium"}-details-bottom.png`,
+    ),
+  });
+  await detailLayer
+    .getByRole("button", { name: "关闭详情", exact: true })
+    .click();
+  check(
+    await detail.count(),
+    1,
+    "drawer retains its cards during the exit animation",
+  );
+  await detailLayer.waitFor({ state: "detached" });
 
   for (const [width, height] of [
     [320, 568],
@@ -356,7 +555,19 @@ try {
           true,
           `all statistics metrics fit ${width}x${height}`,
         );
-      if(label==='stats')check(await page.locator('.deck-card.is-front footer').evaluate(el=>el.getBoundingClientRect().bottom<=el.closest('.deck-card-face').getBoundingClientRect().bottom+1),true,`last-completion time is not clipped at ${width}x${height}`);
+      if (label === "stats")
+        check(
+          await page
+            .locator(".deck-card.is-front footer")
+            .evaluate(
+              (el) =>
+                el.getBoundingClientRect().bottom <=
+                el.closest(".deck-card-face").getBoundingClientRect().bottom +
+                  1,
+            ),
+          true,
+          `last-completion time is not clipped at ${width}x${height}`,
+        );
       if (label === "calendar")
         check(
           await page
@@ -416,55 +627,68 @@ try {
     0,
     "list removes the top count strip",
   );
-  const seedHeading=page.getByTestId(`record-group-${seedDate}`);
-  await seedHeading.click();
-  const seedStack=seedHeading.locator('..');
-  const listEntrance=await seedStack.locator('.record-stagger').evaluateAll(els=>els.slice(0,3).map(el=>({opacity:Number(getComputedStyle(el).opacity),x:new DOMMatrix(getComputedStyle(el).transform).m41,delay:parseFloat(getComputedStyle(el).transitionDelay)})));
-  check(listEntrance.some(r=>r.opacity<1&&r.x>0),true,'expanded list cards fade in from right to left');
-  check(listEntrance[2].delay>listEntrance[1].delay,true,'expanded list cards enter progressively');
+  const seedLabel = `${Number(seedDate.slice(5, 7))}月${Number(seedDate.slice(8))}日`;
+  await page
+    .getByRole("button", { name: new RegExp(`^${seedLabel}，`) })
+    .click();
+  const listDetail = page.getByTestId("calendar-day-details");
+  await listDetail.waitFor();
   await page.waitForTimeout(600);
-  const expandedHeight=await seedStack.locator('.record-stack-body').evaluate(e=>e.getBoundingClientRect().height);
-  await seedHeading.click();
-  check(await seedStack.locator('.record-stack-body').evaluate((e,h)=>e.getBoundingClientRect().height>=h-1,expandedHeight),true,'collapse retains its scroll extent while cards are still visible');
-  const exits=await seedStack.locator('.record-reveal-leave-active').evaluateAll(els=>els.map(el=>Number.parseFloat(el.style.top)));
-  check(exits.length,7,'collapse keeps each card for its exit animation');
-  check(exits.every((y,i)=>Number.isFinite(y)&&(i===0||y>exits[i-1])),true,'collapsing cards preserve distinct old positions');
-  const foldingFrames = await seedStack.evaluate(async el => {
-    const frames=[],started=performance.now();
-    while(performance.now()-started<430){
-      await new Promise(requestAnimationFrame);
-      frames.push({rows:[...el.querySelectorAll('.record-stagger')].map(row=>{
-        const css=getComputedStyle(row),m=new DOMMatrix(css.transform);
-        return {opacity:Number(css.opacity),x:m.m41,y:m.m42};
-      }),depth:Number(getComputedStyle(el,'::after').opacity)});
-    }
-    return frames;
-  });
-  check(foldingFrames.some(f=>f.rows.some(r=>r.opacity>.05&&r.opacity<.95&&r.x>1&&r.y< -1)),true,'collapse visibly fades and moves cards back towards the stack');
-  check(foldingFrames.some(f=>f.rows.length>2&&Math.abs(f.rows[0].opacity-f.rows[f.rows.length-1].opacity)>.1),true,'collapse uses a progressive exit instead of removing every card together');
-  check(foldingFrames.some(f=>f.depth>0&&f.depth<1),true,'closed stack depth fades into place instead of popping in');
-  check(await seedStack.locator('.record-stagger').count(),0,'collapse leaves no ghost cards');
-  check(await seedStack.locator('.record-stack-body').evaluate(e=>e.style.minHeight),'','collapse releases its temporary scroll reservation');
-  await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(600);
-  check(await seedStack.locator('.record-stagger').evaluateAll(els=>els.length===7&&els.every(e=>getComputedStyle(e).opacity==='1'&&!e.style.top)),true,'interrupted collapse reopens all cards at their natural positions');
-  await seedHeading.click();await seedStack.locator('.record-stagger').first().waitFor({state:'detached'});
-  check(await seedStack.locator('.record-stagger').count(),0,'repeated collapse does not leave stale cards');
+  check(
+    await listDetail.locator(".record-stagger").count(),
+    7,
+    "date summary opens all seven historical records in its detail drawer",
+  );
+  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await listDetail.waitFor({ state: "detached" });
   const seen = new Set();
-  while(true){
-    for(const heading of await page.locator('.records-heading').all()){
-      if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+  while (true) {
+    const dates = await page
+      .locator(".record-date")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+    for (const label of dates) {
+      await page.getByRole("button", { name: label, exact: true }).click();
+      const records = page.getByTestId("calendar-day-details");
+      await records.waitFor();
+      for (const id of await records
+        .locator(".record-row")
+        .evaluateAll((els) => els.map((el) => el.dataset.recordId)))
+        seen.add(id);
+      await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+      await records.waitFor({ state: "detached" });
     }
-    await page.waitForTimeout(420);
-    for(const row of await page.locator('[data-testid^="calendar-list-record-"]').all())seen.add(await row.getAttribute('data-testid'));
-    const next=page.getByRole('button',{name:'下一页记录',exact:true});
-    if(!await next.count()||!await next.isEnabled())break;
+    const next = page.getByRole("button", { name: "下一页记录", exact: true });
+    if (!(await next.count()) || !(await next.isEnabled())) break;
     await next.click();
   }
-  check(seen.size,after.calendar.length,'folded date groups retain every historical record');
-  const previous=page.getByRole('button',{name:'上一页记录',exact:true});
-  while(await previous.count()&&await previous.isEnabled())await previous.click();
-  for(const heading of await page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
-  await page.getByTestId(`calendar-list-record-${record.id}`).getByRole('button',{name:'修正小林的抬水记录',exact:true}).click();
+  check(
+    seen.size,
+    after.calendar.length,
+    "paginated dates retain every historical record in their detail drawers",
+  );
+  const previous = page.getByRole("button", {
+    name: "上一页记录",
+    exact: true,
+  });
+  while ((await previous.count()) && (await previous.isEnabled()))
+    await previous.click();
+  const recordLabel =
+    record.completed_date === after.today
+      ? "今天"
+      : `${Number(record.completed_date.slice(5, 7))}月${Number(record.completed_date.slice(8))}日`;
+  while (
+    !(await page
+      .getByRole("button", { name: new RegExp(`^${recordLabel}，`) })
+      .count())
+  )
+    await page.getByRole("button", { name: "下一页记录", exact: true }).click();
+  await page
+    .getByRole("button", { name: new RegExp(`^${recordLabel}，`) })
+    .click();
+  await page
+    .locator(`.record-row[data-record-id="${record.id}"]`)
+    .getByRole("button", { name: "修正小林的抬水记录", exact: true })
+    .click();
   const edit = page.getByRole("dialog", { name: "修正记录", exact: true });
   await edit.waitFor();
   await edit.getByText("修正记录 · 1", { exact: true }).waitFor();

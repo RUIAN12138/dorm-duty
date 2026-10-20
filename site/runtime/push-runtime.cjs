@@ -8162,6 +8162,7 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = nul
         job.endpoint
       )) || date.getTime() - Date.parse(job.created_at) > 864e5 || job.attempts > 5;
       const scheduled = job?.kind === "reminder" && job.source === "scheduled";
+      const note = job?.kind === "reminder" && job.source === "note";
       let taskIds = [];
       if (scheduled) {
         try {
@@ -8177,15 +8178,15 @@ function createPushDelivery(db, send, { base = "/dorm-duty/", publicOrigin = nul
         job.schedule_day || ""
       ).filter((task) => taskIds.includes(task.id)) : [];
       const scheduleAge = scheduled ? date.getTime() - Date.parse(job.scheduled_at) : 0;
-      const obsoleteReminder = job?.kind === "reminder" && (job.target_member_id !== job.user_id || job.reminder_dorm !== job.dorm_id || job.read_at || (scheduled ? !job.plan_enabled || job.preference_version !== job.plan_version || !Number.isFinite(scheduleAge) || scheduleAge < 0 || scheduleAge >= SCHEDULE_CATCH_UP_MS || !remaining.length : job.task_status !== "pending" || job.assignee_id !== job.user_id || !job.category_enabled));
+      const obsoleteReminder = job?.kind === "reminder" && (job.target_member_id !== job.user_id || job.reminder_dorm !== job.dorm_id || job.read_at || (scheduled ? !job.plan_enabled || job.preference_version !== job.plan_version || !Number.isFinite(scheduleAge) || scheduleAge < 0 || scheduleAge >= SCHEDULE_CATCH_UP_MS || !remaining.length : !note && (job.task_status !== "pending" || job.assignee_id !== job.user_id || !job.category_enabled)));
       if (stale || obsoleteReminder) {
         finish("cancelled");
         continue;
       }
       const route = job.kind === "reminder" && job.task_key === "water" ? "water" : "";
       const message = {
-        title: job.kind === "test" ? "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u901A\u77E5" : scheduled ? "\u8F6E\u5230 \xB7 \u503C\u65E5\u63D0\u9192" : `${job.sender_name_snapshot} \u63D0\u9192\u4F60${job.task_name_snapshot}`,
-        body: job.kind === "test" ? `${job.recipient_name}\uFF0C\u8FD9\u662F\u4E00\u6761\u6D4B\u8BD5\u63D0\u9192\u3002\u793A\u4F8B\uFF1A\u5BA4\u53CB\u63D0\u9192\u4F60\u62AC\u6C34\uFF0C\u62AC\u5B8C\u540E\u8BB0\u5F97\u6253\u5361\u3002` : scheduled ? `${remaining.map((task) => task.name).join("\u3001")}\u8FD8\u6CA1\u5B8C\u6210\uFF0C\u505A\u5B8C\u8BB0\u5F97\u6253\u5361\u3002` : `\u5F85\u529E\uFF1A${job.task_name_snapshot}\u3002${String(job.task_content_snapshot || "").trim() || "\u5B8C\u6210\u540E\u8BB0\u5F97\u6253\u5361\u3002"}`.slice(
+        title: job.kind === "test" ? "\u8F6E\u5230 \xB7 \u6D4B\u8BD5\u901A\u77E5" : scheduled ? "\u8F6E\u5230 \xB7 \u503C\u65E5\u63D0\u9192" : note ? `${job.sender_name_snapshot} \u7ED9\u4F60\u7559\u8A00` : `${job.sender_name_snapshot} \u63D0\u9192\u4F60${job.task_name_snapshot}`,
+        body: job.kind === "test" ? `${job.recipient_name}\uFF0C\u8FD9\u662F\u4E00\u6761\u6D4B\u8BD5\u63D0\u9192\u3002\u793A\u4F8B\uFF1A\u5BA4\u53CB\u63D0\u9192\u4F60\u62AC\u6C34\uFF0C\u62AC\u5B8C\u540E\u8BB0\u5F97\u6253\u5361\u3002` : scheduled ? `${remaining.map((task) => task.name).join("\u3001")}\u8FD8\u6CA1\u5B8C\u6210\uFF0C\u505A\u5B8C\u8BB0\u5F97\u6253\u5361\u3002` : note ? String(job.task_content_snapshot || "").trim() : `\u5F85\u529E\uFF1A${job.task_name_snapshot}\u3002${String(job.task_content_snapshot || "").trim() || "\u5B8C\u6210\u540E\u8BB0\u5F97\u6253\u5361\u3002"}`.slice(
           0,
           160
         ),

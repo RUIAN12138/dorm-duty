@@ -205,16 +205,16 @@ async function save() {
   min-height: 72px;
   padding: 12px 16px;
   margin-bottom: 8px;
-  border: 1px solid #eee;
+  border: 1px solid var(--app-tone-heee, #eee);
   border-radius: 18px;
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   box-shadow: none;
   animation: order-arrive 240ms cubic-bezier(0.22, 1, 0.36, 1)
     calc(min(var(--entry-index), 8) * 40ms) both;
 }
 .order-number {
   width: 16px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-size: 14px;
 }
 strong {
@@ -223,13 +223,13 @@ strong {
   font-weight: 500;
 }
 .current {
-  background: #f6f6f6;
+  background: var(--app-tone-hf6f6f6, #f6f6f6);
 }
 .current-label {
   font-size: 13px;
   padding: 5px 9px;
-  background: #111;
-  color: white;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-white, white);
   border-radius: 12px;
 }
 .order-error {

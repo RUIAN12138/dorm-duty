@@ -245,10 +245,10 @@ circle {
   stroke-linecap: round;
 }
 .round-progress-track {
-  stroke: #f0f0f0;
+  stroke: var(--app-tone-hf0f0f0, #f0f0f0);
 }
 .round-progress-value {
-  stroke: #111;
+  stroke: var(--app-tone-h111, #111);
 }
 .round-progress-center {
   position: absolute;
@@ -282,14 +282,14 @@ circle {
 }
 .round-total {
   font-size: 17px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   margin-top: 24px;
 }
 .round-summary {
   text-align: center;
   margin: 0 0 24px;
   font-size: 15px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .round-plus {
   position: absolute;
@@ -298,7 +298,7 @@ circle {
   font-size: 23px;
   font-weight: 650;
   pointer-events: none;
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   border-radius: 20px;
   padding: 3px 7px;
   animation: absorb-plus 460ms cubic-bezier(0.55, 0.03, 0.88, 0.5) both;
@@ -332,7 +332,7 @@ circle {
   align-items: center;
   gap: 14px;
   min-height: 66px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
 }
 .round-ranking li > strong {
   flex: 1;
@@ -341,12 +341,12 @@ circle {
 }
 .rank-number {
   width: 22px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .round-ranking .van-icon {
-  color: #aaa;
+  color: var(--app-tone-haaa, #aaa);
   font-size: 18px;
 }
 .round-rank-enter-active {
@@ -374,7 +374,7 @@ circle {
 }
 .round-empty {
   text-align: center;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   margin: 12px 0 20px;
   font-size: 15px;
 }

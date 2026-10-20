@@ -250,9 +250,9 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 9px;
   padding: 0 6px 0 12px;
-  border: 1px solid #e9e9e9;
+  border: 1px solid var(--app-tone-he9e9e9, #e9e9e9);
   border-radius: 18px;
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   box-shadow: none;
   animation: order-unfold 240ms cubic-bezier(0.22, 0.8, 0.3, 1)
     calc(min(var(--entry-index), 8) * 40ms) both;
@@ -262,13 +262,13 @@ onBeforeUnmount(() => {
   z-index: 10;
 }
 .sort-row.lifted .sort-card {
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   outline: 1px solid var(--ui-ink);
   box-shadow: none;
 }
 .sort-position {
   width: 14px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -284,7 +284,7 @@ strong {
   font-weight: 500;
 }
 .current-turn {
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-size: 12px;
   font-weight: 600;
 }
@@ -294,7 +294,7 @@ button {
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: #444;
+  color: var(--app-tone-h444, #444);
   height: 44px;
   padding: 0;
   cursor: pointer;
@@ -342,11 +342,11 @@ button {
   cursor: grabbing;
 }
 button:disabled {
-  color: #ccc;
+  color: var(--app-tone-hccc, #ccc);
   cursor: default;
 }
 button:focus-visible {
-  outline: 2px solid #555;
+  outline: 2px solid var(--app-tone-h555, #555);
   outline-offset: -2px;
   border-radius: 8px;
 }
@@ -364,13 +364,13 @@ strong > span {
 }
 strong small {
   font-size: 11px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-weight: 400;
 }
 .sort-step:active:not(:disabled),
 .sort-handle:active:not(:disabled) {
   transform: var(--ui-press-small);
-  background: #eee;
+  background: var(--app-tone-heee, #eee);
   border-radius: 12px;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -394,9 +394,9 @@ strong small {
   content: "";
   position: absolute;
   inset: 0 5px -4px;
-  border: 1px solid #eee;
+  border: 1px solid var(--app-tone-heee, #eee);
   border-radius: 18px;
-  background: #f5f5f5;
+  background: var(--app-tone-hf5f5f5, #f5f5f5);
   transform: scale(0.98);
   z-index: -1;
 }

@@ -53,7 +53,11 @@ async function fixture(h) {
   const claimed = await api(h, "/chores/claim", {
     method: "POST",
     status: 201,
-    data: { invite_code: r.invite_code, member_id: id, nickname: r.dorm.members.find(m => m.user_id === id).nickname },
+    data: {
+      invite_code: r.invite_code,
+      member_id: id,
+      nickname: r.dorm.members.find((m) => m.user_id === id).nickname,
+    },
   });
   const member = { id, token: claimed.access_token };
   h.env.PUSH_CONFIG = {
@@ -284,6 +288,37 @@ test("real web-push encryption decrypts with receiver keys and VAPID signature v
     lang: "zh-CN",
     navigate: "https://8.148.190.114/dorm-duty/",
   });
+});
+test("roommate notes deliver without a task and stop after read acknowledgement", async (h) => {
+  const r = await fixture(h);
+  await subscribe(h, r.member, device("note"));
+  const note = await api(h, "/chores/notes", {
+    method: "POST",
+    status: 201,
+    token: r.owner.token,
+    data: { target_member_id: r.member.id, text: "晚点回来，帮我留个门。" },
+  });
+  const received = [];
+  const worker = newDelivery(h, async (_, payload) => {
+    received.push(JSON.parse(payload));
+    return { statusCode: 201 };
+  });
+  await worker.drain();
+  equal(received.length, 1);
+  equal(received[0].body, "晚点回来，帮我留个门。");
+  equal(received[0].title, "小林 给你留言");
+  await api(h, `/chores/reminders/${note.id}/read`, {
+    method: "PATCH",
+    token: r.member.token,
+    data: {},
+  });
+  h.db.sqlite.exec(
+    "UPDATE chore_push_jobs SET status='pending',attempts=0,lease=NULL,lease_until=NULL,next_attempt_at='2000-01-01T00:00:00Z'",
+  );
+  await worker.drain();
+  equal(received.length, 1);
+  equal(jobs(h)[0].status, "cancelled");
+  await worker.close();
 });
 test("notification center body preserves custom content and has a useful empty-content fallback", async (h) => {
   const r = await fixture(h);

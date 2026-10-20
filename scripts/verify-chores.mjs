@@ -201,8 +201,10 @@ async function closePresentedReminder(page) {
     if (!(await banner.isVisible().catch(() => false))) break;
     const current = banner.getAttribute("data-reminder-id");
     const id = await current;
-    await banner.getByRole("button", { name: "收起提醒", exact: true }).click();
-    await page.locator(`[data-testid="reminder-banner"][data-reminder-id="${id}"]`).waitFor({state:"hidden"});
+    await banner.press("Escape");
+    await page
+      .locator(`[data-testid="reminder-banner"][data-reminder-id="${id}"]`)
+      .waitFor({ state: "hidden" });
     await page.waitForTimeout(50);
   }
   const panel = page.getByTestId("chore-reminders");
@@ -231,8 +233,29 @@ async function closePresentedReminder(page) {
 }
 async function openTool(page, id) {
   await openMenu(page);
-  if (!(await page.getByTestId(id).count()))
+  if (
+    [
+      "guest-change-dorm",
+      "open-system-notifications",
+      "guest-change-member",
+      "open-email-account",
+      "open-marker",
+      "guest-create-dorm",
+      "open-creator-recovery",
+      "chore-refresh",
+    ].includes(id)
+  ) {
     await page.getByTestId("open-preferences").click();
+    await page.getByTestId(id).waitFor({ state: "attached" });
+    if (
+      ["guest-create-dorm", "open-creator-recovery", "chore-refresh"].includes(
+        id,
+      )
+    )
+      await page.getByText("更多操作", { exact: true }).click();
+  } else if (!(await page.getByTestId(id).count())) {
+    await page.getByTestId("open-preferences").click();
+  }
   await page.getByTestId(id).click();
   const title = {
     "open-reminder": "提醒一位室友",
@@ -250,7 +273,10 @@ async function pane(page, key) {
     wanted.path,
   );
   await page.locator(wanted.selector).waitFor();
-  await page.waitForFunction(()=>document.querySelectorAll('.focus-pane[aria-hidden="true"]').length===0);
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('.focus-pane[aria-hidden="true"]').length === 0,
+  );
   for (const [name, item] of Object.entries(panes)) {
     assert.equal(
       await page.locator(item.selector).count(),
@@ -592,13 +618,20 @@ async function join(page, code, userId, mark, nickname) {
   await page.getByTestId("guest-invite").fill(code);
   await page.getByTestId("guest-join-submit").click();
   await page.getByTestId("guest-member-name").waitFor();
-  assert.equal(await page.locator('[data-testid^="guest-member-"]:not(input)').count(), 0);
+  assert.equal(
+    await page.locator('[data-testid^="guest-member-"]:not(input)').count(),
+    0,
+  );
   await noNavigation(page);
   await page.getByTestId("guest-member-name").fill("不在名单中的名字");
   await page.getByTestId("guest-name-submit").click();
-  await page.getByRole("alert").filter({hasText:"名字不匹配"}).waitFor();
+  await page.getByRole("alert").filter({ hasText: "名字不匹配" }).waitFor();
   await page.getByTestId("guest-member-name").fill(nickname);
-  const response = page.waitForResponse(r => new URL(r.url()).pathname === "/chores/claim" && r.request().method() === "POST");
+  const response = page.waitForResponse(
+    (r) =>
+      new URL(r.url()).pathname === "/chores/claim" &&
+      r.request().method() === "POST",
+  );
   await page.getByTestId("guest-name-submit").click();
   const result = await (await response).json();
   assert.equal(result.member.user_id, userId);
@@ -850,7 +883,7 @@ try {
     created.invite_code,
     otherId,
     "pixel-11",
-    created.dorm.members.find(m => m.user_id === otherId).nickname,
+    created.dorm.members.find((m) => m.user_id === otherId).nickname,
   );
   const board = (id, token) =>
     api(`/chores/board?invite_code=${created.invite_code}&member_id=${id}`, {
@@ -946,7 +979,7 @@ try {
     "ordinary member switches between two real dorms, reloads and returns with the original scoped identity without another invite",
   );
   const memberOrderBefore = (await board(otherId, memberToken)).water_order;
-  await b.page.getByTestId("open-water-order").click();
+  await openTool(b.page, "open-water-order");
   await b.page.getByTestId("order-category-water").click();
   await b.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   assert.equal(await b.page.getByTestId("water-order-save").count(), 1);
@@ -960,7 +993,10 @@ try {
     .waitFor({ state: "hidden" });
   const memberOrderAfter = await board(otherId, memberToken);
   assert.notDeepEqual(memberOrderAfter.water_order, memberOrderBefore);
-  assert.equal(memberOrderAfter.water_task.assignee_id, memberOrderAfter.water_order[0]);
+  assert.equal(
+    memberOrderAfter.water_task.assignee_id,
+    memberOrderAfter.water_order[0],
+  );
   await api("/chores/order", {
     method: "PATCH",
     token: memberToken,
@@ -975,7 +1011,7 @@ try {
   checks.push(
     "ordinary scoped member reorders and saves without creator recovery; pending water assignee is recalculated immediately",
   );
-  await a.page.getByTestId("open-water-order").click();
+  await openTool(a.page, "open-water-order");
   await a.page.getByTestId("order-category-water").click();
   await a.page.getByRole("dialog", { name: "抬水轮序", exact: true }).waitFor();
   await snapshot(a.page, "independent-water-order-390");
@@ -989,7 +1025,7 @@ try {
     (await board(ownerId, ownerToken)).water_task.assignee_id,
     otherId,
   );
-  await a.page.getByTestId("open-water-order").click();
+  await openTool(a.page, "open-water-order");
   await a.page.getByTestId("order-category-water").click();
   await a.page.getByTestId(`order-up-water-${ownerId}`).focus();
   await a.page.keyboard.press("Enter");
@@ -1018,7 +1054,7 @@ try {
   const initialRound = (await board(ownerId, ownerToken)).rounds.find(
     (r) => r.key === "floor",
   );
-  await a.page.getByTestId("open-water-order").click();
+  await openTool(a.page, "open-water-order");
   await a.page.getByTestId("order-category-water").click();
   await a.page.getByTestId("order-category-floor").click();
   await a.page.getByTestId(`order-down-floor-${ownerId}`).focus();
@@ -1053,10 +1089,9 @@ try {
       .click();
     assert(
       await a.page
-        .locator(".task-title-stage h2").last()
-        .evaluate((el) =>
-          Number(getComputedStyle(el).opacity)>0.1,
-        ),
+        .locator(".task-title-stage h2")
+        .last()
+        .evaluate((el) => Number(getComputedStyle(el).opacity) > 0.1),
     );
   }
   await a.page
@@ -1067,15 +1102,25 @@ try {
     "rapid task-title switches keep at least one readable title instead of a serial exit/enter blank interval",
   );
   for (const name of ["地板", "厕所", "洗手池"]) {
-    await a.page.locator(".task-selector").getByRole("button", {name, exact:true}).click();
-    await a.page.getByRole("button", {name:`查看${name}详情`, exact:true}).click();
-    const dialog = a.page.getByRole("dialog", {name,exact:true});
+    await a.page
+      .locator(".task-selector")
+      .getByRole("button", { name, exact: true })
+      .click();
+    await a.page
+      .getByRole("button", { name: `查看${name}详情`, exact: true })
+      .click();
+    const dialog = a.page.getByRole("dialog", { name, exact: true });
     await dialog.waitFor();
-    await dialog.getByRole("button", {name:"关闭详情",exact:true}).click();
-    await dialog.waitFor({state:"hidden"});
+    await dialog.getByRole("button", { name: "关闭详情", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
   }
-  checks.push("all three duty titles remain clickable and their detail dialogs dismiss independently");
-  await a.page.locator(".task-selector").getByRole("button", {name:"地板",exact:true}).click();
+  checks.push(
+    "all three duty titles remain clickable and their detail dialogs dismiss independently",
+  );
+  await a.page
+    .locator(".task-selector")
+    .getByRole("button", { name: "地板", exact: true })
+    .click();
   phase = "three_page_navigation";
   await pageMatrix(a.page, "creator");
   await pageMatrix(b.page, "member");
@@ -1117,9 +1162,22 @@ try {
   const reminder = await sent.json();
   await a.page.reload();
   await a.page.getByTestId("pane-duty").waitFor();
-  await a.page.locator(`[data-testid="reminder-banner"][data-reminder-id="${reminder.id}"]`).waitFor();
-  assert.equal((await board(ownerId, ownerToken)).reminders.find(note => note.id === reminder.id)?.read_at, null, "banner does not mark the reminder read");
-  await a.page.getByTestId("reminder-banner").getByRole("button", { name: /查看消息/ }).click();
+  await a.page
+    .locator(
+      `[data-testid="reminder-banner"][data-reminder-id="${reminder.id}"]`,
+    )
+    .waitFor();
+  assert.equal(
+    (await board(ownerId, ownerToken)).reminders.find(
+      (note) => note.id === reminder.id,
+    )?.read_at,
+    null,
+    "banner does not mark the reminder read",
+  );
+  await a.page
+    .getByTestId("reminder-banner")
+    .getByRole("button", { name: /查看消息/ })
+    .click();
   await a.page.getByTestId("chore-reminders").waitFor();
   assert.match(
     await a.page.getByTestId("chore-reminders").textContent(),
@@ -1144,23 +1202,46 @@ try {
   await complete(a.page, floor);
   await a.page.getByTestId(`undo-${floor.id}`).click();
   await a.page.getByTestId(`complete-floor-${floor.id}`).waitFor();
-  assert.equal((await board(ownerId,ownerToken)).today_tasks.find(t=>t.id===floor.id).status,'pending');
-  await complete(a.page,floor);
+  assert.equal(
+    (await board(ownerId, ownerToken)).today_tasks.find(
+      (t) => t.id === floor.id,
+    ).status,
+    "pending",
+  );
+  await complete(a.page, floor);
   await a.page.waitForTimeout(850);
-  assert.equal(await a.page.getByTestId(`undo-${floor.id}`).locator('.done-label').innerText(),'已完成');
-  assert(await a.page.getByTestId(`undo-${floor.id}`).locator('.done-label').evaluate(el=>Number(getComputedStyle(el).opacity)>.99));
-  assert(await a.page.getByTestId(`undo-${floor.id}`).locator('.pending-label').evaluate(el=>Number(getComputedStyle(el).opacity)<.01));
-  await snapshot(a.page,'undo-receipt-390');
-  checks.push('completed duty keeps the familiar button; tapping it again restores the actual pending task');
+  assert.equal(
+    await a.page
+      .getByTestId(`undo-${floor.id}`)
+      .locator(".done-label")
+      .innerText(),
+    "已完成",
+  );
+  assert(
+    await a.page
+      .getByTestId(`undo-${floor.id}`)
+      .locator(".done-label")
+      .evaluate((el) => Number(getComputedStyle(el).opacity) > 0.99),
+  );
+  assert(
+    await a.page
+      .getByTestId(`undo-${floor.id}`)
+      .locator(".pending-label")
+      .evaluate((el) => Number(getComputedStyle(el).opacity) < 0.01),
+  );
+  await snapshot(a.page, "undo-receipt-390");
+  checks.push(
+    "completed duty keeps the familiar button; tapping it again restores the actual pending task",
+  );
   ownerBoard = await board(ownerId, ownerToken);
   await navigate(a.page, "water");
   await complete(a.page, ownerBoard.water_task);
   const originalWater = ownerBoard.water_task;
   await a.page.getByTestId(`undo-${originalWater.id}`).click();
   await a.page.getByTestId(`complete-water-${originalWater.id}`).waitFor();
-  await complete(a.page,originalWater);
+  await complete(a.page, originalWater);
   await a.page.waitForTimeout(850);
-  await snapshot(a.page,'water-nudge-focus-390');
+  await snapshot(a.page, "water-nudge-focus-390");
   await a.page.getByRole("button", { name: "查看任务", exact: true }).click();
   await a.page.locator(".sheet-layer.is-nonmodal").waitFor();
   assert.equal(await a.page.locator(".sheet-scrim").count(), 0);
@@ -1355,7 +1436,7 @@ try {
   assert.equal(
     (await board(otherId, memberToken)).member.marker_id,
     "pixel-11",
-    created.dorm.members.find(m => m.user_id === otherId).nickname,
+    created.dorm.members.find((m) => m.user_id === otherId).nickname,
   );
   await snapshot(a.page, "restored-after-restart-390");
   for (const key of Object.keys(panes)) {
@@ -1381,26 +1462,48 @@ try {
       await a.page.locator(".sheet-layer").waitFor({ state: "detached" });
       await a.page.getByTestId("calendar-view-list").click();
       await a.page.getByTestId("calendar-list").waitFor();
-      const seenRecords=new Set();
-      while(true){
-        for(const heading of await a.page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+      const seenRecords = new Set();
+      while (true) {
+        for (const heading of await a.page.locator(".records-heading").all())
+          if ((await heading.getAttribute("aria-expanded")) === "false")
+            await heading.click();
         await a.page.waitForTimeout(420);
-        for(const record of await a.page.locator('[data-testid^="calendar-list-record-"]').all())seenRecords.add(await record.getAttribute('data-testid'));
-        const next=a.page.getByRole('button',{name:'下一页记录',exact:true});
-        if(!await next.count()||!await next.isEnabled())break;
+        for (const record of await a.page
+          .locator('[data-testid^="calendar-list-record-"]')
+          .all())
+          seenRecords.add(await record.getAttribute("data-testid"));
+        const next = a.page.getByRole("button", {
+          name: "下一页记录",
+          exact: true,
+        });
+        if (!(await next.count()) || !(await next.isEnabled())) break;
         await next.click();
       }
-      assert.equal(seenRecords.size,restored.calendar.length,'all completed records remain available through folded date groups');
-      for (const [width, height] of [[320, 568], [390, 667], [390, 844], [430, 932]]) {
-        await a.page.setViewportSize({width, height});
-        for (const mode of ['grid', 'list', 'stats']) {
+      assert.equal(
+        seenRecords.size,
+        restored.calendar.length,
+        "all completed records remain available through folded date groups",
+      );
+      for (const [width, height] of [
+        [320, 568],
+        [390, 667],
+        [390, 844],
+        [430, 932],
+      ]) {
+        await a.page.setViewportSize({ width, height });
+        for (const mode of ["grid", "list", "stats"]) {
           await a.page.getByTestId(`calendar-view-${mode}`).click();
           await a.page.waitForTimeout(240);
-          assert(await a.page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `${mode} full application has no redundant vertical scrolling at ${width}x${height}`);
+          assert(
+            await a.page.evaluate(
+              () => document.documentElement.scrollHeight <= innerHeight + 1,
+            ),
+            `${mode} full application has no redundant vertical scrolling at ${width}x${height}`,
+          );
         }
       }
-      await a.page.setViewportSize({width:390,height:844});
-      await a.page.getByTestId('calendar-view-list').click();
+      await a.page.setViewportSize({ width: 390, height: 844 });
+      await a.page.getByTestId("calendar-view-list").click();
       await a.page.screenshot({
         path: path.join(evidence, "final-calendar-records-390.jpg"),
         type: "jpeg",

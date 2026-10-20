@@ -324,6 +324,7 @@ onBeforeUnmount(() => {
               'has-sticky-header': stickyHeader,
               'has-contained-scroll': contained,
               'has-fixed-content': fixedContent,
+              'has-sheet-footer': !!$slots.footer,
             }"
             :style="{
               transformOrigin: 'top left',
@@ -333,6 +334,7 @@ onBeforeUnmount(() => {
           >
             <div
               class="sheet-handle"
+              data-sheet-handle
               @pointerdown="down"
               @pointermove="move"
               @pointerup="up($event)"
@@ -343,6 +345,7 @@ onBeforeUnmount(() => {
             </div>
             <header
               class="sheet-heading"
+              data-sheet-header
               @pointerdown="down"
               @pointermove="move"
               @pointerup="up($event)"
@@ -393,15 +396,49 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-.has-sticky-header .sheet-heading {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  background: var(--canvas, #fff);
-  padding: 12px 0;
-  margin-top: 0;
-  margin-bottom: 16px;
-  box-shadow: 0 -14px 0 var(--canvas, #fff);
+/* The panel never scrolls: handle, heading and footer stay outside the scrollport.
+   Intrinsic height keeps short sheets compact; max-height only limits long ones. */
+.elastic-sheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.sheet-handle,
+.sheet-heading {
+  flex: 0 0 auto;
+}
+.sheet-heading {
+  position: relative;
+  z-index: 2;
+  background: var(--canvas, var(--app-tone-hfff, #fff));
+}
+.sheet-heading > div:first-child {
+  min-width: 0;
+}
+.sheet-heading h2 {
+  overflow-wrap: anywhere;
+}
+.sheet-content {
+  min-height: 0;
+  flex: 0 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-block: 12px;
+  padding: 4px 3px calc(24px + env(safe-area-inset-bottom));
+  margin: 0 -3px;
+  isolation: isolate;
+}
+.has-sheet-footer .sheet-content {
+  padding-bottom: 14px;
+}
+@media (max-width: 350px) {
+  .sheet-handle {
+    margin-inline: -18px;
+  }
 }
 </style>
 
@@ -437,17 +474,18 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   overscroll-behavior-y: contain;
   scroll-padding-block: 12px;
-  padding: 4px 3px 14px;
-  margin: 0 -3px;
-  isolation: isolate;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+}
+.has-contained-scroll.has-sheet-footer .sheet-content {
+  padding-bottom: 14px;
 }
 .sheet-footer {
   position: relative;
   z-index: 40;
   flex-shrink: 0;
   padding: 14px 0 calc(18px + env(safe-area-inset-bottom));
-  background: var(--canvas, #fff);
-  border-top: 1px solid #eee;
+  background: var(--canvas, var(--app-tone-hfff, #fff));
+  border-top: 1px solid var(--app-tone-heee, #eee);
 }
 </style>
 

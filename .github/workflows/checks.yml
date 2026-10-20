@@ -52,6 +52,7 @@ jobs:
           node site/scripts/check-history.mjs
           node site/scripts/check-recency.mjs
           node site/scripts/check-chores.mjs
+          node site/scripts/check-roommate-notes.mjs
           node site/scripts/check-rounds.mjs
           node site/scripts/check-round-order.mjs
           node site/scripts/check-water-reassign.mjs
@@ -82,6 +83,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify mobile interaction foundation
         run: |
+          node scripts/check-companion-browser.mjs
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
           node scripts/check-list-collapse-sync.mjs
@@ -96,7 +98,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: interaction-failure
-          path: docs/evidence/interaction-foundation/failure.png
+          path: |
+            docs/evidence/interaction-foundation/failure.png
+            docs/evidence/companion/
           if-no-files-found: ignore
           retention-days: 7
       - name: Build server website

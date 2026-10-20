@@ -79,11 +79,11 @@ input {
   width: 100%;
   min-width: 0;
   min-height: 46px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 10px;
   padding: 10px 44px 10px 12px;
-  color: #111;
-  background: #fff;
+  color: var(--app-tone-h111, #111);
+  background: var(--app-tone-hfff, #fff);
   font: inherit;
   font-size: 16px;
 }
@@ -94,8 +94,8 @@ input {
   width: 40px;
   height: 40px;
   border: 0;
-  background: #fff;
-  color: #777;
+  background: var(--app-tone-hfff, #fff);
+  color: var(--app-tone-h777, #777);
   font-size: 20px;
   border-radius: 10px;
   cursor: pointer;
@@ -104,16 +104,25 @@ input {
   transform: scale(0.96);
 }
 .time-wheel :deep(.van-picker) {
-  --van-picker-confirm-action-color: #111;
+  --van-picker-confirm-action-color: var(--app-tone-h111, #111);
   --van-picker-option-font-size: 26px;
-  --van-picker-option-text-color: #111;
+  --van-picker-option-text-color: var(--app-tone-h111, #111);
   --van-picker-background: transparent;
   --van-picker-mask-color:
-    linear-gradient(180deg, #ffff, #fff5), linear-gradient(0deg, #ffff, #fff5);
+    linear-gradient(
+      180deg,
+      var(--app-tone-hffff, #ffff),
+      var(--app-tone-hfff5, #fff5)
+    ),
+    linear-gradient(
+      0deg,
+      var(--app-tone-hffff, #ffff),
+      var(--app-tone-hfff5, #fff5)
+    );
 }
 .time-wheel :deep(.van-picker__frame) {
   border-radius: 16px;
-  background: #00000004;
+  background: var(--app-tone-h00000004, #00000004);
   inset-inline: 8px;
 }
 .time-wheel :deep(.van-picker-column__item) {

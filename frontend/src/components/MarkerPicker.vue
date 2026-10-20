@@ -74,7 +74,7 @@ legend {
   font-weight: 600;
 }
 p {
-  color: #666;
+  color: var(--app-tone-h666, #666);
   font-size: 11px;
   line-height: 1.7;
   margin: 6px 0 14px;
@@ -94,11 +94,11 @@ p {
   min-height: 44px;
   border: 1px solid transparent;
   border-radius: 6px;
-  background: #f7f7f7;
+  background: var(--app-tone-hf7f7f7, #f7f7f7);
 }
 .marker-grid button.selected {
-  background: #111;
-  border-color: #111;
+  background: var(--app-tone-h111, #111);
+  border-color: var(--app-tone-h111, #111);
 }
 .marker-grid button:disabled {
   opacity: 0.25;
@@ -108,13 +108,13 @@ p {
   align-items: center;
   justify-content: space-between;
   font-size: 14px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   margin-top: 6px;
 }
 .marker-caption button {
   border: 0;
   background: none;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   min-height: 44px;
   padding: 8px 0 8px 12px;
 }

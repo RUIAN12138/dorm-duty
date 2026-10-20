@@ -24,13 +24,24 @@ import "vant/es/loading/style/index.mjs";
 import "vant/es/switch/style/index.mjs";
 import "vant/es/dialog/style/index.mjs";
 import "vant/es/toast/style/index.mjs";
+import "./theme.css";
+import "./screen.css";
 import "./style.css";
+import { installTheme } from "./interaction/theme";
+import { installPressFeedback } from "./interaction/pressFeedback";
 import "./focus.css";
 import App from "./App.vue";
 import { tilt } from "./interactions/tilt";
 import { router } from "./router";
 import { installMotionTokens } from "./interaction/motion";
 installMotionTokens();
+const disposeTheme = installTheme();
+const disposePress = installPressFeedback();
+if (import.meta.hot)
+  import.meta.hot.dispose(() => {
+    disposeTheme();
+    disposePress();
+  });
 createApp(App)
   .use(createPinia())
   .use(router)

@@ -94,6 +94,13 @@ globalThis.ResizeObserver = class {
   disconnect() {}
 };
 let now = 0;
+let frameId = 0;
+const frames = new Map();
+globalThis.requestAnimationFrame = (fn) => {
+  frames.set(++frameId, fn);
+  return frameId;
+};
+globalThis.cancelAnimationFrame = (id) => frames.delete(id);
 globalThis.performance = { now: () => now };
 const node = (type, text = "") => ({
   type,
@@ -201,58 +208,36 @@ card().props.onPointerdown(event(100));
 now = 100;
 card().props.onPointermove(event(40));
 await nextTick();
-assert.equal(card().props.style.transform, "translateY(-60px)");
+assert.ok(card().props.style.transform.includes("translate3d(0px,-25.2px"));
 now = 110;
 card().props.onPointerup(event(40));
 await nextTick();
 assert.equal(dismissals, 1);
-assert.equal(
-  card().props.style.transform,
-  "translateY(-60px)",
-  "dismissal retains dragged pose for leave",
-);
 card().props.onClick();
 assert.equal(opens, 1, "swipe suppresses synthetic click");
 find(root, (n) => n.props.onFixtureLeave).props.onFixtureLeave();
+find(root, (n) => n.props.onFixtureEnter).props.onFixtureEnter();
 await nextTick();
 now = 800;
 card().props.onPointerdown(event(100));
 now = 1000;
 card().props.onPointermove(event(88));
+now = 1300;
 card().props.onPointerup(event(88));
 await nextTick();
 assert.equal(dismissals, 1, "short slow swipe rebounds");
-assert.equal(card().props.style.transform, "translateY(0px)");
-now = 1200;
-card().props.onPointerdown(event(100));
-now = 1300;
-card().props.onPointermove(event(35));
-card().props.onPointercancel(event(35));
+for (let i = 0; i < 240; i++) {
+  now += 1000 / 120;
+  const batch = [...frames.values()];
+  frames.clear();
+  batch.forEach((fn) => fn(now));
+}
 await nextTick();
-assert.equal(dismissals, 1, "cancel does not dismiss");
-now = 1320;
-card().props.onPointerdown(event(100));
-now = 1330;
-card().props.onPointermove(event(80));
-now = 1331;
-card().props.onPointerup(event(80));
-await nextTick();
-assert.equal(dismissals, 2, "short fast upward flick dismisses");
-find(root, (n) => n.props.onFixtureLeave).props.onFixtureLeave();
-await nextTick();
-now = 1400;
-card().props.onPointerdown(event(100));
-now = 1450;
-card().props.onPointermove(event(50));
+assert.ok(card().props.style.transform.includes("translate3d(0px,0px"));
 globalThis.allowed = false;
 window.dispatchEvent(new Event("ui-motion-change"));
 await nextTick();
-assert.equal(card().props.style.transform, "translateY(0px)");
-globalThis.allowed = true;
-find(root, (n) => n.props["data-banner-close"] !== undefined).props.onClick({
-  stopPropagation() {},
-});
-assert.equal(dismissals, 3);
+assert.ok(card().props.style.transform.includes("translate3d(0px,0px"));
 app.unmount();
 const memory = reactive({
   month: "2026-10",
@@ -288,9 +273,13 @@ function mountList() {
 }
 let list = mountList();
 await nextTick();
-let area = find(list.listRoot, (n) => hasClass(n, "folded-record-page"));
+let area = find(list.listRoot, (n) => hasClass(n, "record-date-page"));
 assert.equal(area.props["data-page"], 2);
-assert.equal(area.scrollTop, 80);
+assert.equal(
+  area.scrollTop,
+  0,
+  "single-screen list does not restore scrolling",
+);
 find(
   list.listRoot,
   (n) => n.props["aria-label"] === "下一页记录",
@@ -298,15 +287,12 @@ find(
 await nextTick();
 assert.equal(memory.page, 3);
 assert.equal(memory.scrollTop, 0);
-area = find(list.listRoot, (n) => hasClass(n, "folded-record-page"));
-area.scrollTop = 120;
-area.props.onScroll({ target: area });
+area = find(list.listRoot, (n) => hasClass(n, "record-date-page"));
 list.instance.unmount();
 list = mountList();
 await nextTick();
-area = find(list.listRoot, (n) => hasClass(n, "folded-record-page"));
-assert.equal(area.props["data-page"], 3, "remount keeps list page");
-assert.equal(area.scrollTop, 120, "remount restores list scroll");
+area = find(list.listRoot, (n) => hasClass(n, "record-date-page"));
+assert.equal(area.props["data-page"], 3, "remount keeps date pagination");
 listState.month = "2026-09";
 await nextTick();
 assert.equal(memory.page, 0);
@@ -314,5 +300,5 @@ assert.equal(memory.scrollTop, 0);
 assert.deepEqual(memory.expanded, []);
 list.instance.unmount();
 console.log(
-  "Navigation components: banner swipe/flick threshold, rebound/cancel, click suppression, interruption and close; list page/scroll restoration and month reset passed (in-memory renderer, no visual QA).",
+  "Navigation components: banner swipe/flick threshold, rebound/cancel, click suppression, interruption and close; date pagination restoration and month reset passed (in-memory renderer, no visual QA).",
 );

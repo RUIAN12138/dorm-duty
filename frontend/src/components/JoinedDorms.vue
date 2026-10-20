@@ -33,7 +33,7 @@ defineEmits<{ select: [room: JoinedDorm] }>();
 }
 h2 {
   font-size: 15px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
   font-weight: 500;
   margin: 0 0 12px;
 }
@@ -44,10 +44,10 @@ button {
   gap: 16px;
   padding: 17px;
   margin-bottom: 8px;
-  border: 1px solid #eee;
+  border: 1px solid var(--app-tone-heee, #eee);
   border-radius: 20px;
-  background: #fafafa;
-  color: #111;
+  background: var(--app-tone-hfafafa, #fafafa);
+  color: var(--app-tone-h111, #111);
   text-align: left;
   font: inherit;
   cursor: pointer;
@@ -66,11 +66,11 @@ strong {
 }
 button > span > span {
   font-size: 14px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 button:active {
   transform: scale(0.98);
-  background: #f0f0f0;
+  background: var(--app-tone-hf0f0f0, #f0f0f0);
 }
 button:disabled {
   opacity: 0.55;

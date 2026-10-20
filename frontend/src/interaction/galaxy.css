@@ -13,7 +13,7 @@
   z-index: -1;
   inset: 0;
   border-radius: inherit;
-  background: #ffffff1a;
+  background: var(--app-tone-hffffff1a, #ffffff1a);
   transform: translateY(105%);
   pointer-events: none;
 }
@@ -21,7 +21,7 @@
 .guest-page .guest-dorm-form input:focus-visible,
 .guest-page .guest-dorm-form textarea:focus-visible {
   outline: none;
-  border-color: #222;
+  border-color: var(--app-tone-h222, #222);
   box-shadow: 0 0 0 3px #0000000b;
 }
 @media (prefers-reduced-motion: no-preference) {

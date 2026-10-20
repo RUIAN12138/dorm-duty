@@ -78,102 +78,128 @@ async function logout() {
         </p>
       </div>
     </div>
-    <div class="section-title"><h2>个人资料</h2></div>
-    <van-form @submit="act(() => patch('/auth/me', { nickname }), '昵称已更新')"
-      ><div class="form-card">
-        <van-field
-          :disabled="loading || busy"
-          v-model="nickname"
-          label="昵称"
-          maxlength="32"
-          :rules="[{ required: true, message: '昵称不能为空' }]"
-        />
-      </div>
-      <van-button
-        block
-        plain
-        type="primary"
-        native-type="submit"
-        class="spaced"
-        :disabled="loading"
-        :loading="busy"
-        >保存昵称</van-button
-      ></van-form
-    >
-    <div class="section-title">
-      <h2>值日提醒</h2>
-      <span class="subtle">站内 + 系统通知</span>
-    </div>
-    <div class="detail-card notification-settings">
-      <p>前一天 21:00 · 当天 08:00 · 未完成时 19:00</p>
-      <router-link to="/messages" class="inline-link"
-        >查看站内消息 <van-icon aria-hidden="true" name="arrow"
-      /></router-link>
-      <p v-if="pushConfig?.available === false" class="helper">
-        系统通知暂未开通，站内提醒正常使用。
-      </p>
-      <div class="notification-state">
-        系统权限：{{
-          permission === "granted"
-            ? "已允许"
-            : permission === "denied"
-              ? "已拒绝"
-              : permission === "unsupported"
-                ? "当前环境不支持"
-                : "尚未授权"
-        }}<br />账号推送：{{ session.user?.push_enabled ? "开启" : "关闭" }}
-      </div>
-      <p v-if="!cap.standalone" class="helper">
-        iPhone 用户：在 Safari
-        分享菜单选择“添加到主屏幕”，从桌面图标打开，再开启通知。需要 iOS 16.4
-        或更新版本及 HTTPS。
-      </p>
-      <p v-if="permission === 'denied'" class="helper">
-        请在手机系统设置中找到本应用，允许通知后再试。
-      </p>
-      <van-button
-        block
-        type="primary"
-        :loading="busy"
-        :disabled="
-          !pushConfig?.available ||
-          !cap.supported ||
-          (cap.ios && !cap.standalone)
-        "
-        @click="act(enablePush, '本设备已开启系统通知')"
-        >开启本设备通知</van-button
-      >
-      <div class="button-row spaced">
+    <details class="profile-settings">
+      <summary>修改昵称</summary>
+      <van-form
+        @submit="act(() => patch('/auth/me', { nickname }), '昵称已更新')"
+        ><div class="form-card">
+          <van-field
+            :disabled="loading || busy"
+            v-model="nickname"
+            label="昵称"
+            maxlength="32"
+            :rules="[{ required: true, message: '昵称不能为空' }]"
+          />
+        </div>
         <van-button
-          size="small"
-          :disabled="busy || !pushConfig?.available"
-          @click="
-            act(() => post('/push/test'), '测试通知已加入队列，稍后查看锁屏')
-          "
-          >发送测试通知</van-button
-        ><van-button
-          size="small"
-          :disabled="busy"
-          @click="
-            act(async () => {
-              await disableDevice();
-              await patch('/auth/me', { push_enabled: false });
-            }, '系统推送已关闭')
-          "
-          >关闭系统推送</van-button
-        >
+          block
+          plain
+          type="primary"
+          native-type="submit"
+          class="spaced"
+          :disabled="loading"
+          :loading="busy"
+          >保存昵称</van-button
+        ></van-form
+      >
+    </details>
+    <details class="profile-settings">
+      <summary>通知与提醒</summary>
+      <div class="section-title">
+        <h2>值日提醒</h2>
+        <span class="subtle">站内 + 系统通知</span>
       </div>
-    </div>
-    <van-cell
-      title="宿舍管理"
-      :value="session.dorm?.name || '创建 / 加入'"
-      is-link
-      to="/dorm"
-      class="spaced"
-    />
+      <div class="detail-card notification-settings">
+        <p>前一天 21:00 · 当天 08:00 · 未完成时 19:00</p>
+        <router-link to="/messages" class="inline-link"
+          >查看站内消息 <van-icon aria-hidden="true" name="arrow"
+        /></router-link>
+        <p v-if="pushConfig?.available === false" class="helper">
+          系统通知暂未开通，站内提醒正常使用。
+        </p>
+        <div class="notification-state">
+          系统权限：{{
+            permission === "granted"
+              ? "已允许"
+              : permission === "denied"
+                ? "已拒绝"
+                : permission === "unsupported"
+                  ? "当前环境不支持"
+                  : "尚未授权"
+          }}<br />账号推送：{{ session.user?.push_enabled ? "开启" : "关闭" }}
+        </div>
+        <p v-if="!cap.standalone" class="helper">
+          iPhone 用户：在 Safari
+          分享菜单选择“添加到主屏幕”，从桌面图标打开，再开启通知。需要 iOS 16.4
+          或更新版本及 HTTPS。
+        </p>
+        <p v-if="permission === 'denied'" class="helper">
+          请在手机系统设置中找到本应用，允许通知后再试。
+        </p>
+        <van-button
+          block
+          type="primary"
+          :loading="busy"
+          :disabled="
+            !pushConfig?.available ||
+            !cap.supported ||
+            (cap.ios && !cap.standalone)
+          "
+          @click="act(enablePush, '本设备已开启系统通知')"
+          >开启本设备通知</van-button
+        >
+        <div class="button-row spaced">
+          <van-button
+            size="small"
+            :disabled="busy || !pushConfig?.available"
+            @click="
+              act(() => post('/push/test'), '测试通知已加入队列，稍后查看锁屏')
+            "
+            >发送测试通知</van-button
+          ><van-button
+            size="small"
+            :disabled="busy"
+            @click="
+              act(async () => {
+                await disableDevice();
+                await patch('/auth/me', { push_enabled: false });
+              }, '系统推送已关闭')
+            "
+            >关闭系统推送</van-button
+          >
+        </div>
+      </div>
+      <van-cell
+        title="宿舍管理"
+        :value="session.dorm?.name || '创建 / 加入'"
+        is-link
+        to="/dorm"
+        class="spaced"
+      />
+    </details>
     <van-button block plain class="spaced" :loading="busy" @click="logout"
       >退出登录</van-button
     >
     <p class="helper">退出会撤销本设备的登录凭据和邮箱会话。</p>
   </main>
 </template>
+
+<style scoped>
+.profile-settings {
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
+  margin: 10px 0 20px;
+  padding: 4px 0 16px;
+}
+.profile-settings summary {
+  font-size: 16px;
+  font-weight: 500;
+  padding: 14px 0;
+  cursor: pointer;
+}
+.profile-settings[open] summary {
+  margin-bottom: 12px;
+}
+.page > .section-heading p {
+  display: none;
+}
+</style>

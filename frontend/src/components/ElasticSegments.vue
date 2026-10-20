@@ -204,7 +204,7 @@ onUnmounted(() => {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   font-size: 16px;
   cursor: pointer;
   transition:

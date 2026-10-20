@@ -59,7 +59,13 @@ const composer = useReminderComposer(() => ({ ...props, open: open.value }), {
         v-else-if="composer.targetId.value && composer.loaded.value"
         class="reminder-task-list"
       >
-        <p v-if="composer.contextNotice.value" class="guest-muted" role="status">{{ composer.contextNotice.value }}</p>
+        <p
+          v-if="composer.contextNotice.value"
+          class="guest-muted"
+          role="status"
+        >
+          {{ composer.contextNotice.value }}
+        </p>
         <p v-if="!composer.tasks.value.length" class="guest-muted">
           这位室友当前没有待完成任务。
         </p>
@@ -121,7 +127,7 @@ const composer = useReminderComposer(() => ({ ...props, open: open.value }), {
 </template>
 <style scoped>
 .reminder-form {
-  color: #111;
+  color: var(--app-tone-h111, #111);
 }
 .reminder-people {
   display: grid;
@@ -134,18 +140,18 @@ const composer = useReminderComposer(() => ({ ...props, open: open.value }), {
   align-items: center;
   gap: 8px;
   min-height: 48px;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--app-tone-hfff, #fff);
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 8px;
   padding: 10px;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
 .reminder-people button.selected,
 .reminder-task-list button.selected {
-  border-color: #111;
-  background: #f7f7f7;
+  border-color: var(--app-tone-h111, #111);
+  background: var(--app-tone-hf7f7f7, #f7f7f7);
 }
 .reminder-task-list button {
   display: flex;
@@ -155,22 +161,22 @@ const composer = useReminderComposer(() => ({ ...props, open: open.value }), {
   width: 100%;
   min-height: 48px;
   padding: 11px 12px;
-  color: #111;
-  background: #fff;
-  border: 1px solid #ddd;
+  color: var(--app-tone-h111, #111);
+  background: var(--app-tone-hfff, #fff);
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 7px;
   margin-top: 8px;
   font-size: 13px;
 }
 .reminder-task-list small {
   font-size: 10px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 
 .chore-inline-error {
-  border-left: 2px solid #111;
+  border-left: 2px solid var(--app-tone-h111, #111);
   padding: 10px 12px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 15px;
   line-height: 1.6;
   margin-bottom: 12px;

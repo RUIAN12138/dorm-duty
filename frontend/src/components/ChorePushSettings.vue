@@ -213,11 +213,11 @@ async function test() {
   font-size: 16px;
   line-height: 1.6;
   margin: 0 0 20px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .push-preview-help {
   margin-top: 20px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 16px;
   line-height: 1.6;
 }
@@ -239,11 +239,11 @@ async function test() {
   background: none;
   font-size: 16px;
   min-height: 48px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   margin-top: 12px;
 }
 .push-error {
   margin-top: 20px;
-  color: #111;
+  color: var(--app-tone-h111, #111);
 }
 </style>

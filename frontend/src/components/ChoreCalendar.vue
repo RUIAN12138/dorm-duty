@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick } from "vue";
+import { revealPage, cancelPageReveal } from "../interaction/pageReveal";
 import {
   computed,
   reactive,
@@ -75,14 +77,21 @@ watch(
 const calendarRoot = ref<HTMLElement>(),
   roomHeight = ref(600);
 function fitViewport() {
-  const top =
-    (calendarRoot.value?.getBoundingClientRect().top || 76) + window.scrollY;
-  const nav =
-    document.querySelector(".chore-bottom-nav")?.getBoundingClientRect()
-      .height || 67;
+  const parentHeight = calendarRoot.value?.parentElement?.clientHeight;
+  if (calendarRoot.value?.closest(".app-stage") && parentHeight) {
+    roomHeight.value = parentHeight;
+    return;
+  }
+  const top = calendarRoot.value?.getBoundingClientRect().top || 76;
+  const viewportBottom = window.visualViewport?.height || window.innerHeight;
+  const navTop = document
+    .querySelector(".chore-bottom-nav")
+    ?.getBoundingClientRect().top;
   roomHeight.value = Math.max(
     280,
-    Math.floor(window.innerHeight - top - nav - 12),
+    Math.floor(
+      Math.min(viewportBottom, navTop ?? viewportBottom - 88) - top - 12,
+    ),
   );
 }
 let layoutObserver: ResizeObserver | undefined;
@@ -95,6 +104,7 @@ onMounted(() => {
     layoutObserver.observe(calendarRoot.value.parentElement);
 });
 onBeforeUnmount(() => {
+  if (calendarRoot.value) cancelPageReveal(calendarRoot.value);
   layoutObserver?.disconnect();
   window.removeEventListener("resize", fitViewport);
   window.visualViewport?.removeEventListener("resize", fitViewport);
@@ -151,6 +161,16 @@ watch(
   },
 );
 const view = ref<"calendar" | "list" | "stats">(memory.view);
+watch(
+  view,
+  () =>
+    void nextTick(() =>
+      revealPage(
+        calendarRoot.value || null,
+        ".calendar-mode,.compact-records,.stats-mode",
+      ),
+    ),
+);
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
   { value: "list", label: "列表", testId: "calendar-view-list" },
@@ -530,7 +550,7 @@ h1 {
 h1 small {
   font-size: 15px;
   font-weight: 450;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   letter-spacing: 0;
 }
 h1 > span {
@@ -547,14 +567,14 @@ h1 > span {
   height: 42px;
   border: 0;
   border-radius: 15px;
-  color: #333;
-  background: #f5f5f5;
+  color: var(--app-tone-h333, #333);
+  background: var(--app-tone-hf5f5f5, #f5f5f5);
   cursor: pointer;
 }
 .calendar-surface {
   margin-top: 22px;
   padding: 16px 8px 10px;
-  border: 1px solid #ededed;
+  border: 1px solid var(--app-tone-hededed, #ededed);
   border-radius: 26px;
   background: var(--ui-surface);
   touch-action: pan-y;
@@ -570,7 +590,7 @@ h1 > span {
 .chore-weekdays span {
   text-align: center;
   font-size: 12px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   padding-bottom: 15px;
 }
 .chore-calendar-grid button {
@@ -586,16 +606,16 @@ h1 > span {
   border-radius: 14px;
   gap: 3px;
   background: transparent;
-  color: #444;
+  color: var(--app-tone-h444, #444);
   cursor: pointer;
 }
 .chore-calendar-grid button.has-records {
-  background: #f6f6f6;
+  background: var(--app-tone-hf6f6f6, #f6f6f6);
   color: var(--ui-ink);
 }
 .chore-calendar-grid button.is-selected {
   border-color: var(--ui-ink);
-  background: #f5f5f5;
+  background: var(--app-tone-hf5f5f5, #f5f5f5);
 }
 .calendar-day-number {
   display: grid;
@@ -608,15 +628,15 @@ h1 > span {
   font-variant-numeric: tabular-nums;
 }
 .is-today .calendar-day-number {
-  background: #111;
-  color: #fff;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
   border-radius: 50%;
 }
 .calendar-more {
   position: absolute;
   top: 2px;
   right: 2px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-size: 9px;
   line-height: 1;
 }
@@ -654,7 +674,7 @@ h1 > span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-size: 12px;
 }
 .calendar-list-empty {
@@ -662,21 +682,21 @@ h1 > span {
   place-items: center;
   min-height: 240px;
   margin: 22px 0 0;
-  border: 1px solid #eee;
+  border: 1px solid var(--app-tone-heee, #eee);
   border-radius: 26px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-size: 16px;
 }
 .calendar-details > p {
   font-size: 16px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
   padding: 18px 0;
 }
 .calendar-details > p[role="alert"] {
   color: #9c2929;
 }
 .calendar-legend {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--app-tone-heee, #eee);
   margin-top: 18px;
 }
 .calendar-legend summary {
@@ -684,7 +704,7 @@ h1 > span {
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
   font-size: 13px;
   list-style: none;
   cursor: pointer;
@@ -703,7 +723,7 @@ h1 > span {
   align-items: center;
   gap: 5px;
   font-size: 13px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   max-width: 100%;
 }
 .calendar-legend > div > span > span {
@@ -722,13 +742,13 @@ h1 > span {
 .month-stage > .month-page {
   padding: 10px 5px 0;
   border-radius: 18px;
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   box-shadow:
     inset 1px 0 #efefef,
     inset -1px 0 #efefef;
 }
 .month-page.month-page-even {
-  background: #fafafa;
+  background: var(--app-tone-hfafafa, #fafafa);
 }
 .month-page-heading {
   display: flex;
@@ -736,14 +756,14 @@ h1 > span {
   justify-content: space-between;
   padding: 0 8px 16px;
   gap: 10px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-size: 12px;
   letter-spacing: 0.5px;
 }
 .month-page-heading strong {
   font-size: 17px;
   letter-spacing: -0.3px;
-  color: #444;
+  color: var(--app-tone-h444, #444);
   font-weight: 550;
 }
 .month-stage > .month-page {
@@ -1085,16 +1105,16 @@ h1 small {
   display: block;
 }
 [data-heat="1"] {
-  background: #f2f2f2 !important;
+  background: var(--app-tone-hf2f2f2, #f2f2f2) !important;
 }
 [data-heat="2"] {
-  background: #e4e4e4 !important;
+  background: var(--app-tone-he4e4e4, #e4e4e4) !important;
 }
 [data-heat="3"] {
-  background: #d3d3d3 !important;
+  background: var(--app-tone-hd3d3d3, #d3d3d3) !important;
 }
 [data-heat="4"] {
-  background: #bdbdbd !important;
+  background: var(--app-tone-hbdbdbd, #bdbdbd) !important;
 }
 .compact-calendar .is-selected {
   outline: 1px solid var(--ui-ink);
@@ -1215,6 +1235,6 @@ h1 small {
     color 160ms ease !important;
 }
 .chore-calendar-grid button:active:not(:disabled) {
-  background: #e7e7e7;
+  background: var(--app-tone-he7e7e7, #e7e7e7);
 }
 </style>

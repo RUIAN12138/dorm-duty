@@ -1,9 +1,9 @@
 :root {
-  --ui-ink: #111;
-  --ui-text-muted: #686868;
-  --ui-surface: #fff;
-  --ui-surface-muted: #f3f3f3;
-  --ui-border: #e5e5e5;
+  --ui-ink: var(--app-tone-h111, #111);
+  --ui-text-muted: var(--app-tone-h686868, #686868);
+  --ui-surface: var(--app-tone-hfff, #fff);
+  --ui-surface-muted: var(--app-tone-hf3f3f3, #f3f3f3);
+  --ui-border: var(--app-tone-he5e5e5, #e5e5e5);
   --ui-title-size: 32px;
   --ui-card-title-size: 20px;
   --ui-body-size: 16px;
@@ -20,13 +20,13 @@
   --ui-card-border: 1px solid var(--ui-border);
   --ui-action-height: 50px;
   --ui-category-floor: #657768;
-  --ui-category-floor-bg: #eef2ee;
+  --ui-category-floor-bg: var(--app-tone-heef2ee, #eef2ee);
   --ui-category-toilet: #786e85;
-  --ui-category-toilet-bg: #f2eff5;
+  --ui-category-toilet-bg: var(--app-tone-hf2eff5, #f2eff5);
   --ui-category-sink: #84785f;
-  --ui-category-sink-bg: #f4f1eb;
+  --ui-category-sink-bg: var(--app-tone-hf4f1eb, #f4f1eb);
   --ui-category-water: #637e8b;
-  --ui-category-water-bg: #edf2f5;
+  --ui-category-water-bg: var(--app-tone-hedf2f5, #edf2f5);
   --ui-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ui-drawer-time: 250ms;
   --ui-page-time: 200ms;

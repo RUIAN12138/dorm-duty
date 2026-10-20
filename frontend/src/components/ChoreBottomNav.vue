@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LiquidNavGlass from "./LiquidNavGlass.vue";
+import { companionEntering } from "../interaction/companion";
 import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { motion } from "motion-v";
@@ -21,13 +23,19 @@ const dragging = ref(false);
 const currentIndex = computed(() =>
   items.findIndex((item) => item.section === props.section),
 );
-const pressedIndex = ref(-1);
+const pressedIndex = ref(-1),
+  opticalGlass = ref(false);
+const glassPosition = ref(currentIndex.value);
 const selection = useSelectionMotion(currentIndex.value, () => items.length);
+const stopGlassPosition = selection.position.on("change", (value) => {
+  glassPosition.value = value;
+});
 watch(currentIndex, (next) => {
   if (!dragging.value) selection.move(next);
   requestedIndex = next;
 });
 onUnmounted(() => {
+  stopGlassPosition();
   gesture = null;
   navigationScrubbing.value = false;
   window.removeEventListener("blur", cancelGesture);
@@ -61,8 +69,8 @@ function navigate(index: number, replace = false) {
 }
 function position(x: number, nav: HTMLElement) {
   const rect = nav.getBoundingClientRect();
-  const width = Math.max(1, rect.width - 32);
-  const fraction = ((x - rect.left - 16) / width) * items.length;
+  const width = Math.max(1, rect.width - 16);
+  const fraction = ((x - rect.left - 8) / width) * items.length;
   return {
     index: Math.max(0, Math.min(items.length - 1, Math.floor(fraction))),
     progress: Math.max(0, Math.min(items.length - 1, fraction - 0.5)),
@@ -177,9 +185,17 @@ function click(event: MouseEvent) {
 <template>
   <nav
     class="chore-bottom-nav"
+    :style="
+      companionEntering ? { opacity: 0, pointerEvents: 'none' } : undefined
+    "
     aria-label="宿舍导航"
     data-testid="chore-bottom-nav"
-    :class="{ 'is-dragging': dragging, 'is-moving': selection.moving.value }"
+    :class="{
+      'is-dragging': dragging,
+      'is-moving': selection.moving.value,
+      'has-optical-glass': opticalGlass,
+      'glass-pressed': pressedIndex >= 0,
+    }"
     @pointerdown="down"
     @pointermove="move"
     @pointerup="finish($event)"
@@ -188,7 +204,16 @@ function click(event: MouseEvent) {
     @click.capture="click"
     @dragstart.prevent
   >
+    <LiquidNavGlass
+      :position="glassPosition"
+      :pressed="pressedIndex >= 0"
+      :dragging="dragging"
+      :moving="selection.moving.value"
+      :active="currentIndex"
+      @ready="opticalGlass = $event"
+    />
     <motion.span
+      v-if="!opticalGlass"
       class="nav-selection"
       aria-hidden="true"
       :style="{ transform: selection.transform }"
@@ -204,29 +229,31 @@ function click(event: MouseEvent) {
       :aria-current="section === item.section ? 'page' : undefined"
       :data-testid="`nav-${item.section}`"
     >
-      <svg
-        v-if="item.section === 'duty'"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path d="M7 4h10a2 2 0 0 1 2 2v14H5V6a2 2 0 0 1 2-2Z" />
-        <path d="M9 3h6v3H9zM8 11l1.5 1.5L12 10M14 11h2M8 16h8" />
-      </svg>
-      <svg
-        v-else-if="item.section === 'water'"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          d="M12 3c-2.5 3.6-6 7.5-6 11a6 6 0 0 0 12 0c0-3.5-3.5-7.4-6-11Z"
-        />
-        <path d="M9 14a3 3 0 0 0 3 3" />
-      </svg>
-      <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="4" y="5" width="16" height="15" rx="2" />
-        <path d="M8 3v4M16 3v4M4 10h16M8 14h2M14 14h2M8 17h2" />
-      </svg>
-      <span>{{ item.label }}</span>
+      <span class="nav-native-content">
+        <svg
+          v-if="item.section === 'duty'"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M7 4h10a2 2 0 0 1 2 2v14H5V6a2 2 0 0 1 2-2Z" />
+          <path d="M9 3h6v3H9zM8 11l1.5 1.5L12 10M14 11h2M8 16h8" />
+        </svg>
+        <svg
+          v-else-if="item.section === 'water'"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            d="M12 3c-2.5 3.6-6 7.5-6 11a6 6 0 0 0 12 0c0-3.5-3.5-7.4-6-11Z"
+          />
+          <path d="M9 14a3 3 0 0 0 3 3" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3v4M16 3v4M4 10h16M8 14h2M14 14h2M8 17h2" />
+        </svg>
+        <span class="nav-native-caption">{{ item.label }}</span>
+      </span>
     </router-link>
   </nav>
 </template>
@@ -241,7 +268,7 @@ function click(event: MouseEvent) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   background: var(--ui-surface);
-  border-top: 1px solid #e9e9e9;
+  border-top: 1px solid var(--app-tone-he9e9e9, #e9e9e9);
   padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
   touch-action: pan-y;
   user-select: none;
@@ -256,7 +283,7 @@ function click(event: MouseEvent) {
   width: calc((100% - 32px) / 3);
   height: 54px;
   border-radius: var(--ui-control-radius);
-  background: #e6e6e6;
+  background: var(--app-tone-he6e6e6, #e6e6e6);
 }
 .is-moving .nav-selection {
   will-change: transform;
@@ -268,7 +295,7 @@ a {
   align-items: center;
   gap: 5px;
   min-height: 54px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   text-decoration: none;
   font-size: 13px;
   border-radius: var(--ui-control-radius);
@@ -305,5 +332,132 @@ svg {
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+</style>
+
+<style scoped>
+.chore-bottom-nav {
+  transition: opacity 380ms 220ms;
+}
+</style>
+
+<style scoped>
+.chore-bottom-nav {
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  width: min(calc(100% - 32px), 480px);
+  padding: 7px 8px;
+  border: 1px solid var(--app-tone-he5e5e980, #e5e5e980);
+  border-radius: 38px;
+  background: rgba(255, 255, 255, 0.075);
+  -webkit-backdrop-filter: blur(8px) saturate(var(--glass-saturation));
+  backdrop-filter: blur(8px) saturate(var(--glass-saturation));
+  box-shadow: var(--glass-shadow);
+  touch-action: none;
+  isolation: isolate;
+}
+.chore-bottom-nav a {
+  position: relative;
+  z-index: 3;
+  min-height: 54px;
+  border-radius: 28px;
+  transform: none !important;
+}
+.nav-native-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 54px;
+}
+.chore-bottom-nav .nav-selection {
+  left: 8px;
+  top: 7px;
+  width: calc((100% - 16px) / 3);
+  height: 54px;
+  z-index: 1;
+  border-radius: 29px;
+  background: rgba(255, 255, 255, 0.075);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(8px) saturate(125%);
+  backdrop-filter: blur(8px) saturate(125%);
+  box-shadow:
+    inset 0 1px 0 #ffffffe0,
+    inset 1px 0 0 #ffffff65,
+    inset 0 -1px 1px #65708032,
+    0 2px 6px #35435b0c;
+}
+.nav-selection::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.glass-pressed .nav-selection {
+  border-radius: 24px;
+  filter: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .nav-selection::after {
+    display: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .chore-bottom-nav {
+    background: var(--app-tone-hf3f4f6, #f3f4f6);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .chore-bottom-nav .nav-selection {
+    background: var(--app-tone-hfff, #fff);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .chore-bottom-nav {
+    background: var(--app-tone-hf3f4f6, #f3f4f6);
+  }
+  .chore-bottom-nav .nav-selection {
+    background: var(--app-tone-hfff, #fff);
+  }
+}
+</style>
+
+<style scoped>
+.chore-bottom-nav .nav-selection {
+  scale: 1;
+  transition:
+    scale 480ms cubic-bezier(0.2, 1.6, 0.35, 1),
+    border-radius 420ms ease;
+}
+.chore-bottom-nav.is-moving .nav-selection {
+  scale: 1.07 0.94;
+}
+.chore-bottom-nav.is-dragging .nav-selection {
+  scale: 1.13 0.87;
+}
+.chore-bottom-nav.glass-pressed .nav-selection {
+  scale: 0.9 0.83;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chore-bottom-nav .nav-selection {
+    scale: 1 !important;
+    transition: none;
+  }
 }
 </style>

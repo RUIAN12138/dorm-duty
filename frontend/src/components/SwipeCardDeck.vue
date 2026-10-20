@@ -289,13 +289,13 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 1px solid #d4d4d1;
-  background: #dfdfdc;
+  border: 1px solid var(--app-tone-hd4d4d1, #d4d4d1);
+  background: var(--app-tone-hdfdfdc, #dfdfdc);
   pointer-events: none;
   transform: translate3d(0, 5px, -3px);
 }
 .deck-card::after {
-  background: #eeeeeb;
+  background: var(--app-tone-heeeeeb, #eeeeeb);
   transform: translate3d(0, 2px, -1px);
 }
 .deck-card-face {
@@ -327,14 +327,14 @@ onBeforeUnmount(() => {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #ddd;
+  background: var(--app-tone-hddd, #ddd);
 }
 .deck-dot-fill {
   display: block;
   width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: #111;
+  background: var(--app-tone-h111, #111);
   transition:
     opacity 220ms var(--ui-ease-out),
     transform 220ms var(--ui-ease-out);

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CompanionLogin from "../components/CompanionLogin.vue";
+import { captureCompanionHandoff } from "../interaction/companion";
 import { ref, onMounted } from "vue";
 import { emailAccount, refreshEmailAccount } from "../api/email";
 import { useRouter, useRoute } from "vue-router";
@@ -42,6 +44,7 @@ async function submit() {
     }
     if (!(await session.login(username.value, password.value))) return;
     showToast(register.value ? "注册成功" : "欢迎回来");
+    captureCompanionHandoff();
     const next = String(route.query.next || "/dorm");
     await router.replace(
       next.startsWith("/") &&
@@ -61,13 +64,14 @@ async function submit() {
 <template>
   <main class="login-page">
     <router-link to="/" class="admin-back">← 返回今日任务</router-link>
+    <CompanionLogin />
     <div class="brand-line">
       <span class="brand-mark"
         ><van-icon aria-hidden="true" name="flower-o" /></span
       ><span>轮到</span><small>DORM DUTY</small>
     </div>
-    <h1>宿舍管理</h1>
-    <p class="intro">登录后创建或加入宿舍，管理排班与值日内容。</p>
+    <h1>轮到</h1>
+
     <div class="login-tabs">
       <button
         :class="{ active: !register }"
@@ -132,8 +136,46 @@ async function submit() {
         }}<van-icon aria-hidden="true" name="arrow"
       /></van-button>
     </van-form>
-    <p class="login-foot">
-      共享空间，共同照顾。<br />首次登录后，可以创建宿舍或用邀请码加入。
-    </p>
   </main>
 </template>
+
+<style scoped>
+.login-page :deep(.brand-line) {
+  display: none;
+}
+.login-page h1 {
+  font-size: 26px;
+  text-align: center;
+}
+.login-page .intro {
+  text-align: center;
+  font-size: 13px;
+}
+.login-page {
+  padding-top: 24px;
+}
+</style>
+
+<style scoped>
+.login-page {
+  padding-top: 12px;
+}
+.login-page :deep(.companion-login) {
+  height: 150px;
+}
+.login-page :deep(.companion-frame),
+.login-page :deep(.dorm-companion) {
+  width: 100px !important;
+  height: 100px !important;
+}
+.login-page :deep(.van-cell-group) {
+  border-radius: 26px;
+  overflow: hidden;
+}
+.login-page :deep(.van-field) {
+  background: var(--ui-surface-muted);
+}
+.login-page :deep(.van-button) {
+  border-radius: 28px;
+}
+</style>

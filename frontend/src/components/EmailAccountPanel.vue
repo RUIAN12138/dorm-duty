@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { captureCompanionHandoff } from "../interaction/companion";
+import CompanionLogin from "./CompanionLogin.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   emailAccount,
@@ -243,6 +245,7 @@ async function verify() {
       code: code.value,
       mail_enabled: mailEnabled.value,
     });
+    captureCompanionHandoff();
     challenge.value = "";
     code.value = "";
     await refreshEmailAccount();
@@ -366,6 +369,7 @@ onMounted(() => {
         </button>
       </section>
       <section v-else-if="!emailAccount.loggedIn || reverify" key="login">
+        <CompanionLogin />
         <div v-if="!hideTitle" class="email-heading">
           <h2>{{ memberToken ? "绑定你的邮箱" : "用邮箱进入轮到" }}</h2>
           <HintPopover
@@ -610,7 +614,7 @@ onMounted(() => {
   margin: 0;
   font-size: 16px;
   line-height: 1.5;
-  color: #666;
+  color: var(--app-tone-h666, #666);
 }
 .email-unbind > span:first-child {
   display: grid;
@@ -624,7 +628,7 @@ onMounted(() => {
 }
 .email-bound-label {
   font-size: 13px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .email-heading {
   display: flex;
@@ -694,15 +698,15 @@ onMounted(() => {
   min-width: 0;
   box-sizing: border-box;
   min-height: 52px;
-  border: 1px solid #dedede;
+  border: 1px solid var(--app-tone-hdedede, #dedede);
   border-radius: 14px;
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   padding: 12px 16px;
   font: inherit;
   font-size: 16px;
 }
 .email-panel input:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--app-tone-h111, #111);
   outline-offset: 3px;
 }
 .email-check {
@@ -714,7 +718,7 @@ onMounted(() => {
 .email-check input {
   width: 20px;
   height: 20px;
-  accent-color: #111;
+  accent-color: var(--app-tone-h111, #111);
 }
 .email-secondary {
   display: flex;
@@ -728,7 +732,7 @@ onMounted(() => {
   background: transparent;
   border: 0;
   padding: 8px 0;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font: inherit;
   font-size: 14px;
 }
@@ -736,7 +740,7 @@ onMounted(() => {
   min-height: 44px;
   border: 0;
   background: transparent;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   padding: 8px 0;
   font: inherit;
   font-size: 14px;
@@ -762,8 +766,8 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: #fff;
-  border: 1px solid #e3e3e3;
+  background: var(--app-tone-hfff, #fff);
+  border: 1px solid var(--app-tone-he3e3e3, #e3e3e3);
   border-radius: 14px;
   padding: 16px;
   min-height: 56px;
@@ -771,7 +775,7 @@ onMounted(() => {
   font: inherit;
 }
 .email-setting span:last-child {
-  color: #666;
+  color: var(--app-tone-h666, #666);
   font-size: 14px;
 }
 .email-rooms button > span {
@@ -784,7 +788,7 @@ onMounted(() => {
 }
 .email-rooms button > span > span {
   font-size: 14px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
 }
 .email-error,
 .email-message {
