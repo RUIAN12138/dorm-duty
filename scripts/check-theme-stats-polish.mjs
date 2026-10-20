@@ -135,6 +135,101 @@ try {
     duty.y > 844 * 0.3 && duty.y + duty.height < 844 * 0.62,
     "actual duty title sits slightly above screen centre with room for progress",
   );
+  for (const [width, height] of [
+    [320, 568],
+    [390, 844],
+    [430, 932],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.waitForFunction(
+      (height) =>
+        Math.abs(
+          document.querySelector(".app-stage").getBoundingClientRect().height -
+            height,
+        ) < 1,
+      height,
+    );
+    const layout = await page.locator(".chore-personal").evaluate((el) => {
+      const rect = (selector) => {
+        const r = el.querySelector(selector).getBoundingClientRect();
+        return {
+          x: r.x,
+          y: r.y,
+          width: r.width,
+          height: r.height,
+          bottom: r.bottom,
+        };
+      };
+      return {
+        title: rect(".task-title-stage"),
+        action: rect(".completion-surface"),
+        progress: rect(".round-progress"),
+        ring: rect(".round-progress-display"),
+        font: parseFloat(getComputedStyle(el.querySelector("h2")).fontSize),
+        navTop: document
+          .querySelector(".chore-bottom-nav")
+          .getBoundingClientRect().top,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    check(
+      layout.title.bottom <= layout.action.y &&
+        layout.action.bottom <= layout.progress.y,
+      `${width}px: enlarged duty elements retain separate, aligned touch areas`,
+    );
+    check(
+      layout.progress.bottom + 16 < layout.navTop &&
+        layout.scrollWidth <= width,
+      `${width}px: duty progress clears navigation without horizontal overflow`,
+    );
+    if (height > 800)
+      check(
+        layout.font >= 72 &&
+          layout.action.height >= 56 &&
+          layout.ring.width >= 58,
+        `${width}px: roomy duty page actually enlarges title, action and round ring`,
+      );
+    await page.screenshot({
+      path: path.join(
+        evidence,
+        `${safari ? "webkit" : "chromium"}-duty-${width}.png`,
+      ),
+    });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Resize/visualViewport is asynchronous on CI. Measure the settled stage,
+  // rather than mistaking the preceding 430x932 layout for a button jump.
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        document.querySelector(".app-stage").getBoundingClientRect().height -
+          844,
+      ) < 1,
+  );
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  const action = page.locator(".chore-personal .completion-surface").first(),
+    before = await action.boundingBox();
+  await action.click();
+  await page.waitForTimeout(1100);
+  const completedBox = await action.boundingBox();
+  check(
+    Math.abs(before.y - completedBox.y) < 1 &&
+      Math.abs(before.height - completedBox.height) < 1,
+    `enlarged completion keeps the same footprint after the server receipt: ${JSON.stringify({ before, completedBox })}`,
+  );
+  await action.click();
+  await page.waitForTimeout(400);
+  const undoneBox = await action.boundingBox();
+  check(
+    Math.abs(before.y - undoneBox.y) < 1 &&
+      !(await action.evaluate((el) => el.classList.contains("is-round"))),
+    "second click undoes directly without recentering or collapsing the enlarged button",
+  );
   await page.evaluate(() => window.qa.theme("dark", { x: 350, y: 30 }));
   await page.waitForTimeout(100);
   const reveal = await page.evaluate(() =>
