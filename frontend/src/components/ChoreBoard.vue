@@ -2976,7 +2976,7 @@ onUnmounted(() => {
 }
 .chore-personal > .chore-task {
   position: absolute;
-  top: calc(50% - 55px);
+  top: calc(50% - 39px);
   left: 0;
 }
 @media (max-height: 650px) {

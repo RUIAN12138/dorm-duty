@@ -258,6 +258,20 @@ try {
     "top browser chrome follows the current light theme",
   );
   await page.getByTestId("nav-calendar").click();
+  check(
+    await page
+      .locator('[data-testid^="calendar-day-"].is-today .calendar-day-number')
+      .evaluate((el) => {
+        const style = getComputedStyle(el);
+        return (
+          style.borderTopWidth === "1px" &&
+          style.borderTopStyle === "solid" &&
+          ["rgba(0, 0, 0, 0)", "transparent"].includes(style.backgroundColor) &&
+          style.borderRadius === "6px"
+        );
+      }),
+    "today uses a thin outlined frame instead of a filled ball",
+  );
   await page.getByTestId("calendar-view-stats").click();
   await page.getByTestId("stats-floor").waitFor();
   await page.waitForTimeout(400);
@@ -313,12 +327,27 @@ try {
     "warning fill has a separate dark palette",
   );
   await page.getByRole("button", { name: "统计提醒颜色", exact: true }).click();
-  const oldNightColor = await color("floor");
-  await page.getByLabel("统计基色", { exact: true }).fill("#444444");
   check(
-    (await color("floor")) === oldNightColor,
-    "daytime colour customisation leaves the nighttime grey/white palette intact",
+    (await page
+      .getByRole("group", { name: "预设颜色", exact: true })
+      .getByRole("button")
+      .count()) === 8,
+    "eight colour presets are available alongside a custom picker",
   );
+  const oldNightColor = await color("floor"),
+    oldToiletColor = await color("toilet");
+  await page.getByLabel("统计基色", { exact: true }).fill("#444444");
+  await page.waitForTimeout(380);
+  check(
+    (await color("floor")) !== oldNightColor,
+    "nighttime colour can be customised for the selected task",
+  );
+  check(
+    (await color("toilet")) === oldToiletColor,
+    "customising one task leaves the others unchanged",
+  );
+  await page.getByRole("button", { name: "日间预览", exact: true }).click();
+  await page.getByRole("button", { name: "沙色", exact: true }).click();
   await page.evaluate(() => window.qa.theme("light"));
   await page.waitForTimeout(400);
   check(

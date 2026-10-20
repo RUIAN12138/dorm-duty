@@ -11,8 +11,8 @@ import SwipeCardDeck from "./SwipeCardDeck.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import { darkTheme } from "../interaction/theme";
 import {
-  statsBaseColor,
-  saveStatsColor,
+  statsColorFor,
+  saveStatsTaskColor,
   resetStatsColors,
   statsInk,
   statsFill,
@@ -20,6 +20,23 @@ import {
 } from "../interaction/statsPalette";
 const colorsOpen = ref(false),
   previewDark = ref(false);
+const paletteTask = ref("floor");
+const paletteColor = computed(() =>
+  statsColorFor(paletteTask.value, previewDark.value),
+);
+const swatches = [
+  ["灰", "#aaaaaa"],
+  ["沙", "#b98a48"],
+  ["杏", "#c88c6c"],
+  ["粉", "#c8819a"],
+  ["紫", "#9986bc"],
+  ["蓝", "#759fc1"],
+  ["青", "#75aaa9"],
+  ["绿", "#8aa784"],
+];
+function chooseColor(color: string) {
+  saveStatsTaskColor(paletteTask.value, color, previewDark.value);
+}
 const summary = ref<HTMLElement>();
 function settleThemePalette() {
   // The existing circular page reveal owns theme changes. Capture settled
@@ -48,13 +65,15 @@ onBeforeUnmount(() =>
 );
 function openColors() {
   previewDark.value = darkTheme.value;
+  paletteTask.value = names[current.value]?.[0] || "floor";
   colorsOpen.value = true;
 }
-function warningStyle(shade: number | null) {
+function warningStyle(task: string, shade: number | null) {
   const background = statsFill(
-    statsBaseColor.value,
+    statsColorFor(task, false),
     shade ?? 0,
     darkTheme.value,
+    statsColorFor(task, true),
   );
   return { background, color: statsInk(background) };
 }
@@ -151,7 +170,7 @@ const cards = computed(() =>
       <span>距上次完成</span
       ><HintPopover
         title="间隔提醒"
-        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，刚完成为白色，每过一天轻微加深。日间灰色可在此设备自定义，夜间保持灰白色。颜色只作提醒，暂无记录单独显示。"
+        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，刚完成为白色，每过一天轻微加深。各项任务的日间、夜间颜色可单独选择，保存在此设备。颜色只作提醒，暂无记录单独显示。"
         label="查看间隔提醒规则"
       />
       <div class="summary-actions">
@@ -181,7 +200,7 @@ const cards = computed(() =>
           class="stat-card"
           :data-testid="`stats-${cards[index]!.key}`"
           :data-tone="cards[index]!.tone"
-          :style="warningStyle(cards[index]!.shade)"
+          :style="warningStyle(cards[index]!.key, cards[index]!.shade)"
         >
           <header>
             <TaskCategoryIcon :kind="cards[index]!.key" />
@@ -201,6 +220,16 @@ const cards = computed(() =>
       </template></SwipeCardDeck
     >
     <ElasticSheet v-model="colorsOpen" title="提醒颜色" motion="bottom">
+      <div class="palette-tasks" role="group" aria-label="设置哪项任务的颜色">
+        <button
+          v-for="[key, name] in names"
+          :key="key"
+          :aria-pressed="paletteTask === key"
+          @click="paletteTask = key!"
+        >
+          {{ name }}
+        </button>
+      </div>
       <div class="palette-mode" role="group" aria-label="颜色预览外观">
         <button :aria-pressed="!previewDark" @click="previewDark = false">
           日间预览
@@ -214,17 +243,36 @@ const cards = computed(() =>
           v-for="step in 5"
           :key="step"
           :style="{
-            background: statsFill(statsBaseColor, (step - 1) / 4, previewDark),
+            background: statsFill(
+              statsColorFor(paletteTask, false),
+              (step - 1) / 4,
+              previewDark,
+              statsColorFor(paletteTask, true),
+            ),
           }"
         />
       </div>
+      <div class="palette-swatches" role="group" aria-label="预设颜色">
+        <button
+          v-for="[name, color] in swatches"
+          :key="color"
+          :aria-label="`${name}色`"
+          :aria-pressed="paletteColor === color"
+          :style="{ '--swatch': color }"
+          @click="chooseColor(color!)"
+        >
+          <span aria-hidden="true">{{
+            paletteColor === color ? "✓" : ""
+          }}</span>
+        </button>
+      </div>
       <label class="palette-color-row"
-        ><span>日间基色</span>
+        ><span>自定义颜色</span>
         <input
           type="color"
           aria-label="统计基色"
-          :value="statsBaseColor"
-          @input="saveStatsColor(($event.target as HTMLInputElement).value)"
+          :value="paletteColor"
+          @input="chooseColor(($event.target as HTMLInputElement).value)"
         />
       </label>
       <button class="palette-reset" @click="resetStatsColors()">
@@ -397,5 +445,56 @@ time {
   border: 0;
   color: var(--ui-text-muted);
   font: inherit;
+}
+</style>
+
+<style scoped>
+.palette-tasks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.palette-tasks button {
+  min-height: 44px;
+  border: var(--ui-card-border);
+  border-radius: 14px;
+  color: var(--ui-ink);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 14px;
+}
+.palette-tasks button[aria-pressed="true"] {
+  background: var(--ui-ink);
+  color: var(--ui-surface);
+}
+.palette-swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+  margin: 16px 0;
+}
+.palette-swatches button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  min-height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+.palette-swatches span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--swatch);
+  color: #111;
+  border: 1px solid #0002;
+}
+.palette-swatches button[aria-pressed="true"] span {
+  outline: 1px solid var(--ui-ink);
+  outline-offset: 3px;
 }
 </style>
