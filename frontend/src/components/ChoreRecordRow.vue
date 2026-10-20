@@ -89,7 +89,7 @@ const time = (value: string) =>
   height: 46px;
   flex-shrink: 0;
   border-radius: 16px;
-  background: #f5f5f5;
+  background: var(--app-tone-hf5f5f5, #f5f5f5);
 }
 .record-description {
   display: grid;
@@ -107,7 +107,7 @@ const time = (value: string) =>
   align-items: center;
   gap: 6px;
   font-size: 14px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .record-description .chore-type-icon {
   width: 14px;
@@ -122,14 +122,14 @@ const time = (value: string) =>
 }
 time {
   font-size: 14px;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   font-variant-numeric: tabular-nums;
 }
 .record-completed {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #444;
+  color: var(--app-tone-h444, #444);
   font-size: 13px;
 }
 .own-record {
@@ -140,14 +140,14 @@ time {
 }
 .own-record:active {
   transform: scaleX(0.98) scaleY(0.96);
-  background: #f7f7f7;
+  background: var(--app-tone-hf7f7f7, #f7f7f7);
 }
 .own-record:disabled {
   opacity: 0.5;
   cursor: default;
 }
 .own-record:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--app-tone-h111, #111);
   outline-offset: 3px;
 }
 @media (prefers-reduced-motion: no-preference) {

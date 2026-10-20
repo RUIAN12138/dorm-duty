@@ -150,23 +150,23 @@ onBeforeUnmount(() => {
 .emotion-preview {
   width: 100%;
   padding: 0 0 16px;
-  color: #222;
+  color: var(--app-tone-h222, #222);
   border-bottom: 0;
 }
 .emotion-pinned {
   position: sticky;
   top: -4px;
   z-index: 5;
-  background: var(--canvas, #fff);
+  background: var(--canvas, var(--app-tone-hfff, #fff));
   padding-bottom: 4px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
 }
 .emotion-catalog {
   padding-top: 18px;
 }
 .emotion-catalog summary {
   font-size: 13px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   cursor: pointer;
   padding: 8px 0;
 }
@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
 .emotion-eyebrow {
   font-size: 9px;
   letter-spacing: 1.2px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
 }
 .emotion-description strong {
   display: block;
@@ -195,13 +195,13 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 12px !important;
   line-height: 1.7 !important;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .emotion-description small {
   display: block;
   margin-top: 8px;
   font-size: 10px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
 }
 .emotion-controls {
   display: flex;
@@ -215,7 +215,7 @@ onBeforeUnmount(() => {
 .emotion-group h3 {
   font-size: 11px;
   font-weight: 500;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   margin: 0 0 9px;
 }
 .emotion-choices {
@@ -224,9 +224,9 @@ onBeforeUnmount(() => {
   gap: 7px;
 }
 .emotion-preview button {
-  border: 1px solid #ddd;
-  background: #fff;
-  color: #333;
+  border: 1px solid var(--app-tone-hddd, #ddd);
+  background: var(--app-tone-hfff, #fff);
+  color: var(--app-tone-h333, #333);
   font: inherit;
   cursor: pointer;
   font-size: 11px !important;
@@ -238,18 +238,18 @@ onBeforeUnmount(() => {
     color 180ms;
 }
 .emotion-preview button.selected {
-  background: #222 !important;
-  color: #fff !important;
-  border-color: #222 !important;
+  background: var(--app-tone-h222, #222) !important;
+  color: var(--app-tone-hfff, #fff) !important;
+  border-color: var(--app-tone-h222, #222) !important;
 }
 .emotion-credit {
   line-height: 1.8;
   font-size: 10px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   margin-top: 20px !important;
 }
 .emotion-credit a {
-  color: #666;
+  color: var(--app-tone-h666, #666);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -258,16 +258,16 @@ onBeforeUnmount(() => {
     position: sticky;
     top: -4px;
     z-index: 5;
-    background: var(--canvas, #fff);
+    background: var(--canvas, var(--app-tone-hfff, #fff));
     padding-bottom: 4px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--app-tone-heee, #eee);
   }
   .emotion-catalog {
     padding-top: 18px;
   }
   .emotion-catalog summary {
     font-size: 13px;
-    color: #666;
+    color: var(--app-tone-h666, #666);
     cursor: pointer;
     padding: 8px 0;
   }

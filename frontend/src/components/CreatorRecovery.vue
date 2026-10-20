@@ -288,7 +288,7 @@ onUnmounted(() => {
   font-size: 15px;
   line-height: 1.6;
   margin: 16px 0;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .recovery-form label {
   display: block;
@@ -300,13 +300,13 @@ onUnmounted(() => {
 .recovery-code {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 12px;
   padding: 14px;
   font-size: 16px;
   line-height: 1.6;
-  color: #111;
-  background: #fff;
+  color: var(--app-tone-h111, #111);
+  background: var(--app-tone-hfff, #fff);
 }
 .recovery-form textarea {
   resize: vertical;
@@ -328,12 +328,12 @@ onUnmounted(() => {
   width: 100%;
   min-height: 48px;
   font-size: 16px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .recovery-form .guest-primary {
   margin-top: 20px;
 }
 .recovery-error {
-  color: #111;
+  color: var(--app-tone-h111, #111);
 }
 </style>

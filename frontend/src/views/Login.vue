@@ -70,8 +70,8 @@ async function submit() {
         ><van-icon aria-hidden="true" name="flower-o" /></span
       ><span>轮到</span><small>DORM DUTY</small>
     </div>
-    <h1>宿舍管理</h1>
-    <p class="intro">登录后创建或加入宿舍，管理排班与值日内容。</p>
+    <h1>轮到</h1>
+
     <div class="login-tabs">
       <button
         :class="{ active: !register }"
@@ -136,9 +136,6 @@ async function submit() {
         }}<van-icon aria-hidden="true" name="arrow"
       /></van-button>
     </van-form>
-    <p class="login-foot">
-      共享空间，共同照顾。<br />首次登录后，可以创建宿舍或用邀请码加入。
-    </p>
   </main>
 </template>
 
@@ -156,5 +153,29 @@ async function submit() {
 }
 .login-page {
   padding-top: 24px;
+}
+</style>
+
+<style scoped>
+.login-page {
+  padding-top: 12px;
+}
+.login-page :deep(.companion-login) {
+  height: 150px;
+}
+.login-page :deep(.companion-frame),
+.login-page :deep(.dorm-companion) {
+  width: 100px !important;
+  height: 100px !important;
+}
+.login-page :deep(.van-cell-group) {
+  border-radius: 26px;
+  overflow: hidden;
+}
+.login-page :deep(.van-field) {
+  background: var(--ui-surface-muted);
+}
+.login-page :deep(.van-button) {
+  border-radius: 28px;
 }
 </style>

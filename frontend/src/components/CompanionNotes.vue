@@ -135,17 +135,17 @@ onBeforeUnmount(() => {
 }
 .note-recipients button {
   padding: 10px 16px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--app-tone-he8e8e8, #e8e8e8);
   border-radius: 20px;
-  background: #fff;
-  color: #777;
+  background: var(--app-tone-hfff, #fff);
+  color: var(--app-tone-h777, #777);
   font: inherit;
   font-size: 14px;
 }
 .note-recipients button.selected {
-  background: #222;
-  color: #fff;
-  border-color: #222;
+  background: var(--app-tone-h222, #222);
+  color: var(--app-tone-hfff, #fff);
+  border-color: var(--app-tone-h222, #222);
 }
 .companion-note-form textarea {
   box-sizing: border-box;
@@ -153,8 +153,8 @@ onBeforeUnmount(() => {
   resize: vertical;
   min-height: 110px;
   padding: 16px;
-  border: 1px solid #e8e8e8;
-  background: #fafafa;
+  border: 1px solid var(--app-tone-he8e8e8, #e8e8e8);
+  background: var(--app-tone-hfafafa, #fafafa);
   border-radius: 20px;
   line-height: 1.7;
   font: inherit;
@@ -162,13 +162,13 @@ onBeforeUnmount(() => {
 }
 .note-count {
   font-size: 11px;
-  color: #aaa;
+  color: var(--app-tone-haaa, #aaa);
   justify-self: end;
   margin-top: -10px;
 }
 .note-error,
 .note-empty {
-  color: #777;
+  color: var(--app-tone-h777, #777);
   font-size: 13px;
   line-height: 1.7;
 }

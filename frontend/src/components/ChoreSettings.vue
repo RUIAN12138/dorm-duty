@@ -346,7 +346,7 @@ async function save() {
 .mode-description {
   font-size: 16px;
   line-height: 1.6;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   margin: 16px 0 24px;
 }
 .category-selector {
@@ -359,8 +359,8 @@ async function save() {
   min-height: 44px;
   border: 0;
   border-radius: 12px;
-  background: #f3f3f3;
-  color: #555;
+  background: var(--app-tone-hf3f3f3, #f3f3f3);
+  color: var(--app-tone-h555, #555);
   font-size: 16px;
   cursor: pointer;
   transition:
@@ -369,8 +369,8 @@ async function save() {
     color 160ms ease;
 }
 .category-selector button[aria-pressed="true"] {
-  background: #111;
-  color: #fff;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
 }
 .category-selector button:active {
   transform: scale(0.97);
@@ -383,20 +383,20 @@ async function save() {
 </style>
 <style scoped>
 .chore-settings {
-  color: #111;
+  color: var(--app-tone-h111, #111);
   padding-bottom: 15px;
 }
 .settings-intro,
 .settings-effect {
   font-size: 12px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   line-height: 1.8;
   margin: 0 0 22px;
 }
 fieldset {
   min-width: 0;
   border: 0;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--app-tone-hddd, #ddd);
   margin: 26px 0 0;
   padding: 16px 0 0;
 }
@@ -409,7 +409,7 @@ label,
 .settings-label {
   display: block;
   font-size: 12px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   margin: 20px 0 8px;
 }
 input:not([type="checkbox"]),
@@ -419,10 +419,10 @@ textarea {
   min-width: 0;
   min-height: 46px;
   padding: 10px 11px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 7px;
-  background: #fff;
-  color: #111;
+  background: var(--app-tone-hfff, #fff);
+  color: var(--app-tone-h111, #111);
   font-size: 16px;
 }
 textarea {
@@ -436,7 +436,7 @@ textarea {
   margin: 0 0 12px;
 }
 input[type="checkbox"] {
-  accent-color: #111;
+  accent-color: var(--app-tone-h111, #111);
   width: 18px;
   height: 18px;
 }
@@ -459,9 +459,9 @@ input[type="checkbox"] {
   display: grid;
   place-items: center;
   min-height: 42px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 6px;
-  color: #111;
+  color: var(--app-tone-h111, #111);
 }
 .settings-weekdays input {
   position: absolute;
@@ -472,12 +472,12 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 .settings-weekdays label:has(input:checked) {
-  color: #fff;
-  background: #111;
-  border-color: #111;
+  color: var(--app-tone-hfff, #fff);
+  background: var(--app-tone-h111, #111);
+  border-color: var(--app-tone-h111, #111);
 }
 .settings-weekdays label:has(input:focus-visible) {
-  outline: 2px solid #666;
+  outline: 2px solid var(--app-tone-h666, #666);
   outline-offset: 2px;
 }
 .settings-order {
@@ -490,11 +490,11 @@ input[type="checkbox"] {
   gap: 9px;
   align-items: center;
   min-height: 45px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
 }
 .order-position {
   font-size: 11px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
   width: 14px;
 }
 .settings-order strong {
@@ -507,22 +507,22 @@ input[type="checkbox"] {
 .settings-order button {
   background: none;
   border: 0;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   width: 34px;
   height: 42px;
   font-size: 18px;
 }
 .settings-order button:disabled {
-  color: #ccc;
+  color: var(--app-tone-hccc, #ccc);
 }
 .settings-effect {
   margin-top: 25px;
 }
 .chore-inline-error {
   padding: 10px 12px;
-  border-left: 2px solid #111;
+  border-left: 2px solid var(--app-tone-h111, #111);
   font-size: 12px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   line-height: 1.7;
 }
 </style>
@@ -559,12 +559,12 @@ textarea {
   margin-top: 8px;
   padding: 8px 0;
   border: 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
   background: transparent;
   font-size: 16px;
 }
 .settings-detail-row > span:last-child {
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .chore-settings > .guest-primary {
   margin-top: 24px;

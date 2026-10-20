@@ -149,7 +149,12 @@ onBeforeUnmount(() => {
   transform: translateY(-50%);
   overflow: hidden;
   pointer-events: none;
-  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(
+    transparent,
+    var(--app-tone-h000, #000) 18%,
+    var(--app-tone-h000, #000) 82%,
+    transparent
+  );
 }
 .handoff-reel {
   display: block;

@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {readFile,readdir} from 'node:fs/promises';
+import {build} from '../frontend/node_modules/esbuild/lib/main.js';
+const output=await build({entryPoints:['frontend/src/interaction/theme.ts'],bundle:true,write:false,format:'esm',platform:'node',plugins:[{name:'ref-only',setup(b){b.onResolve({filter:/^vue$/},()=>({path:'vue',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export const ref=value=>({value});'}));}}]});
+const saved=new Map(),systemListeners=new Set(),events=new Map();let meta='';
+globalThis.localStorage={getItem:key=>saved.get(key)??null,setItem:(key,value)=>saved.set(key,value)};
+globalThis.document={documentElement:{dataset:{},style:{}},querySelector:()=>({setAttribute:(_,value)=>{meta=value;}})};
+const media={matches:true,addEventListener:(_,fn)=>systemListeners.add(fn),removeEventListener:(_,fn)=>systemListeners.delete(fn)};
+globalThis.matchMedia=query=>query.includes("reduced-motion")?{matches:false}:media;
+globalThis.window={addEventListener:(key,fn)=>events.set(key,fn),removeEventListener:(key,fn)=>{if(events.get(key)===fn)events.delete(key);},dispatchEvent:()=>{}};
+const theme=await import('data:text/javascript;base64,'+Buffer.from(output.outputFiles[0].text).toString('base64'));
+const dispose=theme.installTheme();assert.equal(theme.themeMode.value,'system');assert.equal(document.documentElement.dataset.theme,'dark');
+media.matches=false;systemListeners.forEach(fn=>fn());assert.equal(theme.darkTheme.value,false);
+theme.setThemeMode('dark');assert.equal(meta,'#16171b');assert.equal(saved.get('lundao-theme-mode-v2'),'dark');systemListeners.forEach(fn=>fn());assert.equal(theme.darkTheme.value,true);
+theme.setThemeMode('light');media.matches=true;systemListeners.forEach(fn=>fn());assert.equal(document.documentElement.dataset.theme,'light');assert.equal(document.documentElement.style.colorScheme,'light');
+theme.setThemeMode('system');assert.equal(theme.darkTheme.value,true);
+events.get('storage')({key:'other',newValue:'light'});assert.equal(theme.themeMode.value,'system');
+events.get('storage')({key:'lundao-theme-mode-v2',newValue:'light'});assert.equal(theme.darkTheme.value,false);
+events.get('storage')({key:null,newValue:null});assert.equal(theme.themeMode.value,'system');assert.equal(theme.darkTheme.value,true);
+theme.setThemeMode('invalid');assert.equal(theme.themeMode.value,'system');dispose();assert.equal(systemListeners.size,0);assert.equal(events.size,0);
+saved.set('lundao-theme-mode-v2','light');const disposeAgain=theme.installTheme();assert.equal(theme.darkTheme.value,false);disposeAgain();
+// Verify the native transition path, fast retargeting, unsupported fallback and reduced motion.
+const animations=[];document.documentElement.animate=(frames,options)=>{animations.push({frames,options});};globalThis.innerWidth=390;globalThis.innerHeight=760;
+let skipped=0;document.startViewTransition=update=>{update();return {ready:Promise.resolve(),finished:Promise.resolve(),skipTransition:()=>skipped++};};
+theme.setThemeMode('dark',{x:350,y:40});theme.setThemeMode('light',{x:350,y:40});await Promise.resolve();assert.equal(skipped,1);assert.equal(document.documentElement.dataset.theme,'light');assert.equal(animations.length,1);assert.equal(animations[0].options.pseudoElement,'::view-transition-new(root)');assert.ok(animations[0].frames.clipPath[1].includes('350px 40px'));
+await Promise.resolve();delete document.startViewTransition;theme.setThemeMode('dark',{x:20,y:30});assert.equal(animations.at(-1).options.duration,180);
+const count=animations.length;globalThis.matchMedia=()=>({matches:true});theme.setThemeMode('light',{x:20,y:30});assert.equal(animations.length,count);assert.equal(theme.darkTheme.value,false);
+const css=await readFile('frontend/src/theme.css','utf8'),definitions=new Set([...css.matchAll(/(--app-tone-[\w-]+)\s*:/g)].map(m=>m[1]));
+async function check(path){for(const entry of await readdir(path,{withFileTypes:true})){const file=path+'/'+entry.name;if(entry.isDirectory())await check(file);else if(/\.(css|vue)$/.test(file))for(const m of (await readFile(file,'utf8')).matchAll(/var\((--app-tone-[\w-]+)/g))assert.ok(definitions.has(m[1]),file+' missing '+m[1]);}}
+await check('frontend/src');for(const file of ['frontend/src/views/GuestHome.vue','frontend/src/screen.css'])for(const m of (await readFile(file,'utf8')).matchAll(/var\((--app-tone-[\w-]+)/g))assert.ok(definitions.has(m[1]),file+' missing '+m[1]);
+console.log('PASS: system/live changes, fixed modes, persistence, storage sync, invalid values, cleanup and all dark tone references.');

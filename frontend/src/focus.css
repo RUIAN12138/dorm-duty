@@ -4,6 +4,7 @@
   :where(button, a[href], [role="button"]):not(
       :where(
         [data-press-owned],
+        [data-press-feedback],
         .sort-handle,
         .sort-step,
         .action-item,
@@ -25,6 +26,7 @@
     ):not(
       :where(
         [data-press-owned],
+        [data-press-feedback],
         .sort-handle,
         .sort-step,
         .action-item,
@@ -91,7 +93,7 @@
   z-index: 1;
 }
 .elastic-sheet {
-  background: #fff;
+  background: var(--app-tone-hfff, #fff);
   max-width: 520px;
   padding-left: 20px;
   padding-right: 20px;
@@ -109,7 +111,7 @@
   width: 44px;
   height: 44px;
   border: 0;
-  background: #f3f3f3;
+  background: var(--app-tone-hf3f3f3, #f3f3f3);
 }
 .elastic-sheet .sheet-handle {
   margin-left: -20px;
@@ -117,7 +119,7 @@
 }
 .settings-rules {
   margin: 16px 0;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .settings-members {
   display: flex;
@@ -126,7 +128,7 @@
   min-height: 48px;
   margin-top: 12px;
   font-size: 15px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .sheet-leave-active,
 .sheet-leave-active .sheet-scrim {

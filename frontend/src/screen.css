@@ -1,0 +1,294 @@
+/* Sheets are portalled outside this stage and retain native body scrolling. */
+.app-stage .screen-surface,
+.app-stage .screen-surface * {
+  touch-action: pinch-zoom;
+}
+.app-stage .screen-surface input,
+.app-stage .screen-surface textarea {
+  touch-action: manipulation;
+}
+.app-stage .screen-surface > main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+.app-stage .screen-surface .guest-page {
+  min-height: 0;
+  padding: 8px 20px 0;
+}
+.app-stage .screen-surface .chore-board {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app-stage .screen-surface .board-identity {
+  flex: none;
+  margin: 4px 0 10px;
+}
+.app-stage .screen-surface .board-focus {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+  container-name: page;
+}
+.app-stage .screen-surface .focus-pane {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+.app-stage .screen-surface .chore-personal,
+.app-stage .screen-surface .water-pane {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  --hero-anchor: clamp(88px, 32cqh, 210px);
+}
+.app-stage .screen-surface .chore-personal > .hero-caption {
+  top: max(4px, calc(var(--hero-anchor) - 110px));
+}
+.app-stage .screen-surface .chore-personal > .task-selector {
+  top: calc(var(--hero-anchor) - 62px);
+}
+.app-stage .screen-surface .chore-personal > .chore-task {
+  top: var(--hero-anchor);
+}
+.app-stage .screen-surface .focus-hero {
+  gap: clamp(8px, 2.8cqh, 20px);
+}
+.app-stage .screen-surface .task-title-stage {
+  height: clamp(44px, 11cqh, 76px);
+}
+.app-stage .screen-surface .task-title-stage h2 {
+  font-size: clamp(38px, 11cqh, 68px);
+  line-height: 1.12;
+}
+.app-stage .screen-surface .focus-hero > .completion-surface {
+  height: clamp(44px, 9cqh, 56px);
+}
+.app-stage .screen-surface .water-pane > .hero-caption {
+  top: calc(var(--hero-anchor) - 45px);
+}
+.app-stage .screen-surface .water-pane > .chore-water {
+  top: var(--hero-anchor);
+}
+.app-stage .screen-surface .water-title-stage {
+  height: clamp(52px, 14cqh, 104px);
+  min-height: 0;
+}
+.app-stage .screen-surface .water-title-stage h2 {
+  font-size: clamp(42px, 13cqh, 80px);
+}
+.app-stage .screen-surface .calendar-pane {
+  height: 100%;
+  padding: 0;
+}
+.app-stage .screen-surface .compact-calendar {
+  height: 100%;
+  min-height: 0;
+}
+.app-stage .screen-surface .calendar-surface {
+  max-height: none;
+}
+@container page (max-height:350px) {
+  .app-stage .screen-surface .chore-personal,
+  .app-stage .screen-surface .water-pane {
+    --hero-anchor: 88px;
+  }
+  .app-stage .screen-surface .hero-caption {
+    font-size: 18px;
+  }
+  .app-stage .screen-surface .task-selector button {
+    padding-block: 5px;
+  }
+  .app-stage .screen-surface .round-progress {
+    min-height: 36px;
+    padding-block: 4px;
+    font-size: 14px;
+  }
+}
+@container page (max-height:250px) {
+  .app-stage .screen-surface .chore-personal,
+  .app-stage .screen-surface .water-pane {
+    --hero-anchor: 46px;
+  }
+  .app-stage .screen-surface .chore-personal > .hero-caption,
+  .app-stage .screen-surface .water-pane > .hero-caption {
+    top: 0;
+    text-align: left;
+    width: 45%;
+  }
+  .app-stage .screen-surface .chore-personal > .task-selector {
+    top: 34px;
+    left: 0;
+    transform: none;
+    width: 45%;
+  }
+  .app-stage .screen-surface .chore-personal > .chore-task,
+  .app-stage .screen-surface .water-pane > .chore-water {
+    display: grid;
+    grid-template-columns: 45% 1fr;
+    gap: 8px;
+    align-items: center;
+  }
+  .app-stage .screen-surface .task-title-stage,
+  .app-stage .screen-surface .water-title-stage {
+    grid-column: 1;
+    grid-row: 1 / span 4;
+    height: 80px;
+  }
+  .app-stage .screen-surface .chore-personal .task-title-stage {
+    padding-top: 20px;
+  }
+  .app-stage .screen-surface .completion-surface,
+  .app-stage .screen-surface .round-progress,
+  .app-stage .screen-surface .water-nudge-actions,
+  .app-stage .screen-surface .hero-date {
+    grid-column: 2;
+  }
+}
+@container screen (max-height:520px) {
+}
+
+@container page (max-height:350px) {
+  .app-stage .screen-surface .compact-calendar > header {
+    min-height: 36px;
+    padding-bottom: 4px;
+  }
+  .app-stage .screen-surface .compact-calendar :is(h1, h1 > span) {
+    font-size: 23px;
+  }
+  .app-stage .screen-surface .calendar-nav button {
+    height: 34px;
+    width: 34px;
+  }
+  .app-stage .screen-surface .compact-calendar .calendar-view-selector {
+    margin-bottom: 5px;
+  }
+  .app-stage .screen-surface .compact-calendar .calendar-view-selector button {
+    min-height: 30px;
+  }
+  .app-stage .screen-surface .stats-mode .summary-heading {
+    min-height: 28px;
+    font-size: 12px;
+  }
+  .app-stage .screen-surface .stats-mode .interval-settings {
+    min-height: 28px;
+    padding: 4px;
+    font-size: 12px;
+  }
+  .app-stage .screen-surface .stats-mode .deck-stage {
+    margin: 12px 8px 2px;
+  }
+  .app-stage .screen-surface .stats-mode .deck-dots {
+    height: 20px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-card {
+    padding: 12px;
+    gap: 5px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-card h2 {
+    font-size: 18px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-elapsed strong {
+    font-size: clamp(30px, 14cqh, 48px);
+  }
+  .app-stage .screen-surface .stats-mode .stat-card footer {
+    font-size: 11px;
+    gap: 2px;
+  }
+}
+@container page (max-height:250px) {
+  .app-stage .screen-surface .stats-mode .summary-heading {
+    min-height: 22px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    padding: 6px 12px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-card header {
+    grid-column: 1;
+    grid-row: 1;
+    gap: 6px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-elapsed {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    gap: 4px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-elapsed strong {
+    font-size: 30px;
+    letter-spacing: -1px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-elapsed > span {
+    font-size: 12px;
+  }
+  .app-stage .screen-surface .stats-mode .stat-card footer {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+/* Softer login controls, with a smaller companion in the same visual position. */
+
+@container screen (max-height:520px) {
+}
+@container screen (max-height:380px) {
+}
+html:has(.app-stage),
+body:has(.app-stage),
+#app:has(.app-stage) {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.app-stage .screen-surface .guest-personal {
+  height: 100%;
+  min-height: 0;
+}
+.app-stage .guest-entry {
+  max-width: 360px;
+  width: 100%;
+  margin: auto;
+}
+.app-stage .guest-entry > h1 {
+  font-size: 24px;
+  margin: 4px 0 16px;
+}
+.app-stage .guest-entry .companion-login {
+  height: 120px;
+  min-height: 64px;
+  margin: 0;
+}
+.app-stage .guest-entry .companion-frame,
+.app-stage .guest-entry .dorm-companion {
+  width: 96px !important;
+  height: 96px !important;
+}
+.app-stage .guest-entry .email-panel input:not([type="checkbox"]) {
+  border-radius: 27px;
+  min-height: 46px;
+  padding: 12px 18px;
+  background: var(--ui-surface-muted);
+}
+@container screen (max-height:520px) {
+  .app-stage .guest-entry .companion-login {
+    height: 54px;
+  }
+  .app-stage .guest-entry .companion-frame,
+  .app-stage .guest-entry .dorm-companion {
+    width: 48px !important;
+    height: 48px !important;
+  }
+  .app-stage .guest-entry .email-panel input:not([type="checkbox"]) {
+    min-height: 36px;
+    padding: 7px 14px;
+  }
+  .app-stage .guest-entry > h1 {
+    margin: 2px 0 8px;
+    font-size: 20px;
+  }
+}

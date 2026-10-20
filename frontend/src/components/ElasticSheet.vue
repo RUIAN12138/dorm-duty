@@ -412,10 +412,14 @@ onBeforeUnmount(() => {
 .sheet-heading {
   position: relative;
   z-index: 2;
-  background: var(--canvas, #fff);
+  background: var(--canvas, var(--app-tone-hfff, #fff));
 }
-.sheet-heading > div:first-child { min-width: 0; }
-.sheet-heading h2 { overflow-wrap: anywhere; }
+.sheet-heading > div:first-child {
+  min-width: 0;
+}
+.sheet-heading h2 {
+  overflow-wrap: anywhere;
+}
 .sheet-content {
   min-height: 0;
   flex: 0 1 auto;
@@ -428,9 +432,13 @@ onBeforeUnmount(() => {
   margin: 0 -3px;
   isolation: isolate;
 }
-.has-sheet-footer .sheet-content { padding-bottom: 14px; }
+.has-sheet-footer .sheet-content {
+  padding-bottom: 14px;
+}
 @media (max-width: 350px) {
-  .sheet-handle { margin-inline: -18px; }
+  .sheet-handle {
+    margin-inline: -18px;
+  }
 }
 </style>
 
@@ -468,14 +476,16 @@ onBeforeUnmount(() => {
   scroll-padding-block: 12px;
   padding-bottom: calc(14px + env(safe-area-inset-bottom));
 }
-.has-contained-scroll.has-sheet-footer .sheet-content { padding-bottom: 14px; }
+.has-contained-scroll.has-sheet-footer .sheet-content {
+  padding-bottom: 14px;
+}
 .sheet-footer {
   position: relative;
   z-index: 40;
   flex-shrink: 0;
   padding: 14px 0 calc(18px + env(safe-area-inset-bottom));
-  background: var(--canvas, #fff);
-  border-top: 1px solid #eee;
+  background: var(--canvas, var(--app-tone-hfff, #fff));
+  border-top: 1px solid var(--app-tone-heee, #eee);
 }
 </style>
 

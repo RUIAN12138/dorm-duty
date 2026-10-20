@@ -242,7 +242,7 @@ onBeforeUnmount(clear);
 <style scoped>
 .calendar-settings {
   margin-top: 16px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--app-tone-heee, #eee);
   font-size: 16px;
   line-height: 1.5;
 }
@@ -253,7 +253,7 @@ summary {
 }
 p {
   margin: 8px 0 16px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .calendar-toggle {
   display: flex;
@@ -266,7 +266,7 @@ p {
 input {
   width: 22px;
   height: 22px;
-  accent-color: #111;
+  accent-color: var(--app-tone-h111, #111);
   flex-shrink: 0;
 }
 .calendar-link {
@@ -276,7 +276,7 @@ input {
   padding: 12px 0;
   border: 0;
   background: transparent;
-  color: #333;
+  color: var(--app-tone-h333, #333);
   text-align: center;
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -295,18 +295,18 @@ textarea {
   width: 100%;
   min-width: 0;
   padding: 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 10px;
-  background: #fafafa;
-  color: #111;
+  background: var(--app-tone-hfafafa, #fafafa);
+  color: var(--app-tone-h111, #111);
   font-size: 16px;
   line-height: 1.5;
   overflow-wrap: anywhere;
   resize: none;
 }
 [role="alert"] {
-  color: #444;
-  border-left: 2px solid #111;
+  color: var(--app-tone-h444, #444);
+  border-left: 2px solid var(--app-tone-h111, #111);
   padding-left: 12px;
 }
 </style>

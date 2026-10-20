@@ -9,6 +9,10 @@ import {
 } from "vue";
 import { motionAllowed } from "../interaction/motion";
 import CompanionBubble from "./CompanionBubble.vue";
+import {
+  createCompanionTapGesture,
+  naturalGaze,
+} from "../interaction/companionTap";
 import type { CompanionScene } from "../interaction/companionSpeech";
 import {
   takeCompanionHandoff,
@@ -46,7 +50,21 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ message: [] }>();
 const bubble = ref<InstanceType<typeof CompanionBubble>>();
-let clickTimer: ReturnType<typeof setTimeout> | undefined;
+const tapGesture = createCompanionTapGesture({
+  single: () => {
+    if (!document.hidden && !props.muted && !flying) emit("message");
+  },
+  double: () => {
+    tap();
+    bubble.value?.say("再双击一次，换个表情。");
+  },
+});
+watch(
+  () => props.muted,
+  (muted) => {
+    if (muted) tapGesture.cancel();
+  },
+);
 let flight: Animation | undefined;
 let flying = false;
 function finishFlight() {
@@ -85,13 +103,22 @@ const host = ref<HTMLElement>();
 const reaction = ref("");
 const idle = ref("02");
 const actual = ref(props.mood);
-const target = computed(() =>
-  props.automatic
-    ? props.mood !== "02" && props.mood !== "19"
+const target = computed(() => {
+  if (!props.automatic) return props.mood;
+  // Keep operation/error feedback above play; ordinary scene moods may react.
+  if (
+    ["11", "12", "13", "20", "32", "33", "34", "36", "38"].includes(props.mood)
+  )
+    return props.mood;
+  return (
+    reaction.value ||
+    (props.mood !== "02" && props.mood !== "19"
       ? props.mood
-      : reaction.value || (idle.value !== "02" ? idle.value : props.mood)
-    : props.mood,
-);
+      : idle.value !== "02"
+        ? idle.value
+        : props.mood)
+  );
+});
 let engine: EmotionEngine | undefined;
 let reactionTimer: ReturnType<typeof setTimeout> | undefined;
 let clock: ReturnType<typeof setInterval> | undefined;
@@ -149,15 +176,11 @@ function clicked(event: MouseEvent) {
     tap();
     return;
   }
-  clearTimeout(clickTimer);
-  if (event.detail >= 2) {
-    tap();
-    bubble.value?.say("被你发现啦，今天也要开心。");
-    return;
-  }
-  clickTimer = setTimeout(() => {
-    if (!document.hidden) emit("message");
-  }, 360);
+  tapGesture.tap(
+    event.clientX,
+    event.clientY,
+    event.detail === 0 && event.clientX === 0 && event.clientY === 0,
+  );
 }
 function applyGaze() {
   if (props.gazePoint) engine?.setGaze(props.gazePoint.x, props.gazePoint.y);
@@ -165,15 +188,24 @@ function applyGaze() {
 watch(() => props.gazePoint, applyGaze, { deep: true });
 function gaze(event: PointerEvent) {
   if (props.gazePoint) return;
-  if (!engine || !props.interactive || !motionAllowed()) return;
+  if (
+    !engine ||
+    !props.interactive ||
+    !visible ||
+    document.hidden ||
+    !motionAllowed()
+  )
+    return;
   const rect = host.value?.getBoundingClientRect();
   if (!rect) return;
-  engine.setGaze(
-    (event.clientX - rect.left - rect.width / 2) / rect.width,
-    (event.clientY - rect.top - rect.height / 2) / rect.height,
-  );
+  const point = naturalGaze(event.clientX, event.clientY, rect, {
+    width: innerWidth,
+    height: innerHeight,
+  });
+  engine.setGaze(point.x, point.y);
 }
 function syncMotion() {
+  if (document.hidden) tapGesture.cancel();
   if (!motionAllowed()) finishFlight();
   const animate =
     companionEnabled.value && visible && motionAllowed() && !media.matches;
@@ -232,6 +264,7 @@ onMounted(() => {
       if (props.automatic && !document.hidden)
         idle.value = ambientEmotion(Date.now() - lastActivity);
     }, 1000);
+    window.addEventListener("pointermove", gaze, { passive: true });
     window.addEventListener("pointerdown", activity, { passive: true });
     window.addEventListener("keydown", activity);
   }
@@ -240,12 +273,13 @@ onMounted(() => {
   media.addEventListener("change", syncMotion);
 });
 onBeforeUnmount(() => {
-  clearTimeout(clickTimer);
+  tapGesture.cancel();
   finishFlight();
   clearTimeout(reactionTimer);
   clearInterval(clock);
   observer?.disconnect();
   engine?.destroy();
+  window.removeEventListener("pointermove", gaze);
   window.removeEventListener("pointerdown", activity);
   window.removeEventListener("keydown", activity);
   document.removeEventListener("visibilitychange", syncMotion);
@@ -272,8 +306,6 @@ onBeforeUnmount(() => {
       :aria-hidden="interactive ? undefined : true"
       :title="interactive ? label : undefined"
       @click.stop="clicked"
-      @pointermove="gaze"
-      @pointerleave="!gazePoint && engine?.clearGaze()"
     >
       <span ref="host" class="emotion-ball-host" aria-hidden="true"></span>
     </component>
@@ -316,7 +348,7 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 .dorm-companion:focus-visible {
-  outline: 2px solid #333;
+  outline: 2px solid var(--app-tone-h333, #333);
   outline-offset: 3px;
   border-radius: 50%;
 }

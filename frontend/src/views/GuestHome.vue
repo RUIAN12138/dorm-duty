@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import ScreenStage from "../components/ScreenStage.vue";
+import AppearanceSettings from "../components/AppearanceSettings.vue";
+const appearanceOpen = ref(false);
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -1007,432 +1010,454 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main
-    ref="entrySurface"
-    class="guest-page"
-    :class="{
-      'has-chore-nav': navVisible,
-      'has-compact-calendar': navVisible && section === 'calendar',
-      'is-name-entry': !navVisible && !!dorm && (!member || choosingMember),
-      'is-entry-flow':
-        !navVisible && !creatingRoom && (viewMode === 'entry' || changingDorm),
-    }"
-  >
-    <EntryBack
-      v-if="entryBackVisible && !emailOpen && !recoveryOpen"
-      :target="entrySurface"
-      :disabled="loading || !!entryEmail?.busy"
-      @back="entryBack"
-    />
-    <header v-if="!navVisible && viewMode === 'demo'" class="guest-header">
-      <div class="guest-brand-line">
-        <span
-          v-if="viewMode === 'demo'"
-          class="guest-demo-badge"
-          data-testid="guest-demo-mode"
-          >游客模式</span
-        >
-      </div>
-    </header>
-
-    <section
-      v-if="creatingRoom"
-      class="guest-dorm-form"
-      data-testid="guest-create-form"
-      aria-labelledby="create-title"
+  <ScreenStage :signed-in="navVisible">
+    <main
+      ref="entrySurface"
+      class="guest-page"
+      :class="{
+        'has-chore-nav': navVisible,
+        'has-compact-calendar': navVisible && section === 'calendar',
+        'is-name-entry': !navVisible && !!dorm && (!member || choosingMember),
+        'is-entry-flow':
+          !navVisible &&
+          !creatingRoom &&
+          (viewMode === 'entry' || changingDorm),
+      }"
     >
-      <div class="entry-heading">
-        <h1 id="create-title">创建你的宿舍</h1>
-        <HintPopover
-          title="创建者权限"
-          :text="
-            emailAccount.loggedIn
-              ? '用当前邮箱创建，自动拥有创建者权限。换设备后用同一邮箱登录即可。'
-              : '管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。'
-          "
-        />
-      </div>
-      <form @submit.prevent="submitCreate">
-        <label for="create-name">宿舍名称</label>
-        <input
-          id="create-name"
-          v-model="createName"
-          data-testid="guest-create-name"
-          maxlength="64"
-          placeholder="例如：6-402"
-          autocomplete="off"
-          required
-          :disabled="loading"
-        />
-        <label for="create-nickname">你的名字</label>
-        <input
-          id="create-nickname"
-          v-model="createNickname"
-          data-testid="guest-create-nickname"
-          maxlength="32"
-          placeholder="室友怎么称呼你"
-          autocomplete="nickname"
-          required
-          :disabled="loading"
-        />
-        <label for="create-members"
-          >其他室友的名字 <span class="guest-muted">（选填）</span></label
-        >
-        <textarea
-          id="create-members"
-          v-model="createMembers"
-          data-testid="guest-create-members"
-          rows="3"
-          maxlength="2000"
-          placeholder="每行一位，也可以用逗号分隔"
-          :disabled="loading"
-        ></textarea>
-        <MarkerPicker v-model="createMarker" :disabled="loading" />
-        <p v-if="error" class="guest-create-error" role="alert">{{ error }}</p>
-        <button
-          type="submit"
-          class="guest-primary"
-          data-testid="guest-create-submit"
-          :disabled="loading"
-        >
-          {{ loading ? "正在创建…" : "创建宿舍" }}
-        </button>
-      </form>
-      <div class="guest-form-actions">
-        <button :disabled="loading" @click="cancelSelection">返回</button>
-      </div>
-    </section>
-    <section
-      v-else-if="changingDorm"
-      class="guest-dorm-form guest-switch-form"
-      aria-labelledby="switch-title"
-    >
-      <div class="entry-heading">
-        <h1 id="switch-title">加入新宿舍</h1>
-        <HintPopover
-          title="邀请码在哪里？"
-          label="邀请码帮助"
-          text="向宿舍创建者索取邀请码，再输入名单中你的完整名字即可进入。"
-        />
-      </div>
-      <form @submit.prevent="switchDorm()">
-        <label for="guest-invite" class="invite-label">宿舍邀请码</label>
-        <input
-          id="guest-invite"
-          data-testid="guest-invite"
-          v-model="draftCode"
-          maxlength="64"
-          autocomplete="off"
-          autocapitalize="characters"
-          placeholder="输入邀请码"
-          required
-        />
-        <button
-          type="submit"
-          class="guest-primary"
-          data-testid="guest-join-submit"
-          :disabled="loading"
-        >
-          {{ loading ? "正在加入…" : "加入宿舍" }}
-        </button>
-      </form>
-      <p v-if="error" class="guest-create-error" role="alert">{{ error }}</p>
-      <div class="guest-form-actions">
-        <button :disabled="loading" @click="switchDorm(true)">游客体验</button>
-        <button @click="cancelSelection">
-          {{ member ? "返回当前任务" : "取消" }}
-        </button>
-      </div>
-      <JoinedDorms
-        :rooms="savedDorms"
-        :disabled="loading"
-        :current="inviteCode"
-        @select="returnToDorm"
+      <EntryBack
+        v-if="entryBackVisible && !emailOpen && !recoveryOpen"
+        :target="entrySurface"
+        :disabled="loading || !!entryEmail?.busy"
+        @back="entryBack"
       />
-    </section>
-    <template v-else>
-      <LoadingSkeleton v-if="loading && !dorm" />
-      <div v-if="error && !dorm" class="guest-error" role="alert">
-        <h1>暂时无法查看</h1>
-        <p>{{ error }}</p>
-        <button class="guest-primary" :disabled="loading" @click="retryEntry">
-          重新加载
-        </button>
-      </div>
+      <header v-if="!navVisible && viewMode === 'demo'" class="guest-header">
+        <div class="guest-brand-line">
+          <span
+            v-if="viewMode === 'demo'"
+            class="guest-demo-badge"
+            data-testid="guest-demo-mode"
+            >游客模式</span
+          >
+        </div>
+      </header>
+
       <section
-        v-else-if="viewMode === 'entry' && !loading"
-        class="guest-entry"
-        aria-labelledby="entry-title"
+        v-if="creatingRoom"
+        class="guest-dorm-form"
+        data-testid="guest-create-form"
+        aria-labelledby="create-title"
       >
-        <h1
-          id="entry-title"
-          :class="{ 'companion-entry-title': !emailAccount.loggedIn }"
+        <div class="entry-heading">
+          <h1 id="create-title">创建你的宿舍</h1>
+          <HintPopover
+            title="创建者权限"
+            :text="
+              emailAccount.loggedIn
+                ? '用当前邮箱创建，自动拥有创建者权限。换设备后用同一邮箱登录即可。'
+                : '管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。'
+            "
+          />
+        </div>
+        <form @submit.prevent="submitCreate">
+          <label for="create-name">宿舍名称</label>
+          <input
+            id="create-name"
+            v-model="createName"
+            data-testid="guest-create-name"
+            maxlength="64"
+            placeholder="例如：6-402"
+            autocomplete="off"
+            required
+            :disabled="loading"
+          />
+          <label for="create-nickname">你的名字</label>
+          <input
+            id="create-nickname"
+            v-model="createNickname"
+            data-testid="guest-create-nickname"
+            maxlength="32"
+            placeholder="室友怎么称呼你"
+            autocomplete="nickname"
+            required
+            :disabled="loading"
+          />
+          <label for="create-members"
+            >其他室友的名字 <span class="guest-muted">（选填）</span></label
+          >
+          <textarea
+            id="create-members"
+            v-model="createMembers"
+            data-testid="guest-create-members"
+            rows="3"
+            maxlength="2000"
+            placeholder="每行一位，也可以用逗号分隔"
+            :disabled="loading"
+          ></textarea>
+          <MarkerPicker v-model="createMarker" :disabled="loading" />
+          <p v-if="error" class="guest-create-error" role="alert">
+            {{ error }}
+          </p>
+          <button
+            type="submit"
+            class="guest-primary"
+            data-testid="guest-create-submit"
+            :disabled="loading"
+          >
+            {{ loading ? "正在创建…" : "创建宿舍" }}
+          </button>
+        </form>
+        <div class="guest-form-actions">
+          <button :disabled="loading" @click="cancelSelection">返回</button>
+        </div>
+      </section>
+      <section
+        v-else-if="changingDorm"
+        class="guest-dorm-form guest-switch-form"
+        aria-labelledby="switch-title"
+      >
+        <div class="entry-heading">
+          <h1 id="switch-title">加入新宿舍</h1>
+          <HintPopover
+            title="邀请码在哪里？"
+            label="邀请码帮助"
+            text="向宿舍创建者索取邀请码，再输入名单中你的完整名字即可进入。"
+          />
+        </div>
+        <form @submit.prevent="switchDorm()">
+          <label for="guest-invite" class="invite-label">宿舍邀请码</label>
+          <input
+            id="guest-invite"
+            data-testid="guest-invite"
+            v-model="draftCode"
+            maxlength="64"
+            autocomplete="off"
+            autocapitalize="characters"
+            placeholder="输入邀请码"
+            required
+          />
+          <button
+            type="submit"
+            class="guest-primary"
+            data-testid="guest-join-submit"
+            :disabled="loading"
+          >
+            {{ loading ? "正在加入…" : "加入宿舍" }}
+          </button>
+        </form>
+        <p v-if="error" class="guest-create-error" role="alert">{{ error }}</p>
+        <div class="guest-form-actions">
+          <button :disabled="loading" @click="switchDorm(true)">
+            游客体验
+          </button>
+          <button @click="cancelSelection">
+            {{ member ? "返回当前任务" : "取消" }}
+          </button>
+        </div>
+        <JoinedDorms
+          :rooms="savedDorms"
+          :disabled="loading"
+          :current="inviteCode"
+          @select="returnToDorm"
+        />
+      </section>
+      <template v-else>
+        <LoadingSkeleton v-if="loading && !dorm" />
+        <div v-if="error && !dorm" class="guest-error" role="alert">
+          <h1>暂时无法查看</h1>
+          <p>{{ error }}</p>
+          <button class="guest-primary" :disabled="loading" @click="retryEntry">
+            重新加载
+          </button>
+        </div>
+        <section
+          v-else-if="viewMode === 'entry' && !loading"
+          class="guest-entry"
+          aria-labelledby="entry-title"
         >
-          {{
-            (emailAccount.required && !emailAccount.loggedIn) ||
-            !roomChoicesVisible
-              ? "欢迎来到轮到"
-              : "先找到你的宿舍"
-          }}
-        </h1>
+          <h1
+            id="entry-title"
+            :class="{ 'companion-entry-title': !emailAccount.loggedIn }"
+          >
+            {{
+              (emailAccount.required && !emailAccount.loggedIn) ||
+              !roomChoicesVisible
+                ? "欢迎来到轮到"
+                : "先找到你的宿舍"
+            }}
+          </h1>
+          <EmailAccountPanel
+            ref="entryEmail"
+            auto-enter
+            :preferred-invite="storedChoice().invite_code"
+            @verification="emailVerifying = $event"
+            v-if="
+              (emailAccount.required || emailAccount.loggedIn) &&
+              (!emailAccount.loggedIn || roomChoicesVisible) &&
+              !emailOpen
+            "
+            hide-title
+            :member-token="migrationToken"
+            :owner-token="migrationOwnerToken"
+            :member-id="migrationMemberId"
+            :gate="!!migrationMemberId"
+            @recover="openRecovery"
+            @reenter="reenterAfterMigration"
+            @entered="acceptEmailEntry"
+            @logout="emailLogout"
+          />
+          <button
+            v-if="emailAccount.loggedIn && !roomChoicesVisible"
+            class="guest-primary"
+            data-testid="entry-continue"
+            @click="roomChoicesVisible = true"
+          >
+            进入宿舍
+          </button>
+          <JoinedDorms
+            v-if="
+              (!emailAccount.required || emailAccount.loggedIn) &&
+              roomChoicesVisible
+            "
+            :rooms="savedDorms"
+            :disabled="loading"
+            @select="returnToDorm"
+          />
+          <div
+            v-if="
+              (!emailAccount.required || emailAccount.loggedIn) &&
+              roomChoicesVisible
+            "
+            class="guest-entry-actions"
+          >
+            <button
+              class="guest-primary"
+              data-testid="guest-join-dorm"
+              @click="openDormChange"
+            >
+              加入宿舍<van-icon name="arrow" aria-hidden="true" />
+            </button>
+            <button
+              @click="openCreate"
+              class="guest-secondary"
+              data-testid="guest-create-dorm"
+            >
+              创建宿舍
+            </button>
+          </div>
+          <div class="entry-secondary-actions">
+            <button
+              class="guest-demo-link"
+              data-testid="guest-demo-entry"
+              @click="switchDorm(true)"
+            >
+              游客体验<van-icon name="arrow" aria-hidden="true" />
+            </button>
+            <button
+              class="guest-demo-link"
+              data-testid="guest-recover-owner"
+              @click="openRecovery"
+            >
+              恢复管理权限
+            </button>
+          </div>
+        </section>
+        <template v-else-if="dorm && (!loading || pendingPerson)">
+          <aside
+            v-if="createdInvite"
+            class="guest-created"
+            data-testid="guest-created-invite"
+          >
+            <div>
+              <strong>宿舍已创建</strong>
+            </div>
+            <div class="guest-invite-line">
+              <code>{{ createdInvite }}</code
+              ><button @click="copyInvite">复制邀请码</button>
+            </div>
+            <button
+              class="guest-created-close"
+              aria-label="收起邀请码"
+              @click="createdInvite = ''"
+            >
+              <van-icon name="cross" />
+            </button>
+          </aside>
+          <section
+            v-if="!member || choosingMember"
+            class="guest-chooser"
+            aria-labelledby="choose-title"
+          >
+            <h1 id="choose-title">
+              {{
+                pendingPerson
+                  ? `你好，${pendingPerson.nickname}`
+                  : viewMode === "demo"
+                    ? "你是哪位室友？"
+                    : "输入你的名字"
+              }}
+            </h1>
+            <template v-if="pendingPerson">
+              <MarkerPicker
+                v-model="choiceMarker"
+                :occupied="occupiedMarks"
+                :disabled="loading"
+              />
+              <p v-if="error" class="guest-create-error" role="alert">
+                {{ error }}
+              </p>
+              <button
+                class="guest-primary"
+                data-testid="marker-confirm"
+                :disabled="loading || !choiceMarker"
+                @click="confirmChoice"
+              >
+                {{ loading ? "正在进入…" : "进入宿舍" }}
+              </button>
+              <button
+                class="guest-refresh"
+                :disabled="loading"
+                @click="
+                  pendingPerson = null;
+                  pendingClaimToken = '';
+                  enteredName = '';
+                  error = '';
+                "
+              >
+                重新输入名字
+              </button>
+            </template>
+            <p v-if="notice" class="guest-notice" role="status">{{ notice }}</p>
+            <form
+              v-if="!pendingPerson && viewMode === 'dorm'"
+              class="name-entry"
+              data-testid="guest-name-form"
+              @submit.prevent="submitName"
+            >
+              <label for="member-name">你在宿舍名单中的名字</label>
+              <input
+                id="member-name"
+                v-model="enteredName"
+                data-testid="guest-member-name"
+                autocomplete="off"
+                autocapitalize="off"
+                maxlength="32"
+                placeholder="输入完整名字"
+                required
+                :disabled="loading"
+              />
+              <p v-if="error" class="guest-create-error" role="alert">
+                {{ error }}
+              </p>
+              <button
+                class="guest-primary"
+                data-testid="guest-name-submit"
+                :disabled="loading || !enteredName.trim()"
+              >
+                {{ loading ? "正在确认…" : "确认身份" }}
+              </button>
+            </form>
+            <div
+              v-if="
+                !pendingPerson && viewMode === 'demo' && dorm.members.length
+              "
+              class="guest-member-list"
+            >
+              <button
+                v-for="(person, index) in dorm.members"
+                :key="person.user_id"
+                :data-testid="`guest-member-${person.user_id}`"
+                @click="choose(person)"
+              >
+                <span class="guest-member-number">{{
+                  String(index + 1).padStart(2, "0")
+                }}</span>
+                <MemberMark :id="person.marker_id" :size="24" />
+                <strong>{{ person.nickname }}</strong
+                ><van-icon name="arrow" aria-hidden="true" />
+              </button>
+            </div>
+            <p
+              v-else-if="
+                !pendingPerson && viewMode === 'demo' && !dorm.members.length
+              "
+              class="guest-notice"
+            >
+              这个宿舍还没有成员，可以先进入宿舍管理添加。
+            </p>
+            <button
+              v-if="member"
+              class="guest-refresh"
+              data-testid="guest-cancel-member"
+              @click="cancelSelection"
+            >
+              返回当前任务
+            </button>
+          </section>
+          <section v-else-if="member" class="guest-personal">
+            <ChoreBoard
+              :key="`${inviteCode}:${member.user_id}`"
+              :section="section"
+              :invite="inviteCode"
+              :dorm-name="dorm.name"
+              :member-id="member.user_id"
+              :token="choreToken"
+              :demo="viewMode === 'demo'"
+              @expired="identityExpired"
+              @member="member = $event"
+              @switch-member="changeMember"
+              @join-dorm="openDormChange"
+              @create-dorm="openCreate"
+              @recover-owner="recoveryOpen = true"
+              @email-account="emailOpen = true"
+              @exit-demo="exitDemo"
+            />
+          </section>
+        </template>
+      </template>
+
+      <footer
+        v-if="viewMode !== 'entry' && !member && !changingDorm && !creatingRoom"
+        class="guest-footer"
+      >
+        <button @click="openDormChange">
+          创建 / 加入宿舍<van-icon name="arrow" aria-hidden="true" />
+        </button>
+        <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
+      </footer>
+
+      <ElasticSheet
+        v-model="emailOpen"
+        title="邮箱登录与提醒设置"
+        motion="bottom"
+      >
         <EmailAccountPanel
-          ref="entryEmail"
-          auto-enter
-          :preferred-invite="storedChoice().invite_code"
-          @verification="emailVerifying = $event"
-          v-if="
-            (emailAccount.required || emailAccount.loggedIn) &&
-            (!emailAccount.loggedIn || roomChoicesVisible) &&
-            !emailOpen
-          "
           hide-title
-          :member-token="migrationToken"
-          :owner-token="migrationOwnerToken"
-          :member-id="migrationMemberId"
-          :gate="!!migrationMemberId"
-          @recover="openRecovery"
-          @reenter="reenterAfterMigration"
+          :member-token="viewMode === 'dorm' ? choreToken : ''"
+          :dorm-id="dorm?.id"
           @entered="acceptEmailEntry"
           @logout="emailLogout"
         />
-        <button
-          v-if="emailAccount.loggedIn && !roomChoicesVisible"
-          class="guest-primary"
-          data-testid="entry-continue"
-          @click="roomChoicesVisible = true"
-        >
-          进入宿舍
-        </button>
-        <JoinedDorms
-          v-if="
-            (!emailAccount.required || emailAccount.loggedIn) &&
-            roomChoicesVisible
-          "
-          :rooms="savedDorms"
-          :disabled="loading"
-          @select="returnToDorm"
-        />
-        <div
-          v-if="
-            (!emailAccount.required || emailAccount.loggedIn) &&
-            roomChoicesVisible
-          "
-          class="guest-entry-actions"
-        >
-          <button
-            class="guest-primary"
-            data-testid="guest-join-dorm"
-            @click="openDormChange"
-          >
-            加入宿舍<van-icon name="arrow" aria-hidden="true" />
-          </button>
-          <button
-            @click="openCreate"
-            class="guest-secondary"
-            data-testid="guest-create-dorm"
-          >
-            创建宿舍
-          </button>
-        </div>
-        <div class="entry-secondary-actions">
-          <button
-            class="guest-demo-link"
-            data-testid="guest-demo-entry"
-            @click="switchDorm(true)"
-          >
-            游客体验<van-icon name="arrow" aria-hidden="true" />
-          </button>
-          <button
-            class="guest-demo-link"
-            data-testid="guest-recover-owner"
-            @click="openRecovery"
-          >
-            恢复管理权限
-          </button>
-        </div>
-      </section>
-      <template v-else-if="dorm && (!loading || pendingPerson)">
-        <aside
-          v-if="createdInvite"
-          class="guest-created"
-          data-testid="guest-created-invite"
-        >
-          <div>
-            <strong>宿舍已创建</strong>
-          </div>
-          <div class="guest-invite-line">
-            <code>{{ createdInvite }}</code
-            ><button @click="copyInvite">复制邀请码</button>
-          </div>
-          <button
-            class="guest-created-close"
-            aria-label="收起邀请码"
-            @click="createdInvite = ''"
-          >
-            <van-icon name="cross" />
-          </button>
-        </aside>
-        <section
-          v-if="!member || choosingMember"
-          class="guest-chooser"
-          aria-labelledby="choose-title"
-        >
-          <h1 id="choose-title">
-            {{
-              pendingPerson
-                ? `你好，${pendingPerson.nickname}`
-                : viewMode === "demo"
-                  ? "你是哪位室友？"
-                  : "输入你的名字"
-            }}
-          </h1>
-          <template v-if="pendingPerson">
-            <MarkerPicker
-              v-model="choiceMarker"
-              :occupied="occupiedMarks"
-              :disabled="loading"
-            />
-            <p v-if="error" class="guest-create-error" role="alert">
-              {{ error }}
-            </p>
-            <button
-              class="guest-primary"
-              data-testid="marker-confirm"
-              :disabled="loading || !choiceMarker"
-              @click="confirmChoice"
-            >
-              {{ loading ? "正在进入…" : "进入宿舍" }}
-            </button>
-            <button
-              class="guest-refresh"
-              :disabled="loading"
-              @click="
-                pendingPerson = null;
-                pendingClaimToken = '';
-                enteredName = '';
-                error = '';
-              "
-            >
-              重新输入名字
-            </button>
-          </template>
-          <p v-if="notice" class="guest-notice" role="status">{{ notice }}</p>
-          <form
-            v-if="!pendingPerson && viewMode === 'dorm'"
-            class="name-entry"
-            data-testid="guest-name-form"
-            @submit.prevent="submitName"
-          >
-            <label for="member-name">你在宿舍名单中的名字</label>
-            <input
-              id="member-name"
-              v-model="enteredName"
-              data-testid="guest-member-name"
-              autocomplete="off"
-              autocapitalize="off"
-              maxlength="32"
-              placeholder="输入完整名字"
-              required
-              :disabled="loading"
-            />
-            <p v-if="error" class="guest-create-error" role="alert">
-              {{ error }}
-            </p>
-            <button
-              class="guest-primary"
-              data-testid="guest-name-submit"
-              :disabled="loading || !enteredName.trim()"
-            >
-              {{ loading ? "正在确认…" : "确认身份" }}
-            </button>
-          </form>
-          <div
-            v-if="!pendingPerson && viewMode === 'demo' && dorm.members.length"
-            class="guest-member-list"
-          >
-            <button
-              v-for="(person, index) in dorm.members"
-              :key="person.user_id"
-              :data-testid="`guest-member-${person.user_id}`"
-              @click="choose(person)"
-            >
-              <span class="guest-member-number">{{
-                String(index + 1).padStart(2, "0")
-              }}</span>
-              <MemberMark :id="person.marker_id" :size="24" />
-              <strong>{{ person.nickname }}</strong
-              ><van-icon name="arrow" aria-hidden="true" />
-            </button>
-          </div>
-          <p
-            v-else-if="
-              !pendingPerson && viewMode === 'demo' && !dorm.members.length
-            "
-            class="guest-notice"
-          >
-            这个宿舍还没有成员，可以先进入宿舍管理添加。
-          </p>
-          <button
-            v-if="member"
-            class="guest-refresh"
-            data-testid="guest-cancel-member"
-            @click="cancelSelection"
-          >
-            返回当前任务
-          </button>
-        </section>
-        <section v-else-if="member" class="guest-personal">
-          <ChoreBoard
-            :key="`${inviteCode}:${member.user_id}`"
-            :section="section"
-            :invite="inviteCode"
-            :dorm-name="dorm.name"
-            :member-id="member.user_id"
-            :token="choreToken"
-            :demo="viewMode === 'demo'"
-            @expired="identityExpired"
-            @member="member = $event"
-            @switch-member="changeMember"
-            @join-dorm="openDormChange"
-            @create-dorm="openCreate"
-            @recover-owner="recoveryOpen = true"
-            @email-account="emailOpen = true"
-            @exit-demo="exitDemo"
-          />
-        </section>
-      </template>
-    </template>
-
-    <footer
-      v-if="viewMode !== 'entry' && !member && !changingDorm && !creatingRoom"
-      class="guest-footer"
-    >
-      <button @click="openDormChange">
-        创建 / 加入宿舍<van-icon name="arrow" aria-hidden="true" />
-      </button>
-      <router-link v-if="creatorAccess" to="/dorm">宿舍成员管理</router-link>
-    </footer>
-    <ChoreBottomNav v-if="navVisible" :section="section" />
-    <ElasticSheet
-      v-model="emailOpen"
-      title="邮箱登录与提醒设置"
-      motion="bottom"
-    >
-      <EmailAccountPanel
-        hide-title
-        :member-token="viewMode === 'dorm' ? choreToken : ''"
-        :dorm-id="dorm?.id"
-        @entered="acceptEmailEntry"
-        @logout="emailLogout"
+      </ElasticSheet>
+      <CreatorRecovery
+        v-model="recoveryOpen"
+        mode="restore"
+        :invite="inviteCode"
+        @restored="acceptRecovered"
       />
-    </ElasticSheet>
-    <CreatorRecovery
-      v-model="recoveryOpen"
-      mode="restore"
-      :invite="inviteCode"
-      @restored="acceptRecovered"
-    />
-  </main>
+    </main>
+  </ScreenStage>
+  <ChoreBottomNav v-if="navVisible" :section="section" />
+  <button
+    v-if="!navVisible"
+    class="entry-appearance"
+    aria-label="设置"
+    @click="appearanceOpen = true"
+  >
+    <van-icon name="setting-o" />
+  </button>
+  <ElasticSheet v-model="appearanceOpen" title="设置"
+    ><AppearanceSettings
+  /></ElasticSheet>
 </template>
 
 <style scoped>
@@ -1475,22 +1500,22 @@ onUnmounted(() => {
 .name-entry label {
   display: block;
   margin-bottom: 12px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 15px;
 }
 .name-entry input {
   width: 100%;
   min-height: 60px;
   padding: 14px 18px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 18px;
-  background: #f7f7f7;
-  color: #111;
+  background: var(--app-tone-hf7f7f7, #f7f7f7);
+  color: var(--app-tone-h111, #111);
   font: inherit;
   font-size: 21px;
 }
 .name-entry input:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--app-tone-h111, #111);
   outline-offset: 3px;
 }
 .name-entry .guest-primary {
@@ -1564,9 +1589,9 @@ onUnmounted(() => {
 }
 .guest-switch-form input {
   min-height: 64px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--app-tone-he8e8e8, #e8e8e8);
   border-radius: 20px;
-  background: #f7f7f7;
+  background: var(--app-tone-hf7f7f7, #f7f7f7);
   text-align: center;
   font-size: 22px;
   letter-spacing: 2px;
@@ -1575,11 +1600,11 @@ onUnmounted(() => {
 .guest-switch-form input::placeholder {
   font-size: 18px;
   letter-spacing: 0;
-  color: #aaa;
+  color: var(--app-tone-haaa, #aaa);
 }
 .guest-switch-form input:focus {
   outline: none;
-  border-color: #222;
+  border-color: var(--app-tone-h222, #222);
   box-shadow: 0 0 0 3px #0000000b;
 }
 .guest-entry .guest-primary,
@@ -1645,5 +1670,21 @@ onUnmounted(() => {
 }
 .guest-entry :deep(.companion-login) {
   margin-top: 12px;
+}
+</style>
+
+<style scoped>
+.entry-appearance {
+  position: fixed;
+  right: 24px;
+  top: calc(env(safe-area-inset-top) + 12px);
+  z-index: 5;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ui-surface-muted);
+  color: var(--ui-ink);
+  font-size: 22px;
 }
 </style>

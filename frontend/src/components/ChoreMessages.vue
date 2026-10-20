@@ -64,7 +64,7 @@ const emit = defineEmits<{ read: [id: number]; closed: [] }>();
 <style scoped>
 .message-error {
   padding: 10px 0;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -78,24 +78,24 @@ const emit = defineEmits<{ read: [id: number]; closed: [] }>();
 .messages-heading p,
 .messages-empty {
   font-size: 16px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   line-height: 1.6;
 }
 .messages-heading button {
   border: 0;
   background: none;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   min-height: 44px;
   font-size: 15px;
   padding: 8px 0;
 }
 .message-read {
   font-size: 14px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
   padding: 12px 0;
 }
 .chore-reminders {
-  border-top: 1px solid #111;
+  border-top: 1px solid var(--app-tone-h111, #111);
   margin-top: 0;
   padding-top: 16px;
 }
@@ -112,10 +112,10 @@ const emit = defineEmits<{ read: [id: number]; closed: [] }>();
 }
 .chore-reminders header span {
   font-size: 10px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .chore-reminders article {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
   padding: 12px 0;
 }
 .chore-reminders article p {
@@ -125,7 +125,7 @@ const emit = defineEmits<{ read: [id: number]; closed: [] }>();
   overflow-wrap: anywhere;
 }
 .chore-reminders .reminder-sender {
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .chore-reminders .reminder-task-name {
   font-size: 32px;
@@ -144,13 +144,13 @@ const emit = defineEmits<{ read: [id: number]; closed: [] }>();
 }
 .chore-reminders time {
   font-size: 10px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .chore-reminders article button {
   background: none;
   border: 0;
   min-height: 40px;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font-size: 11px;
   padding: 7px 0;
 }

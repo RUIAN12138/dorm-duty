@@ -157,8 +157,8 @@ const cards = computed(() =>
   justify-content: space-between;
   height: 100%;
   padding: 24px;
-  background: #f7f7f5;
-  color: #191919;
+  background: var(--app-tone-hf7f7f5, #f7f7f5);
+  color: var(--app-tone-h191919, #191919);
 }
 .stat-card[data-tone="warm"] {
   background: #fff0d9;
@@ -169,8 +169,8 @@ const cards = computed(() =>
   color: #8e342b;
 }
 .stat-card[data-tone="empty"] {
-  background: #f5f5f5;
-  color: #777;
+  background: var(--app-tone-hf5f5f5, #f5f5f5);
+  color: var(--app-tone-h777, #777);
 }
 header {
   display: flex;

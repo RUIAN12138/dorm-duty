@@ -186,7 +186,7 @@ async function logout() {
 
 <style scoped>
 .profile-settings {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--app-tone-heee, #eee);
   margin: 10px 0 20px;
   padding: 4px 0 16px;
 }

@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-size: 24px;
 }
 .entry-back-edge {

@@ -188,7 +188,7 @@ onUnmounted(() => {
 <style scoped>
 .timed-reminders {
   margin-top: 24px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--app-tone-heee, #eee);
   font-size: 16px;
   line-height: 1.5;
 }
@@ -214,30 +214,30 @@ fieldset {
 .plan-toggle input {
   width: 22px;
   height: 22px;
-  accent-color: #111;
+  accent-color: var(--app-tone-h111, #111);
 }
 .plan-time input {
   min-width: 0;
   width: 112px;
   padding: 10px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--app-tone-hddd, #ddd);
   border-radius: 10px;
   font: inherit;
-  background: #fff;
-  color: #111;
+  background: var(--app-tone-hfff, #fff);
+  color: var(--app-tone-h111, #111);
 }
 .plan-time button,
 .plan-add {
   border: 0;
   background: none;
-  color: #555;
+  color: var(--app-tone-h555, #555);
   font: inherit;
   padding: 10px 0;
   min-height: 44px;
 }
 p {
   margin: 12px 0;
-  color: #555;
+  color: var(--app-tone-h555, #555);
 }
 .guest-primary {
   margin-top: 16px;

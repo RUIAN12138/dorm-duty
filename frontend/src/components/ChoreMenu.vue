@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import AppearanceSettings from "./AppearanceSettings.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ActionItem from "./ActionItem.vue";
 import MemberMark from "./MemberMark.vue";
 import type { ChoreMember } from "../api/chores";
 export type MenuAction =
+  | "order"
   | "reminder"
   | "messages"
   | "join"
@@ -32,7 +34,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
 <template>
   <ElasticSheet
     v-model="tools"
-    title="个人与设置"
+    title="设置"
     motion="bottom"
     @closed="emit('closed')"
   >
@@ -63,6 +65,13 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
         @click="emit('action', 'reminder')"
       />
     </div>
+    <AppearanceSettings />
+    <ActionItem
+      label="任务轮序"
+      icon="orders-o"
+      data-testid="open-water-order"
+      @click="emit('action', 'order')"
+    />
     <div class="menu-section">
       <ActionItem
         label="球球设置"
@@ -180,7 +189,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
 }
 .menu-profile span {
   font-size: 14px;
-  color: #777;
+  color: var(--app-tone-h777, #777);
 }
 .menu-quick {
   display: grid;
@@ -191,7 +200,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
   padding: 7px;
   margin-top: 16px;
   border-radius: 22px;
-  background: #fafafa;
+  background: var(--app-tone-hfafafa, #fafafa);
 }
 .menu-section + .menu-section {
   margin-top: 12px;
@@ -202,7 +211,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
   gap: 13px;
   min-height: 62px;
   padding: 10px 14px;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   font-size: 16px;
   text-decoration: none;
   border-radius: 16px;
@@ -219,7 +228,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
 .menu-advanced summary {
   padding: 12px 4px;
   font-size: 13px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
   cursor: pointer;
 }
 </style>

@@ -89,7 +89,7 @@ onUnmounted(() => bounce?.cancel());
   transform: var(--ui-press-squash);
 }
 .nudge-name:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--app-tone-h111, #111);
   outline-offset: 12px;
   border-radius: 8px;
 }
@@ -105,7 +105,7 @@ onUnmounted(() => bounce?.cancel());
   width: 48px;
   height: 48px;
   margin: -24px;
-  border: 1px solid #111;
+  border: 1px solid var(--app-tone-h111, #111);
   border-radius: 50%;
   animation: ring-expand 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }

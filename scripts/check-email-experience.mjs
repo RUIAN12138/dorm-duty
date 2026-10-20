@@ -142,43 +142,87 @@ try {
   h.env.DEFAULT_DORM_INVITE_CODE = ensureLocalDemo(h.db);
   const navigationContext = await context();
   const navigationPage = await navigationContext.newPage();
-  navigationPage.on("pageerror", e => errors.push(e.message));
+  navigationPage.on("pageerror", (e) => errors.push(e.message));
   await navigationPage.goto(url);
   await navigationPage.getByTestId("guest-demo-entry").waitFor();
-  check(await navigationPage.getByTestId("entry-back").count(), 0, "welcome is root without back");
+  check(
+    await navigationPage.getByTestId("entry-back").count(),
+    0,
+    "welcome is root without back",
+  );
   await navigationPage.getByTestId("guest-demo-entry").click();
   await navigationPage.getByTestId("entry-back").waitFor();
   await navigationPage.waitForURL("**entry=identity");
   await navigationPage.mouse.move(10, 300);
   await navigationPage.mouse.down();
-  await navigationPage.mouse.move(70, 302, {steps:5});
-  check(await navigationPage.locator("main.guest-page").evaluate(el=>new DOMMatrixReadOnly(getComputedStyle(el).transform).m41 > 40), true, "edge drag follows finger before threshold");
+  await navigationPage.mouse.move(70, 302, { steps: 5 });
+  check(
+    await navigationPage
+      .locator("main.guest-page")
+      .evaluate(
+        (el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41 > 40,
+      ),
+    true,
+    "edge drag follows finger before threshold",
+  );
   await navigationPage.mouse.up();
   await navigationPage.waitForTimeout(260);
-  check(await navigationPage.getByTestId("entry-back").count(),1,"short edge drag springs back without navigation");
-  await navigationPage.mouse.move(10,300); await navigationPage.mouse.down();
-  await navigationPage.mouse.move(190,302,{steps:8}); await navigationPage.mouse.up();
+  check(
+    await navigationPage.getByTestId("entry-back").count(),
+    1,
+    "short edge drag springs back without navigation",
+  );
+  await navigationPage.mouse.move(10, 300);
+  await navigationPage.mouse.down();
+  await navigationPage.mouse.move(190, 302, { steps: 8 });
+  await navigationPage.mouse.up();
   await navigationPage.getByTestId("guest-demo-entry").waitFor();
-  check(await navigationPage.getByTestId("entry-back").count(),0,"committed edge gesture returns to welcome");
+  check(
+    await navigationPage.getByTestId("entry-back").count(),
+    0,
+    "committed edge gesture returns to welcome",
+  );
   await navigationPage.getByTestId("guest-demo-entry").click();
   await navigationPage.waitForURL("**entry=identity");
   await navigationPage.goBack();
   await navigationPage.getByTestId("guest-demo-entry").waitFor();
-  check(await navigationPage.getByTestId("entry-back").count(),0,"browser back uses same entry history");
+  check(
+    await navigationPage.getByTestId("entry-back").count(),
+    0,
+    "browser back uses same entry history",
+  );
   await navigationPage.goForward();
   await navigationPage.locator(".guest-member-list").waitFor();
-  check(await navigationPage.getByTestId("entry-back").count(),1,"browser forward restores identity selection");
+  check(
+    await navigationPage.getByTestId("entry-back").count(),
+    1,
+    "browser forward restores identity selection",
+  );
   await navigationPage.goBack();
   await navigationPage.getByTestId("guest-demo-entry").waitFor();
-  await navigationPage.getByLabel("邮箱",{exact:true}).fill("navigation@example.invalid");
-  await navigationPage.getByRole("button",{name:"获取验证码",exact:true}).click();
+  await navigationPage
+    .getByLabel("邮箱", { exact: true })
+    .fill("navigation@example.invalid");
+  await navigationPage
+    .getByRole("button", { name: "获取验证码", exact: true })
+    .click();
   await navigationPage.waitForURL("**entry=email");
   await navigationPage.getByTestId("entry-back").click();
-  await navigationPage.getByRole("button",{name:"获取验证码",exact:true}).waitFor();
-  check(await navigationPage.getByLabel("邮箱",{exact:true}).inputValue(),"navigation@example.invalid","email back preserves typed address");
+  await navigationPage
+    .getByRole("button", { name: "获取验证码", exact: true })
+    .waitFor();
+  check(
+    await navigationPage.getByLabel("邮箱", { exact: true }).inputValue(),
+    "navigation@example.invalid",
+    "email back preserves typed address",
+  );
   await navigationPage.goForward();
-  await navigationPage.getByLabel("验证码",{exact:true}).waitFor();
-  check(await navigationPage.getByLabel("邮箱",{exact:true}).inputValue(),"navigation@example.invalid","browser forward resumes the existing verification challenge");
+  await navigationPage.getByLabel("验证码", { exact: true }).waitFor();
+  check(
+    await navigationPage.getByLabel("邮箱", { exact: true }).inputValue(),
+    "navigation@example.invalid",
+    "browser forward resumes the existing verification challenge",
+  );
   await navigationContext.close();
   const first = await context(),
     page = await first.newPage();
@@ -265,7 +309,12 @@ try {
   );
   await page.mouse.up();
   let checkedWrongCodeMotion = false;
-  async function login(p, address = "ui-qa@example.invalid", gate = false, autoEntry = false) {
+  async function login(
+    p,
+    address = "ui-qa@example.invalid",
+    gate = false,
+    autoEntry = false,
+  ) {
     await p.getByLabel("邮箱", { exact: true }).fill(address);
     await p.evaluate(() => {
       window.__emailCodeFrames = [];
@@ -347,7 +396,8 @@ try {
     await p.getByLabel("验证码", { exact: true }).fill(code);
     await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
     if (!gate) {
-      if (autoEntry) await p.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+      if (autoEntry)
+        await p.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
       else await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
     }
   }
@@ -356,10 +406,18 @@ try {
   await page.waitForURL("**entry=create");
   await page.getByTestId("entry-back").click();
   await page.getByTestId("guest-join-dorm").waitFor();
-  check(await page.getByTestId("guest-create-form").count(),0,"create returns to room selection");
+  check(
+    await page.getByTestId("guest-create-form").count(),
+    0,
+    "create returns to room selection",
+  );
   await page.getByTestId("entry-back").click();
   await page.getByTestId("entry-continue").waitFor();
-  check(await page.getByTestId("entry-back").count(),0,"room selection returns to welcome without signing out");
+  check(
+    await page.getByTestId("entry-back").count(),
+    0,
+    "room selection returns to welcome without signing out",
+  );
   await page.getByTestId("entry-continue").click();
   await page.getByTestId("guest-join-dorm").waitFor();
 
@@ -379,7 +437,7 @@ try {
   await page.getByTestId("guest-create-nickname").fill("界面测试甲");
   await page.getByTestId("guest-create-members").fill("界面测试乙\n界面测试丙");
   await page.getByTestId("guest-create-submit").click();
-  await page.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+  await page.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
   check(
     h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM email_members").get().n,
     1,
@@ -463,7 +521,10 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page.getByTestId("board-refresh-notice").waitFor();
   check(
-    await page.getByTestId("board-refresh-notice").getByRole("button").getAttribute("aria-label"),
+    await page
+      .getByTestId("board-refresh-notice")
+      .getByRole("button")
+      .getAttribute("aria-label"),
     "当前离线，请联网后重试，重试刷新安排",
     "offline guard explains the preserved board instead of silently skipping refresh",
   );
@@ -558,7 +619,7 @@ try {
     saved,
   );
   await page.reload();
-  await page.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+  await page.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
   check(
     (await page.getByText("邮箱界面 QA", { exact: true }).count()) > 0,
     true,
@@ -576,7 +637,7 @@ try {
     "page reload reuses the active credential",
   );
   // Joining a new room is above the remembered-room list, with no dead top space.
-  await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page.getByRole("button", { name: /^设置(?:，.*)?$/ }).click();
   await page.getByTestId("open-preferences").click();
   await page.getByTestId("guest-change-dorm").click();
   await page
@@ -622,13 +683,13 @@ try {
   other.on("pageerror", (e) => errors.push(e.message));
   await other.goto(url);
   await login(other, "ui-qa@example.invalid", false, true);
-  await other.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+  await other.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
   check(
     (await other.getByText("邮箱界面 QA", { exact: true }).count()) > 0,
     true,
     "another device restores linked dorm without name claim",
   );
-  await other.getByRole("button", { name: "更多操作", exact: true }).click();
+  await other.getByRole("button", { name: /^设置(?:，.*)?$/ }).click();
   await other.getByTestId("open-preferences").click();
   await other.getByTestId("open-email-account").click();
   await other.getByText("ui-qa@example.invalid", { exact: true }).waitFor();
@@ -663,7 +724,7 @@ try {
   await other.getByRole("button", { name: "退出登录", exact: true }).click();
   await other.getByLabel("邮箱", { exact: true }).waitFor();
   check(
-    await other.getByRole("button", { name: "更多操作", exact: true }).count(),
+    await other.getByRole("button", { name: /^设置(?:，.*)?$/ }).count(),
     0,
     "logout clears current identity view",
   );
@@ -738,8 +799,16 @@ try {
     .waitFor();
   await other.getByRole("button", { name: "关闭详情", exact: true }).click();
   await other.getByTestId("open-tools").waitFor();
-  check(await other.getByTestId("open-tools").count(), 1, "closing optional email keeps guest identity and source board");
-  check(await other.getByTestId("entry-back").count(), 0, "board has no entry back button");
+  check(
+    await other.getByTestId("open-tools").count(),
+    1,
+    "closing optional email keeps guest identity and source board",
+  );
+  check(
+    await other.getByTestId("entry-back").count(),
+    0,
+    "board has no entry back button",
+  );
   await other.getByRole("button", { name: "退出游客", exact: true }).click();
   await other.reload();
   await other.getByLabel("邮箱", { exact: true }).waitFor();
@@ -763,9 +832,7 @@ try {
   await newcomer.getByTestId("guest-member-name").fill("界面测试乙");
   await newcomer.getByTestId("guest-name-submit").click();
   await newcomer.getByTestId("marker-confirm").click();
-  await newcomer
-    .getByRole("button", { name: "更多操作", exact: true })
-    .waitFor();
+  await newcomer.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
   const joinedMember = h.db.sqlite
     .prepare(
       "SELECT em.creator_verified FROM email_members em JOIN email_accounts e ON e.id=em.account_id WHERE e.email='new-member@example.invalid'",
@@ -779,7 +846,7 @@ try {
   const memberSibling = await newMemberContext.newPage();
   await memberSibling.goto(url);
   await memberSibling.getByTestId("open-tools").waitFor();
-  await newcomer.getByRole("button", { name: "更多操作", exact: true }).click();
+  await newcomer.getByRole("button", { name: /^设置(?:，.*)?$/ }).click();
   await newcomer.getByTestId("open-preferences").click();
   await newcomer.getByTestId("open-email-account").click();
   await newcomer.getByTestId("email-unbind").waitFor();
@@ -941,12 +1008,12 @@ try {
   await old.goto(url);
   await old.getByLabel("邮箱", { exact: true }).waitFor();
   check(
-    await old.getByRole("button", { name: "更多操作", exact: true }).count(),
+    await old.getByRole("button", { name: /^设置(?:，.*)?$/ }).count(),
     0,
     "saved old credentials cannot bypass the email gate",
   );
   await login(old, "legacy-ui@example.invalid", true);
-  await old.getByRole("button", { name: "更多操作", exact: true }).waitFor();
+  await old.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
   check(
     h.db.sqlite
       .prepare("SELECT creator_verified FROM email_members WHERE user_id=?")

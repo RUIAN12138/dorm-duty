@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import DormCompanion from "./DormCompanion.vue";
+import { naturalGaze } from "../interaction/companionTap";
 import { companionEnabled } from "../interaction/companion";
 const point = ref({ x: 0, y: 0.1 }),
   privateInput = ref(false),
@@ -21,24 +22,25 @@ function aim(x: number, y: number) {
     ?.querySelector(".dorm-companion")
     ?.getBoundingClientRect();
   if (!box) return;
-  point.value = {
-    x: Math.max(
-      -1,
-      Math.min(1, (x - box.left - box.width / 2) / (box.width * 1.4)),
-    ),
-    y: Math.max(
-      -1,
-      Math.min(1, (y - box.top - box.height / 2) / (box.height * 1.4)),
-    ),
-  };
+  point.value = naturalGaze(x, y, box, {
+    width: innerWidth,
+    height: innerHeight,
+  });
 }
+let gazeFrame = 0;
+let measureContext: CanvasRenderingContext2D | null = null;
 function caret() {
+  cancelAnimationFrame(gazeFrame);
+  gazeFrame = requestAnimationFrame(measureCaret);
+}
+function measureCaret() {
   const input = focusField;
   if (!input || privateInput.value) return;
   const box = input.getBoundingClientRect(),
     style = getComputedStyle(input);
-  const canvas = document.createElement("canvas"),
-    ctx = canvas.getContext("2d");
+  const ctx = (measureContext ||= document
+    .createElement("canvas")
+    .getContext("2d"));
   if (ctx) ctx.font = style.font;
   // Measure only non-secret text, locally. No field text leaves this component.
   const width =
@@ -68,7 +70,11 @@ function focus(event: Event) {
 }
 function pointer(event: PointerEvent) {
   if (privateInput.value) return;
-  aim(event.clientX, event.clientY);
+  const { clientX, clientY } = event;
+  cancelAnimationFrame(gazeFrame);
+  gazeFrame = requestAnimationFrame(() => {
+    if (!privateInput.value) aim(clientX, clientY);
+  });
 }
 function blur() {
   queueMicrotask(() => {
@@ -97,6 +103,7 @@ onMounted(() => {
     focus({ target: document.activeElement } as unknown as Event);
 });
 onBeforeUnmount(() => {
+  cancelAnimationFrame(gazeFrame);
   clearInterval(privacyTimer);
   clearTimeout(peekTimer);
   document.removeEventListener("focusin", focus);
@@ -116,15 +123,13 @@ onBeforeUnmount(() => {
     data-companion-login
   >
     <DormCompanion
-      :size="176"
+      :size="112"
       :mood="privateInput ? (peek ? '14' : '00') : '03'"
       :gaze-point="point"
-      :tips="true"
+      :tips="false"
       :muted="privateInput"
       scene="login"
-    /><span class="companion-login-caption">{{
-      privateInput ? "我看别处，你慢慢输入。" : "轮到 · 一起照顾我们的宿舍"
-    }}</span>
+    />
   </div>
 </template>
 <style scoped>
@@ -133,15 +138,11 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 0;
   margin: clamp(12px, 4dvh, 40px) auto 28px;
   min-height: 210px;
 }
-.companion-login-caption {
-  font-size: 11px;
-  letter-spacing: 1px;
-  color: #999;
-}
+
 .companion-login :deep(.companion-bubble) {
   left: 50%;
   transform: translateX(-50%);

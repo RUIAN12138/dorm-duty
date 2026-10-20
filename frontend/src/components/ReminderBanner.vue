@@ -1,65 +1,296 @@
 <script setup lang="ts">
 import { companionEnabled } from "../interaction/companion";
 import DormCompanion from "./DormCompanion.vue";
-import { onMounted, onBeforeUnmount, ref } from "vue";
+import { onMounted, onBeforeUnmount, ref, computed } from "vue";
 import type { ChoreReminder } from "../api/chores";
 import { createVelocityTracker } from "../interaction/gestures";
 import { motionAllowed } from "../interaction/motion";
+import {
+  bannerEnterFrames,
+  bannerLeaveFrames,
+  bannerFlightTiming,
+} from "../interaction/bannerFlight";
+import { pressStep } from "../interaction/pressDynamics";
+import { bannerSwipe, dismissBanner } from "../interaction/bannerMotion";
 const props = defineProps<{ note: ChoreReminder | null }>();
 const emit = defineEmits<{ dismiss: []; open: []; settled: [id?: number] }>();
+const offsetX = ref(0);
+let exitDirection = 0,
+  returnFrame = 0,
+  returnLast = 0,
+  returnVX = 0,
+  returnVY = 0;
 const offset = ref(0),
-  dragging = ref(false);
+  dragging = ref(false),
+  hold = ref(1),
+  holdActive = ref(false);
+let holdFrame = 0,
+  holdLast = 0,
+  holdVelocity = 0,
+  holdTarget = 1;
+function holdTick(now: number) {
+  holdFrame = 0;
+  const next = pressStep(
+    hold.value,
+    holdVelocity,
+    holdTarget,
+    (now - holdLast) / 1000,
+  );
+  holdLast = now;
+  hold.value = next.position;
+  holdVelocity = next.velocity;
+  if (
+    Math.abs(hold.value - holdTarget) > 0.0002 ||
+    Math.abs(holdVelocity) > 0.003
+  )
+    holdFrame = requestAnimationFrame(holdTick);
+  else {
+    hold.value = holdTarget;
+    holdVelocity = 0;
+    if (holdTarget === 1) holdActive.value = false;
+  }
+}
+function holdTo(target: number) {
+  holdTarget = target;
+  if (!motionAllowed()) {
+    hold.value = 1;
+    return;
+  }
+  if (target < 1) {
+    holdActive.value = true;
+    hold.value = Math.min(hold.value, 0.982);
+    holdVelocity = Math.min(holdVelocity, -0.35);
+  }
+  if (!holdFrame) {
+    holdLast = performance.now();
+    holdFrame = requestAnimationFrame(holdTick);
+  }
+}
+function stopHold() {
+  cancelAnimationFrame(holdFrame);
+  holdFrame = 0;
+  holdVelocity = 0;
+}
+
+const rubber = (value: number, limit = 90) =>
+  value / (1 + Math.abs(value) / limit);
+function stopReturn() {
+  cancelAnimationFrame(returnFrame);
+  returnFrame = 0;
+}
+function returnTick(now: number) {
+  returnFrame = 0;
+  const dt = Math.min(0.032, (now - returnLast) / 1000);
+  returnLast = now;
+  let remaining = dt;
+  while (remaining > 0) {
+    const h = Math.min(remaining, 1 / 240);
+    returnVX += (-offsetX.value * 280 - returnVX * 25) * h;
+    returnVY += (-offset.value * 280 - returnVY * 25) * h;
+    offsetX.value += returnVX * h;
+    offset.value += returnVY * h;
+    remaining -= h;
+  }
+  if (
+    Math.hypot(offsetX.value, offset.value) > 0.02 ||
+    Math.hypot(returnVX, returnVY) > 0.1
+  )
+    returnFrame = requestAnimationFrame(returnTick);
+  else {
+    offsetX.value = 0;
+    offset.value = 0;
+    returnVX = returnVY = 0;
+  }
+}
+function returnHome() {
+  stopReturn();
+  if (!motionAllowed()) {
+    offset.value = offsetX.value = 0;
+    return;
+  }
+  returnLast = performance.now();
+  returnVX = returnVY = 0;
+  returnFrame = requestAnimationFrame(returnTick);
+}
+const swipePose = computed(() => {
+  const x = rubber(offsetX.value, 160),
+    y = offset.value < 0 ? offset.value * 0.42 : rubber(offset.value, 75);
+  const pose = bannerSwipe(Math.max(0, -offset.value));
+  const stretchX = Math.min(0.16, Math.abs(x) * 0.002),
+    stretchY = Math.min(0.22, Math.abs(y) * 0.004);
+  return {
+    transform: `translate3d(${x}px,${y}px,0) rotate(${x * 0.035}deg) scale(${pose.scale * (1 + stretchX - stretchY * 0.4) * (1 - (1 - hold.value) * 0.45)},${pose.scale * (1 + stretchY - stretchX * 0.4) * hold.value})`,
+    opacity: pose.opacity,
+  };
+});
+const flights = new Map<
+  HTMLElement,
+  { animation: Animation; done: () => void }
+>();
+function stopMotion(element: Element) {
+  const el = element as HTMLElement,
+    item = flights.get(el);
+  if (!item) return;
+  flights.delete(el);
+  item.animation.cancel();
+  item.done();
+}
+function freezeMotion(element: Element) {
+  const el = element as HTMLElement;
+  if (!flights.has(el)) return;
+  const pose = getComputedStyle(el).transform;
+  stopMotion(el);
+  el.style.transform = pose;
+  el.style.opacity = "1";
+}
+function animateMotion(
+  el: HTMLElement,
+  frames: Keyframe[],
+  duration: number,
+  done: () => void,
+  easing = "cubic-bezier(.22,1,.36,1)",
+) {
+  stopMotion(el);
+  if (!motionAllowed()) {
+    el.style.transform = "";
+    el.style.opacity = "";
+    done();
+    return;
+  }
+  const animation = el.animate(frames, { duration, easing, fill: "both" });
+  flights.set(el, { animation, done });
+  const finish = () => {
+    if (flights.get(el)?.animation !== animation) return;
+    flights.delete(el);
+    el.style.transform = "";
+    el.style.opacity = "";
+    animation.cancel();
+    done();
+  };
+  animation.finished.then(finish, finish);
+}
+function beforeEnter(element: Element) {
+  cancelGesture();
+  const el = element as HTMLElement;
+  el.classList.remove("is-leaving");
+  el.style.transform = "";
+  el.style.opacity = "1";
+}
+function enter(element: Element, done: () => void) {
+  const el = element as HTMLElement;
+  animateMotion(
+    el,
+    bannerEnterFrames(el.offsetHeight),
+    bannerFlightTiming.enter,
+    done,
+    "linear",
+  );
+}
+function leave(element: Element, done: () => void) {
+  const el = element as HTMLElement;
+  const pose = getComputedStyle(el);
+  el.classList.add("is-leaving");
+  stopHold();
+  animateMotion(
+    el,
+    bannerLeaveFrames(
+      el.offsetHeight,
+      pose.transform,
+      Number(pose.opacity),
+      exitDirection,
+    ),
+    bannerFlightTiming.leave,
+    done,
+    "linear",
+  );
+}
+
 let gesture: {
   id: number;
   x: number;
   y: number;
   element: HTMLElement;
+  velocityX: ReturnType<typeof createVelocityTracker>;
   velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 let suppressUntil = 0;
 function down(event: PointerEvent) {
-  if (
-    !event.isPrimary ||
-    event.button !== 0 ||
-    gesture ||
-    (event.target as Element).closest("[data-banner-close]")
-  )
-    return;
+  if (!event.isPrimary || event.button !== 0 || gesture) return;
+  const element = event.currentTarget as HTMLElement;
+  if (element.parentElement?.classList.contains("is-leaving")) return;
+  if (element.parentElement) freezeMotion(element.parentElement);
+  stopReturn();
+  exitDirection = 0;
   gesture = {
     id: event.pointerId,
-    x: event.clientX,
-    y: event.clientY,
-    element: event.currentTarget as HTMLElement,
+    x: event.clientX - offsetX.value,
+    y: event.clientY - offset.value,
+    element,
+    velocityX: createVelocityTracker(event.clientX, performance.now()),
     velocity: createVelocityTracker(event.clientY, performance.now()),
   };
+  holdTo(0.94);
+  element.setPointerCapture(event.pointerId);
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
   const y = event.clientY - gesture.y,
     x = event.clientX - gesture.x;
-  if (!dragging.value && y < -8 && Math.abs(y) > Math.abs(x) * 1.2) {
-    dragging.value = true;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  }
-  if (!dragging.value) return;
   gesture.velocity.add(event.clientY, performance.now());
-  offset.value = Math.min(0, y);
+  gesture.velocityX.add(event.clientX, performance.now());
+  if (!dragging.value && Math.hypot(x, y) > 3) dragging.value = true;
+  if (!dragging.value) return;
+  if (event.cancelable) event.preventDefault();
+  offset.value = y;
+  offsetX.value = x;
 }
 function finish(event: PointerEvent, cancelled = false) {
   if (!gesture || gesture.id !== event.pointerId) return;
+  if (
+    event.type === "lostpointercapture" &&
+    (event.target !== gesture.element ||
+      gesture.element.hasPointerCapture(event.pointerId))
+  )
+    return;
+  const current = gesture;
   const close =
     !cancelled &&
     dragging.value &&
-    (offset.value < -45 ||
-      (offset.value < -16 && gesture.velocity.read(performance.now()) < -0.5));
-  if (dragging.value) suppressUntil = performance.now() + 500;
+    dismissBanner(-offset.value, current.velocity.read(performance.now()));
+  if (dragging.value) suppressUntil = performance.now() + 400;
   gesture = null;
   dragging.value = false;
-  const el = event.currentTarget as HTMLElement;
-  if (el.hasPointerCapture(event.pointerId))
-    el.releasePointerCapture(event.pointerId);
-  if (close) emit("dismiss");
-  else offset.value = 0;
+  if (current.element.hasPointerCapture(event.pointerId))
+    current.element.releasePointerCapture(event.pointerId);
+  if (close) {
+    const vx = current.velocityX.read(performance.now()),
+      vy = current.velocity.read(performance.now());
+    exitDirection = Math.max(
+      -2,
+      Math.min(
+        2,
+        Math.abs(vy) > 0.15
+          ? vx / Math.max(0.15, -vy)
+          : offsetX.value / Math.max(12, -offset.value),
+      ),
+    );
+    stopHold();
+    emit("dismiss");
+  } else {
+    holdTo(1);
+    returnHome();
+    const el = current.element.parentElement;
+    if (el)
+      animateMotion(
+        el,
+        [
+          { transform: getComputedStyle(el).transform, opacity: 1 },
+          { transform: "translate3d(0,0,0) scale(1)", opacity: 1 },
+        ],
+        160,
+        () => {},
+      );
+  }
 }
 function open() {
   if (performance.now() >= suppressUntil) emit("open");
@@ -70,6 +301,13 @@ function afterLeave(element?: Element) {
   emit("settled", id ? Number(id) : undefined);
 }
 function cancelGesture() {
+  stopReturn();
+  offsetX.value = 0;
+  exitDirection = 0;
+  stopHold();
+  holdActive.value = false;
+  hold.value = 1;
+  holdTarget = 1;
   const current = gesture;
   gesture = null;
   dragging.value = false;
@@ -78,7 +316,14 @@ function cancelGesture() {
     current.element.releasePointerCapture(current.id);
 }
 function inactive() {
-  if (!motionAllowed()) cancelGesture();
+  if (!motionAllowed()) {
+    cancelGesture();
+    for (const el of [...flights.keys()]) {
+      stopMotion(el);
+      el.style.transform = "";
+      el.style.opacity = "";
+    }
+  }
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 onMounted(() => {
@@ -89,6 +334,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   cancelGesture();
+  for (const el of [...flights.keys()]) stopMotion(el);
   window.removeEventListener("blur", cancelGesture);
   window.removeEventListener("ui-motion-change", inactive);
   document.removeEventListener("visibilitychange", inactive);
@@ -99,8 +345,12 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div class="reminder-banner-position">
       <Transition
-        name="reminder-banner"
-        @before-enter="cancelGesture"
+        :css="false"
+        @before-enter="beforeEnter"
+        @enter="enter"
+        @leave="leave"
+        @enter-cancelled="freezeMotion"
+        @leave-cancelled="stopMotion"
         @after-leave="afterLeave"
       >
         <section
@@ -116,8 +366,8 @@ onBeforeUnmount(() => {
         >
           <div
             class="reminder-banner-card"
-            :class="{ 'is-dragging': dragging }"
-            :style="{ transform: `translateY(${offset}px)` }"
+            :class="{ 'is-dragging': dragging, 'is-held': holdActive }"
+            :style="swipePose"
             @pointerdown="down"
             @pointermove="move"
             @pointerup="finish($event)"
@@ -129,7 +379,7 @@ onBeforeUnmount(() => {
               v-if="companionEnabled"
               mood="13"
               :interactive="false"
-              :size="36"
+              :size="32"
             />
             <button
               type="button"
@@ -140,21 +390,9 @@ onBeforeUnmount(() => {
                 >{{ note.sender_name || "室友"
                 }}{{ note.source === "note" ? "给你留言" : "提醒你" }}</span
               >
-              <strong>{{ note.task_name || "完成宿舍任务" }}</strong>
-              <span
-                v-if="note.body && note.body !== note.task_name"
-                class="reminder-banner-body"
-                >{{ note.body }}</span
-              >
-            </button>
-            <button
-              type="button"
-              class="reminder-banner-close"
-              data-banner-close
-              aria-label="收起提醒"
-              @click.stop="emit('dismiss')"
-            >
-              ×
+              <strong>{{
+                note.body || note.task_name || "完成宿舍任务"
+              }}</strong>
             </button>
           </div>
         </section>
@@ -167,105 +405,113 @@ onBeforeUnmount(() => {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 14px);
   left: 50%;
-  width: min(350px, calc(100% - 32px));
+  width: min(342px, calc(100% - 32px));
   transform: translateX(-50%);
   z-index: 2900;
   pointer-events: none;
 }
 .reminder-banner-card {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 8px 8px 8px 10px;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(12px) saturate(130%);
-  -webkit-backdrop-filter: blur(12px) saturate(130%);
-  border: 1px solid #ffffffb3;
-  border-radius: 25px;
-  box-shadow: 0 6px 24px #00000012;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  box-sizing: border-box;
+  height: 60px;
+  position: relative;
+  isolation: isolate;
+  background: var(--glass-surface);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation));
+  border: 1px solid var(--glass-border);
+  border-radius: 32px;
+  box-shadow: var(--glass-shadow);
   pointer-events: auto;
-  touch-action: pan-x;
-  transition: transform 200ms var(--ui-ease-out);
+  touch-action: none;
+  transform-origin: 50% 0;
+  transition: none;
+  will-change: transform, opacity;
 }
-.reminder-banner-card.is-dragging {
+.reminder-banner-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.reminder-banner-card.is-dragging,
+.reminder-banner-card.is-held {
   transition: none;
 }
 .reminder-banner-main {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   flex: 1;
   text-align: left;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   background: none;
   border: 0;
-  padding: 6px 0;
+  padding: 0;
   font: inherit;
 }
 .reminder-banner-caption {
   font-size: 11px;
-  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--app-tone-h666, #666);
 }
 .reminder-banner-main strong {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.reminder-banner-body {
-  font-size: 12px;
-  color: #555;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
 }
-.reminder-banner-close {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border: 0;
-  background: none;
-  color: #777;
-  font: inherit;
-  font-size: 25px;
+
+.reminder-banner-motion {
+  transform-origin: 50% 0;
+  isolation: isolate;
 }
-.reminder-banner-enter-active,
-.reminder-banner-leave-active {
-  transition:
-    transform 250ms var(--ui-ease-soft),
-    opacity 200ms ease;
-}
-.reminder-banner-enter-from,
-.reminder-banner-leave-to {
-  transform: translateY(calc(-100% - env(safe-area-inset-top) - 30px));
-  opacity: 0;
-}
-.reminder-banner-leave-active .reminder-banner-card {
+.reminder-banner-motion.is-leaving .reminder-banner-card {
   pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .reminder-banner-card,
-  .reminder-banner-enter-active,
-  .reminder-banner-leave-active {
+  .reminder-banner-card {
     transition: none;
+    animation: none;
   }
 }
 </style>
 
 <style scoped>
-@supports not (backdrop-filter: blur(1px)) {
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   .reminder-banner-card {
-    background: #fffffff5;
+    background: var(--app-tone-hfffffff5, #fffffff5);
   }
 }
 @media (prefers-reduced-transparency: reduce) {
   .reminder-banner-card {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: #fff;
-    border-color: #eee;
+    background: var(--app-tone-hfff, #fff);
+    border-color: var(--app-tone-heee, #eee);
+  }
+  .reminder-banner-card::after {
+    display: none;
   }
 }
 </style>

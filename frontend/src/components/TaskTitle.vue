@@ -1,41 +1,66 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { useAttrs } from "vue";
 import { motionAllowed } from "../interaction/motion";
-const props = withDefaults(
-  defineProps<{ value: string | number; animated?: boolean }>(),
-  { animated: true },
+defineOptions({ inheritAttrs: false });
+withDefaults(
+  defineProps<{
+    value: string | number;
+    animated?: boolean;
+    direction?: number;
+  }>(),
+  { animated: true, direction: 1 },
 );
-const element = ref<HTMLElement>();
-let animation: Animation | undefined;
-watch(
-  () => props.value,
-  () => {
-    const el = element.value;
-    if (!el) return;
-    const computed = getComputedStyle(el);
-    const opacity = animation ? Math.max(0.72, Number(computed.opacity)) : 0.72;
-    const transform = animation ? computed.transform : "translateY(3px)";
-    animation?.cancel();
-    animation = undefined;
-    if (!props.animated || !motionAllowed() || document.hidden) return;
-    // The latest label is rendered immediately. Keep it readable even if another
-    // selection interrupts before the previous transition has finished.
-    animation = el.animate(
-      [
-        { opacity, transform },
-        { opacity: 1, transform: "translateY(0px)" },
-      ],
-      { duration: 140, easing: "cubic-bezier(.22,1,.36,1)" },
-    );
-    const current = animation;
-    current.onfinish = () => {
-      if (animation === current) animation = undefined;
-    };
-  },
-  { flush: "post" },
-);
-onBeforeUnmount(() => animation?.cancel());
+const attrs = useAttrs();
+function leaving(el: Element) {
+  el.setAttribute("inert", "");
+  el.setAttribute("aria-hidden", "true");
+  el.removeAttribute("id");
+}
 </script>
 <template>
-  <h2 ref="element"><slot /></h2>
+  <Transition
+    :name="direction < 0 ? 'task-name-prev' : 'task-name-next'"
+    :css="animated && motionAllowed()"
+    @before-leave="leaving"
+    ><h2 :key="value" v-bind="attrs"><slot /></h2
+  ></Transition>
 </template>
+<style scoped>
+.task-name-next-enter-active,
+.task-name-prev-enter-active {
+  transition:
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease;
+}
+.task-name-next-leave-active,
+.task-name-prev-leave-active {
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 150ms ease;
+  pointer-events: none;
+}
+.task-name-next-enter-from {
+  transform: translateX(48px);
+  opacity: 0;
+}
+.task-name-next-leave-to {
+  transform: translateX(-36px);
+  opacity: 0;
+}
+.task-name-prev-enter-from {
+  transform: translateX(-48px);
+  opacity: 0;
+}
+.task-name-prev-leave-to {
+  transform: translateX(36px);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-name-next-enter-active,
+  .task-name-prev-enter-active,
+  .task-name-next-leave-active,
+  .task-name-prev-leave-active {
+    transition: none;
+  }
+}
+</style>

@@ -68,7 +68,7 @@ onBeforeUnmount(() => removeBack?.());
   height: 36px;
   border: 0;
   border-radius: 50%;
-  color: #888;
+  color: var(--app-tone-h888, #888);
   background: transparent;
   cursor: pointer;
   vertical-align: middle;
@@ -103,7 +103,7 @@ onBeforeUnmount(() => removeBack?.());
   border: 1px solid rgb(255 255 255 / 90%);
   border-radius: 28px;
   background: var(--ui-surface);
-  color: #222;
+  color: var(--app-tone-h222, #222);
   box-shadow:
     0 20px 70px #00000014,
     0 2px 8px #00000005;
@@ -128,7 +128,7 @@ onBeforeUnmount(() => removeBack?.());
   margin: 0;
   font-size: 16px;
   line-height: 1.65;
-  color: #666;
+  color: var(--app-tone-h666, #666);
 }
 .hint-confirm {
   display: block;
@@ -138,8 +138,8 @@ onBeforeUnmount(() => removeBack?.());
   margin-top: 24px;
   border: 0;
   border-radius: 16px;
-  color: #fff;
-  background: #111;
+  color: var(--app-tone-hfff, #fff);
+  background: var(--app-tone-h111, #111);
   font: inherit;
   font-size: 16px;
   font-weight: 500;
@@ -147,7 +147,7 @@ onBeforeUnmount(() => removeBack?.());
 }
 .hint-trigger:focus-visible,
 .hint-confirm:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--app-tone-h111, #111);
   outline-offset: 3px;
 }
 .hint-confirm:active {

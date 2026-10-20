@@ -78,7 +78,7 @@ const transition = computed(() =>
   border: 0;
   border-radius: 16px;
   background: transparent;
-  color: #111;
+  color: var(--app-tone-h111, #111);
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -91,7 +91,7 @@ const transition = computed(() =>
   flex-shrink: 0;
   font-size: 23px;
   border-radius: 12px;
-  background: #f1f1f1;
+  background: var(--app-tone-hf1f1f1, #f1f1f1);
 }
 .action-label {
   font-size: 16px;
@@ -100,10 +100,10 @@ const transition = computed(() =>
 }
 .action-arrow {
   font-size: 15px;
-  color: #999;
+  color: var(--app-tone-h999, #999);
 }
 .action-item:active {
-  background: #efefef;
+  background: var(--app-tone-hefefef, #efefef);
 }
 .action-item:disabled {
   opacity: 0.4;
@@ -115,7 +115,7 @@ const transition = computed(() =>
   justify-content: center;
   min-height: 106px;
   gap: 11px;
-  background: #f6f6f6;
+  background: var(--app-tone-hf6f6f6, #f6f6f6);
   text-align: center;
   border-radius: 22px;
   padding: 16px 10px;
@@ -135,8 +135,8 @@ const transition = computed(() =>
   line-height: 21px;
   border-radius: 11px;
   text-align: center;
-  background: #111;
-  color: #fff;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
   font-size: 12px;
 }
 .tile .action-badge {
@@ -156,7 +156,7 @@ const transition = computed(() =>
   }
   .action-item:active .action-arrow {
     transform: translateX(3px);
-    color: #111;
+    color: var(--app-tone-h111, #111);
   }
   .action-icon {
     transition: transform var(--ui-page-time) var(--ui-ease-out);
@@ -168,7 +168,7 @@ const transition = computed(() =>
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .action-item:hover .action-arrow {
     transform: translateX(3px);
-    color: #111;
+    color: var(--app-tone-h111, #111);
   }
 }
 </style>

@@ -1,0 +1,32 @@
+/* Neutral glass: colour comes from refracting covered content, never a
+   pre-painted rainbow. These CSS layers are also the no-WebGL fallback. */
+:root {
+  --glass-surface: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(154, 166, 184, 0.24);
+  --glass-shadow:
+    0 7px 24px #24334c14, inset 0 1px 0 #ffffffb3, inset 0 -1px 0 #7c8b9f24;
+  --glass-rim: linear-gradient(
+    118deg,
+    #ffffffd9 2%,
+    #ffffff33 28%,
+    #ffffff08 50%,
+    #73829730 76%,
+    #ffffff8c 98%
+  );
+  --glass-blur: 12px;
+  --glass-saturation: 135%;
+}
+:root[data-theme="dark"] {
+  --glass-surface: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(204, 216, 235, 0.18);
+  --glass-shadow:
+    0 7px 24px #00000030, inset 0 1px 0 #ffffff45, inset 0 -1px 0 #00000038;
+  --glass-rim: linear-gradient(
+    118deg,
+    #ffffff80 2%,
+    #ffffff18 28%,
+    #ffffff03 50%,
+    #00000030 76%,
+    #ffffff35 98%
+  );
+}

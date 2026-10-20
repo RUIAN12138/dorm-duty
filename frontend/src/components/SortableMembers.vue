@@ -151,7 +151,7 @@ watch(
 .sort-hint {
   margin: 0 0 12px;
   font-size: 14px;
-  color: #666;
+  color: var(--app-tone-h666, #666);
 }
 .sort-list {
   position: relative;
