@@ -1687,7 +1687,7 @@ onUnmounted(() => {
       </ElasticSheet>
       <ElasticSheet
         v-model="roundOpen"
-        :content-height="`min(90dvh, 820px, calc(min(224px, 27dvh) + 180px + ${Math.max(0, displayRound?.completions?.length || 0) * 66}px + env(safe-area-inset-bottom, 0px)))`"
+        :content-height="`min(75dvh, 820px, calc(min(224px, 27dvh) + 180px + ${Math.max(0, displayRound?.completions?.length || 0) * 66}px + env(safe-area-inset-bottom, 0px)))`"
         contained
         fixed-content
         motion="bottom"

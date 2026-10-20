@@ -348,7 +348,7 @@ svg {
   padding: 7px 8px;
   border: 1px solid var(--app-tone-he5e5e980, #e5e5e980);
   border-radius: 38px;
-  background: rgba(255, 255, 255, 0.075);
+  background: var(--glass-surface);
   -webkit-backdrop-filter: blur(8px) saturate(var(--glass-saturation));
   backdrop-filter: blur(8px) saturate(var(--glass-saturation));
   box-shadow: var(--glass-shadow);
@@ -378,15 +378,11 @@ svg {
   height: 54px;
   z-index: 1;
   border-radius: 29px;
-  background: rgba(255, 255, 255, 0.075);
+  background: var(--glass-lens-surface);
   border: 1px solid var(--glass-border);
   -webkit-backdrop-filter: blur(8px) saturate(125%);
   backdrop-filter: blur(8px) saturate(125%);
-  box-shadow:
-    inset 0 1px 0 #ffffffe0,
-    inset 1px 0 0 #ffffff65,
-    inset 0 -1px 1px #65708032,
-    0 2px 6px #35435b0c;
+  box-shadow: var(--glass-lens-shadow);
 }
 .nav-selection::after {
   content: "";

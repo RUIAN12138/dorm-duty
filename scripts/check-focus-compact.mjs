@@ -627,68 +627,55 @@ try {
     0,
     "list removes the top count strip",
   );
-  const seedLabel = `${Number(seedDate.slice(5, 7))}月${Number(seedDate.slice(8))}日`;
-  await page
-    .getByRole("button", { name: new RegExp(`^${seedLabel}，`) })
-    .click();
-  const listDetail = page.getByTestId("calendar-day-details");
-  await listDetail.waitFor();
+  const seedHeading=page.getByTestId(`record-group-${seedDate}`);
+  await seedHeading.click();
+  const seedStack=seedHeading.locator('..');
+  const listEntrance=await seedStack.locator('.record-stagger').evaluateAll(els=>els.slice(0,3).map(el=>({opacity:Number(getComputedStyle(el).opacity),x:new DOMMatrix(getComputedStyle(el).transform).m41,delay:parseFloat(getComputedStyle(el).transitionDelay)})));
+  check(listEntrance.some(r=>r.opacity<1&&r.x>0),true,'expanded list cards fade in from right to left');
+  check(listEntrance[2].delay>listEntrance[1].delay,true,'expanded list cards enter progressively');
   await page.waitForTimeout(600);
-  check(
-    await listDetail.locator(".record-stagger").count(),
-    7,
-    "date summary opens all seven historical records in its detail drawer",
-  );
-  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
-  await listDetail.waitFor({ state: "detached" });
-  const seen = new Set();
-  while (true) {
-    const dates = await page
-      .locator(".record-date")
-      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
-    for (const label of dates) {
-      await page.getByRole("button", { name: label, exact: true }).click();
-      const records = page.getByTestId("calendar-day-details");
-      await records.waitFor();
-      for (const id of await records
-        .locator(".record-row")
-        .evaluateAll((els) => els.map((el) => el.dataset.recordId)))
-        seen.add(id);
-      await page.getByRole("button", { name: "关闭详情", exact: true }).click();
-      await records.waitFor({ state: "detached" });
+  const expandedHeight=await seedStack.locator('.record-stack-body').evaluate(e=>e.getBoundingClientRect().height);
+  await seedHeading.click();
+  check(await seedStack.locator('.record-stack-body').evaluate((e,h)=>e.getBoundingClientRect().height>=h-1,expandedHeight),true,'collapse retains its scroll extent while cards are still visible');
+  const exits=await seedStack.locator('.record-reveal-leave-active').evaluateAll(els=>els.map(el=>Number.parseFloat(el.style.top)));
+  check(exits.length,7,'collapse keeps each card for its exit animation');
+  check(exits.every((y,i)=>Number.isFinite(y)&&(i===0||y>exits[i-1])),true,'collapsing cards preserve distinct old positions');
+  const foldingFrames = await seedStack.evaluate(async el => {
+    const frames=[],started=performance.now();
+    while(performance.now()-started<430){
+      await new Promise(requestAnimationFrame);
+      frames.push({rows:[...el.querySelectorAll('.record-stagger')].map(row=>{
+        const css=getComputedStyle(row),m=new DOMMatrix(css.transform);
+        return {opacity:Number(css.opacity),x:m.m41,y:m.m42};
+      }),depth:Number(getComputedStyle(el,'::after').opacity)});
     }
-    const next = page.getByRole("button", { name: "下一页记录", exact: true });
-    if (!(await next.count()) || !(await next.isEnabled())) break;
+    return frames;
+  });
+  check(foldingFrames.some(f=>f.rows.some(r=>r.opacity>.05&&r.opacity<.95&&r.x>1&&r.y< -1)),true,'collapse visibly fades and moves cards back towards the stack');
+  check(foldingFrames.some(f=>f.rows.length>2&&Math.abs(f.rows[0].opacity-f.rows[f.rows.length-1].opacity)>.1),true,'collapse uses a progressive exit instead of removing every card together');
+  check(foldingFrames.some(f=>f.depth>0&&f.depth<1),true,'closed stack depth fades into place instead of popping in');
+  check(await seedStack.locator('.record-stagger').count(),0,'collapse leaves no ghost cards');
+  check(await seedStack.locator('.record-stack-body').evaluate(e=>e.style.minHeight),'','collapse releases its temporary scroll reservation');
+  await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(50);await seedHeading.click();await page.waitForTimeout(600);
+  check(await seedStack.locator('.record-stagger').evaluateAll(els=>els.length===7&&els.every(e=>getComputedStyle(e).opacity==='1'&&!e.style.top)),true,'interrupted collapse reopens all cards at their natural positions');
+  await seedHeading.click();await seedStack.locator('.record-stagger').first().waitFor({state:'detached'});
+  check(await seedStack.locator('.record-stagger').count(),0,'repeated collapse does not leave stale cards');
+  const seen = new Set();
+  while(true){
+    for(const heading of await page.locator('.records-heading').all()){
+      if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+    }
+    await page.waitForTimeout(420);
+    for(const row of await page.locator('[data-testid^="calendar-list-record-"]').all())seen.add(await row.getAttribute('data-testid'));
+    const next=page.getByRole('button',{name:'下一页记录',exact:true});
+    if(!await next.count()||!await next.isEnabled())break;
     await next.click();
   }
-  check(
-    seen.size,
-    after.calendar.length,
-    "paginated dates retain every historical record in their detail drawers",
-  );
-  const previous = page.getByRole("button", {
-    name: "上一页记录",
-    exact: true,
-  });
-  while ((await previous.count()) && (await previous.isEnabled()))
-    await previous.click();
-  const recordLabel =
-    record.completed_date === after.today
-      ? "今天"
-      : `${Number(record.completed_date.slice(5, 7))}月${Number(record.completed_date.slice(8))}日`;
-  while (
-    !(await page
-      .getByRole("button", { name: new RegExp(`^${recordLabel}，`) })
-      .count())
-  )
-    await page.getByRole("button", { name: "下一页记录", exact: true }).click();
-  await page
-    .getByRole("button", { name: new RegExp(`^${recordLabel}，`) })
-    .click();
-  await page
-    .locator(`.record-row[data-record-id="${record.id}"]`)
-    .getByRole("button", { name: "修正小林的抬水记录", exact: true })
-    .click();
+  check(seen.size,after.calendar.length,'folded date groups retain every historical record');
+  const previous=page.getByRole('button',{name:'上一页记录',exact:true});
+  while(await previous.count()&&await previous.isEnabled())await previous.click();
+  for(const heading of await page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
+  await page.getByTestId(`calendar-list-record-${record.id}`).getByRole('button',{name:'修正小林的抬水记录',exact:true}).click();
   const edit = page.getByRole("dialog", { name: "修正记录", exact: true });
   await edit.waitFor();
   await edit.getByText("修正记录 · 1", { exact: true }).waitFor();

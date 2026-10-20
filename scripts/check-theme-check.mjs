@@ -11,7 +11,7 @@ globalThis.window={addEventListener:(key,fn)=>events.set(key,fn),removeEventList
 const theme=await import('data:text/javascript;base64,'+Buffer.from(output.outputFiles[0].text).toString('base64'));
 const dispose=theme.installTheme();assert.equal(theme.themeMode.value,'system');assert.equal(document.documentElement.dataset.theme,'dark');
 media.matches=false;systemListeners.forEach(fn=>fn());assert.equal(theme.darkTheme.value,false);
-theme.setThemeMode('dark');assert.equal(meta,'#16171b');assert.equal(saved.get('lundao-theme-mode-v2'),'dark');systemListeners.forEach(fn=>fn());assert.equal(theme.darkTheme.value,true);
+theme.setThemeMode('dark');assert.equal(meta,'#ffffff');assert.equal(saved.get('lundao-theme-mode-v2'),'dark');systemListeners.forEach(fn=>fn());assert.equal(theme.darkTheme.value,true);
 theme.setThemeMode('light');media.matches=true;systemListeners.forEach(fn=>fn());assert.equal(document.documentElement.dataset.theme,'light');assert.equal(document.documentElement.style.colorScheme,'light');
 theme.setThemeMode('system');assert.equal(theme.darkTheme.value,true);
 events.get('storage')({key:'other',newValue:'light'});assert.equal(theme.themeMode.value,'system');
@@ -19,12 +19,13 @@ events.get('storage')({key:'lundao-theme-mode-v2',newValue:'light'});assert.equa
 events.get('storage')({key:null,newValue:null});assert.equal(theme.themeMode.value,'system');assert.equal(theme.darkTheme.value,true);
 theme.setThemeMode('invalid');assert.equal(theme.themeMode.value,'system');dispose();assert.equal(systemListeners.size,0);assert.equal(events.size,0);
 saved.set('lundao-theme-mode-v2','light');const disposeAgain=theme.installTheme();assert.equal(theme.darkTheme.value,false);disposeAgain();
-// Verify the native transition path, fast retargeting, unsupported fallback and reduced motion.
-const animations=[];document.documentElement.animate=(frames,options)=>{animations.push({frames,options});};globalThis.innerWidth=390;globalThis.innerHeight=760;
-let skipped=0;document.startViewTransition=update=>{update();return {ready:Promise.resolve(),finished:Promise.resolve(),skipTransition:()=>skipped++};};
-theme.setThemeMode('dark',{x:350,y:40});theme.setThemeMode('light',{x:350,y:40});await Promise.resolve();assert.equal(skipped,1);assert.equal(document.documentElement.dataset.theme,'light');assert.equal(animations.length,1);assert.equal(animations[0].options.pseudoElement,'::view-transition-new(root)');assert.ok(animations[0].frames.clipPath[1].includes('350px 40px'));
-await Promise.resolve();delete document.startViewTransition;theme.setThemeMode('dark',{x:20,y:30});assert.equal(animations.at(-1).options.duration,180);
-const count=animations.length;globalThis.matchMedia=()=>({matches:true});theme.setThemeMode('light',{x:20,y:30});assert.equal(animations.length,count);assert.equal(theme.darkTheme.value,false);
+// Glass stays live across theme changes: never capture root/WebGL snapshots.
+const animations=[];let cancelled=0,snapshots=0;
+document.querySelector=selector=>selector==='meta[name="theme-color"]'?{setAttribute:(_,value)=>{meta=value;}}:{animate:(frames,options)=>{animations.push({frames,options});return{cancel:()=>cancelled++};}};
+document.startViewTransition=()=>{snapshots++;throw Error('root snapshot must not run');};
+theme.setThemeMode('dark',{x:350,y:40});theme.setThemeMode('light',{x:350,y:40});
+assert.equal(snapshots,0);assert.equal(cancelled,1);assert.equal(document.documentElement.dataset.theme,'light');assert.equal(animations.length,2);assert.equal(animations[0].options.duration,180);assert.equal(meta,'#ffffff');
+const count=animations.length;globalThis.matchMedia=()=>({matches:true});theme.setThemeMode('dark',{x:20,y:30});assert.equal(animations.length,count);assert.equal(theme.darkTheme.value,true);
 const css=await readFile('frontend/src/theme.css','utf8'),definitions=new Set([...css.matchAll(/(--app-tone-[\w-]+)\s*:/g)].map(m=>m[1]));
 async function check(path){for(const entry of await readdir(path,{withFileTypes:true})){const file=path+'/'+entry.name;if(entry.isDirectory())await check(file);else if(/\.(css|vue)$/.test(file))for(const m of (await readFile(file,'utf8')).matchAll(/var\((--app-tone-[\w-]+)/g))assert.ok(definitions.has(m[1]),file+' missing '+m[1]);}}
 await check('frontend/src');for(const file of ['frontend/src/views/GuestHome.vue','frontend/src/screen.css'])for(const m of (await readFile(file,'utf8')).matchAll(/var\((--app-tone-[\w-]+)/g))assert.ok(definitions.has(m[1]),file+' missing '+m[1]);

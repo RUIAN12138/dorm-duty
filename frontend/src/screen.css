@@ -44,6 +44,9 @@
   padding: 0;
   --hero-anchor: clamp(88px, 32cqh, 210px);
 }
+.app-stage .screen-surface .chore-personal {
+  --hero-anchor: clamp(112px, 37cqh, 270px);
+}
 .app-stage .screen-surface .chore-personal > .hero-caption {
   top: max(4px, calc(var(--hero-anchor) - 110px));
 }

@@ -41,7 +41,9 @@ let pressure = 0,
   lastPosition = props.position,
   velocity = 0;
 let parent: HTMLElement | null = null;
-let backdrop = [1, 1, 1];
+let backdrop = [1, 1, 1],
+  tint = [1, 1, 1, 0.1],
+  themeUntil = 0;
 const source = document.createElement("canvas");
 const nativeLabels = new Map<HTMLElement, NativeLabelBox>();
 function clearClips() {
@@ -68,12 +70,21 @@ function paintSource(width: number, height: number, dpr: number) {
   source.height = Math.round(height * dpr);
   // Resolve the translucent navigation against its actual page base once per
   // source refresh; the shader uses it for per-wavelength transmittance.
-  ctx.fillStyle = getComputedStyle(document.body).backgroundColor;
+  ctx.fillStyle = getComputedStyle(
+    document.querySelector(".app-stage") || document.documentElement,
+  ).backgroundColor;
   ctx.fillRect(0, 0, 1, 1);
   ctx.fillStyle = getComputedStyle(parent).backgroundColor;
   ctx.fillRect(0, 0, 1, 1);
   const pixel = ctx.getImageData(0, 0, 1, 1).data;
   backdrop = [pixel[0] / 255, pixel[1] / 255, pixel[2] / 255];
+  ctx.clearRect(0, 0, source.width, source.height);
+  ctx.fillStyle =
+    getComputedStyle(parent).getPropertyValue("--glass-lens-surface").trim() ||
+    "rgba(255,255,255,0.1)";
+  ctx.fillRect(0, 0, 1, 1);
+  const tintPixel = ctx.getImageData(0, 0, 1, 1).data;
+  tint = [...tintPixel].map((value) => value / 255);
   ctx.clearRect(0, 0, source.width, source.height);
   ctx.scale(source.width / width, source.height / height);
   const bounds = canvas.value!.getBoundingClientRect();
@@ -189,8 +200,10 @@ function draw(now: number) {
     );
     gl.viewport(0, 0, w, h);
     gl.useProgram(program);
+    if (now < themeUntil) dirty = true;
     if (dirty) paintSource(width, height, dpr);
     gl.uniform3f(uniforms.u_backdrop!, backdrop[0], backdrop[1], backdrop[2]);
+    gl.uniform4f(uniforms.u_tint!, tint[0], tint[1], tint[2], tint[3]);
     gl.uniform2f(uniforms.u_size!, width, height);
     gl.uniform4f(uniforms.u_lens!, lens.x, lens.y, lens.width, lens.height);
     gl.uniform1f(
@@ -209,13 +222,14 @@ function draw(now: number) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     ready(true);
     if (
-      animate &&
-      (props.moving ||
-        props.dragging ||
-        Math.abs(pressure - desired) > 0.001 ||
-        Math.abs(wobble) > 0.0002 ||
-        Math.abs(wobbleSpeed) > 0.002 ||
-        Math.abs(velocity) > 0.015)
+      now < themeUntil ||
+      (animate &&
+        (props.moving ||
+          props.dragging ||
+          Math.abs(pressure - desired) > 0.001 ||
+          Math.abs(wobble) > 0.0002 ||
+          Math.abs(wobbleSpeed) > 0.002 ||
+          Math.abs(velocity) > 0.015))
     )
       request();
   } catch {
@@ -266,6 +280,7 @@ function preference() {
   }
 }
 function themeChanged() {
+  themeUntil = motionAllowed() ? performance.now() + 220 : 0;
   dirty = true;
   request();
 }
@@ -312,6 +327,7 @@ function initialize() {
       alpha: true,
       antialias: false,
       premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
       powerPreference: "low-power",
     });
     if (!gl) return;
@@ -345,7 +361,14 @@ function initialize() {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.uniform1i(gl.getUniformLocation(program, "u_text"), 0);
-    for (const name of ["u_size", "u_lens", "u_energy", "u_time", "u_backdrop"])
+    for (const name of [
+      "u_size",
+      "u_lens",
+      "u_energy",
+      "u_time",
+      "u_backdrop",
+      "u_tint",
+    ])
       uniforms[name] = gl.getUniformLocation(program, name);
     dirty = true;
     request();

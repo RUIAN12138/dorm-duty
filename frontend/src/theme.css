@@ -159,14 +159,6 @@ html[data-theme="dark"] {
   background: #16171b;
   color: #ebebef;
 }
-html[data-theme="dark"] .stat-card[data-tone="warm"] {
-  background: #3b3022;
-  color: #ead0a1;
-}
-html[data-theme="dark"] .stat-card[data-tone="alert"] {
-  background: #40282a;
-  color: #f0b9b8;
-}
 html[data-theme="dark"] .stat-card[data-tone="empty"] {
   background: #25262c;
   color: #b0b1bc;
@@ -183,33 +175,4 @@ html[data-theme="dark"] .van-toast {
 html[data-theme="dark"] input::placeholder,
 html[data-theme="dark"] textarea::placeholder {
   color: #777984;
-}
-
-/* Only the incoming snapshot reveals; avoid additive/lightening snapshot blending. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-::view-transition-old(root) {
-  z-index: 1;
-}
-::view-transition-new(root) {
-  z-index: 2;
-  animation: theme-reveal-lifetime 320ms linear;
-}
-@keyframes theme-reveal-lifetime {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(root),
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0s !important;
-  }
 }

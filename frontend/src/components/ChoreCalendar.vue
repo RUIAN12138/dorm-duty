@@ -448,6 +448,7 @@ watch(
         ><ActivitySummary
           v-if="activity"
           :activity="activity"
+          :memory="memory.stats"
           :rounds="rounds || []"
           :categories="categories"
           :creator="creator"

@@ -71,6 +71,7 @@ const frontendStateScripts = [
   "scripts/check-companion-preview-check.mjs",
   "scripts/check-screen-gesture-check.mjs",
   "scripts/check-theme-check.mjs",
+  "scripts/check-stats-palette.mjs",
   "scripts/check-emotion-integration.mjs",
   "scripts/check-api-transport.mjs",
   "scripts/check-water-handoff-receipts.mjs",
