@@ -32,8 +32,8 @@ const tips: Record<CompanionScene, string[]> = {
     "点完成按钮，即可打卡。",
     "再点已完成，可撤销打卡。",
     "点圆环，查看本轮完成情况。",
-    "点右上角轮序，查看排班。",
-    "点右上角更多，可以查看消息。",
+    "点设置，查看轮序。",
+    "点设置，查看室友消息。",
   ],
   water: [
     "抬完水，点“我已抬水”。",
@@ -47,7 +47,7 @@ const tips: Record<CompanionScene, string[]> = {
     "切到统计，查看完成情况。",
   ],
   login: ["可以切换邮箱或账号登录。", "新用户可以切到注册。"],
-  general: ["在更多里调整提醒和球球。", "双击球球，可以与它互动。"],
+  general: ["在设置里调整提醒和球球。", "双击球球，可以与它互动。"],
 };
 const tipCursor: Partial<Record<CompanionScene, number>> = {};
 

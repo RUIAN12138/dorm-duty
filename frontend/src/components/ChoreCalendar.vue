@@ -78,18 +78,19 @@ const calendarRoot = ref<HTMLElement>(),
   roomHeight = ref(600);
 function fitViewport() {
   const parentHeight = calendarRoot.value?.parentElement?.clientHeight;
-  if (parentHeight) {
+  if (calendarRoot.value?.closest(".app-stage") && parentHeight) {
     roomHeight.value = parentHeight;
     return;
   }
   const top = calendarRoot.value?.getBoundingClientRect().top || 76;
-  const nav =
-    document.querySelector(".chore-bottom-nav")?.getBoundingClientRect()
-      .height || 67;
+  const viewportBottom = window.visualViewport?.height || window.innerHeight;
+  const navTop = document
+    .querySelector(".chore-bottom-nav")
+    ?.getBoundingClientRect().top;
   roomHeight.value = Math.max(
     280,
     Math.floor(
-      (window.visualViewport?.height || window.innerHeight) - top - nav - 12,
+      Math.min(viewportBottom, navTop ?? viewportBottom - 88) - top - 12,
     ),
   );
 }

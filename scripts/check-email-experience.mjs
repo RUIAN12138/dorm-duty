@@ -396,8 +396,7 @@ try {
     await p.getByLabel("验证码", { exact: true }).fill(code);
     await p.getByRole("button", { name: /验证并(进入|绑定)/ }).click();
     if (!gate) {
-      if (autoEntry)
-        await p.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
+      if (autoEntry) await p.getByTestId("open-tools").waitFor();
       else await p.getByRole("heading", { name: "先找到你的宿舍" }).waitFor();
     }
   }
@@ -437,7 +436,46 @@ try {
   await page.getByTestId("guest-create-nickname").fill("界面测试甲");
   await page.getByTestId("guest-create-members").fill("界面测试乙\n界面测试丙");
   await page.getByTestId("guest-create-submit").click();
-  await page.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
+  // The entry screen now has its own Settings button; wait for the actual
+  // signed-in board, not an unrelated control that was already visible.
+  await page.getByTestId("chore-board").waitFor();
+  await page.getByTestId("open-tools").waitFor();
+  await page.waitForFunction(() => {
+    const lens = document.querySelector(".liquid-nav-optics");
+    return (
+      !!document.querySelector(".nav-selection") ||
+      (lens && getComputedStyle(lens).opacity === "1")
+    );
+  });
+  check(
+    await page.locator(".chore-bottom-nav a").count(),
+    3,
+    "actual signed-in navigation keeps three accessible page links with optical or CSS rendering",
+  );
+  for (const [width, height] of [
+    [320, 568],
+    [390, 844],
+    [430, 932],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(100);
+    check(
+      await page.evaluate(() => {
+        const stage = document.querySelector(".app-stage"),
+          nav = document.querySelector(".chore-bottom-nav");
+        return (
+          stage &&
+          nav &&
+          stage.getBoundingClientRect().bottom <= innerHeight + 1 &&
+          document.documentElement.scrollWidth <= innerWidth &&
+          nav.getBoundingClientRect().bottom <= innerHeight + 1
+        );
+      }),
+      true,
+      `${width}x${height} real signed-in stage and navigation fit the viewport`,
+    );
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   check(
     h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM email_members").get().n,
     1,
@@ -619,7 +657,7 @@ try {
     saved,
   );
   await page.reload();
-  await page.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
+  await page.getByTestId("open-tools").waitFor();
   check(
     (await page.getByText("邮箱界面 QA", { exact: true }).count()) > 0,
     true,
@@ -637,7 +675,7 @@ try {
     "page reload reuses the active credential",
   );
   // Joining a new room is above the remembered-room list, with no dead top space.
-  await page.getByRole("button", { name: /^设置(?:，.*)?$/ }).click();
+  await page.getByTestId("open-tools").click();
   await page.getByTestId("open-preferences").click();
   await page.getByTestId("guest-change-dorm").click();
   await page
@@ -683,13 +721,13 @@ try {
   other.on("pageerror", (e) => errors.push(e.message));
   await other.goto(url);
   await login(other, "ui-qa@example.invalid", false, true);
-  await other.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
+  await other.getByTestId("open-tools").waitFor();
   check(
     (await other.getByText("邮箱界面 QA", { exact: true }).count()) > 0,
     true,
     "another device restores linked dorm without name claim",
   );
-  await other.getByRole("button", { name: /^设置(?:，.*)?$/ }).click();
+  await other.getByTestId("open-tools").click();
   await other.getByTestId("open-preferences").click();
   await other.getByTestId("open-email-account").click();
   await other.getByText("ui-qa@example.invalid", { exact: true }).waitFor();
@@ -724,7 +762,7 @@ try {
   await other.getByRole("button", { name: "退出登录", exact: true }).click();
   await other.getByLabel("邮箱", { exact: true }).waitFor();
   check(
-    await other.getByRole("button", { name: /^设置(?:，.*)?$/ }).count(),
+    await other.getByTestId("open-tools").count(),
     0,
     "logout clears current identity view",
   );
@@ -832,7 +870,7 @@ try {
   await newcomer.getByTestId("guest-member-name").fill("界面测试乙");
   await newcomer.getByTestId("guest-name-submit").click();
   await newcomer.getByTestId("marker-confirm").click();
-  await newcomer.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
+  await newcomer.getByTestId("open-tools").waitFor();
   const joinedMember = h.db.sqlite
     .prepare(
       "SELECT em.creator_verified FROM email_members em JOIN email_accounts e ON e.id=em.account_id WHERE e.email='new-member@example.invalid'",
@@ -846,7 +884,7 @@ try {
   const memberSibling = await newMemberContext.newPage();
   await memberSibling.goto(url);
   await memberSibling.getByTestId("open-tools").waitFor();
-  await newcomer.getByRole("button", { name: /^设置(?:，.*)?$/ }).click();
+  await newcomer.getByTestId("open-tools").click();
   await newcomer.getByTestId("open-preferences").click();
   await newcomer.getByTestId("open-email-account").click();
   await newcomer.getByTestId("email-unbind").waitFor();
@@ -1008,12 +1046,12 @@ try {
   await old.goto(url);
   await old.getByLabel("邮箱", { exact: true }).waitFor();
   check(
-    await old.getByRole("button", { name: /^设置(?:，.*)?$/ }).count(),
+    await old.getByTestId("open-tools").count(),
     0,
     "saved old credentials cannot bypass the email gate",
   );
   await login(old, "legacy-ui@example.invalid", true);
-  await old.getByRole("button", { name: /^设置(?:，.*)?$/ }).waitFor();
+  await old.getByTestId("open-tools").waitFor();
   check(
     h.db.sqlite
       .prepare("SELECT creator_verified FROM email_members WHERE user_id=?")

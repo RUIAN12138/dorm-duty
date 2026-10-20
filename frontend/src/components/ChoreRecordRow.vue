@@ -21,6 +21,7 @@ const time = (value: string) =>
 <template>
   <div
     class="record-row"
+    :data-record-id="record.id"
     :class="{ 'own-record': own }"
     :data-testid="
       testId?.startsWith('calendar-list-record-') ? testId : undefined

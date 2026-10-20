@@ -30,7 +30,7 @@ try {
   );
   await fs.writeFile(
     vue,
-    `<script setup lang="ts">import List from'./src/components/CompactRecordList.vue';const records=Array.from({length:8},(_,i)=>({id:i+1,key:'floor',name:'地板',assignee_id:i+1,assignee_name:'室友'+(i+1),marker_id:'pixel-01',completed_at:'2026-10-16T02:00:00Z',completed_date:i<6?'2026-10-16':i===6?'2026-10-15':'2026-10-14'}));</script><template><main style="width:100%;max-width:430px;height:700px;padding:20px;margin:auto;box-sizing:border-box"><List :records="records" today="2026-10-16" month="2026-10"/></main></template>`,
+    `<script setup lang="ts">import {ref} from 'vue';import Calendar from'./src/components/ChoreCalendar.vue';const month=ref('2026-10');const records=Array.from({length:16},(_,i)=>({id:i+1,key:'floor',name:'地板',assignee_id:i+1,assignee_name:'室友'+(i+1),marker_id:'pixel-01',completed_at:'2026-10-16T02:00:00Z',completed_date:i<6?'2026-10-16':'2026-10-'+String(21-i).padStart(2,'0')}));</script><template><main style="width:100%;max-width:430px;height:700px;padding:20px;margin:auto;box-sizing:border-box"><Calendar :records="records" :members="[]" today="2026-10-16" :month="month" @change="month=$event"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -71,138 +71,120 @@ try {
   });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(url);
-  const heading = page.getByTestId("record-group-2026-10-16");
-  const next = page.getByTestId("record-group-2026-10-15");
-  await heading.waitFor();
-  await page.waitForTimeout(650);
-  const initial = await next.evaluate((e) => e.getBoundingClientRect().top);
-  await heading.tap();
-  const frames = await page.evaluate(async () => {
+  // The new calendar deliberately uses fixed-height date summaries, with the
+  // animated record stack inside a bottom drawer instead of an inline fold.
+  await page.getByTestId("calendar-view-list").click();
+  await page.waitForTimeout(400);
+  const seen = new Set();
+  let pages = 0;
+  while (true) {
+    const labels = await page
+      .locator(".record-date")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+    labels.forEach((label) => seen.add(label));
+    check(labels.length > 0, "each record page contains date summaries");
+    check(
+      await page.locator(".record-date").evaluateAll((els) =>
+        els.every((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= 0 && r.bottom <= innerHeight;
+        }),
+      ),
+      "every date summary fits in the visible viewport",
+    );
+    const next = page.getByRole("button", { name: "下一页记录", exact: true });
+    pages++;
+    if (!(await next.count()) || !(await next.isEnabled())) break;
+    await next.click();
+  }
+  check(
+    pages > 1 && seen.size === 11,
+    "pagination exposes every date without a scrolling list",
+  );
+  const previous = page.getByRole("button", {
+    name: "上一页记录",
+    exact: true,
+  });
+  while (await previous.isEnabled()) await previous.click();
+  const heading = page.getByRole("button", {
+    name: "今天，6条记录，查看详情",
+    exact: true,
+  });
+  const initial = await heading.boundingBox();
+  await heading.click();
+  const detail = page.getByTestId("calendar-day-details");
+  await detail.waitFor();
+  const layer = page.locator(".sheet-layer");
+  check(
+    (await layer.getAttribute("data-motion")) === "bottom",
+    "date summaries open a bottom drawer",
+  );
+  const frames = await detail.evaluate(async (el) => {
     const frames = [],
-      start = performance.now(),
-      group = document.querySelector(
-        '[data-testid="record-group-2026-10-16"]',
-      ).parentElement;
-    while (performance.now() - start < 730) {
+      start = performance.now();
+    while (performance.now() - start < 600) {
       await new Promise(requestAnimationFrame);
-      frames.push({
-        t: performance.now() - start,
-        y: document
-          .querySelector('[data-testid="record-group-2026-10-15"]')
-          .getBoundingClientRect().top,
-        rows: group.querySelectorAll(".record-stagger").length,
-        visible: [...group.querySelectorAll(".record-stagger")].some(
-          (e) => Number(getComputedStyle(e).opacity) > 0.1,
-        ),
-        scroll: document.querySelector(".folded-record-page").scrollTop,
-      });
+      frames.push(
+        [...el.querySelectorAll(".record-stagger")].map((row) => ({
+          opacity: Number(getComputedStyle(row).opacity),
+          x: new DOMMatrix(getComputedStyle(row).transform).m41,
+        })),
+      );
     }
     return frames;
   });
-  await fs.writeFile(
-    path.join(evidence, `${safari ? "webkit" : "chromium"}-frames.json`),
-    JSON.stringify(frames),
+  check(
+    frames.some((rows) =>
+      rows.some((row) => row.opacity > 0 && row.opacity < 1 && row.x > 0),
+    ),
+    "record cards fade and travel from the right across intermediate frames",
   );
   check(
-    frames.some((f) => f.t < 200 && f.visible && initial - f.y > 20),
-    "next date moves up while closing cards are still visible",
+    (await detail.locator(".record-stagger").count()) === 6,
+    "drawer keeps every record for the selected date",
   );
   check(
-    frames.filter((f) => f.rows > 0 && f.y < initial - 5).length > 4,
-    "following dates move over multiple frames during the exit",
+    (await detail.locator("img.member-mark").count()) === 0 &&
+      (await detail.locator("svg.member-mark").count()) === 6,
+    "all six record markers render inline without network images",
   );
-  const final = frames.at(-1).y;
+  await detail.locator(".record-stagger").last().scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
   check(
-    Math.abs(initial - final) > 200,
-    "following date reaches the released layout position",
+    (await detail.count()) === 1,
+    "closing retains drawer content while the exit runs",
   );
+  await detail.waitFor({ state: "detached" });
+  const returned = await heading.boundingBox();
   check(
-    Math.max(
-      ...frames.map((f, i) => (i ? Math.abs(f.y - frames[i - 1].y) : 0)),
-    ) <
-      (initial - final) * 0.3,
-    "no end-of-collapse jump in following date position",
+    Math.abs(returned.y - initial.y) < 1,
+    "closing a drawer preserves the date summary position",
   );
+  await heading.click();
+  await detail.waitFor();
+  await page.waitForTimeout(350);
+  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await detail.waitFor({ state: "detached" });
   check(
-    frames.slice(-8).every((f) => Math.abs(f.y - final) < 1),
-    "following dates settle without a second jump",
+    (await page.locator(".sheet-layer").count()) === 0,
+    "repeated open and close leaves no stale drawer",
   );
-  check(frames.at(-1).rows === 0, "closing cards are removed after their exit");
-  await heading.tap();
-  await page.waitForTimeout(100);
-  await heading.tap();
-  await page.waitForTimeout(90);
-  await heading.tap();
-  await page.waitForTimeout(700);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await heading.click();
+  await detail.waitFor();
+  await page.waitForTimeout(80);
   check(
-    await page
+    await detail
       .locator(".record-stagger")
       .evaluateAll(
         (els) =>
           els.length === 6 &&
-          els.every((e) => getComputedStyle(e).opacity === "1" && !e.style.top),
+          els.every((el) => getComputedStyle(el).opacity === "1"),
       ),
-    "quick reversal restores every card without stale fixed positions",
+    "reduced motion shows every record at its final state",
   );
-  const reversed = await next.evaluate((e) => e.getBoundingClientRect().top);
-  check(
-    Math.abs(reversed - initial) < 1,
-    "quick reversal restores following dates to their original position",
-  );
-  await heading.tap();
-  await page.waitForTimeout(90);
-  await next.evaluate((e) => e.click());
-  await page.waitForTimeout(700);
-  check(
-    (await next.getAttribute("aria-expanded")) === "true" &&
-      (await page.locator(".record-stagger").count()) === 1,
-    "opening a following date during collapse keeps the selected records",
-  );
-  check(
-    await page
-      .locator(".record-stack")
-      .evaluateAll((els) =>
-        els.every(
-          (e) => Math.abs(new DOMMatrix(getComputedStyle(e).transform).m42) < 1,
-        ),
-      ),
-    "overlapping changes release every temporary following offset",
-  );
-  await heading.tap();
-  await next.evaluate((e) => e.click());
-  await page.waitForTimeout(700);
-  check(
-    Math.abs(
-      (await next.evaluate((e) => e.getBoundingClientRect().top)) - initial,
-    ) < 1,
-    "opposite changes on adjacent dates restore the correct layout",
-  );
-  await page
-    .locator(".folded-record-page")
-    .evaluate((e) => (e.scrollTop = e.scrollHeight));
-  // Scrolling the clicked date heading into view is ordinary browser behavior;
-  // measure only the resulting collapse, never carry the old scroll offset.
-  await heading.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(100);
-  await heading.tap();
-  await page.waitForTimeout(700);
-  check(
-    await next.evaluate((e) => {
-      const r = e.getBoundingClientRect(),
-        p = e.closest(".folded-record-page").getBoundingClientRect();
-      return r.top >= p.top - 1 && r.bottom <= p.bottom + 1;
-    }),
-    "following dates remain reachable after a scrolled collapse",
-  );
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await heading.tap();
-  await page.waitForTimeout(50);
-  await heading.tap();
-  await page.waitForTimeout(80);
-  check(
-    (await page.locator(".record-stagger").count()) === 0,
-    "reduced motion renders the collapsed final state",
-  );
+  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await detail.waitFor({ state: "detached" });
   check(errors.length === 0, "no runtime exceptions");
   await fs.writeFile(
     path.join(evidence, `${safari ? "webkit" : "chromium"}-report.json`),

@@ -49,6 +49,7 @@ import GalaxySpinner from "./GalaxySpinner.vue";
 import ChoreMenu, { type MenuAction } from "./ChoreMenu.vue";
 import ChoreMessages from "./ChoreMessages.vue";
 import ReminderBanner from "./ReminderBanner.vue";
+import RefreshNotice from "./RefreshNotice.vue";
 import { useReminderBanner } from "../composables/useReminderBanner";
 import ChoreReminderSheet from "./ChoreReminderSheet.vue";
 
@@ -1252,6 +1253,7 @@ onUnmounted(() => {
           >
         </div>
         <div class="identity-actions">
+          <RefreshNotice :error="error" :loading="loading" @retry="load" />
           <button
             class="tools-button"
             :aria-label="

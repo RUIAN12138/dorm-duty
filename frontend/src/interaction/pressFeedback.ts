@@ -89,7 +89,7 @@ export function installPressFeedback() {
   function press(el: HTMLElement, pulse = false) {
     if (!el.isConnected || document.hidden) return;
     const state = stateFor(el);
-    state.target = pulse ? 1 : 0.93;
+    state.target = pulse ? 1 : 0.96;
     if (media.matches) {
       el.style.opacity = String((Number(state.opacity) || 1) * 0.76);
       if (pulse) {

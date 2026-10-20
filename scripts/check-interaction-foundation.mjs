@@ -94,6 +94,15 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   const page = await context.newPage();
   page.setDefaultTimeout(10000);
   page.on("pageerror", (e) => errors.push(e.message));
+  // Verify the CSS selection/spring fallback explicitly. Optical WebGL uses
+  // a canvas instead of .nav-selection and has separate geometry coverage.
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      if (type === "webgl" || type === "webgl2") return null;
+      return original.call(this, type, ...args);
+    };
+  });
   await page.goto(origin + "/" + name + ".html");
   await page.getByTestId("nav-duty").waitFor();
   const waitOpen = () =>

@@ -33,7 +33,7 @@ try {
   await fs.mkdir(evidence, { recursive: true });
   await fs.writeFile(
     html,
-    `<meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div>${["rings", "emotions", "ball", "engine"].map((n) => `<script src="/vendor/emotion-ball/${n}.js"></script>`).join("")}<script>window.qaEngines=[];const create=EmotionBall.create;EmotionBall.create=function(el,opts){const e=create(el,opts);const gaze=e.setGaze;e.setGaze=function(x,y){e.qaGaze={x,y};return gaze.call(e,x,y)};window.qaEngines.push(e);return e}</script><script type="module">import{createApp}from'vue';import{createPinia}from'pinia';import{createRouter,createWebHistory}from'vue-router';import{Icon,Switch}from'vant';import Root from './${name}.vue';import'vant/lib/index.css';import'./src/style.css';const router=createRouter({history:createWebHistory(),routes:[{path:'/:pathMatch(.*)*',component:{template:'<div/>'}}]});createApp(Root).use(createPinia()).use(router).use(Icon).use(Switch).mount('#app')</script>`,
+    `<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div>${["rings", "emotions", "ball", "engine"].map((n) => `<script src="/vendor/emotion-ball/${n}.js"></script>`).join("")}<script>window.qaEngines=[];const create=EmotionBall.create;EmotionBall.create=function(el,opts){const e=create(el,opts);const gaze=e.setGaze;e.setGaze=function(x,y){e.qaGaze={x,y};return gaze.call(e,x,y)};window.qaEngines.push(e);return e}</script><script type="module">import{createApp}from'vue';import{createPinia}from'pinia';import{createRouter,createWebHistory}from'vue-router';import{Icon,Switch}from'vant';import Root from './${name}.vue';import'vant/lib/index.css';import'./src/style.css';const router=createRouter({history:createWebHistory(),routes:[{path:'/:pathMatch(.*)*',component:{template:'<div/>'}}]});createApp(Root).use(createPinia()).use(router).use(Icon).use(Switch).mount('#app')</script>`,
   );
   await fs.writeFile(
     vue,
@@ -64,7 +64,15 @@ try {
   }
   browser = await (
     process.env.DORM_BROWSER === "webkit" ? webkit : chromium
-  ).launch({ headless: true });
+  ).launch({
+    headless: true,
+    ...(process.platform === "darwin" && process.env.DORM_BROWSER !== "webkit"
+      ? {
+          executablePath:
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        }
+      : {}),
+  });
   page = await browser.newPage({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -90,13 +98,25 @@ try {
     });
   });
   await page.goto(url);
+  check(
+    await page.evaluate(
+      () =>
+        EmotionBall.config.list().find((e) => e.id === "02").name ===
+        "待机放空",
+    ),
+    "upstream expression names are decoded as UTF-8",
+  );
   await page.locator("[data-companion-login] svg").waitFor();
   const loginBox = await page
     .locator("[data-companion-login] .dorm-companion")
     .boundingBox();
   check(
-    loginBox.width > 150 && loginBox.y < 300,
-    "login ball is the upper central visual focus",
+    loginBox.width >= 100 &&
+      loginBox.width <= 130 &&
+      Math.abs(loginBox.x + loginBox.width / 2 - 195) < 8 &&
+      loginBox.y > 0 &&
+      loginBox.y < 300,
+    "compact login ball is centered above the form",
   );
   await page.getByTestId("qa-email").fill("qa@example.invalid");
   const reading = await page.evaluate(() => window.qaEngines[0].qaGaze);
