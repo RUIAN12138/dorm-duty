@@ -231,8 +231,13 @@ async function closePresentedReminder(page) {
 }
 async function openTool(page, id) {
   await openMenu(page);
-  if (!(await page.getByTestId(id).count()))
+  if (["guest-change-dorm", "open-system-notifications", "guest-change-member", "open-email-account", "open-marker", "guest-create-dorm", "open-creator-recovery", "chore-refresh"].includes(id)) {
     await page.getByTestId("open-preferences").click();
+    await page.getByTestId(id).waitFor({state:"attached"});
+    if (["guest-create-dorm", "open-creator-recovery", "chore-refresh"].includes(id)) await page.getByText("更多操作", {exact:true}).click();
+  } else if (!(await page.getByTestId(id).count())) {
+    await page.getByTestId("open-preferences").click();
+  }
   await page.getByTestId(id).click();
   const title = {
     "open-reminder": "提醒一位室友",

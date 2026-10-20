@@ -577,6 +577,7 @@ try {
   );
   // Joining a new room is above the remembered-room list, with no dead top space.
   await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page.getByTestId("open-preferences").click();
   await page.getByTestId("guest-change-dorm").click();
   await page
     .getByRole("heading", { name: "加入新宿舍", exact: true })
