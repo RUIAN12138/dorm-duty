@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick } from "vue";
 import { revealPage, cancelPageReveal } from "../interaction/pageReveal";
+import { motionTiming } from "../interaction/motion";
 import {
   computed,
   reactive,
@@ -97,6 +98,12 @@ function fitViewport() {
 let layoutObserver: ResizeObserver | undefined;
 onMounted(() => {
   fitViewport();
+  // The async placeholder may already have left. Animate the real, fitted
+  // calendar once as a single layer, with no delayed header/grid staggering.
+  revealPage(calendarRoot.value?.parentElement || null, ".chore-calendar", 0, {
+    duration: motionTiming.page * 1000,
+    distance: 8,
+  });
   window.addEventListener("resize", fitViewport);
   window.visualViewport?.addEventListener("resize", fitViewport);
   layoutObserver = new ResizeObserver(fitViewport);

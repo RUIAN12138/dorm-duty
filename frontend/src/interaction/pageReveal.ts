@@ -7,7 +7,12 @@ export function cancelPageReveal(root: Element) {
       active.delete(el);
     }
 }
-export function revealPage(root: Element | null, selector: string, step = 48) {
+export function revealPage(
+  root: Element | null,
+  selector: string,
+  step = 48,
+  options: { duration?: number; distance?: number } = {},
+) {
   if (!root) return;
   cancelPageReveal(root);
   if (!motionAllowed()) return;
@@ -21,11 +26,14 @@ export function revealPage(root: Element | null, selector: string, step = 48) {
     const opacity = getComputedStyle(el).opacity || "1";
     const animation = el.animate(
       [
-        { opacity: 0, translate: `0 ${18 + Math.min(index, 4) * 3}px` },
+        {
+          opacity: 0,
+          translate: `0 ${(options.distance ?? 18) + Math.min(index, 4) * 3}px`,
+        },
         { opacity, translate: "0 0" },
       ],
       {
-        duration: 460,
+        duration: options.duration ?? 460,
         delay: Math.min(260, index * step),
         easing: "cubic-bezier(.22,1,.36,1)",
         fill: "both",

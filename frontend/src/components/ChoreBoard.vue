@@ -56,13 +56,30 @@ import ChoreReminderSheet from "./ChoreReminderSheet.vue";
 
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import AsyncPageError from "./AsyncPageError.vue";
+const loadCalendarPage = () => import("./ChoreCalendar.vue");
 const ChoreCalendar = defineAsyncComponent({
-  loader: () => import("./ChoreCalendar.vue"),
+  loader: loadCalendarPage,
   loadingComponent: LoadingSkeleton,
   errorComponent: AsyncPageError,
   delay: 0,
   timeout: 15000,
 });
+// Warm code, never room data, outside the first page's rendering work. A failed
+// warm-up is optional: the async component retains its loading/error/retry path.
+let cancelCalendarWarmup: (() => void) | undefined;
+onMounted(() => {
+  const warm = () => {
+    if (!document.hidden) void loadCalendarPage().catch(() => {});
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(warm, { timeout: 1000 });
+    cancelCalendarWarmup = () => window.cancelIdleCallback(id);
+  } else {
+    const id = window.setTimeout(warm, 200);
+    cancelCalendarWarmup = () => window.clearTimeout(id);
+  }
+});
+onBeforeUnmount(() => cancelCalendarWarmup?.());
 import ChoreSettings from "./ChoreSettings.vue";
 import ChorePushSettings from "./ChorePushSettings.vue";
 import CreatorRecovery from "./CreatorRecovery.vue";
@@ -412,6 +429,8 @@ onBeforeUnmount(() => {
   if (boardRoot.value) cancelPageReveal(boardRoot.value);
 });
 function enterPage(element: Element) {
+  // Async calendar owns its entrance after its actual content has mounted.
+  if (element.classList.contains("calendar-page")) return;
   if (!companionEntering.value) revealPage(element, pageLayers);
 }
 function hideLeaving(element: Element) {
@@ -1357,7 +1376,11 @@ onUnmounted(() => {
           @enter="enterPage"
           @after-leave="cancelPageReveal"
         >
-          <div :key="section" class="focus-pane">
+          <div
+            :key="section"
+            class="focus-pane"
+            :class="{ 'calendar-page': section === 'calendar' }"
+          >
             <section
               v-if="section === 'calendar'"
               class="calendar-pane"
@@ -3027,6 +3050,9 @@ onUnmounted(() => {
 <style scoped>
 .focus-fade-enter-active {
   transition: opacity 720ms linear !important;
+}
+.focus-fade-enter-active.calendar-page {
+  transition: none !important;
 }
 .focus-fade-leave-active {
   transition:
