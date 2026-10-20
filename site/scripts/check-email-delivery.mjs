@@ -24,6 +24,7 @@ const options = {
   config,
   now: () => new Date(time),
   autoStart: false,
+  reminderGraceMs: 0,
   send: async (message) => {
     lastMessage = message;
     if (reject) throw new Error("injected failure");

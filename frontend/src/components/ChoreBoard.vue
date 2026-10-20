@@ -697,7 +697,53 @@ const reminderBanner = useReminderBanner(() => ({
 }));
 function presentNewReminders() {
   reminderBanner.refresh();
+  if (messagesOpen.value)
+    unread.value.forEach((note) => acknowledgeMessage(note.id));
+  const shown = reminderBanner.active.value;
+  if (
+    shown &&
+    presentedMessages.has(`${props.invite}:${props.memberId}:${shown.id}`)
+  )
+    void acknowledgeMessage(shown.id);
 }
+const presentedMessages = new Set<string>(),
+  receivedMessages = new Set<string>(),
+  receivingMessages = new Set<string>();
+async function acknowledgeMessage(id: number) {
+  if (
+    props.demo ||
+    document.hidden ||
+    !props.token ||
+    !unread.value.some((note) => note.id === id)
+  )
+    return;
+  const scope = `${props.invite}:${props.memberId}:${id}`;
+  if (receivedMessages.has(scope) || receivingMessages.has(scope)) return;
+  receivingMessages.add(scope);
+  try {
+    await choreRequest(`/chores/reminders/${id}/received`, props.token, {
+      method: "PATCH",
+    });
+    receivedMessages.add(scope);
+  } catch {
+    /* No confirmed delivery: email remains the fallback; retry on poll. */
+  } finally {
+    receivingMessages.delete(scope);
+  }
+}
+function messagePresented(id: number) {
+  if (reminderBanner.active.value?.id !== id || document.hidden) return;
+  presentedMessages.add(`${props.invite}:${props.memberId}:${id}`);
+  void acknowledgeMessage(id);
+}
+watch(
+  [messagesOpen, unread],
+  () => {
+    if (messagesOpen.value)
+      unread.value.forEach((note) => acknowledgeMessage(note.id));
+  },
+  { flush: "post" },
+);
 function openBannerMessages() {
   messagesOpen.value = true;
   reminderBanner.dismiss();
@@ -1200,6 +1246,7 @@ onUnmounted(() => {
       @dismiss="reminderBanner.dismiss"
       @open="openBannerMessages"
       @settled="reminderBanner.settled"
+      @presented="messagePresented"
     />
     <LoadingSkeleton v-if="loading && !board" />
     <div

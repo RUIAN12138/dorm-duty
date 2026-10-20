@@ -103,6 +103,7 @@ const verificationScripts = [
   "site/scripts/check-recency.mjs",
   "site/scripts/check-email-accounts.mjs",
   "site/scripts/check-email-delivery.mjs",
+  "site/scripts/check-in-app-email.mjs",
   "site/scripts/check-email-entry-policy.mjs",
   "site/scripts/check-auth-boundaries.mjs",
   "site/scripts/check-email-unbind.mjs",

@@ -2326,6 +2326,19 @@ export async function handleChores(request, env, now) {
     return leaveNote(request, db, room, who, now, env);
   if (path === "/chores/remind" && method === "POST")
     return remind(request, db, room, who, now, env);
+  const receivedMatch = /^\/chores\/reminders\/(\d+)\/received$/.exec(path);
+  if (receivedMatch && method === "PATCH") {
+    const id = integer(Number(receivedMatch[1])),
+      row = await first(db, "SELECT * FROM chore_reminders WHERE id=?", [id]);
+    if (!row) fail(404, "reminder_missing", "提醒不存在");
+    if (row.dorm_id !== room.id || row.target_member_id !== who.user_id)
+      fail(403, "not_recipient", "只能确认发给自己的消息");
+    await db.batch([
+      stmt(db, "UPDATE chore_reminders SET in_app_received_at=COALESCE(in_app_received_at,?) WHERE id=? AND dorm_id=? AND target_member_id=?", [now.toISOString(), id, room.id, who.user_id]),
+      stmt(db, "UPDATE email_jobs SET status='cancelled',lease_until=NULL WHERE reminder_id=? AND status='pending'", [id]),
+    ]);
+    return json({ ok: true });
+  }
   const readMatch = /^\/chores\/reminders\/(\d+)\/read$/.exec(path);
   if (readMatch && method === "PATCH") {
     const id = integer(Number(readMatch[1])),

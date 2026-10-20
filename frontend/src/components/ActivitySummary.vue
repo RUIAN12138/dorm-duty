@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import type {
   ChoreActivity,
   ChoreBoardData,
@@ -19,12 +19,42 @@ import {
 } from "../interaction/statsPalette";
 const colorsOpen = ref(false),
   previewDark = ref(false);
+const summary = ref<HTMLElement>();
+function settleThemePalette() {
+  // The existing circular page reveal owns theme changes. Capture settled
+  // card colours rather than ending that reveal with a second colour jump.
+  for (const el of summary.value?.querySelectorAll(
+    ".stat-card, .palette-ramp span",
+  ) || [])
+    for (const animation of el.getAnimations())
+      if (
+        "transitionProperty" in animation &&
+        ["background-color", "color"].includes(
+          String(animation.transitionProperty),
+        )
+      )
+        try {
+          animation.finish();
+        } catch {
+          /* Already finished. */
+        }
+}
+onMounted(() =>
+  window.addEventListener("ui-theme-snapshot", settleThemePalette),
+);
+onBeforeUnmount(() =>
+  window.removeEventListener("ui-theme-snapshot", settleThemePalette),
+);
 function openColors() {
   previewDark.value = darkTheme.value;
   colorsOpen.value = true;
 }
 function warningStyle(shade: number | null) {
-  const background = statsFill(statsBaseColor.value, shade ?? 0, darkTheme.value);
+  const background = statsFill(
+    statsBaseColor.value,
+    shade ?? 0,
+    darkTheme.value,
+  );
   return { background, color: statsInk(background) };
 }
 const props = defineProps<{
@@ -111,12 +141,16 @@ const cards = computed(() =>
 );
 </script>
 <template>
-  <section class="activity-summary" data-testid="activity-summary">
+  <section
+    ref="summary"
+    class="activity-summary"
+    data-testid="activity-summary"
+  >
     <div class="summary-heading">
       <span>距上次完成</span
       ><HintPopover
         title="间隔提醒"
-        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，间隔越久，底色越深。日间棕黄色可在此设备自定义，夜间保持灰白色。颜色只作提醒，暂无记录单独显示。"
+        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，刚完成为白色，间隔越久越灰。日间灰色可在此设备自定义，夜间保持灰白色。颜色只作提醒，暂无记录单独显示。"
         label="查看间隔提醒规则"
       />
       <div class="summary-actions">
@@ -236,6 +270,14 @@ const cards = computed(() =>
 .stat-card[data-tone="empty"] {
   background: var(--app-tone-hf5f5f5, #f5f5f5);
   color: var(--app-tone-h777, #777);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stat-card,
+  .palette-ramp span {
+    transition:
+      background-color 320ms var(--ui-ease-out),
+      color 220ms var(--ui-ease-out);
+  }
 }
 header {
   display: flex;

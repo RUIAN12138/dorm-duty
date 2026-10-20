@@ -286,12 +286,27 @@ try {
       )
         .backgroundColor.match(/\d+/g)
         .map(Number);
-      return light[0] > light[1] && light[1] > light[2] && deep[0] < light[0];
+      return (
+        light[0] === light[1] && light[1] === light[2] && deep[0] < light[0]
+      );
     }),
-    "daytime warnings use one brown/yellow palette that deepens with the interval",
+    "daytime warnings use one neutral-grey palette that deepens with the interval",
   );
-  await page.evaluate(() => window.qa.theme("dark"));
-  await page.waitForTimeout(250);
+  const paletteFrames = await page.evaluate(async () => {
+    const card = document.querySelector('[data-testid="stats-floor"]');
+    window.qa.theme("dark");
+    const colours = [];
+    const start = performance.now();
+    while (performance.now() - start < 380) {
+      await new Promise(requestAnimationFrame);
+      colours.push(getComputedStyle(card).backgroundColor);
+    }
+    return colours;
+  });
+  check(
+    new Set(paletteFrames).size >= 4,
+    "card colour changes have real intermediate colours rather than a hard swap",
+  );
   check(
     (await color("floor")) !== lightColor,
     "warning fill has a separate dark palette",
@@ -304,12 +319,19 @@ try {
     "daytime colour customisation leaves the nighttime grey/white palette intact",
   );
   await page.evaluate(() => window.qa.theme("light"));
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(400);
   check(
     (await color("floor")) !== lightColor,
     "custom daytime colour updates the actual card",
   );
-  await page.evaluate(() => window.qa.theme("dark"));
+  await page.evaluate(() => window.qa.theme("dark", { x: 350, y: 30 }));
+  await page.waitForTimeout(120);
+  const snapshotColour = await color("floor");
+  await page.waitForTimeout(320);
+  check(
+    (await color("floor")) === snapshotColour,
+    "circular theme reveal never ends with a second card-colour jump",
+  );
   await page.getByRole("button", { name: "关闭详情", exact: true }).click();
   await page.locator(".sheet-layer").waitFor({ state: "detached" });
   await page.screenshot({
@@ -441,6 +463,57 @@ try {
     await page.getByRole("button", { name: "关闭详情", exact: true }).click();
     await page.locator(".sheet-layer").waitFor({ state: "detached" });
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const receivedNote = Number(
+    h.db.sqlite
+      .prepare(
+        "INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source) VALUES (?,?,'室友',?,'留言','记得抬水',?,?,'note')",
+      )
+      .run(
+        room.dorm.id,
+        room.member_id,
+        room.member_id,
+        new Date().toISOString(),
+        `banner-delivery-${process.pid}`,
+      ).lastInsertRowid,
+  );
+  await page.goto(url);
+  await page.getByTestId("reminder-banner").waitFor();
+  const bannerStyle = await page
+    .locator(".reminder-banner-card")
+    .evaluate((el) => ({
+      background: getComputedStyle(el).backgroundColor,
+      filter: getComputedStyle(el).backdropFilter,
+    }));
+  check(
+    !bannerStyle.background.startsWith("rgba") && bannerStyle.filter === "none",
+    "moving message has an opaque backing and never composites underlying text",
+  );
+  const bannerBox = await page
+    .locator(".reminder-banner-position")
+    .boundingBox();
+  check(
+    bannerBox.width >= 365 && bannerBox.width <= 390,
+    "message banner is slightly wider and remains within mobile viewport",
+  );
+  for (let i = 0; i < 40; i++) {
+    if (
+      h.db.sqlite
+        .prepare("SELECT in_app_received_at FROM chore_reminders WHERE id=?")
+        .get(receivedNote).in_app_received_at
+    )
+      break;
+    await page.waitForTimeout(50);
+  }
+  const deliveredRow = h.db.sqlite
+    .prepare(
+      "SELECT in_app_received_at,read_at FROM chore_reminders WHERE id=?",
+    )
+    .get(receivedNote);
+  check(
+    !!deliveredRow.in_app_received_at && deliveredRow.read_at === null,
+    "actual foreground banner sends delivery confirmation without marking it read",
+  );
   await page.goto(url + "?deck=1");
   await page.locator(".deck-card.is-front").waitFor();
   await page.waitForFunction(
