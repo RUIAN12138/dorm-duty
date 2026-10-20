@@ -160,6 +160,9 @@ try {
     })(),
   }));
   if (lens.opacity === 1) {
+    await page.getByTestId("nav-calendar").click();
+    await page.getByTestId("calendar-view-grid").waitFor();
+    await page.waitForTimeout(250);
     check(
       lens.pixel?.[3] > 0 && Math.max(...lens.pixel.slice(0, 3)) < 110,
       "WebGL selected glass is dark and keeps its buffer while idle",
@@ -198,7 +201,7 @@ try {
         );
         return pixels.some((v, i) => i % 4 !== 3 && v > 200);
       }),
-      "dark glass keeps the selected label bright instead of tinting it grey",
+      "dark glass refreshes the newly selected page label through its colour transition",
     );
   }
   const frames = await page.evaluate(async () => {

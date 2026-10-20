@@ -43,7 +43,7 @@ let pressure = 0,
 let parent: HTMLElement | null = null;
 let backdrop = [1, 1, 1],
   tint = [1, 1, 1, 0.1],
-  themeUntil = 0;
+  sourceRefreshUntil = 0;
 const source = document.createElement("canvas");
 const nativeLabels = new Map<HTMLElement, NativeLabelBox>();
 function clearClips() {
@@ -200,7 +200,7 @@ function draw(now: number) {
     );
     gl.viewport(0, 0, w, h);
     gl.useProgram(program);
-    if (now < themeUntil) dirty = true;
+    if (now < sourceRefreshUntil) dirty = true;
     if (dirty) paintSource(width, height, dpr);
     gl.uniform3f(uniforms.u_backdrop!, backdrop[0], backdrop[1], backdrop[2]);
     gl.uniform4f(uniforms.u_tint!, tint[0], tint[1], tint[2], tint[3]);
@@ -222,7 +222,7 @@ function draw(now: number) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     ready(true);
     if (
-      now < themeUntil ||
+      now < sourceRefreshUntil ||
       (animate &&
         (props.moving ||
           props.dragging ||
@@ -245,6 +245,7 @@ watch(() => props.position, request);
 watch(
   () => props.active,
   () => {
+    sourceRefreshUntil = motionAllowed() ? performance.now() + 220 : 0;
     dirty = true;
     request();
   },
@@ -280,7 +281,7 @@ function preference() {
   }
 }
 function themeChanged() {
-  themeUntil = motionAllowed() ? performance.now() + 220 : 0;
+  sourceRefreshUntil = motionAllowed() ? performance.now() + 220 : 0;
   dirty = true;
   request();
 }
