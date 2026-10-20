@@ -147,6 +147,11 @@ try {
       return kind === "webgl" ? null : get.call(this, kind, ...args);
     };
   });
+  let calendarCodeRequested = false;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/ChoreCalendar.vue"))
+      calendarCodeRequested = true;
+  });
   await page.goto(url);
   await page.getByTestId("pane-duty").waitFor();
   const initial = await board(),
@@ -157,9 +162,14 @@ try {
     failBoard,
     "completion was acknowledged before simulated refresh failure",
   );
+  check(
+    calendarCodeRequested,
+    "calendar code is warmed while duty is idle, before any calendar navigation",
+  );
   await page.evaluate(() => {
     window.qaRoutes.length = 0;
     window.qaLens = [];
+    window.qaCalendarFrames = [];
     const start = performance.now();
     function frame() {
       const el = document.querySelector(".nav-selection");
@@ -168,13 +178,42 @@ try {
       window.qaLens.push(
         matrix ? matrix.m41 / el.getBoundingClientRect().width : null,
       );
-      if (performance.now() - start < 350) requestAnimationFrame(frame);
+      const calendar = document.querySelector(
+        ".calendar-page:not([inert]) .chore-calendar",
+      );
+      if (calendar) {
+        const style = getComputedStyle(calendar);
+        window.qaCalendarFrames.push({
+          opacity: Number(style.opacity),
+          translate: style.translate,
+          durations: calendar
+            .getAnimations()
+            .map((a) => a.effect.getTiming().duration),
+        });
+      }
+      if (performance.now() - start < 700) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   });
   await page.getByTestId("nav-calendar").click();
   await page.getByTestId("calendar-view-grid").waitFor();
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(750);
+  const entryFrames = await page.evaluate(() => window.qaCalendarFrames);
+  check(
+    entryFrames.some(
+      (f) =>
+        f.opacity > 0 &&
+        f.opacity < 1 &&
+        parseFloat(f.translate.split(" ").at(-1)) > 0,
+    ),
+    "the actual async calendar has visible opacity and movement between its entrance endpoints",
+  );
+  check(
+    entryFrames.some((f) => f.durations.includes(200)) &&
+      entryFrames.at(-1).opacity === 1 &&
+      entryFrames.at(-1).durations.length === 0,
+    "calendar enters as one 200ms layer and settles without delayed grid/header animations",
+  );
   check(
     !(await page.evaluate(() => window.qaLens)).some((p) => p > 0.2 && p < 1.8),
     "non-adjacent tap selection does not sweep through middle tab",
@@ -249,6 +288,52 @@ try {
           n.task_content_snapshot === "今晚一起打扫。",
       ),
     "all-recipient composer delivers once to each other roommate",
+  );
+  // A very early tap can outrun idle warming. The real async content must
+  // still own its entrance, even when the loading placeholder has settled.
+  await page.addInitScript(() => {
+    window.qaCalendarRuns = [];
+    const original = Element.prototype.animate;
+    Element.prototype.animate = function (frames, options) {
+      const animation = original.call(this, frames, options);
+      if (this.matches(".chore-calendar"))
+        window.qaCalendarRuns.push({ frames, duration: options.duration });
+      return animation;
+    };
+  });
+  await page.route(/\/src\/components\/ChoreCalendar\.vue$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.continue();
+  });
+  await page.goto(url);
+  await page.getByTestId("pane-duty").waitFor();
+  await page.getByTestId("nav-calendar").click();
+  await page.getByTestId("chore-calendar").waitFor();
+  const cold = await page.evaluate(() => window.qaCalendarRuns);
+  check(
+    cold.length === 1 &&
+      cold[0].duration === 200 &&
+      cold[0].frames[0].opacity === 0,
+    "slow first-load calendar animates its real content once after the placeholder, rather than popping in",
+  );
+  await page.getByTestId("nav-duty").click();
+  await page.getByTestId("pane-duty").waitFor();
+  await page.getByTestId("nav-calendar").click();
+  await page.getByTestId("nav-duty").click();
+  await page.waitForTimeout(350);
+  check(
+    (await page.locator(".focus-pane:not([inert])").count()) === 1 &&
+      (await page.locator(".focus-pane[inert]").count()) === 0,
+    "rapid calendar reversals leave one active page and release departing layers",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByTestId("nav-calendar").click();
+  await page.getByTestId("chore-calendar").waitFor();
+  check(
+    (await page
+      .getByTestId("chore-calendar")
+      .evaluate((el) => el.getAnimations({ subtree: true }).length)) === 0,
+    "reduced motion renders the calendar immediately without an entrance animation",
   );
   check(errors.length === 0, "no browser errors");
   console.log(

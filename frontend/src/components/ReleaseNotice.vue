@@ -142,8 +142,8 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>值日标题、完成按钮与轮次适当放大</li>
-          <li>手机高屏留白更均衡，短屏保持紧凑</li>
+          <li>日历代码提前加载，直接切换更连贯</li>
+          <li>日历实际内容衔接短过渡，减少突然出现</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button
