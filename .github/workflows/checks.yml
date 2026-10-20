@@ -83,6 +83,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify mobile interaction foundation
         run: |
+          node scripts/check-companion-browser.mjs
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
           node scripts/check-list-collapse-sync.mjs
@@ -92,7 +93,6 @@ jobs:
           node scripts/check-order-boundaries.mjs
           node scripts/check-entry-handoff.mjs
           node scripts/check-entry-layout.mjs
-          node scripts/check-companion-browser.mjs
       - name: Keep interaction failure screenshot
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
