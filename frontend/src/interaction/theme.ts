@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 export type ThemeMode = "system" | "light" | "dark";
 export const themeMode = ref<ThemeMode>("system"),
   darkTheme = ref(false);
@@ -15,11 +15,12 @@ function apply() {
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", "#ffffff");
+    ?.setAttribute("content", dark ? "#151515" : "#ffffff");
   window.dispatchEvent(new Event("ui-theme-change"));
 }
 type Origin = { x: number; y: number };
-let reveal: Animation | undefined;
+let transition: ViewTransition | undefined;
+let fallback: Animation | undefined;
 export function setThemeMode(mode: ThemeMode, origin?: Origin) {
   if (!valid(mode)) return;
   const wasDark = darkTheme.value;
@@ -27,24 +28,68 @@ export function setThemeMode(mode: ThemeMode, origin?: Origin) {
   try {
     localStorage.setItem(key, mode);
   } catch {}
-  reveal?.cancel();
-  reveal = undefined;
-  // WebGL/backdrop-filter layers cannot reliably survive root snapshots on
-  // iOS. Keep glass live and only soften the page surface; the icon has its
-  // own reversible sun/moon spring.
-  apply();
-  if (
-    origin &&
-    wasDark !== darkTheme.value &&
+  transition?.skipTransition();
+  transition = undefined;
+  fallback?.cancel();
+  fallback = undefined;
+  const nextDark =
+    mode === "dark" || (mode === "system" && Boolean(media?.matches));
+  const animated =
+    Boolean(origin) &&
+    wasDark !== nextDark &&
     !document.hidden &&
-    !matchMedia("(prefers-reduced-motion: reduce)").matches
-  ) {
-    reveal = document
-      .querySelector<HTMLElement>(".screen-surface")
-      ?.animate?.([{ opacity: 0.96 }, { opacity: 1 }], {
-        duration: 180,
-        easing: "cubic-bezier(.22,1,.36,1)",
+    document.documentElement.dataset.interaction !== "keyboard" &&
+    !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!animated || !document.startViewTransition) {
+    apply();
+    if (animated)
+      fallback = document.documentElement.animate?.(
+        { opacity: [0.88, 1] },
+        { duration: 180, easing: "ease-out" },
+      );
+    return;
+  }
+  const point = origin!;
+  try {
+    const current = document.startViewTransition(async () => {
+      apply();
+      // A view-transition pauses frame rendering during its update callback.
+      // Flush Vue and repaint retained glass synchronously; awaiting RAF here
+      // would stall the reveal until the browser times out the transition.
+      await nextTick();
+      window.dispatchEvent(new Event("ui-theme-snapshot"));
+    });
+    transition = current;
+    void current.ready
+      .then(() => {
+        if (transition !== current) return;
+        const radius = Math.hypot(
+          Math.max(point.x, innerWidth - point.x),
+          Math.max(point.y, innerHeight - point.y),
+        );
+        document.documentElement.animate(
+          {
+            clipPath: [
+              `circle(0px at ${point.x}px ${point.y}px)`,
+              `circle(${radius}px at ${point.x}px ${point.y}px)`,
+            ],
+          },
+          {
+            duration: 320,
+            easing: "cubic-bezier(.22,1,.36,1)",
+            pseudoElement: "::view-transition-new(root)",
+            fill: "both",
+          },
+        );
+      })
+      .catch(() => {});
+    void current.finished
+      .catch(() => {})
+      .then(() => {
+        if (transition === current) transition = undefined;
       });
+  } catch {
+    apply();
   }
 }
 export function installTheme() {
@@ -66,8 +111,10 @@ export function installTheme() {
   window.addEventListener("storage", storage);
   apply();
   return () => {
-    reveal?.cancel();
-    reveal = undefined;
+    transition?.skipTransition();
+    transition = undefined;
+    fallback?.cancel();
+    fallback = undefined;
     media?.removeEventListener("change", system);
     window.removeEventListener("storage", storage);
   };

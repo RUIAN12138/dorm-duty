@@ -20,6 +20,11 @@ const paths = [
 ];
 export default defineConfig({
   base,
+  define: {
+    "import.meta.env.VITE_RELEASE_VERSION": JSON.stringify(
+      process.env.DORM_RELEASE_NAME || "",
+    ),
+  },
   plugins: [
     vue(),
     VitePWA({

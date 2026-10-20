@@ -44,9 +44,10 @@ function run(command, args, options = {}) {
   return result.status ?? 1;
 }
 
-function buildFrontend(output, { server = false } = {}) {
+function buildFrontend(output, { server = false, release = "" } = {}) {
   const args = ["run", "build", "--prefix", "frontend"];
   const env = {};
+  if (release) env.DORM_RELEASE_NAME = release;
   args.push("--", "--outDir", output, "--emptyOutDir");
   if (server) {
     env.DORM_WEB_BASE = process.env.DORM_WEB_BASE || "/dorm-duty/";
@@ -176,7 +177,7 @@ if (action === "dev") {
   let status = 1;
   try {
     const frontend = join(temporary, "frontend");
-    const frontendStatus = buildFrontend(frontend, { server: true });
+    const frontendStatus = buildFrontend(frontend, { server: true, release: name });
     status = frontendStatus === 0
       ? run(python, ["deploy/prepare-release.py", name, frontend])
       : frontendStatus;

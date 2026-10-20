@@ -285,6 +285,12 @@ function themeChanged() {
   dirty = true;
   request();
 }
+function snapshotTheme() {
+  cancelAnimationFrame(frame);
+  frame = 0;
+  dirty = true;
+  draw(performance.now());
+}
 function visibility() {
   if (document.hidden) {
     cancelAnimationFrame(frame);
@@ -392,6 +398,7 @@ onMounted(() => {
   document.addEventListener("visibilitychange", visibility);
   window.addEventListener("ui-motion-change", preference);
   window.addEventListener("ui-theme-change", themeChanged);
+  window.addEventListener("ui-theme-snapshot", snapshotTheme);
   transparency.addEventListener("change", preference);
   reduced.addEventListener("change", preference);
   void document.fonts.ready.then(() => {
@@ -413,6 +420,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", visibility);
   window.removeEventListener("ui-motion-change", preference);
   window.removeEventListener("ui-theme-change", themeChanged);
+  window.removeEventListener("ui-theme-snapshot", snapshotTheme);
   transparency.removeEventListener("change", preference);
   reduced.removeEventListener("change", preference);
 });

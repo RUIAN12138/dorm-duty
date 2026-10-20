@@ -30,8 +30,8 @@ const palette = await import(
   "data:text/javascript;base64," +
     Buffer.from(output.outputFiles[0].text).toString("base64")
 );
-assert.equal(palette.readStatsColor("{broken"), "#555555");
-assert.equal(palette.readStatsColor('{"base":"url(evil)"}'), "#555555");
+assert.equal(palette.readStatsColor("{broken"), "#b98a48");
+assert.equal(palette.readStatsColor('{"base":"url(evil)"}'), "#b98a48");
 assert.equal(palette.readStatsColor('{"base":"#123AbC"}'), "#123abc");
 palette.saveStatsColor("#444444");
 assert.equal(palette.statsBaseColor.value, "#444444");
@@ -39,7 +39,12 @@ assert.equal(JSON.parse(saved.get("lundao-stats-colors-v1")).base, "#444444");
 palette.saveStatsColor("red;opacity:0");
 assert.equal(palette.statsBaseColor.value, "#444444");
 palette.resetStatsColors();
-assert.equal(palette.statsBaseColor.value, "#555555");
+assert.equal(palette.statsBaseColor.value, "#b98a48");
+assert.equal(palette.readStatsColor('{"base":"#555555"}'), "#b98a48");
+assert.equal(palette.statsFill("#b98a48", 0, false), "#fff8ed");
+assert.equal(palette.statsFill("#b98a48", 1, false), "#b98a48");
+assert.equal(palette.statsFill("#b98a48", 0, true), "#f2f2f2");
+assert.equal(palette.statsFill("#b98a48", 1, true), "#b0b0b0");
 const rgb = (hex) =>
   hex
     .slice(1)
@@ -71,5 +76,5 @@ for (const dark of [false, true])
     }
   }
 console.log(
-  "PASS: one shared base colour, validated persistence/reset, 10000 monotone depth samples, dark adaptation and WCAG text contrast.",
+  "PASS: daytime brown and nighttime grey/white, validated persistence/reset, 10000 monotone depth samples, dark adaptation and WCAG text contrast.",
 );

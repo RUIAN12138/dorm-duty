@@ -24,8 +24,7 @@ function openColors() {
   colorsOpen.value = true;
 }
 function warningStyle(shade: number | null) {
-  if (shade === null) return {};
-  const background = statsFill(statsBaseColor.value, shade, darkTheme.value);
+  const background = statsFill(statsBaseColor.value, shade ?? 0, darkTheme.value);
   return { background, color: statsInk(background) };
 }
 const props = defineProps<{
@@ -117,7 +116,7 @@ const cards = computed(() =>
       <span>距上次完成</span
       ><HintPopover
         title="间隔提醒"
-        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，间隔越久，底色越深。日夜共用一个基色，可在此设备自定义。颜色只作提醒，暂无记录单独显示。"
+        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，间隔越久，底色越深。日间棕黄色可在此设备自定义，夜间保持灰白色。颜色只作提醒，暂无记录单独显示。"
         label="查看间隔提醒规则"
       />
       <div class="summary-actions">
@@ -185,7 +184,7 @@ const cards = computed(() =>
         />
       </div>
       <label class="palette-color-row"
-        ><span>基色</span>
+        ><span>日间基色</span>
         <input
           type="color"
           aria-label="统计基色"
