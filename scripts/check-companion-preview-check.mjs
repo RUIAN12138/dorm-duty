@@ -91,7 +91,7 @@ const {installPressFeedback}=await load('frontend/src/interaction/pressFeedback.
 const cleanup=installPressFeedback(),button=new Control();
 const event={target:button,isPrimary:true,button:0,pointerId:1,clientX:0,clientY:0};
 handlers.get('pointerdown')(event);assert.ok(Number(button.style.scale)<1,'feedback appears on the pointerdown frame');
-advanceFrames(60);assert.ok(Math.abs(Number(button.style.scale)-.93)<.001);
+advanceFrames(60);assert.ok(Math.abs(Number(button.style.scale)-.96)<.001);
 const held=button.style.scale;advanceFrames(60);assert.equal(button.style.scale,held,'held feedback stays pressed');
 handlers.get('pointerup')(event);advanceFrames(120);assert.equal(button.style.scale,'');assert.equal(button.style.transform,'rotate(9deg)');
 const disabled=new Control();disabled.disabled=true;handlers.get('pointerdown')({...event,target:disabled});assert.equal(disabled.style.scale,'');
