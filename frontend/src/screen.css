@@ -71,6 +71,30 @@
 }
 /* Keep title anchors; lower only the action/round group on roomy screens. */
 @container page (min-height: 400px) {
+  /* Enlarge only duty content; keep its anchor and completion occupancy stable. */
+  .app-stage .screen-surface .chore-personal .focus-hero {
+    gap: clamp(20px, 4cqh, 28px);
+  }
+  .app-stage .screen-surface .chore-personal .task-title-stage {
+    height: clamp(68px, 15cqh, 94px);
+  }
+  .app-stage .screen-surface .chore-personal .task-title-stage h2 {
+    font-size: clamp(54px, 13.8cqh, 82px);
+  }
+  .app-stage .screen-surface .chore-personal .focus-hero > .completion-surface {
+    width: min(100%, 330px);
+    height: clamp(56px, 10cqh, 64px);
+    font-size: 18px;
+  }
+  .app-stage .screen-surface .chore-personal .round-progress {
+    font-size: 18px;
+  }
+  .app-stage .screen-surface .chore-personal .round-progress-display {
+    width: 58px;
+  }
+  .app-stage .screen-surface .chore-personal .round-number-window {
+    font-size: 19px;
+  }
   .app-stage .screen-surface .focus-hero > .completion-surface {
     margin-top: clamp(20px, 5cqh, 42px);
   }
