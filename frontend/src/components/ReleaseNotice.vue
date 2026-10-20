@@ -142,7 +142,7 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>统计：日间灰黑色，颜色过渡更自然</li>
+          <li>统计：日间中性灰色，颜色过渡更自然</li>
           <li>消息浮窗加宽，修复底层文字叠穿</li>
           <li>前台收到消息后不再补发邮件</li>
         </ul>

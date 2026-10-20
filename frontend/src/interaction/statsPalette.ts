@@ -1,5 +1,5 @@
 import { ref } from "vue";
-export const defaultStatsColor = "#303030";
+export const defaultStatsColor = "#aaaaaa";
 const key = "lundao-stats-colors-v1";
 export const validColor = (value: unknown): value is string =>
   typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
@@ -7,7 +7,7 @@ export function readStatsColor(value: string | null) {
   try {
     const saved = JSON.parse(value || "null");
     return validColor(saved?.base)
-      ? ["#555555", "#b98a48"].includes(saved.base.toLowerCase())
+      ? ["#555555", "#b98a48", "#303030"].includes(saved.base.toLowerCase())
         ? defaultStatsColor
         : saved.base.toLowerCase()
       : defaultStatsColor;
@@ -40,13 +40,13 @@ export function statsFill(base: string, progress: number, dark: boolean) {
     .slice(1)
     .match(/../g)!
     .map((v) => parseInt(v, 16));
-  // Stable pale ink on grey/black by day, dark ink on grey/white by night.
+  // Neutral grey by day and grey/white by night, both with dark default ink.
   // Smooth endpoints avoid sudden depth changes near fresh/overdue states.
   const rgb = channels.map((v) =>
     Math.round(
       dark
         ? 242 * (1 - depth) + 176 * depth
-        : 110 * (1 - depth) + Math.min(110, v) * depth,
+        : 224 * (1 - depth) + Math.min(220, v) * depth,
     ),
   );
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");

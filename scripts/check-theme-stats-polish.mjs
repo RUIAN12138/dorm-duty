@@ -290,7 +290,7 @@ try {
         light[0] === light[1] && light[1] === light[2] && deep[0] < light[0]
       );
     }),
-    "daytime warnings use one grey/black palette that deepens with the interval",
+    "daytime warnings use one neutral-grey palette that deepens with the interval",
   );
   const paletteFrames = await page.evaluate(async () => {
     const card = document.querySelector('[data-testid="stats-floor"]');

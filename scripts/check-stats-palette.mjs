@@ -30,8 +30,8 @@ const palette = await import(
   "data:text/javascript;base64," +
     Buffer.from(output.outputFiles[0].text).toString("base64")
 );
-assert.equal(palette.readStatsColor("{broken"), "#303030");
-assert.equal(palette.readStatsColor('{"base":"url(evil)"}'), "#303030");
+assert.equal(palette.readStatsColor("{broken"), "#aaaaaa");
+assert.equal(palette.readStatsColor('{"base":"url(evil)"}'), "#aaaaaa");
 assert.equal(palette.readStatsColor('{"base":"#123AbC"}'), "#123abc");
 palette.saveStatsColor("#444444");
 assert.equal(palette.statsBaseColor.value, "#444444");
@@ -39,15 +39,15 @@ assert.equal(JSON.parse(saved.get("lundao-stats-colors-v1")).base, "#444444");
 palette.saveStatsColor("red;opacity:0");
 assert.equal(palette.statsBaseColor.value, "#444444");
 palette.resetStatsColors();
-assert.equal(palette.statsBaseColor.value, "#303030");
-assert.equal(palette.readStatsColor('{"base":"#555555"}'), "#303030");
-assert.equal(palette.statsFill("#303030", 0, false), "#6e6e6e");
-assert.equal(palette.statsFill("#303030", 1, false), "#303030");
-assert.equal(palette.statsFill("#303030", 0, true), "#f2f2f2");
-assert.equal(palette.statsFill("#303030", 1, true), "#b0b0b0");
-assert.equal(palette.readStatsColor('{"base":"#b98a48"}'), "#303030");
-assert.equal(palette.statsInk(palette.statsFill("#303030", 0, false)), "#ffffff");
-assert.equal(palette.statsInk(palette.statsFill("#303030", 1, false)), "#ffffff");
+assert.equal(palette.statsBaseColor.value, "#aaaaaa");
+assert.equal(palette.readStatsColor('{"base":"#555555"}'), "#aaaaaa");
+assert.equal(palette.statsFill("#aaaaaa", 0, false), "#e0e0e0");
+assert.equal(palette.statsFill("#aaaaaa", 1, false), "#aaaaaa");
+assert.equal(palette.statsFill("#aaaaaa", 0, true), "#f2f2f2");
+assert.equal(palette.statsFill("#aaaaaa", 1, true), "#b0b0b0");
+assert.equal(palette.readStatsColor('{"base":"#b98a48"}'), "#aaaaaa");
+assert.equal(palette.statsInk(palette.statsFill("#aaaaaa", 0, false)), "#000000");
+assert.equal(palette.statsInk(palette.statsFill("#aaaaaa", 1, false)), "#000000");
 const rgb = (hex) =>
   hex
     .slice(1)
@@ -79,5 +79,5 @@ for (const dark of [false, true])
     }
   }
 console.log(
-  "PASS: daytime grey/black and nighttime grey/white, validated persistence/reset, 10000 monotone depth samples, dark adaptation and WCAG text contrast.",
+  "PASS: daytime neutral grey and nighttime grey/white, validated persistence/reset, 10000 monotone depth samples, dark adaptation and WCAG text contrast.",
 );
