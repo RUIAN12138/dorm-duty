@@ -31,7 +31,7 @@ const stopGlassPosition = selection.position.on("change", (value) => {
   glassPosition.value = value;
 });
 watch(currentIndex, (next) => {
-  if (!dragging.value) selection.move(next);
+  if (!dragging.value) selectTarget(next);
   requestedIndex = next;
 });
 onUnmounted(() => {
@@ -51,6 +51,12 @@ let gesture: {
 let suppressClickUntil = 0;
 let navigationRequest = 0;
 let requestedIndex = currentIndex.value;
+function selectTarget(index: number) {
+  // A tap can skip a tab. Keep the spring for adjacent moves/scrubbing,
+  // without sweeping a non-adjacent selection through the middle label.
+  if (Math.abs(index - selection.position.get()) > 1.01) selection.jump(index);
+  else selection.move(index);
+}
 function navigate(index: number, replace = false) {
   if (
     requestedIndex === index &&
@@ -161,7 +167,8 @@ function finish(event: PointerEvent, cancelled = false) {
       y: event.clientY,
       time: performance.now(),
     };
-  selection.move(index);
+  if (wasDragging) selection.move(index);
+  else selectTarget(index);
   navigate(index);
 }
 function click(event: MouseEvent) {

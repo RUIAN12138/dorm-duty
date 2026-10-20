@@ -39,7 +39,7 @@ try {
     ).json();
   for (const [key, days] of [
     ["floor", 4],
-    ["toilet", 10],
+    ["toilet", 30],
   ]) {
     for (let entry = 0; entry < (key === "floor" ? 6 : 1); entry++) {
       const date = new Date(Date.now() - days * 86400000)
@@ -275,7 +275,8 @@ try {
     page
       .getByTestId("stats-" + key)
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-  const lightColor = await color("floor");
+  const lightColor = await color("floor"),
+    lightToiletColor = await color("toilet");
   check(
     await page.getByTestId("stats-floor").evaluate((el) => {
       const light = getComputedStyle(el)
@@ -293,7 +294,7 @@ try {
     "daytime warnings use one neutral-grey palette that deepens with the interval",
   );
   const paletteFrames = await page.evaluate(async () => {
-    const card = document.querySelector('[data-testid="stats-floor"]');
+    const card = document.querySelector('[data-testid="stats-toilet"]');
     window.qa.theme("dark");
     const colours = [];
     const start = performance.now();
@@ -308,7 +309,7 @@ try {
     "card colour changes have real intermediate colours rather than a hard swap",
   );
   check(
-    (await color("floor")) !== lightColor,
+    (await color("toilet")) !== lightToiletColor,
     "warning fill has a separate dark palette",
   );
   await page.getByRole("button", { name: "统计提醒颜色", exact: true }).click();

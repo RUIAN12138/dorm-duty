@@ -11,7 +11,7 @@ const vueUrl = new URL(
 ).href;
 const result = await build({
   stdin: {
-    contents: `export {useChoreActivity} from './composables/useChoreActivity';export {mergeCalendarRecords,indexCalendarRecords} from './interaction/calendarRecords';`,
+    contents: `export {useChoreActivity} from './composables/useChoreActivity';export {mergeCalendarRecords,indexCalendarRecords,applyCalendarReceipt} from './interaction/calendarRecords';`,
     resolveDir: new URL("../frontend/src", import.meta.url).pathname,
   },
   bundle: true,
@@ -38,11 +38,15 @@ const result = await build({
     },
   ],
 });
-const { useChoreActivity, mergeCalendarRecords, indexCalendarRecords } =
-  await import(
-    "data:text/javascript;base64," +
-      Buffer.from(result.outputFiles[0].text).toString("base64")
-  );
+const {
+  useChoreActivity,
+  mergeCalendarRecords,
+  indexCalendarRecords,
+  applyCalendarReceipt,
+} = await import(
+  "data:text/javascript;base64," +
+    Buffer.from(result.outputFiles[0].text).toString("base64")
+);
 const requests = [];
 globalThis.activityRequest = (path, token, { signal }) =>
   new Promise((resolve, reject) =>
@@ -191,4 +195,51 @@ assert.equal(
 assert.equal(merged[0].id, 2, "stable newest-first ordering");
 console.log(
   "Calendar data: lazy reads, in-flight dedupe, version cache, retained data, retry, stale response, identity isolation, disposal and neighboring-month records passed.",
+);
+
+const visible = {
+  calendar: [old],
+  calendar_neighbors: { "2026-09": [old], "2026-11": [adjacent] },
+};
+const task = {
+  id: 1,
+  key: "floor",
+  name: "地板",
+  assignee_id: 1,
+  assignee_name: "甲",
+  marker_id: "pixel-01",
+  status: "completed",
+  completed_at: "2026-10-20T16:05:00Z",
+};
+applyCalendarReceipt(visible, task);
+assert.equal(
+  visible.calendar.find((r) => r.id === 1).completed_date,
+  "2026-10-21",
+  "receipt uses Shanghai day even around midnight",
+);
+assert.equal(visible.calendar_neighbors["2026-09"].length, 0);
+applyCalendarReceipt(visible, task);
+assert.equal(
+  visible.calendar.filter((r) => r.id === 1).length,
+  1,
+  "duplicate receipt cannot duplicate calendar",
+);
+applyCalendarReceipt(visible, {
+  ...task,
+  status: "pending",
+  completed_at: null,
+});
+assert(
+  !mergeCalendarRecords(visible.calendar, visible.calendar_neighbors).some(
+    (r) => r.id === 1,
+  ),
+  "undo removes all copies immediately",
+);
+assert.equal(
+  visible.calendar_neighbors["2026-11"][0].id,
+  2,
+  "other history stays unchanged",
+);
+console.log(
+  "PASS: confirmed completion and undo update current/neighbor calendar atomically.",
 );

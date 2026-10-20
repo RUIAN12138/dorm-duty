@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>统计：从白色逐渐变灰，颜色过渡更自然</li>
-          <li>消息浮窗加宽，修复底层文字叠穿</li>
-          <li>前台收到消息后不再补发邮件</li>
+          <li>打卡后日历立即同步</li>
+          <li>统计底色每天轻微加深</li>
+          <li>跨页直接切换，留话可选所有人</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

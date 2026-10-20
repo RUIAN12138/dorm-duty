@@ -84,6 +84,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify mobile interaction foundation
         run: |
+          node scripts/check-live-calendar-notes.mjs
           node scripts/check-companion-browser.mjs
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs

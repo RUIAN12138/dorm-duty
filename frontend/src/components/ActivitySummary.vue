@@ -16,6 +16,7 @@ import {
   resetStatsColors,
   statsInk,
   statsFill,
+  statsElapsedShade,
 } from "../interaction/statsPalette";
 const colorsOpen = ref(false),
   previewDark = ref(false);
@@ -116,7 +117,7 @@ const cards = computed(() =>
       at: validAt,
       number,
       unit,
-      shade: days === null ? null : Math.min(1, days / (interval * 2)),
+      shade: days === null ? null : statsElapsedShade(days),
       tone:
         days === null
           ? "empty"
@@ -150,7 +151,7 @@ const cards = computed(() =>
       <span>距上次完成</span
       ><HintPopover
         title="间隔提醒"
-        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，刚完成为白色，间隔越久越灰。日间灰色可在此设备自定义，夜间保持灰白色。颜色只作提醒，暂无记录单独显示。"
+        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，刚完成为白色，每过一天轻微加深。日间灰色可在此设备自定义，夜间保持灰白色。颜色只作提醒，暂无记录单独显示。"
         label="查看间隔提醒规则"
       />
       <div class="summary-actions">

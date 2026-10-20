@@ -1783,7 +1783,8 @@ async function leaveNote(request, db, room, who, now, env) {
     ["target_member_id", "text"],
     ["target_member_id", "text"],
   );
-  const target = integer(input.target_member_id);
+  const broadcast = input.target_member_id === "all";
+  const target = broadcast ? null : integer(input.target_member_id);
   if (typeof input.text !== "string") invalid("请写一句留言");
   const text = input.text.trim();
   if (
@@ -1794,58 +1795,71 @@ async function leaveNote(request, db, room, who, now, env) {
     invalid("留言请控制在 1–120 字");
   const { state, members } = await maintain(db, room, now);
   if (target === who.user_id) fail(422, "self_note", "请选择一位室友");
-  if (!members.some((member) => member.user_id === target))
+  if (!broadcast && !members.some((member) => member.user_id === target))
     fail(403, "wrong_dorm", "只能给本宿舍的室友留言");
+  const targets = broadcast
+    ? members
+        .filter((member) => member.user_id !== who.user_id)
+        .map((member) => member.user_id)
+    : [target];
+  if (!targets.length) fail(422, "no_recipients", "室友加入后再留言吧");
   const cutoff = new Date(now.getTime() - 15_000).toISOString();
-  const cooldown =
-    "SELECT id FROM chore_reminders WHERE dorm_id=? AND sender_id=? AND target_member_id=? AND source='note' AND created_at>?";
-  const args = [room.id, who.user_id, target, cutoff];
+  const placeholders = targets.map(() => "?").join(",");
+  const cooldown = `SELECT id FROM chore_reminders WHERE dorm_id=? AND sender_id=? AND target_member_id IN (${placeholders}) AND source='note' AND created_at>?`;
+  const args = [room.id, who.user_id, ...targets, cutoff];
   if (await first(db, cooldown, args))
     fail(429, "note_cooldown", "刚刚已经留言，稍等片刻再发");
+  // One guarded batch: either every current recipient gets a separate note
+  // and outbox entry, or none do. Each keeps independent read/delivery state.
   const mutation = new Mutation(
     db,
     room,
     state.version,
     who,
     false,
-    `EXISTS(SELECT 1 FROM dorm_members m JOIN users u ON u.id=m.user_id WHERE m.dorm_id=chore_settings.dorm_id AND m.user_id=? AND m.is_active=1 AND u.current_dorm_id=m.dorm_id) AND NOT EXISTS (${cooldown})`,
-    [target, ...args],
+    `(SELECT COUNT(*) FROM dorm_members m JOIN users u ON u.id=m.user_id WHERE m.dorm_id=chore_settings.dorm_id AND m.user_id IN (${placeholders}) AND m.is_active=1 AND u.current_dorm_id=m.dorm_id)=? AND NOT EXISTS (${cooldown})`,
+    [...targets, targets.length, ...args],
   );
-  mutation.raw(
-    `INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source) SELECT ?,?,?,?,NULL,'室友留言',?,?,?,'note' WHERE ${mutation.guard}`,
-    [
-      room.id,
-      who.user_id,
-      who.nickname,
-      target,
-      text,
-      now.toISOString(),
-      mutation.token,
-      ...mutation.guardValues,
-    ],
-  );
-  mutation.ops.push(
-    notifyUser(
-      target,
-      {
-        dormId: room.id,
-        reminderKey: mutation.token,
-        createdAt: now.toISOString(),
-      },
-      { db, env, guard: mutation.guard, values: mutation.guardValues },
-    ),
-  );
+  const keys = [];
+  for (const recipient of targets) {
+    const key = broadcast ? `${mutation.token}:${recipient}` : mutation.token;
+    keys.push(key);
+    mutation.raw(
+      `INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source) SELECT ?,?,?,?,NULL,'室友留言',?,?,?,'note' WHERE ${mutation.guard}`,
+      [
+        room.id,
+        who.user_id,
+        who.nickname,
+        recipient,
+        text,
+        now.toISOString(),
+        key,
+        ...mutation.guardValues,
+      ],
+    );
+    mutation.ops.push(
+      notifyUser(
+        recipient,
+        { dormId: room.id, reminderKey: key, createdAt: now.toISOString() },
+        { db, env, guard: mutation.guard, values: mutation.guardValues },
+      ),
+    );
+  }
   await mutation.finish();
   env.PUSH_WAKE?.();
+  const notes = await all(
+    db,
+    `SELECT * FROM chore_reminders WHERE mutation_key IN (${keys.map(() => "?").join(",")}) ORDER BY id`,
+    keys,
+  );
   return json(
-    reminderView(
-      await first(db, "SELECT * FROM chore_reminders WHERE mutation_key=?", [
-        mutation.token,
-      ]),
-    ),
+    broadcast
+      ? { recipients: notes.length, reminders: notes.map(reminderView) }
+      : reminderView(notes[0]),
     201,
   );
 }
+
 async function memberPush(request, db, room, who, now, env, path) {
   const config = env.PUSH_CONFIG || { available: false, public_key: null };
   if (path === "/chores/push/config" && request.method === "GET")
@@ -2334,8 +2348,16 @@ export async function handleChores(request, env, now) {
     if (row.dorm_id !== room.id || row.target_member_id !== who.user_id)
       fail(403, "not_recipient", "只能确认发给自己的消息");
     await db.batch([
-      stmt(db, "UPDATE chore_reminders SET in_app_received_at=COALESCE(in_app_received_at,?) WHERE id=? AND dorm_id=? AND target_member_id=?", [now.toISOString(), id, room.id, who.user_id]),
-      stmt(db, "UPDATE email_jobs SET status='cancelled',lease_until=NULL WHERE reminder_id=? AND status='pending'", [id]),
+      stmt(
+        db,
+        "UPDATE chore_reminders SET in_app_received_at=COALESCE(in_app_received_at,?) WHERE id=? AND dorm_id=? AND target_member_id=?",
+        [now.toISOString(), id, room.id, who.user_id],
+      ),
+      stmt(
+        db,
+        "UPDATE email_jobs SET status='cancelled',lease_until=NULL WHERE reminder_id=? AND status='pending'",
+        [id],
+      ),
     ]);
     return json({ ok: true });
   }
