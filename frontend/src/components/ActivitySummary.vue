@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import type {
   ChoreActivity,
   ChoreBoardData,
@@ -8,15 +8,39 @@ import type {
 import TaskCategoryIcon from "./TaskCategoryIcon.vue";
 import HintPopover from "./HintPopover.vue";
 import SwipeCardDeck from "./SwipeCardDeck.vue";
+import ElasticSheet from "./ElasticSheet.vue";
+import { darkTheme } from "../interaction/theme";
+import {
+  statsBaseColor,
+  saveStatsColor,
+  resetStatsColors,
+  statsInk,
+  statsFill,
+} from "../interaction/statsPalette";
+const colorsOpen = ref(false),
+  previewDark = ref(false);
+function openColors() {
+  previewDark.value = darkTheme.value;
+  colorsOpen.value = true;
+}
+function warningStyle(shade: number | null) {
+  if (shade === null) return {};
+  const background = statsFill(statsBaseColor.value, shade, darkTheme.value);
+  return { background, color: statsInk(background) };
+}
 const props = defineProps<{
   activity: ChoreActivity;
   rounds: ChoreBoardData["rounds"];
   categories?: ChoreCategory[];
   creator?: boolean;
+  memory?: { current: number; pausedUntil: number };
 }>();
 const emit = defineEmits<{ settings: [key: ChoreCategory["key"]] }>();
-const current = ref(0),
+const current = ref(props.memory?.current || 0),
   now = ref(Date.now());
+watch(current, (value) => {
+  if (props.memory) props.memory.current = value;
+});
 const timer = setInterval(() => (now.value = Date.now()), 60000);
 onBeforeUnmount(() => clearInterval(timer));
 const names = [
@@ -30,8 +54,9 @@ const cards = computed(() =>
     const at = props.activity.last_completed?.find(
       (r) => r.key === key,
     )?.completed_at;
-    const minutes = at
-      ? Math.max(0, Math.floor((now.value - Date.parse(at)) / 60000))
+    const validAt = at && Number.isFinite(Date.parse(at)) ? at : undefined;
+    const minutes = validAt
+      ? Math.max(0, Math.floor((now.value - Date.parse(validAt)) / 60000))
       : null;
     const days = minutes === null ? null : minutes / 1440;
     const interval =
@@ -59,9 +84,10 @@ const cards = computed(() =>
     return {
       key: key!,
       name: props.categories?.find((c) => c.key === key)?.name || name!,
-      at,
+      at: validAt,
       number,
       unit,
+      shade: days === null ? null : Math.min(1, days / (interval * 2)),
       tone:
         days === null
           ? "empty"
@@ -70,7 +96,7 @@ const cards = computed(() =>
             : days >= interval
               ? "warm"
               : "neutral",
-      date: at
+      date: validAt
         ? new Intl.DateTimeFormat("zh-CN", {
             timeZone: "Asia/Shanghai",
             year: "numeric",
@@ -79,7 +105,7 @@ const cards = computed(() =>
             hour: "2-digit",
             minute: "2-digit",
             hour12: false,
-          }).format(new Date(at))
+          }).format(new Date(validAt))
         : "",
     };
   }),
@@ -91,25 +117,37 @@ const cards = computed(() =>
       <span>距上次完成</span
       ><HintPopover
         title="间隔提醒"
-        text="按全宿舍该任务最近一次有效打卡计算，包括修正后的历史记录。每项任务可由创建者设置间隔：达到间隔变淡橙，达到两倍变浅红。颜色只作提醒，不代表固定到期。暂无记录单独显示。"
+        text="按全宿舍该任务最近一次有效打卡计算。每项任务可单独设置间隔，间隔越久，底色越深。日夜共用一个基色，可在此设备自定义。颜色只作提醒，暂无记录单独显示。"
         label="查看间隔提醒规则"
-      /><button
-        v-if="creator"
-        class="interval-settings"
-        @click="emit('settings', cards[current]!.key as ChoreCategory['key'])"
-      >
-        设置间隔
-      </button>
+      />
+      <div class="summary-actions">
+        <button
+          class="interval-settings"
+          aria-label="统计提醒颜色"
+          @click="openColors"
+        >
+          颜色</button
+        ><button
+          v-if="creator"
+          class="interval-settings"
+          @click="emit('settings', cards[current]!.key as ChoreCategory['key'])"
+        >
+          设置间隔
+        </button>
+      </div>
     </div>
     <SwipeCardDeck
       v-model="current"
       :labels="cards.map((c) => c.name)"
       label="分类统计卡片"
+      :autoplay="!colorsOpen"
+      :autoplay-memory="memory"
       ><template #default="{ index }">
         <div
           class="stat-card"
           :data-testid="`stats-${cards[index]!.key}`"
           :data-tone="cards[index]!.tone"
+          :style="warningStyle(cards[index]!.shade)"
         >
           <header>
             <TaskCategoryIcon :kind="cards[index]!.key" />
@@ -128,6 +166,37 @@ const cards = computed(() =>
         </div>
       </template></SwipeCardDeck
     >
+    <ElasticSheet v-model="colorsOpen" title="提醒颜色" motion="bottom">
+      <div class="palette-mode" role="group" aria-label="颜色预览外观">
+        <button :aria-pressed="!previewDark" @click="previewDark = false">
+          日间预览
+        </button>
+        <button :aria-pressed="previewDark" @click="previewDark = true">
+          夜间预览
+        </button>
+      </div>
+      <div class="palette-ramp" aria-label="随间隔逐渐加深的颜色预览">
+        <span
+          v-for="step in 5"
+          :key="step"
+          :style="{
+            background: statsFill(statsBaseColor, (step - 1) / 4, previewDark),
+          }"
+        />
+      </div>
+      <label class="palette-color-row"
+        ><span>基色</span>
+        <input
+          type="color"
+          aria-label="统计基色"
+          :value="statsBaseColor"
+          @input="saveStatsColor(($event.target as HTMLInputElement).value)"
+        />
+      </label>
+      <button class="palette-reset" @click="resetStatsColors()">
+        恢复默认颜色
+      </button>
+    </ElasticSheet>
   </section>
 </template>
 <style scoped>
@@ -142,6 +211,11 @@ const cards = computed(() =>
   min-height: 32px;
   color: var(--ui-text-muted);
   font-size: 14px;
+}
+.summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .interval-settings {
   border: 0;
@@ -159,14 +233,6 @@ const cards = computed(() =>
   padding: 24px;
   background: var(--app-tone-hf7f7f5, #f7f7f5);
   color: var(--app-tone-h191919, #191919);
-}
-.stat-card[data-tone="warm"] {
-  background: #fff0d9;
-  color: #694118;
-}
-.stat-card[data-tone="alert"] {
-  background: #fbe1dc;
-  color: #8e342b;
 }
 .stat-card[data-tone="empty"] {
   background: var(--app-tone-hf5f5f5, #f5f5f5);
@@ -220,5 +286,74 @@ time {
     width: 32px;
     height: 32px;
   }
+}
+</style>
+
+<style scoped>
+.palette-mode {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 18px;
+  background: var(--ui-surface-muted);
+  margin-bottom: 16px;
+}
+.palette-mode button {
+  flex: 1;
+  min-height: 42px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--ui-text-muted);
+  font: inherit;
+}
+.palette-mode button[aria-pressed="true"] {
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+}
+.palette-ramp {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.palette-ramp span {
+  flex: 1;
+  height: 38px;
+  border-radius: 10px;
+  border: var(--ui-card-border);
+}
+.palette-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  border-bottom: var(--ui-card-border);
+}
+.palette-color-row input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 56px;
+  height: 40px;
+  border: var(--ui-card-border);
+  border-radius: 12px;
+  padding: 4px;
+  background: var(--ui-surface);
+  cursor: pointer;
+}
+.palette-color-row input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.palette-color-row input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 7px;
+}
+.palette-reset {
+  display: block;
+  min-height: 44px;
+  margin: 20px auto 0;
+  background: none;
+  border: 0;
+  color: var(--ui-text-muted);
+  font: inherit;
 }
 </style>

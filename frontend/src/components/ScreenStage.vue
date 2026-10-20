@@ -45,7 +45,7 @@ function down(event: PointerEvent) {
     return;
   if (
     event.target.closest(
-      "input,textarea,select,[contenteditable=true],.dorm-companion",
+      "input,textarea,select,[contenteditable=true],.dorm-companion,[data-native-scroll]",
     )
   )
     return;
@@ -147,7 +147,7 @@ function wheel(event: WheelEvent) {
   if (
     event.ctrlKey ||
     !(event.target instanceof Element) ||
-    event.target.closest("input,textarea,select")
+    event.target.closest("input,textarea,select,[data-native-scroll]")
   )
     return;
   event.preventDefault();

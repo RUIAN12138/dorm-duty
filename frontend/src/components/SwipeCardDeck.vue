@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from "vue";
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import {
   horizontalIntent,
   createVelocityTracker,
@@ -7,11 +7,18 @@ import {
 import { motionAllowed } from "../interaction/motion";
 // React Bits Stack: overlapping cards with depth; Carousel: velocity and snap.
 // Vue implementation, no React source or runtime bundled.
-const props = defineProps<{
-  modelValue: number;
-  labels: string[];
-  label: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: number;
+    labels: string[];
+    label: string;
+    autoplay?: boolean;
+    autoplayMemory?: { pausedUntil: number };
+    autoplayDelay?: number;
+    resumeDelay?: number;
+  }>(),
+  { autoplay: false, autoplayDelay: 5000, resumeDelay: 30000 },
+);
 const emit = defineEmits<{ "update:modelValue": [index: number] }>();
 const stage = ref<HTMLElement>(),
   offset = ref(0),
@@ -27,6 +34,38 @@ let gesture: {
 } | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const width = () => stage.value?.clientWidth || 300;
+let autoTimer: ReturnType<typeof setTimeout> | undefined;
+let pausedUntil = props.autoplayMemory?.pausedUntil || 0;
+function scheduleAuto(delay = props.autoplayDelay) {
+  clearTimeout(autoTimer);
+  if (!props.autoplay || props.labels.length < 2 || !motionAllowed()) return;
+  autoTimer = setTimeout(
+    () => {
+      if (!motionAllowed()) return;
+      const remaining = pausedUntil - Date.now();
+      if (remaining > 0) return scheduleAuto(remaining);
+      if (gesture || settling.value || document.querySelector(".sheet-layer"))
+        return scheduleAuto(props.autoplayDelay);
+      choose(props.modelValue + 1);
+      scheduleAuto();
+    },
+    Math.max(1, delay),
+  );
+}
+function pauseAuto() {
+  pausedUntil = Date.now() + props.resumeDelay;
+  if (props.autoplayMemory) props.autoplayMemory.pausedUntil = pausedUntil;
+  scheduleAuto(props.resumeDelay);
+}
+function manualChoose(index: number) {
+  pauseAuto();
+  choose(index);
+}
+watch(
+  () => [props.autoplay, props.labels.length],
+  () => scheduleAuto(),
+);
+onMounted(() => scheduleAuto());
 function target() {
   return (
     (props.modelValue + (offset.value > 0 ? -1 : 1) + props.labels.length) %
@@ -115,6 +154,7 @@ function choose(requested: number) {
 function down(e: PointerEvent) {
   e.stopPropagation();
   if (!e.isPrimary || e.button !== 0 || gesture || settling.value) return;
+  pauseAuto();
   gesture = {
     id: e.pointerId,
     x: e.clientX,
@@ -153,6 +193,7 @@ function up(e: PointerEvent, cancel = false) {
     gesture.target.hasPointerCapture(e.pointerId)
   )
     return;
+  pauseAuto();
   const old = gesture,
     x = offset.value,
     projected = x + old.velocity.read(performance.now()) * 100;
@@ -170,6 +211,7 @@ function up(e: PointerEvent, cancel = false) {
   offset.value = 0;
 }
 function quiet() {
+  scheduleAuto(Math.max(props.autoplayDelay, pausedUntil - Date.now()));
   if (!motionAllowed()) {
     clearTimeout(timer);
     release();
@@ -182,6 +224,7 @@ media.addEventListener("change", quiet);
 document.addEventListener("visibilitychange", quiet);
 window.addEventListener("ui-motion-change", quiet);
 onBeforeUnmount(() => {
+  clearTimeout(autoTimer);
   clearTimeout(timer);
   release();
   media.removeEventListener("change", quiet);
@@ -197,8 +240,8 @@ onBeforeUnmount(() => {
       :class="{ 'is-dragging': dragging, 'is-settling': settling }"
       tabindex="0"
       :aria-label="`${label}，左右滑动切换`"
-      @keydown.left.prevent="choose(modelValue - 1)"
-      @keydown.right.prevent="choose(modelValue + 1)"
+      @keydown.left.prevent="manualChoose(modelValue - 1)"
+      @keydown.right.prevent="manualChoose(modelValue + 1)"
       @pointerdown="down"
       @pointermove="move"
       @pointerup="up($event)"

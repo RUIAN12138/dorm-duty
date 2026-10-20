@@ -2,6 +2,7 @@
 export interface CalendarViewMemory {
   view: "calendar" | "list" | "stats";
   focusedDate: string;
+  stats: { current: number; pausedUntil: number };
   list: {
     month: string;
     page: number;
@@ -14,6 +15,7 @@ export function createCalendarViewMemory(): CalendarViewMemory {
   return {
     view: "calendar",
     focusedDate: "",
+    stats: { current: 0, pausedUntil: 0 },
     list: {
       month: "",
       page: 0,

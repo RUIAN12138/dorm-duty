@@ -2,6 +2,10 @@
    pre-painted rainbow. These CSS layers are also the no-WebGL fallback. */
 :root {
   --glass-surface: rgba(255, 255, 255, 0.1);
+  --glass-lens-surface: rgba(255, 255, 255, 0.1);
+  --glass-lens-shadow:
+    inset 0 1px 0 #ffffffe0, inset 1px 0 0 #ffffff65,
+    inset 0 -1px 1px #65708032, 0 2px 6px #35435b0c;
   --glass-border: rgba(154, 166, 184, 0.24);
   --glass-shadow:
     0 7px 24px #24334c14, inset 0 1px 0 #ffffffb3, inset 0 -1px 0 #7c8b9f24;
@@ -17,7 +21,11 @@
   --glass-saturation: 135%;
 }
 :root[data-theme="dark"] {
-  --glass-surface: rgba(255, 255, 255, 0.1);
+  --glass-surface: rgba(20, 20, 22, 0.72);
+  --glass-lens-surface: rgba(56, 57, 61, 0.68);
+  --glass-lens-shadow:
+    inset 0 1px 0 #ffffff20, inset 1px 0 0 #ffffff0c,
+    inset 0 -1px 1px #00000050, 0 2px 6px #00000018;
   --glass-border: rgba(204, 216, 235, 0.18);
   --glass-shadow:
     0 7px 24px #00000030, inset 0 1px 0 #ffffff45, inset 0 -1px 0 #00000038;

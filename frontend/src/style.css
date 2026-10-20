@@ -1671,7 +1671,7 @@ summary:focus-visible {
   border-radius: 28px 28px 0 0;
   width: 100%;
   max-width: 640px;
-  max-height: 90dvh;
+  max-height: 75dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 24px calc(24px + env(safe-area-inset-bottom));

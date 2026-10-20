@@ -273,13 +273,9 @@ function mountList() {
 }
 let list = mountList();
 await nextTick();
-let area = find(list.listRoot, (n) => hasClass(n, "record-date-page"));
+let area = find(list.listRoot, (n) => hasClass(n, "folded-record-page"));
 assert.equal(area.props["data-page"], 2);
-assert.equal(
-  area.scrollTop,
-  0,
-  "single-screen list does not restore scrolling",
-);
+assert.equal(area.scrollTop, 80);
 find(
   list.listRoot,
   (n) => n.props["aria-label"] === "下一页记录",
@@ -287,12 +283,15 @@ find(
 await nextTick();
 assert.equal(memory.page, 3);
 assert.equal(memory.scrollTop, 0);
-area = find(list.listRoot, (n) => hasClass(n, "record-date-page"));
+area = find(list.listRoot, (n) => hasClass(n, "folded-record-page"));
+area.scrollTop = 120;
+area.props.onScroll({ target: area });
 list.instance.unmount();
 list = mountList();
 await nextTick();
-area = find(list.listRoot, (n) => hasClass(n, "record-date-page"));
-assert.equal(area.props["data-page"], 3, "remount keeps date pagination");
+area = find(list.listRoot, (n) => hasClass(n, "folded-record-page"));
+assert.equal(area.props["data-page"], 3, "remount keeps list page");
+assert.equal(area.scrollTop, 120, "remount restores list scroll");
 listState.month = "2026-09";
 await nextTick();
 assert.equal(memory.page, 0);
@@ -300,5 +299,5 @@ assert.equal(memory.scrollTop, 0);
 assert.deepEqual(memory.expanded, []);
 list.instance.unmount();
 console.log(
-  "Navigation components: banner swipe/flick threshold, rebound/cancel, click suppression, interruption and close; date pagination restoration and month reset passed (in-memory renderer, no visual QA).",
+  "Navigation components: banner swipe/flick threshold, rebound/cancel, click suppression, interruption and close; list page/scroll restoration and month reset passed (in-memory renderer, no visual QA).",
 );

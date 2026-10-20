@@ -454,7 +454,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
   padding-bottom: 0;
-  height: min(90dvh, 820px);
+  height: min(75dvh, 820px);
 }
 .has-contained-scroll .sheet-handle,
 .has-contained-scroll .sheet-heading {

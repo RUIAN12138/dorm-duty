@@ -15,69 +15,36 @@ function apply() {
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", dark ? "#16171b" : "#ffffff");
+    ?.setAttribute("content", "#ffffff");
   window.dispatchEvent(new Event("ui-theme-change"));
 }
 type Origin = { x: number; y: number };
-let transition: ViewTransition | undefined;
+let reveal: Animation | undefined;
 export function setThemeMode(mode: ThemeMode, origin?: Origin) {
   if (!valid(mode)) return;
+  const wasDark = darkTheme.value;
   themeMode.value = mode;
   try {
     localStorage.setItem(key, mode);
   } catch {}
-  const nextDark =
-    mode === "dark" || (mode === "system" && Boolean(media?.matches));
-  const animated =
-    Boolean(origin) &&
-    nextDark !== darkTheme.value &&
+  reveal?.cancel();
+  reveal = undefined;
+  // WebGL/backdrop-filter layers cannot reliably survive root snapshots on
+  // iOS. Keep glass live and only soften the page surface; the icon has its
+  // own reversible sun/moon spring.
+  apply();
+  if (
+    origin &&
+    wasDark !== darkTheme.value &&
     !document.hidden &&
-    !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  transition?.skipTransition();
-  transition = undefined;
-  if (!animated || !document.startViewTransition) {
-    apply();
-    if (animated)
-      document.documentElement.animate?.(
-        { opacity: [0.88, 1] },
-        { duration: 180, easing: "ease-out" },
-      );
-    return;
-  }
-  const point = origin!;
-  try {
-    const current = document.startViewTransition(apply);
-    transition = current;
-    void current.ready
-      .then(() => {
-        if (transition !== current) return;
-        const radius = Math.hypot(
-          Math.max(point.x, innerWidth - point.x),
-          Math.max(point.y, innerHeight - point.y),
-        );
-        document.documentElement.animate(
-          {
-            clipPath: [
-              `circle(0px at ${point.x}px ${point.y}px)`,
-              `circle(${radius}px at ${point.x}px ${point.y}px)`,
-            ],
-          },
-          {
-            duration: 320,
-            easing: "cubic-bezier(.22,1,.36,1)",
-            pseudoElement: "::view-transition-new(root)",
-            fill: "both",
-          },
-        );
-      })
-      .catch(() => {});
-    void current.finished
-      .catch(() => {})
-      .then(() => {
-        if (transition === current) transition = undefined;
+    !matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    reveal = document
+      .querySelector<HTMLElement>(".screen-surface")
+      ?.animate?.([{ opacity: 0.96 }, { opacity: 1 }], {
+        duration: 180,
+        easing: "cubic-bezier(.22,1,.36,1)",
       });
-  } catch {
-    apply();
   }
 }
 export function installTheme() {
@@ -99,6 +66,8 @@ export function installTheme() {
   window.addEventListener("storage", storage);
   apply();
   return () => {
+    reveal?.cancel();
+    reveal = undefined;
     media?.removeEventListener("change", system);
     window.removeEventListener("storage", storage);
   };

@@ -44,6 +44,9 @@
   padding: 0;
   --hero-anchor: clamp(88px, 32cqh, 210px);
 }
+.app-stage .screen-surface .chore-personal {
+  --hero-anchor: clamp(112px, 37cqh, 270px);
+}
 .app-stage .screen-surface .chore-personal > .hero-caption {
   top: max(4px, calc(var(--hero-anchor) - 110px));
 }
@@ -291,4 +294,10 @@ body:has(.app-stage),
     margin: 2px 0 8px;
     font-size: 20px;
   }
+}
+
+/* The restored record stack is a native scroll island inside the elastic page. */
+.app-stage .screen-surface [data-native-scroll],
+.app-stage .screen-surface [data-native-scroll] * {
+  touch-action: pan-y pinch-zoom;
 }

@@ -25,7 +25,7 @@ export const glassVertex = `attribute vec2 a_position; varying vec2 v_uv;
 void main(){v_uv=(a_position+1.0)*.5;gl_Position=vec4(a_position,0.,1.);}`;
 export const glassFragment = `precision mediump float;
 uniform sampler2D u_text; uniform vec2 u_size; uniform vec4 u_lens;
-uniform float u_energy; uniform float u_time; uniform vec3 u_backdrop; varying vec2 v_uv;
+uniform float u_energy; uniform float u_time; uniform vec3 u_backdrop; uniform vec4 u_tint; varying vec2 v_uv;
 float shape(vec2 p){
  vec2 halfSize=u_lens.zw*.5; float radius=min(halfSize.x,halfSize.y)*.97;
  vec2 q=abs(p-u_lens.xy)-halfSize+radius;
@@ -62,14 +62,16 @@ void main(){
  float luma=dot(ink,vec3(.2126,.7152,.0722));
  ink=clamp(mix(vec3(luma),ink,1.35),0.,1.);
  // A 10% white overlay is local to the lens. No page-wide dimming or rainbow.
- float whiteAlpha=.075;
+ float whiteAlpha=u_tint.a;
  // Neutral lower bevel gives the clear surface thickness on pale backgrounds.
  float shade=exp(-abs(d+1.7)*1.4)*.12*(1.-clamp(-n.y,0.,1.));
  float rim=exp(-abs(d+.5)*2.2);
  float gleam=clamp(dot(n,normalize(vec2(-.6,-1.))),0.,1.);
  whiteAlpha+=rim*(.035+.12*gleam);
- float alpha=inkAlpha*(1.-whiteAlpha)+whiteAlpha;
- vec3 rgb=(ink*inkAlpha*(1.-whiteAlpha)+vec3(whiteAlpha))/max(alpha,.001);
+ // The tint is behind the label, not a veil over it. Opaque glyphs stay
+ // fully readable in dark mode even when the glass itself is dark/dense.
+ float alpha=inkAlpha+whiteAlpha*(1.-inkAlpha);
+ vec3 rgb=(ink*inkAlpha+u_tint.rgb*whiteAlpha*(1.-inkAlpha))/max(alpha,.001);
  float bevelAlpha=shade*(1.-inkAlpha);
  rgb=(rgb*alpha*(1.-bevelAlpha)+vec3(.35,.39,.45)*bevelAlpha)/max(alpha*(1.-bevelAlpha)+bevelAlpha,.001);
  alpha=alpha*(1.-bevelAlpha)+bevelAlpha;
