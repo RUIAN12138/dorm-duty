@@ -24,6 +24,7 @@ const config = {
 const service = runtime.createEmailRuntime(h.db, {
   config,
   autoStart: false,
+  reminderGraceMs: 0,
   now: () => new Date(time),
   send: async (message) => {
     if (failSend) throw new Error("fixture SMTP offline");
@@ -211,6 +212,7 @@ try {
     data: { target_member_id: ordinary.member_id, task_id: task.id },
   });
   eq(reminded.status, 201);
+  time = Math.max(time, Date.now()); // The API uses real time; keep the fake queue clock in sync.
   await service.drain();
   eq(
     h.db.sqlite

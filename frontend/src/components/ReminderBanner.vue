@@ -13,7 +13,12 @@ import {
 import { pressStep } from "../interaction/pressDynamics";
 import { bannerSwipe, dismissBanner } from "../interaction/bannerMotion";
 const props = defineProps<{ note: ChoreReminder | null }>();
-const emit = defineEmits<{ dismiss: []; open: []; settled: [id?: number] }>();
+const emit = defineEmits<{
+  dismiss: [];
+  open: [];
+  settled: [id?: number];
+  presented: [id: number];
+}>();
 const offsetX = ref(0);
 let exitDirection = 0,
   returnFrame = 0,
@@ -182,7 +187,11 @@ function enter(element: Element, done: () => void) {
     el,
     bannerEnterFrames(el.offsetHeight),
     bannerFlightTiming.enter,
-    done,
+    () => {
+      done();
+      const id = Number(el.dataset?.reminderId);
+      if (id && el.isConnected && !document.hidden) emit("presented", id);
+    },
     "linear",
   );
 }
@@ -323,6 +332,12 @@ function inactive() {
       el.style.transform = "";
       el.style.opacity = "";
     }
+  } else if (
+    props.note &&
+    !flights.size &&
+    document.querySelector(`[data-reminder-id="${props.note.id}"]`)
+  ) {
+    emit("presented", props.note.id);
   }
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
@@ -405,7 +420,7 @@ onBeforeUnmount(() => {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 14px);
   left: 50%;
-  width: min(342px, calc(100% - 32px));
+  width: min(390px, calc(100% - 24px));
   transform: translateX(-50%);
   z-index: 2900;
   pointer-events: none;
@@ -419,10 +434,11 @@ onBeforeUnmount(() => {
   height: 60px;
   position: relative;
   isolation: isolate;
-  background: var(--glass-surface);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur))
-    saturate(var(--glass-saturation));
+  /* A stable opaque backing prevents underlying text bleeding through while
+     WebKit composites the moving layer. Keep the existing glass rim/flight. */
+  background: var(--ui-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid var(--glass-border);
   border-radius: 32px;
   box-shadow: var(--glass-shadow);

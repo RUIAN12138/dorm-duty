@@ -116,6 +116,7 @@ export function createEmailRuntime(
     base = "/",
     autoStart = true,
     intervalMs = 10000,
+    reminderGraceMs = 20000,
     version = "development",
     requireRegistration = false,
   } = {},
@@ -957,7 +958,7 @@ export function createEmailRuntime(
     sql
       .prepare(
         `INSERT OR IGNORE INTO email_jobs(account_id,reminder_id,next_attempt_at,created_at)
-      SELECT a.id,r.id,?,? FROM chore_reminders r JOIN email_members em ON em.user_id=r.target_member_id AND em.dorm_id=r.dorm_id
+      SELECT a.id,r.id,MAX(?,strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at,?)),? FROM chore_reminders r JOIN email_members em ON em.user_id=r.target_member_id AND em.dorm_id=r.dorm_id
       JOIN email_accounts a ON a.id=em.account_id AND a.mail_enabled=1
       JOIN dorm_members m ON m.user_id=em.user_id AND m.dorm_id=em.dorm_id AND m.is_active=1
       JOIN users u ON u.id=em.user_id AND u.current_dorm_id=em.dorm_id
@@ -966,7 +967,7 @@ export function createEmailRuntime(
       AND NOT EXISTS(SELECT 1 FROM email_jobs j WHERE j.account_id=a.id AND j.reminder_id=r.id)
       ORDER BY r.id LIMIT 256`,
       )
-      .run(stamp(), stamp(), new Date(now().getTime() - DAY).toISOString());
+      .run(stamp(), `${Math.max(0, Math.min(60000, reminderGraceMs)) / 1000} seconds`, stamp(), new Date(now().getTime() - DAY).toISOString());
   }
   function eligible(job) {
     const account = sql
@@ -989,6 +990,7 @@ export function createEmailRuntime(
     if (
       !r ||
       r.read_at ||
+      r.in_app_received_at ||
       (r.task_id && (r.task_status !== "pending" || !r.category_enabled))
     )
       return null;

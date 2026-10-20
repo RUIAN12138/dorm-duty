@@ -1,5 +1,5 @@
 import { ref } from "vue";
-export const defaultStatsColor = "#b98a48";
+export const defaultStatsColor = "#303030";
 const key = "lundao-stats-colors-v1";
 export const validColor = (value: unknown): value is string =>
   typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
@@ -7,7 +7,7 @@ export function readStatsColor(value: string | null) {
   try {
     const saved = JSON.parse(value || "null");
     return validColor(saved?.base)
-      ? saved.base.toLowerCase() === "#555555"
+      ? ["#555555", "#b98a48"].includes(saved.base.toLowerCase())
         ? defaultStatsColor
         : saved.base.toLowerCase()
       : defaultStatsColor;
@@ -35,17 +35,18 @@ export function resetStatsColors() {
 }
 export function statsFill(base: string, progress: number, dark: boolean) {
   const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+  const depth = p * p * (3 - 2 * p);
   const channels = base
     .slice(1)
     .match(/../g)!
     .map((v) => parseInt(v, 16));
-  // Warm brown/yellow by day, neutral grey/white by night. Warning depth stays
-  // continuous; the night surface never inherits the custom daytime hue.
-  const rgb = channels.map((v, index) =>
+  // Stable pale ink on grey/black by day, dark ink on grey/white by night.
+  // Smooth endpoints avoid sudden depth changes near fresh/overdue states.
+  const rgb = channels.map((v) =>
     Math.round(
       dark
-        ? 242 * (1 - p) + 176 * p
-        : [255, 248, 237][index]! * (1 - p) + Math.min(224, v) * p,
+        ? 242 * (1 - depth) + 176 * depth
+        : 110 * (1 - depth) + Math.min(110, v) * depth,
     ),
   );
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");

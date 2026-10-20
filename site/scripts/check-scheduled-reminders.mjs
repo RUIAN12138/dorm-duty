@@ -551,7 +551,8 @@ test("migration from the previous release retains tasks, sessions, reminders and
           if (name === "sessions") { const {dorm_id, ...legacy} = row; return legacy; }
           if (name === "chore_reminders") {
             eq(row.source, "member");
-            const { source, ...legacy } = row;
+            eq(row.in_app_received_at, null);
+            const { source, in_app_received_at, ...legacy } = row;
             return legacy;
           }
           return { ...row };

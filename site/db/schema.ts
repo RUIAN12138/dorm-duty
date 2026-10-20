@@ -415,6 +415,7 @@ export const choreReminders = sqliteTable(
     taskContentSnapshot: text("task_content_snapshot").notNull(),
     createdAt: created(),
     readAt: text("read_at"),
+    inAppReceivedAt: text("in_app_received_at"),
     mutationKey: text("mutation_key").notNull().unique(),
     source: text("source").notNull().default("member"),
   },
