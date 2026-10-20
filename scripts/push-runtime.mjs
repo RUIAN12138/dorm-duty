@@ -80,6 +80,7 @@ export function createPushDelivery(
         date.getTime() - Date.parse(job.created_at) > 86400000 ||
         job.attempts > 5;
       const scheduled = job?.kind === "reminder" && job.source === "scheduled";
+      const note = job?.kind === "reminder" && job.source === "note";
       let taskIds = [];
       if (scheduled) {
         try {
@@ -115,9 +116,10 @@ export function createPushDelivery(
               scheduleAge < 0 ||
               scheduleAge >= SCHEDULE_CATCH_UP_MS ||
               !remaining.length
-            : job.task_status !== "pending" ||
-              job.assignee_id !== job.user_id ||
-              !job.category_enabled));
+            : !note &&
+              (job.task_status !== "pending" ||
+                job.assignee_id !== job.user_id ||
+                !job.category_enabled)));
       if (stale || obsoleteReminder) {
         finish("cancelled");
         continue;
@@ -130,16 +132,20 @@ export function createPushDelivery(
             ? "轮到 · 测试通知"
             : scheduled
               ? "轮到 · 值日提醒"
-              : `${job.sender_name_snapshot} 提醒你${job.task_name_snapshot}`,
+              : note
+                ? `${job.sender_name_snapshot} 给你留言`
+                : `${job.sender_name_snapshot} 提醒你${job.task_name_snapshot}`,
         body:
           job.kind === "test"
             ? `${job.recipient_name}，这是一条测试提醒。示例：室友提醒你抬水，抬完后记得打卡。`
             : scheduled
               ? `${remaining.map((task) => task.name).join("、")}还没完成，做完记得打卡。`
-              : `待办：${job.task_name_snapshot}。${String(job.task_content_snapshot || "").trim() || "完成后记得打卡。"}`.slice(
-                  0,
-                  160,
-                ),
+              : note
+                ? String(job.task_content_snapshot || "").trim()
+                : `待办：${job.task_name_snapshot}。${String(job.task_content_snapshot || "").trim() || "完成后记得打卡。"}`.slice(
+                    0,
+                    160,
+                  ),
         tag:
           job.kind === "test"
             ? `dorm-test-${id}`
