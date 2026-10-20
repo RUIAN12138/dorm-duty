@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { companionEntering } from "../interaction/companion";
 import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { motion } from "motion-v";
@@ -177,6 +178,9 @@ function click(event: MouseEvent) {
 <template>
   <nav
     class="chore-bottom-nav"
+    :style="
+      companionEntering ? { opacity: 0, pointerEvents: 'none' } : undefined
+    "
     aria-label="宿舍导航"
     data-testid="chore-bottom-nav"
     :class="{ 'is-dragging': dragging, 'is-moving': selection.moving.value }"
@@ -305,5 +309,11 @@ svg {
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+</style>
+
+<style scoped>
+.chore-bottom-nav {
+  transition: opacity 380ms 220ms;
 }
 </style>

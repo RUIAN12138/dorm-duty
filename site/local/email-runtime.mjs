@@ -131,21 +131,44 @@ export function createEmailRuntime(
     timer;
   const stamp = () => now().toISOString();
   function metric(name) {
-    sql.prepare(`INSERT INTO runtime_metrics(name,count,updated_at) VALUES (?,1,?)
-      ON CONFLICT(name) DO UPDATE SET count=count+1,updated_at=excluded.updated_at`).run(name, stamp());
+    sql
+      .prepare(
+        `INSERT INTO runtime_metrics(name,count,updated_at) VALUES (?,1,?)
+      ON CONFLICT(name) DO UPDATE SET count=count+1,updated_at=excluded.updated_at`,
+      )
+      .run(name, stamp());
   }
-  const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const escapeHtml = (text) =>
+    text.replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
   async function deliver(message) {
     metric("mail_attempt");
     try {
       // Plain text remains the source; HTML never interpolates unescaped names.
-      const html = message.html || `<div style="font-family:system-ui,sans-serif;line-height:1.6">${escapeHtml(message.text).replace(/\n/g, "<br>")}</div>`;
+      const html =
+        message.html ||
+        `<div style="font-family:system-ui,sans-serif;line-height:1.6">${escapeHtml(message.text).replace(/\n/g, "<br>")}</div>`;
       await transport({ ...message, html });
       metric("mail_accepted");
     } catch (error) {
       metric("mail_failed");
       // Structured service-journal alert: no address, OTP, credential or SMTP response.
-      console.error(JSON.stringify({ event: "smtp_delivery_failed", severity: "error", at: stamp() }));
+      console.error(
+        JSON.stringify({
+          event: "smtp_delivery_failed",
+          severity: "error",
+          at: stamp(),
+        }),
+      );
       throw error;
     }
   }
@@ -293,9 +316,13 @@ export function createEmailRuntime(
         )
         .run(member.user_id, member.dorm_id, member.token_hash);
       sql
-        .prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=? AND token_hash<>?")
+        .prepare(
+          "DELETE FROM sessions WHERE user_id=? AND dorm_id=? AND token_hash<>?",
+        )
         .run(member.user_id, member.dorm_id, member.token_hash);
-      sql.prepare("UPDATE sessions SET dorm_id=? WHERE token_hash=?").run(member.dorm_id, member.token_hash);
+      sql
+        .prepare("UPDATE sessions SET dorm_id=? WHERE token_hash=?")
+        .run(member.dorm_id, member.token_hash);
       const fullSession = Number(
         Boolean(
           sql
@@ -444,10 +471,24 @@ export function createEmailRuntime(
     }
     if (pathname === "/email/operations" && method === "GET") {
       const who = required(request);
-      if (!rooms(who).some((room) => room.is_creator)) fail(403, "需要宿舍创建者身份");
-      return reply({ version, counters: sql.prepare("SELECT name,count,updated_at FROM runtime_metrics ORDER BY name").all(),
-        pending: sql.prepare("SELECT COUNT(*) n FROM email_jobs WHERE status IN ('pending','sending')").get().n,
-        failed: sql.prepare("SELECT COUNT(*) n FROM email_jobs WHERE status='failed'").get().n });
+      if (!rooms(who).some((room) => room.is_creator))
+        fail(403, "需要宿舍创建者身份");
+      return reply({
+        version,
+        counters: sql
+          .prepare(
+            "SELECT name,count,updated_at FROM runtime_metrics ORDER BY name",
+          )
+          .all(),
+        pending: sql
+          .prepare(
+            "SELECT COUNT(*) n FROM email_jobs WHERE status IN ('pending','sending')",
+          )
+          .get().n,
+        failed: sql
+          .prepare("SELECT COUNT(*) n FROM email_jobs WHERE status='failed'")
+          .get().n,
+      });
     }
     if (method !== "POST") fail(404, "接口不存在");
     mutationOrigin(request);
@@ -632,7 +673,9 @@ export function createEmailRuntime(
           SELECT token_hash FROM member_sessions WHERE user_id=? AND dorm_id=?)`,
           )
           .run(link.user_id, link.dorm_id, link.user_id, link.dorm_id);
-        sql.prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=?").run(link.user_id, link.dorm_id);
+        sql
+          .prepare("DELETE FROM sessions WHERE user_id=? AND dorm_id=?")
+          .run(link.user_id, link.dorm_id);
         sql
           .prepare("DELETE FROM member_sessions WHERE user_id=? AND dorm_id=?")
           .run(link.user_id, link.dorm_id);
@@ -862,11 +905,17 @@ export function createEmailRuntime(
           const data = await result.clone().json();
           try {
             bind(who, data.access_token);
-            const room = rooms(who).find((room) => room.member_id === data.member?.user_id);
+            const room = rooms(who).find(
+              (room) => room.member_id === data.member?.user_id,
+            );
             if (room?.is_creator && p === "/chores/claim") {
               const entry = grant(who, room.id);
-              sql.prepare("DELETE FROM email_grants WHERE token_hash=?").run(hash(data.access_token));
-              sql.prepare("DELETE FROM member_sessions WHERE token_hash=?").run(hash(data.access_token));
+              sql
+                .prepare("DELETE FROM email_grants WHERE token_hash=?")
+                .run(hash(data.access_token));
+              sql
+                .prepare("DELETE FROM member_sessions WHERE token_hash=?")
+                .run(hash(data.access_token));
               return reply(entry, 201);
             }
           } catch (error) {
@@ -889,7 +938,8 @@ export function createEmailRuntime(
       guardEntry(request);
       return await dispatch(request);
     } catch (error) {
-      if (new URL(request.url).pathname === "/email/verify") metric("verify_failed");
+      if (new URL(request.url).pathname === "/email/verify")
+        metric("verify_failed");
       if (error.status === 429) metric("rate_limited");
       return reply(
         {
@@ -1005,10 +1055,12 @@ export function createEmailRuntime(
       const subject = r
         ? r.source === "scheduled"
           ? `轮到 · 系统值日提醒`
-          : `轮到 · ${r.sender_name_snapshot}催促你${r.task_name_snapshot}`
+          : r.source === "note"
+            ? `轮到 · ${r.sender_name_snapshot}给你留言`
+            : `轮到 · ${r.sender_name_snapshot}催促你${r.task_name_snapshot}`
         : "轮到 · 测试邮件";
       const text = r
-        ? `${r.nickname}，${r.source === "scheduled" ? "系统提醒：你有未完成的值日。" : `${r.sender_name_snapshot}提醒你${r.task_name_snapshot}。`}\n\n${r.task_content_snapshot}\n\n${r.source === "scheduled" ? "发起人：系统自动提醒" : `发起人：${r.sender_name_snapshot}`}\n宿舍：${r.dorm_name}`
+        ? `${r.nickname}，${r.source === "scheduled" ? "系统提醒：你有未完成的值日。" : r.source === "note" ? `${r.sender_name_snapshot}给你留了一句话。` : `${r.sender_name_snapshot}提醒你${r.task_name_snapshot}。`}\n\n${r.task_content_snapshot}\n\n${r.source === "scheduled" ? "发起人：系统自动提醒" : `发起人：${r.sender_name_snapshot}`}\n宿舍：${r.dorm_name}`
         : "这是一条测试邮件。你已开启轮到邮件提醒。";
       try {
         await deliver({

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CompanionLogin from "../components/CompanionLogin.vue";
+import { captureCompanionHandoff } from "../interaction/companion";
 import { ref, onMounted } from "vue";
 import { emailAccount, refreshEmailAccount } from "../api/email";
 import { useRouter, useRoute } from "vue-router";
@@ -42,6 +44,7 @@ async function submit() {
     }
     if (!(await session.login(username.value, password.value))) return;
     showToast(register.value ? "注册成功" : "欢迎回来");
+    captureCompanionHandoff();
     const next = String(route.query.next || "/dorm");
     await router.replace(
       next.startsWith("/") &&
@@ -61,6 +64,7 @@ async function submit() {
 <template>
   <main class="login-page">
     <router-link to="/" class="admin-back">← 返回今日任务</router-link>
+    <CompanionLogin />
     <div class="brand-line">
       <span class="brand-mark"
         ><van-icon aria-hidden="true" name="flower-o" /></span
@@ -137,3 +141,20 @@ async function submit() {
     </p>
   </main>
 </template>
+
+<style scoped>
+.login-page :deep(.brand-line) {
+  display: none;
+}
+.login-page h1 {
+  font-size: 26px;
+  text-align: center;
+}
+.login-page .intro {
+  text-align: center;
+  font-size: 13px;
+}
+.login-page {
+  padding-top: 24px;
+}
+</style>

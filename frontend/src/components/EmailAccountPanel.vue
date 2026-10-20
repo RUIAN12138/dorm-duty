@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { captureCompanionHandoff } from "../interaction/companion";
+import CompanionLogin from "./CompanionLogin.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   emailAccount,
@@ -243,6 +245,7 @@ async function verify() {
       code: code.value,
       mail_enabled: mailEnabled.value,
     });
+    captureCompanionHandoff();
     challenge.value = "";
     code.value = "";
     await refreshEmailAccount();
@@ -366,6 +369,7 @@ onMounted(() => {
         </button>
       </section>
       <section v-else-if="!emailAccount.loggedIn || reverify" key="login">
+        <CompanionLogin />
         <div v-if="!hideTitle" class="email-heading">
           <h2>{{ memberToken ? "绑定你的邮箱" : "用邮箱进入轮到" }}</h2>
           <HintPopover

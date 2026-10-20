@@ -1,0 +1,30 @@
+{
+  "repository": "https://github.com/sam70361/aora-bot",
+  "retrieved": "2026-10-19",
+  "files": [
+    {
+      "file": "LICENSE",
+      "sha": "ecd0128d4c65a9a894e13a1cee00150f1054f395"
+    },
+    {
+      "file": "NOTICE.md",
+      "sha": "2761c6b69f9e50fd22a7b5a1acbc0fa1bac1af54"
+    },
+    {
+      "file": "rings.js",
+      "sha": "f7159a71a42fc93b4ebb37169cb0dc2679122800"
+    },
+    {
+      "file": "emotions.js",
+      "sha": "d802cca6e11815ad3cf1b4971a3204dac8ecde9a"
+    },
+    {
+      "file": "ball.js",
+      "sha": "a69741b206d51fa004bfe5ff5733e2b09630a0e1"
+    },
+    {
+      "file": "engine.js",
+      "sha": "1f9d9d88258003c7457a5214c560e366c88437bc"
+    }
+  ]
+}

@@ -716,7 +716,9 @@ function reminderView(row) {
     title:
       row.source === "scheduled"
         ? "轮到 · 值日提醒"
-        : `${row.sender_name_snapshot} 提醒你${row.task_name_snapshot}`,
+        : row.source === "note"
+          ? `${row.sender_name_snapshot} 给你留言`
+          : `${row.sender_name_snapshot} 提醒你${row.task_name_snapshot}`,
     body: row.task_content_snapshot,
   };
 }
@@ -1775,6 +1777,75 @@ async function remind(request, db, room, who, now, env) {
     201,
   );
 }
+async function leaveNote(request, db, room, who, now, env) {
+  const input = await body(
+    request,
+    ["target_member_id", "text"],
+    ["target_member_id", "text"],
+  );
+  const target = integer(input.target_member_id);
+  if (typeof input.text !== "string") invalid("请写一句留言");
+  const text = input.text.trim();
+  if (
+    !text ||
+    Array.from(text).length > 120 ||
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text)
+  )
+    invalid("留言请控制在 1–120 字");
+  const { state, members } = await maintain(db, room, now);
+  if (target === who.user_id) fail(422, "self_note", "请选择一位室友");
+  if (!members.some((member) => member.user_id === target))
+    fail(403, "wrong_dorm", "只能给本宿舍的室友留言");
+  const cutoff = new Date(now.getTime() - 15_000).toISOString();
+  const cooldown =
+    "SELECT id FROM chore_reminders WHERE dorm_id=? AND sender_id=? AND target_member_id=? AND source='note' AND created_at>?";
+  const args = [room.id, who.user_id, target, cutoff];
+  if (await first(db, cooldown, args))
+    fail(429, "note_cooldown", "刚刚已经留言，稍等片刻再发");
+  const mutation = new Mutation(
+    db,
+    room,
+    state.version,
+    who,
+    false,
+    `EXISTS(SELECT 1 FROM dorm_members m JOIN users u ON u.id=m.user_id WHERE m.dorm_id=chore_settings.dorm_id AND m.user_id=? AND m.is_active=1 AND u.current_dorm_id=m.dorm_id) AND NOT EXISTS (${cooldown})`,
+    [target, ...args],
+  );
+  mutation.raw(
+    `INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source) SELECT ?,?,?,?,NULL,'室友留言',?,?,?,'note' WHERE ${mutation.guard}`,
+    [
+      room.id,
+      who.user_id,
+      who.nickname,
+      target,
+      text,
+      now.toISOString(),
+      mutation.token,
+      ...mutation.guardValues,
+    ],
+  );
+  mutation.ops.push(
+    notifyUser(
+      target,
+      {
+        dormId: room.id,
+        reminderKey: mutation.token,
+        createdAt: now.toISOString(),
+      },
+      { db, env, guard: mutation.guard, values: mutation.guardValues },
+    ),
+  );
+  await mutation.finish();
+  env.PUSH_WAKE?.();
+  return json(
+    reminderView(
+      await first(db, "SELECT * FROM chore_reminders WHERE mutation_key=?", [
+        mutation.token,
+      ]),
+    ),
+    201,
+  );
+}
 async function memberPush(request, db, room, who, now, env, path) {
   const config = env.PUSH_CONFIG || { available: false, public_key: null };
   if (path === "/chores/push/config" && request.method === "GET")
@@ -2251,6 +2322,8 @@ export async function handleChores(request, env, now) {
   const completeMatch = /^\/chores\/tasks\/(\d+)\/complete$/.exec(path);
   if (completeMatch && method === "PATCH")
     return complete(db, room, who, now, integer(Number(completeMatch[1])));
+  if (path === "/chores/notes" && method === "POST")
+    return leaveNote(request, db, room, who, now, env);
   if (path === "/chores/remind" && method === "POST")
     return remind(request, db, room, who, now, env);
   const readMatch = /^\/chores\/reminders\/(\d+)\/read$/.exec(path);

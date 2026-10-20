@@ -68,6 +68,7 @@ function build({ frontend, worker, server = false }) {
 }
 
 const frontendStateScripts = [
+  "scripts/check-emotion-integration.mjs",
   "scripts/check-api-transport.mjs",
   "scripts/check-water-handoff-receipts.mjs",
   "scripts/check-calendar-data.mjs",
@@ -87,6 +88,7 @@ const frontendStateScripts = [
 
 const verificationScripts = [
   ...frontendStateScripts,
+  "site/scripts/check-roommate-notes.mjs",
   "scripts/check-web-architecture.mjs",
   "site/scripts/check-worker.mjs",
   "site/scripts/check-cloud-backend.mjs",

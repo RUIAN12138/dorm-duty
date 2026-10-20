@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { companionEnabled } from "../interaction/companion";
+import DormCompanion from "./DormCompanion.vue";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import type { ChoreReminder } from "../api/chores";
 import { createVelocityTracker } from "../interaction/gestures";
@@ -123,13 +125,20 @@ onBeforeUnmount(() => {
             @lostpointercapture="finish($event, true)"
             @click="open"
           >
+            <DormCompanion
+              v-if="companionEnabled"
+              mood="13"
+              :interactive="false"
+              :size="36"
+            />
             <button
               type="button"
               class="reminder-banner-main"
-              :aria-label="`${note.sender_name || '室友'}提醒你，${note.task_name || '完成宿舍任务'}，查看消息`"
+              :aria-label="`${note.sender_name || '室友'}${note.source === 'note' ? '给你留言' : '提醒你'}，${note.task_name || '完成宿舍任务'}，查看消息`"
             >
               <span class="reminder-banner-caption"
-                >{{ note.sender_name || "室友" }}提醒你</span
+                >{{ note.sender_name || "室友"
+                }}{{ note.source === "note" ? "给你留言" : "提醒你" }}</span
               >
               <strong>{{ note.task_name || "完成宿舍任务" }}</strong>
               <span
@@ -158,7 +167,7 @@ onBeforeUnmount(() => {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 14px);
   left: 50%;
-  width: min(420px, calc(100% - 24px));
+  width: min(350px, calc(100% - 32px));
   transform: translateX(-50%);
   z-index: 2900;
   pointer-events: none;
@@ -167,11 +176,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding: 12px 10px 12px 18px;
-  background: var(--ui-surface, #fff);
-  border: 1px solid #e5e5e5;
-  border-radius: 22px;
-  box-shadow: 0 8px 32px #00000016;
+  padding: 8px 8px 8px 10px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  border: 1px solid #ffffffb3;
+  border-radius: 25px;
+  box-shadow: 0 6px 24px #00000012;
   pointer-events: auto;
   touch-action: pan-x;
   transition: transform 200ms var(--ui-ease-out);
@@ -192,16 +203,16 @@ onBeforeUnmount(() => {
   font: inherit;
 }
 .reminder-banner-caption {
-  font-size: 13px;
+  font-size: 11px;
   color: #666;
 }
 .reminder-banner-main strong {
-  font-size: 21px;
+  font-size: 15px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .reminder-banner-body {
-  font-size: 14px;
+  font-size: 12px;
   color: #555;
   line-height: 1.5;
   display: -webkit-box;
@@ -212,8 +223,8 @@ onBeforeUnmount(() => {
 }
 .reminder-banner-close {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   border: 0;
   background: none;
   color: #777;
@@ -239,6 +250,22 @@ onBeforeUnmount(() => {
   .reminder-banner-enter-active,
   .reminder-banner-leave-active {
     transition: none;
+  }
+}
+</style>
+
+<style scoped>
+@supports not (backdrop-filter: blur(1px)) {
+  .reminder-banner-card {
+    background: #fffffff5;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .reminder-banner-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #fff;
+    border-color: #eee;
   }
 }
 </style>

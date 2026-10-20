@@ -1,4 +1,13 @@
 <script setup lang="ts">
+import CompanionNotes from "./CompanionNotes.vue";
+import DormCompanion from "./DormCompanion.vue";
+import CompanionSettings from "./CompanionSettings.vue";
+import {
+  companionPreview,
+  companionEnabled,
+  errorEmotion,
+  companionEntering,
+} from "../interaction/companion";
 import LoadingSkeleton from "./LoadingSkeleton.vue";
 import {
   computed,
@@ -149,6 +158,8 @@ const messagesOpen = ref(false),
   markerOpen = ref(false);
 const toolsOpen = ref(false),
   preferencesOpen = ref(false),
+  companionOpen = ref(false),
+  noteOpen = ref(false),
   orderOpen = ref(false);
 let alive = true;
 const roundOpen = ref(false);
@@ -180,6 +191,9 @@ function menuAction(action: MenuAction) {
     join: () => emit("join-dorm"),
     push: () => {
       pushOpen.value = true;
+    },
+    companion: () => {
+      companionOpen.value = true;
     },
     preferences: () => {
       preferencesOpen.value = true;
@@ -410,6 +424,66 @@ const completedTasks = computed(() => {
   );
 });
 const praiseTask = ref<ChoreTask | null>(null);
+const arrivalReveal = ref(companionEntering.value);
+let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
+watch(companionEntering, (pending) => {
+  if (!pending && arrivalReveal.value)
+    arrivalTimer = setTimeout(() => (arrivalReveal.value = false), 1200);
+});
+onUnmounted(() => clearTimeout(arrivalTimer));
+function openNote() {
+  if (!busy.value && !completionSyncPending.value) noteOpen.value = true;
+}
+const companionPulse = ref("");
+let companionPulseTimer: ReturnType<typeof setTimeout> | undefined;
+function pulseCompanion(id: string, duration = 2600) {
+  clearTimeout(companionPulseTimer);
+  companionPulse.value = id;
+  companionPulseTimer = setTimeout(() => (companionPulse.value = ""), duration);
+}
+onUnmounted(() => clearTimeout(companionPulseTimer));
+watch(
+  () => props.section,
+  (section) =>
+    pulseCompanion(
+      section === "calendar" ? "40" : section === "water" ? "31" : "03",
+    ),
+);
+watch(busy, (current, previous) => {
+  if (!current && previous.startsWith("undo-") && !actionError.value)
+    pulseCompanion("18");
+});
+const companionMood = computed(
+  () =>
+    companionPreview.value ||
+    (error.value || actionError.value
+      ? errorEmotion(error.value || actionError.value)
+      : praiseTask.value
+        ? "33"
+        : /失败|稍后重试/.test(nudgeStatus.value)
+          ? "11"
+          : busy.value
+            ? "32"
+            : loading.value
+              ? "36"
+              : companionPulse.value ||
+                (reminderOpen.value
+                  ? "35"
+                  : messagesOpen.value
+                    ? "39"
+                    : settingsOpen.value || orderOpen.value
+                      ? "30"
+                      : detailOpen.value
+                        ? "16"
+                        : completedOpen.value
+                          ? "37"
+                          : personalToday.value.length &&
+                              personalToday.value.every(
+                                (t) => t.status === "completed",
+                              )
+                            ? "19"
+                            : "02")),
+);
 const praiseElement = ref<HTMLElement>();
 const praiseTop = ref<number | null>(null);
 let praiseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -580,6 +654,8 @@ const reminderBanner = useReminderBanner(() => ({
     markerOpen.value ||
     toolsOpen.value ||
     preferencesOpen.value ||
+    companionOpen.value ||
+    noteOpen.value ||
     orderOpen.value ||
     roundOpen.value ||
     pushOpen.value ||
@@ -604,6 +680,8 @@ watch(
     markerOpen,
     toolsOpen,
     preferencesOpen,
+    companionOpen,
+    noteOpen,
     orderOpen,
     roundOpen,
     pushOpen,
@@ -1022,6 +1100,8 @@ function visibleRefresh(event?: Event) {
     !markerOpen.value &&
     !toolsOpen.value &&
     !preferencesOpen.value &&
+    !companionOpen.value &&
+    !noteOpen.value &&
     !orderOpen.value &&
     !roundOpen.value &&
     !pushOpen.value &&
@@ -1074,7 +1154,14 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <div class="chore-board" data-testid="chore-board">
+  <div
+    class="chore-board"
+    :class="{
+      'arrival-pending': companionEntering,
+      'arrival-reveal': arrivalReveal,
+    }"
+    data-testid="chore-board"
+  >
     <ReminderBanner
       :note="reminderBanner.active.value"
       @dismiss="reminderBanner.dismiss"
@@ -1103,12 +1190,35 @@ onUnmounted(() => {
         <button v-if="demo" class="demo-exit" @click="emit('exit-demo')">
           退出游客
         </button>
-        <span class="identity-name"
-          ><span>{{ dormName }}</span
-          ><span class="current-identity"
-            >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
-          ></span
-        >
+        <div class="companion-identity">
+          <DormCompanion
+            v-if="companionEnabled"
+            :mood="companionMood"
+            :automatic="!companionPreview"
+            :track="true"
+            :size="52"
+            intent="message"
+            :tips="true"
+            :scene="section"
+            :muted="
+              toolsOpen ||
+              preferencesOpen ||
+              companionOpen ||
+              noteOpen ||
+              reminderOpen ||
+              messagesOpen ||
+              settingsOpen ||
+              !!detailTask
+            "
+            @message="openNote"
+          />
+          <span class="identity-name"
+            ><span>{{ dormName }}</span
+            ><span class="current-identity"
+              >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+            ></span
+          >
+        </div>
         <div class="identity-actions">
           <RefreshNotice
             :error="completionSyncPending ? '' : error"
@@ -1375,6 +1485,8 @@ onUnmounted(() => {
                           !orderOpen &&
                           !toolsOpen &&
                           !preferencesOpen &&
+                          !companionOpen &&
+                          !noteOpen &&
                           !pushOpen &&
                           !settingsOpen &&
                           !recoveryOpen &&
@@ -1571,6 +1683,23 @@ onUnmounted(() => {
             :celebrate="completionEpoch"
           />
         </div>
+      </ElasticSheet>
+      <CompanionNotes
+        v-model="noteOpen"
+        :members="board.members"
+        :member-id="memberId"
+        :token="token"
+        :invite="invite"
+        @sent="load"
+        @closed="presentNewReminders"
+      />
+      <ElasticSheet
+        v-model="companionOpen"
+        title="球球设置"
+        motion="bottom"
+        @closed="presentNewReminders"
+      >
+        <CompanionSettings />
       </ElasticSheet>
       <ChoreMessages
         v-model="messagesOpen"
@@ -1775,6 +1904,15 @@ onUnmounted(() => {
   background: none;
   color: #111;
   font: inherit;
+}
+.companion-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.identity-actions {
+  flex-shrink: 0;
 }
 .board-identity {
   display: flex;
@@ -2765,6 +2903,41 @@ onUnmounted(() => {
   }
   .chore-personal > .task-selector {
     top: calc(50% - 102px);
+  }
+}
+</style>
+
+<style scoped>
+.arrival-pending .identity-name,
+.arrival-pending .identity-actions,
+.arrival-pending .board-focus {
+  opacity: 0;
+  pointer-events: none;
+}
+.arrival-reveal:not(.arrival-pending) .identity-name {
+  animation: companion-arrival-rise 440ms both;
+}
+.arrival-reveal:not(.arrival-pending) .identity-actions {
+  animation: companion-arrival-rise 440ms 70ms both;
+}
+.arrival-reveal:not(.arrival-pending) .board-focus {
+  animation: companion-arrival-rise 540ms 160ms both;
+}
+@keyframes companion-arrival-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arrival-reveal:not(.arrival-pending) .identity-name,
+  .arrival-reveal:not(.arrival-pending) .identity-actions,
+  .arrival-reveal:not(.arrival-pending) .board-focus {
+    animation: none;
   }
 }
 </style>

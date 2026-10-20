@@ -17,6 +17,7 @@ import {
 import HintPopover from "../components/HintPopover.vue";
 import JoinedDorms from "../components/JoinedDorms.vue";
 import { joinedDorms, rememberDorm, type JoinedDorm } from "../api/dormHistory";
+import { captureCompanionHandoff } from "../interaction/companion";
 import ChoreBoard from "../components/ChoreBoard.vue";
 import MarkerPicker from "../components/MarkerPicker.vue";
 import MemberMark from "../components/MemberMark.vue";
@@ -88,6 +89,7 @@ async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   migrationToken.value = "";
   migrationOwnerToken.value = "";
   migrationMemberId.value = undefined;
+  captureCompanionHandoff();
   emailOpen.value = false;
   cancelSelection();
   if (entry.is_creator) {
@@ -1162,7 +1164,10 @@ onUnmounted(() => {
         class="guest-entry"
         aria-labelledby="entry-title"
       >
-        <h1 id="entry-title">
+        <h1
+          id="entry-title"
+          :class="{ 'companion-entry-title': !emailAccount.loggedIn }"
+        >
           {{
             (emailAccount.required && !emailAccount.loggedIn) ||
             !roomChoicesVisible
@@ -1622,5 +1627,23 @@ onUnmounted(() => {
 .guest-page:has(> .entry-back) {
   position: relative;
   padding-top: calc(env(safe-area-inset-top, 0px) + 76px);
+}
+</style>
+
+<style scoped>
+.companion-entry-title {
+  font-size: 22px !important;
+  text-align: center;
+  margin-bottom: 0 !important;
+}
+.guest-entry:has([data-companion-login]) {
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+.guest-entry:has([data-companion-login]) > h1 {
+  order: 0;
+}
+.guest-entry :deep(.companion-login) {
+  margin-top: 12px;
 }
 </style>

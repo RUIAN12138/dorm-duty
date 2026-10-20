@@ -8,6 +8,7 @@ export type MenuAction =
   | "messages"
   | "join"
   | "push"
+  | "companion"
   | "preferences"
   | "settings"
   | "email"
@@ -31,7 +32,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
 <template>
   <ElasticSheet
     v-model="tools"
-    :title="dormName || '宿舍'"
+    title="个人与设置"
     motion="bottom"
     @closed="emit('closed')"
   >
@@ -39,22 +40,15 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
       <MemberMark :id="member.marker_id" :size="34" />
       <div>
         <strong>{{ member.nickname }}</strong
-        ><span>{{
-          demo ? "游客体验" : creator ? "宿舍创建者" : "宿舍成员"
-        }}</span>
+        ><span
+          >{{ dormName }} ·
+          {{ demo ? "游客" : creator ? "创建者" : "室友" }}</span
+        >
       </div>
     </div>
     <div class="menu-quick">
       <ActionItem
         tile
-        label="提醒室友"
-        icon="chat-o"
-        data-testid="open-reminder"
-        @click="emit('action', 'reminder')"
-      />
-      <ActionItem
-        tile
-        :delay="0.02"
         label="室友消息"
         icon="comment-o"
         :badge="unreadCount"
@@ -63,22 +57,19 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
       />
       <ActionItem
         tile
-        :delay="0.04"
-        label="切换宿舍"
-        icon="exchange"
-        data-testid="guest-change-dorm"
-        @click="emit('action', 'join')"
-      />
-      <ActionItem
-        tile
-        :delay="0.06"
-        label="系统通知"
-        icon="bell"
-        data-testid="open-system-notifications"
-        @click="emit('action', 'push')"
+        label="提醒室友"
+        icon="chat-o"
+        data-testid="open-reminder"
+        @click="emit('action', 'reminder')"
       />
     </div>
     <div class="menu-section">
+      <ActionItem
+        label="球球设置"
+        icon="smile-comment-o"
+        data-testid="open-companion-settings"
+        @click="emit('action', 'companion')"
+      />
       <ActionItem
         v-if="creator && !demo"
         label="任务设置"
@@ -87,7 +78,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
         @click="emit('action', 'settings')"
       />
       <ActionItem
-        label="个人与更多"
+        label="账号与宿舍"
         icon="contact-o"
         data-testid="open-preferences"
         @click="emit('action', 'preferences')"
@@ -96,24 +87,23 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
   </ElasticSheet>
   <ElasticSheet
     v-model="preferences"
-    title="个人与更多"
+    title="账号与宿舍"
     motion="bottom"
     @closed="emit('closed')"
   >
     <div class="menu-section">
       <ActionItem
         v-if="!demo"
-        label="邮箱账号与提醒"
+        label="邮箱账号"
         icon="envelop-o"
         data-testid="open-email-account"
         @click="emit('action', 'email')"
       />
       <ActionItem
-        v-if="!demo"
-        label="切换我的身份"
-        icon="friends-o"
-        data-testid="guest-change-member"
-        @click="emit('action', 'identity')"
+        label="通知偏好"
+        icon="bell"
+        data-testid="open-system-notifications"
+        @click="emit('action', 'push')"
       />
       <ActionItem
         label="更换标记"
@@ -123,6 +113,22 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
       />
     </div>
     <div class="menu-section">
+      <ActionItem
+        label="切换宿舍"
+        icon="exchange"
+        data-testid="guest-change-dorm"
+        @click="emit('action', 'join')"
+      />
+      <ActionItem
+        v-if="!demo"
+        label="切换我的身份"
+        icon="friends-o"
+        data-testid="guest-change-member"
+        @click="emit('action', 'identity')"
+      />
+    </div>
+    <details class="menu-advanced">
+      <summary>更多操作</summary>
       <ActionItem
         label="创建宿舍"
         icon="plus"
@@ -143,20 +149,17 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
         data-testid="chore-refresh"
         @click="emit('action', 'refresh')"
       />
-    </div>
-    <div class="menu-section">
-      <a
-        class="repository-link"
-        href="https://github.com/RUIAN12138/dorm-duty"
-        target="_blank"
-        rel="noopener noreferrer"
-        data-testid="project-github"
-      >
-        <van-icon name="link-o" aria-hidden="true" /><span
-          >项目源码 · GitHub</span
-        ><span aria-hidden="true">↗</span>
-      </a>
-    </div>
+    </details>
+    <a
+      class="repository-link"
+      href="https://github.com/RUIAN12138/dorm-duty"
+      target="_blank"
+      rel="noopener noreferrer"
+      data-testid="project-github"
+      ><van-icon name="link-o" aria-hidden="true" /><span
+        >项目源码 · GitHub</span
+      ><span aria-hidden="true">↗</span></a
+    >
   </ElasticSheet>
 </template>
 
@@ -206,5 +209,17 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
 }
 .repository-link > span:nth-child(2) {
   flex: 1;
+}
+</style>
+
+<style scoped>
+.menu-advanced {
+  margin: 12px 0 20px;
+}
+.menu-advanced summary {
+  padding: 12px 4px;
+  font-size: 13px;
+  color: #999;
+  cursor: pointer;
 }
 </style>

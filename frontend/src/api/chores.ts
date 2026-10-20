@@ -59,6 +59,7 @@ export interface WaterHandoff {
   completed_at: string;
 }
 export interface ChoreReminder {
+  source?: "member" | "scheduled" | "note";
   id: number;
   title?: string;
   body?: string;
