@@ -256,6 +256,7 @@ try {
     "collapsed records remove all hidden interactive rows",
   );
   const depth = await page
+    .getByTestId("timeline-fixture")
     .getByTestId("record-group-2026-10-14")
     .locator("..")
     .evaluate((el) => [
