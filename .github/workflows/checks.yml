@@ -50,6 +50,7 @@ jobs:
           node site/scripts/check-cloud-backend.mjs
           node site/scripts/check-name-entry.mjs
           node site/scripts/check-history.mjs
+          node site/scripts/check-recompletion-history.mjs
           node site/scripts/check-recency.mjs
           node site/scripts/check-chores.mjs
           node site/scripts/check-roommate-notes.mjs

@@ -10,7 +10,7 @@ import {
 } from "../frontend/node_modules/@playwright/test/index.mjs";
 const front = new URL("../frontend/", import.meta.url).pathname;
 const name = `release-notice-${process.pid}`,
-  version = "20261020-calendar-colors-v56";
+  version = "20261020-floor-history-v57";
 const html = path.join(front, name + ".html"),
   vue = path.join(front, name + ".vue");
 let server, browser;
@@ -103,7 +103,7 @@ try {
   check(
     await page
       .getByTestId("release-notice")
-      .getByText("v56", { exact: true })
+      .getByText("v57", { exact: true })
       .isVisible(),
     "new release has its own version label",
   );
