@@ -141,7 +141,14 @@ try {
     [430, 932],
   ]) {
     await page.setViewportSize({ width, height });
-    await page.waitForTimeout(80);
+    await page.waitForFunction(
+      (height) =>
+        Math.abs(
+          document.querySelector(".app-stage").getBoundingClientRect().height -
+            height,
+        ) < 1,
+      height,
+    );
     const layout = await page.locator(".chore-personal").evaluate((el) => {
       const rect = (selector) => {
         const r = el.querySelector(selector).getBoundingClientRect();
@@ -190,6 +197,21 @@ try {
     });
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  // Resize/visualViewport is asynchronous on CI. Measure the settled stage,
+  // rather than mistaking the preceding 430x932 layout for a button jump.
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        document.querySelector(".app-stage").getBoundingClientRect().height -
+          844,
+      ) < 1,
+  );
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
   const action = page.locator(".chore-personal .completion-surface").first(),
     before = await action.boundingBox();
   await action.click();
@@ -198,7 +220,7 @@ try {
   check(
     Math.abs(before.y - completedBox.y) < 1 &&
       Math.abs(before.height - completedBox.height) < 1,
-    "enlarged completion keeps the same footprint after the server receipt",
+    `enlarged completion keeps the same footprint after the server receipt: ${JSON.stringify({ before, completedBox })}`,
   );
   await action.click();
   await page.waitForTimeout(400);
