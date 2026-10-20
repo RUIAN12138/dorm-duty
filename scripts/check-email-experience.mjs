@@ -830,7 +830,8 @@ try {
   );
   await other.getByTestId("open-tools").click();
   await other.getByTestId("open-preferences").click();
-  await other.getByRole("button", { name: "创建宿舍", exact: true }).click();
+  await other.locator(".menu-advanced summary").click();
+  await other.getByTestId("guest-create-dorm").click();
   await other
     .getByRole("dialog")
     .filter({ has: other.getByLabel("邮箱", { exact: true }) })
