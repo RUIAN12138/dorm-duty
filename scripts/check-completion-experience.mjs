@@ -496,7 +496,15 @@ try {
       .locator(".task-selector button")
       .filter({ hasText: task.name })
       .tap();
-    await page.waitForTimeout(240);
+    // Completion stability starts after the preceding task-title transition,
+    // whose duration is 300ms. A fixed 240ms sleep sampled its tail on CI.
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll(".task-title-stage h2")].every((el) =>
+        el
+          .getAnimations()
+          .every((animation) => animation.playState !== "running"),
+      ),
+    );
     await completeAndInspect(task, `320px ${task.key} cumulative checks`);
   }
   const done = (await board()).undo_tasks.filter((t) => t.key !== "water");
@@ -504,7 +512,15 @@ try {
     .locator(".task-selector button")
     .filter({ hasText: done[0].name })
     .tap();
-  await page.waitForTimeout(240);
+  // Completion stability starts after the preceding task-title transition,
+  // whose duration is 300ms. A fixed 240ms sleep sampled its tail on CI.
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".task-title-stage h2")].every((el) =>
+      el
+        .getAnimations()
+        .every((animation) => animation.playState !== "running"),
+    ),
+  );
   failUndo = true;
   await page.getByTestId(`undo-${done[0].id}`).tap();
   await page.getByRole("alert").getByText("稍后重试撤销").waitFor();
