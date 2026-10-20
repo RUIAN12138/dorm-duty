@@ -295,3 +295,9 @@ body:has(.app-stage),
     font-size: 20px;
   }
 }
+
+/* The restored record stack is a native scroll island inside the elastic page. */
+.app-stage .screen-surface [data-native-scroll],
+.app-stage .screen-surface [data-native-scroll] * {
+  touch-action: pan-y pinch-zoom;
+}

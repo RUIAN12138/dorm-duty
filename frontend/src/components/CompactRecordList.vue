@@ -244,6 +244,7 @@ const label = (date: string) =>
       v-else
       ref="scrollArea"
       class="folded-record-page"
+      data-native-scroll
       :data-page="page"
       @scroll="memory.scrollTop = ($event.target as HTMLElement).scrollTop"
     >

@@ -41,26 +41,28 @@ try {
     ["floor", 4],
     ["toilet", 10],
   ]) {
-    const date = new Date(Date.now() - days * 86400000)
-        .toISOString()
-        .slice(0, 10),
-      b = await board();
-    assert.equal(
-      (
-        await h.request("/chores/history", {
-          method: "POST",
-          token: room.access_token,
-          data: {
-            version: b.version,
-            member_id: room.member_id,
-            key,
-            completed_at: date + "T10:00:00+08:00",
-            reason: "隔离主题验收",
-          },
-        })
-      ).status,
-      201,
-    );
+    for (let entry = 0; entry < (key === "floor" ? 6 : 1); entry++) {
+      const date = new Date(Date.now() - days * 86400000)
+          .toISOString()
+          .slice(0, 10),
+        b = await board();
+      assert.equal(
+        (
+          await h.request("/chores/history", {
+            method: "POST",
+            token: room.access_token,
+            data: {
+              version: b.version,
+              member_id: room.member_id,
+              key,
+              completed_at: date + `T10:0${entry}:00+08:00`,
+              reason: "隔离主题验收",
+            },
+          })
+        ).status,
+        201,
+      );
+    }
   }
   await fs.mkdir(evidence, { recursive: true });
   await fs.writeFile(
@@ -297,6 +299,61 @@ try {
   check(
     (await page.locator(".record-row").count()) > 0,
     "historical date expands actual member rows",
+  );
+  const nativeScroll = page.locator(".folded-record-page");
+  const scrollBox = await nativeScroll.boundingBox();
+  if (safari) {
+    // Playwright's mobile WebKit cannot send wheel/touch drags. Verify that the
+    // real wheel handler leaves this scroll island to the browser, then scroll.
+    check(
+      await nativeScroll.evaluate((el) => {
+        const event = new WheelEvent("wheel", {
+          deltaY: 240, bubbles: true, cancelable: true,
+        });
+        el.dispatchEvent(event);
+        return !event.defaultPrevented;
+      }),
+      "WebKit leaves record-list wheel events unclaimed",
+    );
+    await nativeScroll.evaluate((el) => el.scrollBy(0, 240));
+  } else {
+    const cdp = await page.context().newCDPSession(page);
+    const x = scrollBox.x + scrollBox.width / 2;
+    const y = scrollBox.y + scrollBox.height * 0.8;
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart", touchPoints: [{x, y}],
+    });
+    for (let step = 1; step <= 12; step++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove", touchPoints: [{x, y: y - step * 15}],
+      });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd", touchPoints: [],
+    });
+    await cdp.detach();
+  }
+  await page.waitForTimeout(350);
+  check(
+    await nativeScroll.evaluate((el) => el.scrollTop > 0),
+    "restored long record list scrolls natively inside the fixed page",
+  );
+  check(
+    await page
+      .locator(".screen-surface")
+      .evaluate(
+        (el) =>
+          Math.abs(new DOMMatrix(getComputedStyle(el).transform).m42) < 0.1,
+      ),
+    "record list scrolling never pulls the whole page",
+  );
+  check(
+    await nativeScroll
+      .locator(".record-row")
+      .first()
+      .evaluate((el) => getComputedStyle(el).touchAction.includes("pan-y")),
+    "touch targets allow vertical native scrolling",
   );
   await page.getByTestId("nav-duty").click();
   await page.getByTestId("pane-duty").waitFor();
