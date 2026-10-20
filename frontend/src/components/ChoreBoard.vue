@@ -29,6 +29,7 @@ import { showToast } from "../interaction/notice";
 import { createVelocityTracker, rubberBand } from "../interaction/gestures";
 import { useRouter } from "vue-router";
 import { ApiError } from "../api";
+import { applyCalendarReceipt } from "../interaction/calendarRecords";
 import { completeChore } from "../api/completion";
 import {
   choreRequest,
@@ -384,6 +385,7 @@ watch(
     taskSwipe.cancel();
     resetSectionSwipe();
     detailOpen.value = false;
+    if (props.section === "calendar" && board.value && !busy.value) void load();
   },
 );
 function openTask(task: ChoreTask, event: MouseEvent) {
@@ -846,6 +848,7 @@ async function load(): Promise<boolean> {
     if (result.member.user_id !== props.memberId)
       throw new Error("任务身份已变化，请重新选择室友。");
 
+    if (board.value && result.version < board.value.version) return false;
     result.reminders = reconcileMessages(result.reminders);
     board.value = result;
     backgroundRefresh.markSuccessful();
@@ -879,6 +882,12 @@ async function refreshArrangements() {
 function acceptCompletion(receipt: ChoreCompletion) {
   if (!board.value) return;
   const finished = receipt.task;
+  // Reject reads that began before this confirmed mutation.
+  ++requestId;
+  controller?.abort();
+  loading.value = false;
+  backgroundRefresh.interrupt();
+  applyCalendarReceipt(board.value, finished);
   completedOpen.value = false;
   completionReceipt.value = finished;
   settlingTask.value = finished;
@@ -1028,7 +1037,11 @@ async function undo(id: number) {
     board.value.undo_tasks = (board.value.undo_tasks || []).filter(
       (t) => t.id !== id,
     );
-    board.value.calendar = board.value.calendar.filter((t) => t.id !== id);
+    ++requestId;
+    controller?.abort();
+    loading.value = false;
+    backgroundRefresh.interrupt();
+    applyCalendarReceipt(board.value, receipt.task);
     if (receipt.task.key === "water") board.value.water_task = receipt.task;
     else {
       selectedTaskId.value = id;

@@ -33,15 +33,21 @@ export function saveStatsColor(color: string) {
 export function resetStatsColors() {
   saveStatsColor(defaultStatsColor);
 }
+// One subtle step per elapsed 24 hours; reminder intervals still control
+// reminders, but no longer compress the visual scale into a few days.
+export function statsElapsedShade(days: number | null) {
+  if (days === null || !Number.isFinite(days)) return 0;
+  return Math.min(1, Math.floor(Math.max(0, days)) / 30);
+}
 export function statsFill(base: string, progress: number, dark: boolean) {
   const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
-  const depth = p * p * (3 - 2 * p);
+  const depth = p;
   const channels = base
     .slice(1)
     .match(/../g)!
     .map((v) => parseInt(v, 16));
   // Fresh completions start white; elapsed time deepens toward a medium grey.
-  // Smooth endpoints avoid sudden depth changes near fresh/overdue states.
+  // Equal daily steps; CSS owns the short colour interpolation between them.
   const rgb = channels.map((v) =>
     Math.round(
       dark

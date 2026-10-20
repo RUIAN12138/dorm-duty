@@ -46,8 +46,35 @@ assert.equal(palette.statsFill("#aaaaaa", 1, false), "#aaaaaa");
 assert.equal(palette.statsFill("#aaaaaa", 0, true), "#ffffff");
 assert.equal(palette.statsFill("#aaaaaa", 1, true), "#b0b0b0");
 assert.equal(palette.readStatsColor('{"base":"#b98a48"}'), "#aaaaaa");
-assert.equal(palette.statsInk(palette.statsFill("#aaaaaa", 0, false)), "#000000");
-assert.equal(palette.statsInk(palette.statsFill("#aaaaaa", 1, false)), "#000000");
+assert.equal(
+  palette.statsInk(palette.statsFill("#aaaaaa", 0, false)),
+  "#000000",
+);
+assert.equal(
+  palette.statsInk(palette.statsFill("#aaaaaa", 1, false)),
+  "#000000",
+);
+assert.equal(palette.statsElapsedShade(null), 0);
+assert.equal(palette.statsElapsedShade(0.99), 0, "fresh day stays white");
+assert.equal(palette.statsElapsedShade(1), 1 / 30);
+assert.equal(palette.statsElapsedShade(30), 1);
+assert.equal(palette.statsElapsedShade(100), 1);
+for (const dark of [false, true]) {
+  let last = 255;
+  for (let day = 0; day <= 30; day++) {
+    const channel = parseInt(
+      palette
+        .statsFill("#aaaaaa", palette.statsElapsedShade(day), dark)
+        .slice(1, 3),
+      16,
+    );
+    assert(
+      last - channel >= 0 && last - channel <= 3,
+      "each day deepens just 2–3 RGB steps",
+    );
+    last = channel;
+  }
+}
 const rgb = (hex) =>
   hex
     .slice(1)

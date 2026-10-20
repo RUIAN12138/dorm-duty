@@ -14,7 +14,7 @@ const emit = defineEmits<{
   sent: [];
   closed: [];
 }>();
-const target = ref<number | null>(null),
+const target = ref<number | "all" | null>(null),
   text = ref(""),
   busy = ref(false),
   error = ref("");
@@ -85,6 +85,15 @@ onBeforeUnmount(() => {
         aria-label="留言给谁"
       >
         <button
+          type="button"
+          :aria-pressed="target === 'all'"
+          :class="{ selected: target === 'all' }"
+          :disabled="busy"
+          @click="target = 'all'"
+        >
+          所有人
+        </button>
+        <button
           v-for="person in others"
           :key="person.user_id"
           type="button"
@@ -118,7 +127,7 @@ onBeforeUnmount(() => {
         class="guest-primary"
         :disabled="busy || !target || !text.trim() || length > 120"
       >
-        {{ busy ? "正在送达…" : "送给室友" }}
+        {{ busy ? "正在送达…" : target === "all" ? "送给所有人" : "送给室友" }}
       </button>
     </form>
   </ElasticSheet>
