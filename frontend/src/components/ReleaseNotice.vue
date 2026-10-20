@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>打卡后日历立即同步</li>
-          <li>统计底色每天轻微加深</li>
-          <li>跨页直接切换，留话可选所有人</li>
+          <li>今天日期改为框线标识</li>
+          <li>值日标题、操作和轮次稍下移</li>
+          <li>统计可分别选择日夜、各项任务的颜色</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

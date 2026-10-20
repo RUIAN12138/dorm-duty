@@ -25,6 +25,7 @@ const saved = new Map();
 globalThis.localStorage = {
   getItem: (k) => saved.get(k) ?? null,
   setItem: (k, v) => saved.set(k, v),
+  removeItem: (k) => saved.delete(k),
 };
 const palette = await import(
   "data:text/javascript;base64," +
@@ -107,4 +108,41 @@ for (const dark of [false, true])
   }
 console.log(
   "PASS: daytime neutral grey and nighttime grey/white, validated persistence/reset, 10000 monotone depth samples, dark adaptation and WCAG text contrast.",
+);
+
+palette.saveStatsTaskColor("floor", "#b98a48", false);
+palette.saveStatsTaskColor("floor", "#759fc1", true);
+assert.equal(palette.statsColorFor("floor", false), "#b98a48");
+assert.equal(palette.statsColorFor("floor", true), "#759fc1");
+assert.equal(palette.statsColorFor("toilet", false), "#aaaaaa");
+assert.equal(palette.statsFill("#b98a48", 1, true, "#759fc1"), "#759fc1");
+assert.equal(
+  palette.statsFill("#faf0ee", 1, false),
+  "#faf0ee",
+  "custom colours are not clipped",
+);
+assert.equal(palette.statsFill("#b98a48", 0, true, "#759fc1"), "#ffffff");
+assert.deepEqual(
+  palette.readStatsTaskColors(saved.get("lundao-stats-task-colors-v2")),
+  { floor: { light: "#b98a48", dark: "#759fc1" } },
+);
+palette.saveStatsTaskColor("floor", "url(evil)", false);
+palette.saveStatsTaskColor("bad", "#000000", false);
+assert.equal(palette.statsColorFor("floor", false), "#b98a48");
+assert.deepEqual(
+  palette.readStatsTaskColors(
+    '{"floor":{"dark":"bad"},"sink":{"light":"#AABBCC"}}',
+  ),
+  { sink: { light: "#aabbcc" } },
+);
+palette.resetStatsColors();
+assert.equal(palette.statsColorFor("floor", true), "#b0b0b0");
+console.log(
+  "PASS: independent task/day/night colours, exact custom endpoints, validated persistence and reset.",
+);
+
+assert.equal(
+  saved.has("lundao-stats-task-colors-v2"),
+  false,
+  "reset removes persisted per-task colours",
 );

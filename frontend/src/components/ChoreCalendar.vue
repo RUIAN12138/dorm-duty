@@ -629,9 +629,11 @@ h1 > span {
   font-variant-numeric: tabular-nums;
 }
 .is-today .calendar-day-number {
-  background: var(--app-tone-h111, #111);
-  color: var(--app-tone-hfff, #fff);
-  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-ink);
+  border: 1px solid var(--ui-ink);
+  border-radius: 6px;
+  box-sizing: border-box;
 }
 .calendar-more {
   position: absolute;

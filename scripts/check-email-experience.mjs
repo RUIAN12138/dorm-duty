@@ -481,6 +481,98 @@ try {
     1,
     "new dorm automatically binds its creator to verified account",
   );
+  // Real email cookie + real GuestHome routes, not a component-only host.
+  const receiptResponse = page.waitForResponse(
+    (r) =>
+      /\/chores\/tasks\/\d+\/complete$/.test(new URL(r.url()).pathname) &&
+      r.request().method() === "PATCH",
+  );
+  await page.locator('[data-testid^="complete-floor-"]').click();
+  const actualReceipt = await receiptResponse;
+  check(
+    actualReceipt.status(),
+    200,
+    "formal entry floor completion is accepted by real HTTPS server",
+  );
+  const actualFinished = (await actualReceipt.json()).task;
+  const completedDay = new Date(
+    Date.parse(actualFinished.completed_at) + 8 * 3600000,
+  )
+    .toISOString()
+    .slice(0, 10);
+  await page.getByTestId("nav-calendar").click();
+  await page.getByTestId(`calendar-day-${completedDay}`).waitFor();
+  check(
+    await page
+      .getByTestId(`calendar-day-${completedDay}`)
+      .getAttribute("data-heat"),
+    "1",
+    "real GuestHome route immediately reflects today's completion",
+  );
+  const liveIdentity = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("dorm-guest-view-v1")),
+  );
+  const fixtureMembers = h.db.sqlite
+    .prepare(
+      "SELECT u.id,u.nickname FROM users u JOIN dorm_members m ON m.user_id=u.id JOIN dormitories d ON d.id=m.dorm_id WHERE d.invite_code=? AND u.id<>? AND m.is_active=1",
+    )
+    .all(liveIdentity.invite_code, liveIdentity.member_id);
+  for (const person of fixtureMembers) {
+    const claim = await (
+      await h.request("/chores/claim", {
+        method: "POST",
+        data: {
+          invite_code: liveIdentity.invite_code,
+          member_id: person.id,
+          nickname: person.nickname,
+        },
+      })
+    ).json();
+    const otherBoard = await (
+      await h.request(
+        `/chores/board?invite_code=${liveIdentity.invite_code}&member_id=${person.id}`,
+        { token: claim.access_token },
+      )
+    ).json();
+    const otherTask = otherBoard.today_tasks.find((t) => t.key === "floor");
+    check(
+      (
+        await h.request(`/chores/tasks/${otherTask.id}/complete`, {
+          method: "PATCH",
+          token: claim.access_token,
+          data: {},
+        })
+      ).status,
+      200,
+      "isolated roommate floor completion persists",
+    );
+  }
+  await page.getByTestId("nav-duty").click();
+  await page.getByTestId("nav-calendar").click();
+  await page.waitForFunction(
+    ({ day }) =>
+      document.querySelector(`[data-testid="calendar-day-${day}"]`)?.dataset
+        .heat === "3",
+    { day: completedDay },
+  );
+  check(
+    await page
+      .getByTestId(`calendar-day-${completedDay}`)
+      .getAttribute("data-heat"),
+    "3",
+    "all-roommate records refresh after a real route return",
+  );
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByTestId(`calendar-day-${completedDay}`).waitFor();
+  check(
+    await page
+      .getByTestId(`calendar-day-${completedDay}`)
+      .getAttribute("data-heat"),
+    "3",
+    "full page reload retains all persisted floor records",
+  );
+  await page.getByTestId("nav-duty").click();
+  await page.getByTestId("pane-duty").waitFor();
   // Reproduce a suspended page carrying a revoked member grant while its email
   // cookie remains valid. Keep the actual board DOM through asynchronous repair.
   const saved = await page.evaluate(() =>
