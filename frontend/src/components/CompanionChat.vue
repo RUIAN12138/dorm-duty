@@ -31,6 +31,7 @@ const present = ref(false),
   surface = ref<HTMLElement>(),
   backdrop = ref<HTMLElement>(),
   scroll = ref<HTMLElement>(),
+  historyFrame = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
 const available = ref(false),
   voiceAvailable = ref(false),
@@ -86,9 +87,17 @@ function pause(ms: number) {
     }, ms);
   });
 }
+function refreshEdge() {
+  const distance = scroll.value?.scrollTop || 0;
+  historyFrame.value?.style.setProperty(
+    "--chat-edge",
+    String(Math.min(1, Math.max(0, distance / 36))),
+  );
+}
 function bottom() {
   void nextTick(() => {
     if (scroll.value) scroll.value.scrollTop = scroll.value.scrollHeight;
+    refreshEdge();
   });
 }
 function close() {
@@ -432,81 +441,98 @@ function time(value: string) {
               <van-icon name="cross" />
             </button>
           </header>
-          <div
-            ref="scroll"
-            class="chat-history"
-            data-native-scroll
-            role="log"
-            aria-live="polite"
-            aria-relevant="additions"
-            data-testid="chat-history"
-          >
-            <div v-if="loading" class="chat-loading" aria-label="正在读取聊天">
-              <span /><span />
-            </div>
-            <div v-if="clearConfirm" class="chat-confirm">
-              <p>清空这段聊天？</p>
-              <div>
-                <button @click="clearConfirm = false">保留</button
-                ><button :disabled="busy" @click="clear">清空</button>
+          <div ref="historyFrame" class="chat-history-frame">
+            <div
+              ref="scroll"
+              class="chat-history"
+              @scroll.passive="refreshEdge"
+              data-native-scroll
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions"
+              data-testid="chat-history"
+            >
+              <div
+                v-if="loading"
+                class="chat-loading"
+                aria-label="正在读取聊天"
+              >
+                <span /><span />
+              </div>
+              <div v-if="clearConfirm" class="chat-confirm">
+                <p>清空这段聊天？</p>
+                <div>
+                  <button @click="clearConfirm = false">保留</button
+                  ><button :disabled="busy" @click="clear">清空</button>
+                </div>
+              </div>
+              <motion.div
+                v-for="item in items"
+                :key="item.id"
+                class="chat-bubble"
+                :class="item.role"
+                :initial="
+                  motionAllowed() ? { opacity: 0, y: 10, scale: 0.94 } : false
+                "
+                :animate="{ opacity: 1, y: 0, scale: 1 }"
+                :transition="motionTransition"
+                >{{ item.text }}</motion.div
+              >
+              <motion.div
+                v-if="thinking"
+                key="thinking"
+                class="chat-bubble assistant chat-thinking"
+                :initial="motionAllowed() ? { opacity: 0, scale: 0.94 } : false"
+                :animate="{ opacity: 1, scale: 1 }"
+                :transition="motionTransition"
+                ><span>让我想一想</span><i /><i /><i
+              /></motion.div>
+              <motion.div
+                v-for="a in reminders.filter(
+                  (a) => a.status === 'proposed' || a.status === 'pending',
+                )"
+                :key="a.id"
+                class="chat-reminder"
+                :initial="
+                  motionAllowed() ? { opacity: 0, y: 10, scale: 0.96 } : false
+                "
+                :animate="{ opacity: 1, y: 0, scale: 1 }"
+                :transition="motionTransition"
+                ><span>{{
+                  a.status === "pending" ? "已安排提醒" : "确认提醒"
+                }}</span
+                ><strong>{{ a.target_name }}</strong>
+                <p>{{ a.text }}</p>
+                <time>{{ time(a.due_at) }} · 北京时间</time>
+                <div>
+                  <button
+                    :disabled="!!actionBusy || busy"
+                    @click="act(a, 'cancel')"
+                  >
+                    {{ a.status === "pending" ? "取消提醒" : "不安排" }}</button
+                  ><button
+                    v-if="a.status === 'proposed'"
+                    class="chat-primary"
+                    :disabled="!!actionBusy || busy"
+                    @click="act(a, 'confirm')"
+                  >
+                    {{ actionBusy === a.id ? "正在保存…" : "确认安排" }}
+                  </button>
+                </div></motion.div
+              >
+              <div
+                v-if="!loading && !items.length && !error"
+                class="chat-empty"
+              >
+                有事就问球球。
               </div>
             </div>
-            <motion.div
-              v-for="item in items"
-              :key="item.id"
-              class="chat-bubble"
-              :class="item.role"
-              :initial="
-                motionAllowed() ? { opacity: 0, y: 10, scale: 0.94 } : false
-              "
-              :animate="{ opacity: 1, y: 0, scale: 1 }"
-              :transition="motionTransition"
-              >{{ item.text }}</motion.div
+            <div
+              class="chat-top-frost"
+              aria-hidden="true"
+              data-testid="chat-top-frost"
             >
-            <motion.div
-              v-if="thinking"
-              key="thinking"
-              class="chat-bubble assistant chat-thinking"
-              :initial="motionAllowed() ? { opacity: 0, scale: 0.94 } : false"
-              :animate="{ opacity: 1, scale: 1 }"
-              :transition="motionTransition"
-              ><span>让我想一想</span><i /><i /><i
-            /></motion.div>
-            <motion.div
-              v-for="a in reminders.filter(
-                (a) => a.status === 'proposed' || a.status === 'pending',
-              )"
-              :key="a.id"
-              class="chat-reminder"
-              :initial="
-                motionAllowed() ? { opacity: 0, y: 10, scale: 0.96 } : false
-              "
-              :animate="{ opacity: 1, y: 0, scale: 1 }"
-              :transition="motionTransition"
-              ><span>{{
-                a.status === "pending" ? "已安排提醒" : "确认提醒"
-              }}</span
-              ><strong>{{ a.target_name }}</strong>
-              <p>{{ a.text }}</p>
-              <time>{{ time(a.due_at) }} · 北京时间</time>
-              <div>
-                <button
-                  :disabled="!!actionBusy || busy"
-                  @click="act(a, 'cancel')"
-                >
-                  {{ a.status === "pending" ? "取消提醒" : "不安排" }}</button
-                ><button
-                  v-if="a.status === 'proposed'"
-                  class="chat-primary"
-                  :disabled="!!actionBusy || busy"
-                  @click="act(a, 'confirm')"
-                >
-                  {{ actionBusy === a.id ? "正在保存…" : "确认安排" }}
-                </button>
-              </div></motion.div
-            >
-            <div v-if="!loading && !items.length && !error" class="chat-empty">
-              有事就问球球。
+              <i /><i /><i /><i /><i />
             </div>
           </div>
           <footer class="chat-footer">
@@ -597,8 +623,69 @@ function time(value: string) {
   display: grid;
   place-items: center;
 }
-.chat-history {
+.chat-history-frame {
+  --chat-edge: 0;
+  position: relative;
   flex: 1;
+  min-height: 0;
+  margin: 0 -4px;
+}
+.chat-top-frost {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 auto;
+  height: clamp(40px, 9dvh, 72px);
+  pointer-events: none;
+  opacity: var(--chat-edge);
+}
+.chat-top-frost i {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.chat-top-frost i:nth-child(1) {
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  mask-image: linear-gradient(#000 0%, #000 50%, transparent);
+  -webkit-mask-image: linear-gradient(#000 0%, #000 50%, transparent);
+}
+.chat-top-frost i:nth-child(2) {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  mask-image: linear-gradient(#000 0%, #000 28%, transparent 85%);
+  -webkit-mask-image: linear-gradient(#000 0%, #000 28%, transparent 85%);
+}
+.chat-top-frost i:nth-child(3) {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  mask-image: linear-gradient(#000 0%, transparent 65%);
+  -webkit-mask-image: linear-gradient(#000 0%, transparent 65%);
+}
+.chat-top-frost i:nth-child(4) {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(#000 0%, transparent 42%);
+  -webkit-mask-image: linear-gradient(#000 0%, transparent 42%);
+}
+.chat-top-frost i:nth-child(5) {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  mask-image: linear-gradient(#000 0%, transparent 24%);
+  -webkit-mask-image: linear-gradient(#000 0%, transparent 24%);
+}
+.chat-history {
+  height: 100%;
+  box-sizing: border-box;
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / calc(1 - var(--chat-edge))) 0px,
+    #000 48px
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / calc(1 - var(--chat-edge))) 0px,
+    #000 48px
+  );
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -608,7 +695,7 @@ function time(value: string) {
   align-items: flex-start;
   gap: 12px;
   padding: 16px 4px 22px;
-  margin: 0 -4px;
+  margin: 0;
 }
 .chat-history::-webkit-scrollbar {
   display: none;
@@ -798,6 +885,9 @@ function time(value: string) {
   :global(html[data-companion-chat="true"] .app-stage),
   :global(html[data-companion-chat="true"] .chore-bottom-nav) {
     filter: none;
+  }
+  .chat-top-frost {
+    display: none;
   }
   .companion-chat-backdrop {
     backdrop-filter: none;

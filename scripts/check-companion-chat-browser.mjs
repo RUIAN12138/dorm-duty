@@ -365,6 +365,34 @@ try {
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("chat-history").evaluate((el) => {
+    window.savedChatScroll = el.scrollTop;
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  check(
+    await page
+      .getByTestId("chat-top-frost")
+      .evaluate((el) => Number(getComputedStyle(el).opacity) === 0),
+    "top frost does not obscure the first message at the start of history",
+  );
+  await page.getByTestId("chat-history").evaluate((el) => {
+    el.scrollTop = window.savedChatScroll;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  check(
+    await page
+      .getByTestId("chat-top-frost")
+      .evaluate(
+        (el) =>
+          getComputedStyle(el).opacity === "1" &&
+          el.children.length === 5 &&
+          [...el.children].every((i) =>
+            getComputedStyle(i).maskImage.includes("gradient"),
+          ),
+      ),
+    "scrolled messages pass through five graded frost layers instead of a hard upper cut",
+  );
   await page.screenshot({
     path: path.join(evidence, `${safari ? "webkit" : "chromium"}-chat.png`),
   });
