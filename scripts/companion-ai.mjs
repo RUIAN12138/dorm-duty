@@ -4,6 +4,22 @@ import { randomUUID, createHash } from "node:crypto";
 import { choreGuestAccess } from "../site/worker/chores.mjs";
 import { notifyUser } from "../site/shared/notifications.mjs";
 const ORIGIN = "https://open.bigmodel.cn/api/paas/v4";
+const SILICON_ORIGIN = "https://api.siliconflow.cn/v1";
+export function normalizeCompanionConfig(c) {
+  const validKey = (key) =>
+    typeof key === "string" && !!key.trim() && !/\s/.test(key);
+  const bigmodel = c?.base_url === ORIGIN && c?.model === "glm-4.7-flash";
+  const silicon =
+    c?.base_url === SILICON_ORIGIN && c?.model === "Qwen/Qwen2.5-7B-Instruct";
+  if ((!bigmodel && !silicon) || !validKey(c.api_key))
+    throw Error("AI配置无效");
+  return {
+    base_url: c.base_url,
+    model: c.model,
+    api_key: c.api_key,
+    asr_model: bigmodel && c.asr_model === "glm-asr-2512" ? c.asr_model : null,
+  };
+}
 const EMOTIONS = new Set([
   "02",
   "03",
@@ -46,18 +62,7 @@ export async function loadCompanionConfig(directory) {
       st = await fs.stat(file);
     if (st.mode & 0o077) throw Error("AI配置权限应为0600");
     const c = JSON.parse(await fs.readFile(file, "utf8"));
-    if (
-      c.base_url !== ORIGIN ||
-      c.model !== "glm-4.7-flash" ||
-      typeof c.api_key !== "string" ||
-      !c.api_key.trim() ||
-      /\s/.test(c.api_key)
-    )
-      throw Error("AI配置无效");
-    return {
-      ...c,
-      asr_model: c.asr_model === "glm-asr-2512" ? c.asr_model : null,
-    };
+    return normalizeCompanionConfig(c);
   } catch (e) {
     if (e.code === "ENOENT") return null;
     throw e;
@@ -90,6 +95,8 @@ export function createCompanionRuntime(
     locks = new Set(),
     rates = new Map();
   let activeProviderCalls = 0;
+  const speech =
+    config?.base_url !== SILICON_ORIGIN && config?.asr_model ? config : null;
   let running,
     timer,
     closed = false;
@@ -122,6 +129,7 @@ export function createCompanionRuntime(
     return { ...who, account_id: a.account_id };
   }
   async function upstream(route, body, signal) {
+    const provider = route === "/audio/transcriptions" ? speech : config;
     const ctrl = AbortSignal.any([
       AbortSignal.timeout(12000),
       ...(signal ? [signal] : []),
@@ -129,10 +137,10 @@ export function createCompanionRuntime(
     if (activeProviderCalls >= 4) fail(429, "球球有点忙，稍后再试");
     activeProviderCalls++;
     try {
-      const r = await fetcher(ORIGIN + route, {
+      const r = await fetcher((provider.base_url || ORIGIN) + route, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.api_key}`,
+          Authorization: `Bearer ${provider.api_key}`,
           ...(body instanceof FormData
             ? {}
             : { "Content-Type": "application/json" }),
@@ -288,7 +296,7 @@ export function createCompanionRuntime(
       if (p === "/chores/companion/state" && request.method === "GET")
         return json({
           available: !!config,
-          voice_available: !!config?.asr_model,
+          voice_available: !!speech?.asr_model,
           messages: messages(who),
           reminders: actions(who),
         });
@@ -356,7 +364,7 @@ export function createCompanionRuntime(
       }
       if (!config) fail(503, "球球还未接通AI服务");
       if (p === "/chores/companion/transcribe" && request.method === "POST") {
-        if (!config.asr_model) fail(503, "语音转文字尚未开通");
+        if (!speech?.asr_model) fail(503, "语音转文字尚未开通");
         limit(who, "voice", 4);
         if (
           typeof data.audio !== "string" ||
@@ -382,7 +390,7 @@ export function createCompanionRuntime(
         )
           fail(400, "请录制30秒内的语音");
         const form = new FormData();
-        form.set("model", config.asr_model);
+        form.set("model", speech.asr_model);
         form.set("file", new Blob([b], { type: "audio/wav" }), "voice.wav");
         form.set("stream", "false");
         const result = await upstream(
@@ -464,7 +472,9 @@ export function createCompanionRuntime(
           "/chat/completions",
           {
             model: config.model,
-            thinking: { type: "disabled" },
+            ...(config.base_url === SILICON_ORIGIN
+              ? {}
+              : { thinking: { type: "disabled" } }),
             stream: false,
             max_tokens: 700,
             response_format: { type: "json_object" },

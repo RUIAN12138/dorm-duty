@@ -4,11 +4,11 @@
 
 ## 使用
 
-正式宿舍中长按球球550ms，或聚焦球球按Shift+Enter，打开聊天。短按仍留言，双击仍互动。点击关闭或系统返回原路退出，聊天记录保留；清空需要确认，不会取消已确认的提醒。
+正式宿舍中长按球球550ms，或聚焦球球按Shift+Enter，打开聊天。短按仍留言，双击仍互动。点击左上角返回箭头或系统返回原路退出，聊天记录保留；清空需要确认，不会取消已确认的提醒。
 
-默认文字输入。点击麦克风切到语音，再点开始／停止录音；最多29秒自动停止。浏览器解码为16kHz单声道PCM16 WAV后发送，识别结果回填输入框，由用户核对人名与时间后发送。不能使用麦克风或云识别失败时，可使用手机键盘听写。切换身份、切后台、关闭聊天停止录音和请求；不保存音频文件。
+只保留文字输入。打开聊天不自动弹键盘；第一次点输入区域准备编辑，再点文字区进入系统输入法。输入栏有按压挤压与弹性复位，关闭／后台会取消未完成的聊天请求。空对话会逐条显示预设开场，常用问法点击后才发给模型。已有历史直接恢复，不重复插入欢迎消息。聊天里的球球仍可互动。
 
-球球温和、机灵、可靠，主要解答应用使用。服务端限制每条20个Unicode字符、最多6条，只使用既有表情；等待时显示“让我想一想”，不显示推理内容。
+球球温和、机灵、可靠，主要解答应用使用。服务端限制每条20个Unicode字符、最多6条，只使用既有表情；等待时显示三条浮动竖线，不显示推理内容。
 
 ## 提醒
 
@@ -18,18 +18,18 @@
 
 ## 配置
 
-线上Node服务从数据库所在目录读取`companion-ai.json`，只允许0600，配置不进代码包、前端、仓库或日志。只能使用智谱官方地址`https://open.bigmodel.cn/api/paas/v4`和`glm-4.7-flash`；关闭思考输出，要求JSON。语音为`glm-asr-2512`，与聊天模型的额度／权限独立。
+线上Node服务从数据库所在目录读取`companion-ai.json`，只允许0600，配置不进代码包、前端、仓库或日志。默认使用硅基流动官方地址`https://api.siliconflow.cn/v1`与`Qwen/Qwen2.5-7B-Instruct`，要求JSON短句。兼容旧智谱`glm-4.7-flash`配置以便迁移；服务商与模型固定允许列表。各服务的Key独立，硅基流动配置不继承旧语音凭据。网页已移除语音入口。
 
 私密工具：
 
 ```sh
 # 在服务器本人终端运行，不把Key写进命令、聊天或环境文件
-python3.11 /opt/dorm-duty/incoming/configure-companion.py --owner dorm-duty
-# 只输出是否存在配置，不显示内容
+python3.11 /opt/dorm-duty/incoming/configure-companion.py --provider siliconflow --owner dorm-duty
+# 只输出配置状态、公开服务地址与模型，不显示Key
 python3.11 /opt/dorm-duty/incoming/configure-companion.py --check
 ```
 
-工具先用不含宿舍数据的“你好”验证聊天接口，成功后原子保存。修改后重启dorm-duty生效。未配置时其他网站功能可用，聊天明确显示不可用。不要读取／复制私密文件到本地。
+工具先用不含宿舍数据的短句验证模型调用与JSON格式，成功后原子保存。修改后重启dorm-duty生效。未配置时其他网站功能可用，聊天明确显示不可用。不要读取／复制私密文件到本地。
 
 ## 边界
 
@@ -43,8 +43,12 @@ Nginx仅在`/dorm-duty/chores/companion/transcribe`放宽到1400k，普通接口
 
 - `node site/scripts/check-companion-ai.mjs`：隔离SQLite与模拟上游，验证权限、上下文脱敏、幂等、提醒确认／取消／去重、WAV边界、解绑期间返回拒绝。
 - `node scripts/check-companion-voice.mjs`：PCM幅度与长度、权限取消、旧解码与新录音竞态、权限拒绝；不代表真机麦克风验收。
-- `node scripts/check-companion-chat-browser.mjs`，再设置`DORM_BROWSER=webkit`：实际Vue组件、模拟模型与隔离宿舍，检查球球和输入形变中间帧、窄屏／暗色、短句、历史、返回与减动效。
+- `node scripts/check-companion-chat-browser.mjs`，再设置`DORM_BROWSER=webkit`：实际Vue组件、模拟模型与隔离宿舍，检查分层入场中间帧、输入按压回弹、预设开场与快捷问法、边界回弹、错误自动收起、窄屏／暗色、短句、历史、返回与减动效。
 - 2026-10-21真实智谱探测：聊天返回HTTP200并符合短句JSON；合成语音探测返回HTTP429、1113“余额不足或无可用资源包”。语音云识别尚未通过，需服务账号有ASR资源后再验收；手机键盘听写可作为输入替代。
 - iPhone／Android／Harmony真机录音权限、软键盘与锁屏提醒仍需实际设备验收；浏览器自动化和HTTP200不等同设备收件。
 
 官方说明：[对话补全](https://docs.bigmodel.cn/api-reference/模型-api/对话补全)、[语音转文本](https://docs.bigmodel.cn/api-reference/模型-api/语音转文本)。
+
+硅基流动官方接口：[Chat Completions](https://docs.siliconflow.cn/docs/api/chat-completions-post)。v67只保留文字；上面的ASR验收记录属于旧方案，不代表当前聊天入口包含语音。
+
+v67真实服务探测（2026-10-21）：硅基流动Qwen/Qwen2.5-7B-Instruct返回HTTP200，短句JSON校验通过；仅使用不含宿舍与个人信息的问候测试。Chromium45项、WebKit43项聊天交互回归通过，实体手机软键盘与触摸手感仍需真机验收。
