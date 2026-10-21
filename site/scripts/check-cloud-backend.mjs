@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { SQLiteD1 } from "../local/sqlite-d1.mjs";
 import { MARK_IDS } from "../shared/member-marks.mjs";
+import { createJsonInput, jsonResponse } from "../shared/http-json.mjs";
 export { SQLiteD1 } from "../local/sqlite-d1.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -192,6 +193,148 @@ export async function runBackendChecks() {
       { token: a.token },
     );
   }
+
+  test("Shared JSON boundary preserves domain errors and request limits", async (h) => {
+    const { handleApi } = await import("../worker/backend.mjs");
+    const raw = (route, text) =>
+      handleApi(
+        new Request("https://backend-test.example" + route, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: text,
+        }),
+        h.env,
+      );
+    for (const [route, message] of [
+      ["/guest/create", "请检查输入内容与日期范围"],
+      ["/chores/claim", "请检查任务设置、成员和日期"],
+    ]) {
+      for (const text of [
+        "",
+        "   ",
+        "{",
+        "[]",
+        "null",
+        "42",
+        '"text"',
+        '{"unexpected":true}',
+        '{"name":null}',
+        '{"invite_code":null}',
+        '{"__proto__":{}}',
+      ]) {
+        const response = await raw(route, text);
+        equal(response.status, 422, `${route} rejects malformed/invalid object`);
+        equal(
+          await response.json(),
+          { detail: { code: "validation_error", message } },
+          `${route} keeps its original domain error`,
+        );
+        equal(response.headers.get("cache-control"), "no-store");
+        equal(
+          response.headers.get("content-type"),
+          "application/json; charset=utf-8",
+        );
+      }
+      const boundary = await raw(route, " ".repeat(65_536));
+      equal(
+        boundary.status,
+        422,
+        "exact limit is parsed rather than treated as oversized",
+      );
+      const over = await raw(route, " ".repeat(65_537));
+      equal(over.status, 413);
+      equal(await over.json(), {
+        detail: { code: "body_too_large", message: "提交内容过长" },
+      });
+    }
+    const beforeInvalid = h.db.sqlite
+      .prepare("SELECT count(*) AS count FROM dormitories")
+      .get().count;
+    equal(beforeInvalid, 0, "rejected bodies leave business data unchanged");
+    const createText = JSON.stringify({
+      name: "HTTP边界验收",
+      nickname: "甲",
+      members: ["乙"],
+    });
+    const created = await raw("/guest/create", createText.padEnd(65_536));
+    equal(
+      created.status,
+      201,
+      "valid body at the limit still reaches the domain",
+    );
+    const room = await created.json();
+    const claimed = await raw(
+      "/chores/claim",
+      JSON.stringify({
+        invite_code: room.invite_code,
+        nickname: "乙",
+      }).padEnd(65_536),
+    );
+    equal(
+      claimed.status,
+      201,
+      "shared reader preserves normal member claim behavior",
+    );
+    ok(
+      (await claimed.json()).access_token,
+      "claim still produces a member-scoped session",
+    );
+
+    // HTTP mechanics must not translate transport errors into domain 422s.
+    const invalid = () => {
+      throw new Error("validation-only");
+    };
+    const input = createJsonInput({ invalid, fail: invalid });
+    const transportError = new Error("isolated-body-read-failure");
+    await assert.rejects(
+      input.body(
+        {
+          text: async () => {
+            throw transportError;
+          },
+        },
+        [],
+      ),
+      (error) => error === transportError,
+    );
+    assertions++;
+    const unicode = JSON.stringify({ value: "😀" }).padEnd(65_536);
+    equal(
+      (
+        await input.body(
+          new Request("https://input.test", { method: "POST", body: unicode }),
+          ["value"],
+          ["value"],
+        )
+      ).value,
+      "😀",
+      "existing UTF-16 limit does not become a byte limit",
+    );
+    const value = { optional: null };
+    equal(
+      input.object(value, ["optional"]),
+      value,
+      "optional null remains a domain decision",
+    );
+    for (const missing of [{}, { required: undefined }, { required: null }]) {
+      assert.throws(
+        () => input.object(missing, ["required"], ["required"]),
+        /validation-only/,
+      );
+      assertions++;
+    }
+    const response = jsonResponse({ ok: true }, 201);
+    equal(response.status, 201);
+    equal(await response.json(), { ok: true });
+    equal(
+      [...response.headers],
+      [
+        ["cache-control", "no-store"],
+        ["content-type", "application/json; charset=utf-8"],
+      ],
+      "JSON response headers and status stay compatible",
+    );
+  });
 
   test("D1 shim enforces real SQLite constraints and atomic rollback", async (h) => {
     equal(h.db.sqlite.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);

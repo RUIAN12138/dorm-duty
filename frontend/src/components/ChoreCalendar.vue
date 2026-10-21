@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick } from "vue";
 import { revealPage, cancelPageReveal } from "../interaction/pageReveal";
-import { motionTiming } from "../interaction/motion";
+import { motionTiming, motionAllowed } from "../interaction/motion";
 import {
   computed,
   reactive,
@@ -26,6 +26,7 @@ import CompactRecordList from "./CompactRecordList.vue";
 import HintPopover from "./HintPopover.vue";
 import ActivitySummary from "./ActivitySummary.vue";
 import HistoryEditor from "./HistoryEditor.vue";
+import LoadingSkeleton from "./LoadingSkeleton.vue";
 import MemberMark from "./MemberMark.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
@@ -96,16 +97,25 @@ function fitViewport() {
   );
 }
 let layoutObserver: ResizeObserver | undefined;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function finishUnavailableMotion() {
+  if (!motionAllowed() && calendarRoot.value)
+    cancelPageReveal(calendarRoot.value);
+}
 onMounted(() => {
   fitViewport();
   // The async placeholder may already have left. Animate the real, fitted
   // calendar once as a single layer, with no delayed header/grid staggering.
   revealPage(calendarRoot.value?.parentElement || null, ".chore-calendar", 0, {
-    duration: motionTiming.page * 1000,
-    distance: 8,
+    duration: motionTiming.reorder * 1000,
+    distance: 14,
+    scale: 0.975,
   });
   window.addEventListener("resize", fitViewport);
   window.visualViewport?.addEventListener("resize", fitViewport);
+  reducedMotion.addEventListener("change", finishUnavailableMotion);
+  document.addEventListener("visibilitychange", finishUnavailableMotion);
+  window.addEventListener("ui-motion-change", finishUnavailableMotion);
   layoutObserver = new ResizeObserver(fitViewport);
   if (calendarRoot.value?.parentElement)
     layoutObserver.observe(calendarRoot.value.parentElement);
@@ -115,6 +125,9 @@ onBeforeUnmount(() => {
   layoutObserver?.disconnect();
   window.removeEventListener("resize", fitViewport);
   window.visualViewport?.removeEventListener("resize", fitViewport);
+  reducedMotion.removeEventListener("change", finishUnavailableMotion);
+  document.removeEventListener("visibilitychange", finishUnavailableMotion);
+  window.removeEventListener("ui-motion-change", finishUnavailableMotion);
 });
 const historyOpen = ref(false),
   historyRecord = ref<ChoreRecord | null>(null),
@@ -459,12 +472,9 @@ watch(
           :rounds="rounds || []"
           :categories="categories"
           :creator="creator"
-          @settings="emit('settings', $event)"
-        />
-        <p v-if="activityLoading && !activity" role="status">
-          正在读取统计…
-        </p></TabsContent
-      >
+          @settings="emit('settings', $event)" />
+        <LoadingSkeleton v-if="activityLoading && !activity" variant="stats"
+      /></TabsContent>
       <p
         v-if="activityError && view === 'stats'"
         role="alert"
@@ -507,7 +517,10 @@ watch(
           <p v-if="undoError" class="chore-inline-error" role="alert">
             {{ undoError }}
           </p>
-          <p v-if="loading" role="status">正在读取记录…</p>
+          <LoadingSkeleton
+            v-if="loading && !selectedRecords.length"
+            variant="rows"
+          />
           <p v-else-if="!selectedRecords.length">暂无完成记录</p>
           <button
             v-if="token && selected <= today"

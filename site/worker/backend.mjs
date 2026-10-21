@@ -1,6 +1,7 @@
 // Cloudflare Worker/D1 implementation of the original FastAPI business contract.
 // Business identity comes exclusively from opaque Bearer sessions, never platform headers.
 import { CalendarError } from "./calendar.mjs";
+import { createJsonInput, jsonResponse as json } from "../shared/http-json.mjs";
 import {
   ChoreError,
   choreGuestAccess,
@@ -33,15 +34,7 @@ function fail(status, code, message) {
 function invalid(message = "请检查输入内容与日期范围") {
   fail(422, "validation_error", message);
 }
-function json(value, status = 200) {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
-}
+const { object, body } = createJsonInput({ invalid, fail });
 function stmt(db, sql, values = []) {
   return db.prepare(sql).bind(...values);
 }
@@ -119,26 +112,6 @@ function nowDate(ctx) {
   if (!Number.isFinite(now.getTime()))
     throw new Error("Invalid internal clock");
   return now;
-}
-function object(value, allowed, required = []) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
-  if (
-    Object.keys(value).some((key) => !allowed.includes(key)) ||
-    required.some((key) => value[key] === undefined || value[key] === null)
-  )
-    invalid();
-  return value;
-}
-async function body(request, allowed, required = []) {
-  const text = await request.text();
-  if (text.length > 65_536) fail(413, "body_too_large", "提交内容过长");
-  let value;
-  try {
-    value = JSON.parse(text || "{}");
-  } catch {
-    invalid();
-  }
-  return object(value, allowed, required);
 }
 function present(value) {
   return value !== undefined && value !== null;

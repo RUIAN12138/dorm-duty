@@ -4,6 +4,7 @@ import { MARK_IDS } from "../shared/member-marks.mjs";
 import { validPushEndpoint } from "../shared/push-endpoint.mjs";
 import { notifyUser } from "../shared/notifications.mjs";
 import { calendarSettings, calendarFeed } from "./calendar.mjs";
+import { createJsonInput, jsonResponse as json } from "../shared/http-json.mjs";
 
 const DAY = 86_400_000;
 const KEYS = ["floor", "toilet", "sink", "water"];
@@ -22,15 +23,7 @@ function fail(status, code, message) {
 function invalid(message = "请检查任务设置、成员和日期") {
   fail(422, "validation_error", message);
 }
-function json(value, status = 200) {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
-}
+const { object, body } = createJsonInput({ invalid, fail });
 function stmt(db, sql, values = []) {
   return db.prepare(sql).bind(...values);
 }
@@ -56,28 +49,6 @@ async function digest(value) {
   ]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-function object(value, allowed, required = []) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.keys(value).some((key) => !allowed.includes(key)) ||
-    required.some((key) => value[key] === undefined || value[key] === null)
-  )
-    invalid();
-  return value;
-}
-async function body(request, allowed, required = []) {
-  const text = await request.text();
-  if (text.length > 65_536) fail(413, "body_too_large", "提交内容过长");
-  let value;
-  try {
-    value = JSON.parse(text || "{}");
-  } catch {
-    invalid();
-  }
-  return object(value, allowed, required);
 }
 function str(value, min, max) {
   if (typeof value !== "string") invalid();

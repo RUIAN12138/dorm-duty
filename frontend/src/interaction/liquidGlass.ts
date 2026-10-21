@@ -1,3 +1,4 @@
+export const GLASS_OVERFLOW = 16;
 export function glassGeometry(
   width: number,
   height: number,
@@ -8,16 +9,19 @@ export function glassGeometry(
 ) {
   const cell = Math.max(1, (width - 16) / 3);
   const stretch = Math.min(0.18, Math.abs(velocity) * 0.018);
-  const baseWidth = (cell - 4) * (1 + stretch - pressure * 0.12 + wobble);
+  const baseWidth = (cell - 4) * (1 + stretch + pressure * 0.22 + wobble);
   const x = 8 + cell * (Math.max(0, Math.min(2, position)) + 0.5);
   return {
     x,
     y: height / 2,
-    width: Math.min(baseWidth, 2 * Math.min(x - 2, width - x - 2)),
+    width: Math.min(
+      baseWidth,
+      2 * Math.min(x + GLASS_OVERFLOW - 2, width + GLASS_OVERFLOW - x - 2),
+    ),
     height: Math.min(
-      height - 4,
+      height + GLASS_OVERFLOW,
       Math.min(56, height - 12) *
-        (1 - stretch * 0.5 - pressure * 0.17 - wobble * 0.65),
+        (1 - stretch * 0.15 + pressure * 0.42 - wobble * 0.3),
     ),
   };
 }
@@ -25,7 +29,7 @@ export const glassVertex = `attribute vec2 a_position; varying vec2 v_uv;
 void main(){v_uv=(a_position+1.0)*.5;gl_Position=vec4(a_position,0.,1.);}`;
 export const glassFragment = `precision mediump float;
 uniform sampler2D u_text; uniform vec2 u_size; uniform vec4 u_lens;
-uniform float u_energy; uniform float u_time; uniform vec3 u_backdrop; uniform vec4 u_tint; varying vec2 v_uv;
+uniform float u_energy; uniform float u_zoom; uniform float u_time; uniform vec3 u_backdrop; uniform vec4 u_tint; varying vec2 v_uv;
 float shape(vec2 p){
  vec2 halfSize=u_lens.zw*.5; float radius=min(halfSize.x,halfSize.y)*.97;
  vec2 q=abs(p-u_lens.xy)-halfSize+radius;
@@ -43,9 +47,10 @@ void main(){
  // Curvature and wrinkles bend the image, not a decorative coloured border.
  float wrinkle=sin((p.x-u_lens.x)*.19+u_time*2.7)*sin((p.y-u_lens.y)*.16-u_time*1.9);
  vec2 tangent=vec2(-n.y,n.x);
- vec2 refracted=p-n*edge*(2.2+u_energy*.5)+tangent*wrinkle*edge*(.35+u_energy*.65);
+ vec2 enlarged=u_lens.xy+(p-u_lens.xy)/u_zoom;
+ vec2 refracted=enlarged-n*edge*(2.2+u_energy*.5)+tangent*wrinkle*edge*(.35+u_energy*.65);
  float fringe=pow(1.-clamp(-d/5.,0.,1.),1.5);
- float dispersion=fringe*(.35+u_energy*.20);
+ float dispersion=fringe*(.80+u_energy*.50);
  float spread=fringe*.16;
  vec4 red=sampleText(refracted+n*dispersion)*.76;
  red+=(sampleText(refracted+n*dispersion+tangent*spread)+sampleText(refracted+n*dispersion-tangent*spread))*.12;
@@ -62,7 +67,7 @@ void main(){
  float luma=dot(ink,vec3(.2126,.7152,.0722));
  ink=clamp(mix(vec3(luma),ink,1.35),0.,1.);
  // A 10% white overlay is local to the lens. No page-wide dimming or rainbow.
- float whiteAlpha=u_tint.a;
+ float whiteAlpha=u_tint.a*.70;
  // Neutral lower bevel gives the clear surface thickness on pale backgrounds.
  float shade=exp(-abs(d+1.7)*1.4)*.12*(1.-clamp(-n.y,0.,1.));
  float rim=exp(-abs(d+.5)*2.2);

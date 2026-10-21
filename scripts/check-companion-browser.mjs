@@ -188,6 +188,36 @@ try {
       .count()) === 0,
     "double click plays without opening a message draft",
   );
+  check(
+    (await page
+      .getByText("再双击一次，换个表情。", { exact: true })
+      .count()) === 0,
+    "double click no longer opens a play dialogue",
+  );
+  const playMoods = [
+    await page.evaluate(() => window.qaEngines.at(-1).emotionId),
+  ];
+  for (let n = 0; n < 12; n++) {
+    await ball.dblclick({ delay: 75 });
+    await page.waitForTimeout(220);
+    playMoods.push(
+      await page.evaluate(() => window.qaEngines.at(-1).emotionId),
+    );
+  }
+  check(
+    new Set(playMoods).size >= 10,
+    `repeated doubles explore more existing expressions than the former four-state loop: ${JSON.stringify(playMoods)}`,
+  );
+  check(
+    playMoods.every((id, index) => !index || id !== playMoods[index - 1]),
+    "consecutive double interactions do not replay the same expression",
+  );
+  check(
+    (await page
+      .getByText("再双击一次，换个表情。", { exact: true })
+      .count()) === 0,
+    "repeated interactions keep play dialogue absent while functional tips remain available",
+  );
   await ball.click();
   await page
     .getByRole("heading", { name: "给室友留句话", exact: true })

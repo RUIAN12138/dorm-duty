@@ -11,7 +11,7 @@ export function revealPage(
   root: Element | null,
   selector: string,
   step = 48,
-  options: { duration?: number; distance?: number } = {},
+  options: { duration?: number; distance?: number; scale?: number } = {},
 ) {
   if (!root) return;
   cancelPageReveal(root);
@@ -29,8 +29,13 @@ export function revealPage(
         {
           opacity: 0,
           translate: `0 ${(options.distance ?? 18) + Math.min(index, 4) * 3}px`,
+          ...(options.scale !== undefined ? { scale: options.scale } : {}),
         },
-        { opacity, translate: "0 0" },
+        {
+          opacity,
+          translate: "0 0",
+          ...(options.scale !== undefined ? { scale: 1 } : {}),
+        },
       ],
       {
         duration: options.duration ?? 460,

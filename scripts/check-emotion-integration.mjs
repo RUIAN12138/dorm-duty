@@ -158,3 +158,62 @@ speech.setCompanionReplyProvider(null);
 console.log(
   "Companion speech passed: 20 characters per page, 40 total, two pages maximum, no authentication fields in the model adapter.",
 );
+
+const playBuild = await build({
+  entryPoints: ["frontend/src/interaction/companionPlay.ts"],
+  bundle: true,
+  write: false,
+  format: "esm",
+  platform: "node",
+});
+const play = await import(
+  "data:text/javascript;base64," +
+    Buffer.from(playBuild.outputFiles[0].text).toString("base64")
+);
+assert.ok(play.playfulEmotions.length >= 10);
+for (const id of play.playfulEmotions) {
+  assert.ok(
+    catalog.some((emotion) => emotion.id === id),
+    `existing play artwork: ${id}`,
+  );
+  assert.ok(
+    !["32", "33", "34", "36", "38"].includes(id),
+    `no operation/loading/error identity: ${id}`,
+  );
+}
+for (const random of [() => 0, () => 0.99999, Math.random]) {
+  const deck = play.createCompanionPlay(random);
+  let current = "02";
+  for (let round = 0; round < 4; round++) {
+    const seen = new Set();
+    for (let n = 0; n < play.playfulEmotions.length; n++) {
+      const next = deck.next(current);
+      assert.notEqual(
+        next,
+        current,
+        "play never repeats the displayed expression",
+      );
+      assert.ok(
+        !seen.has(next),
+        "each shuffled round explores every expression",
+      );
+      seen.add(next);
+      current = next;
+    }
+  }
+}
+const wake = play.createCompanionPlay(() => 0);
+assert.equal(wake.next("00"), "07");
+assert.notEqual(wake.next("06"), "07");
+const guard = play.createCompanionPlay(() => 0);
+let current = "02";
+for (let n = 0; n < play.playfulEmotions.length - 1; n++)
+  current = guard.next(current);
+assert.notEqual(
+  guard.next("03"),
+  "03",
+  "scene changes cannot replay the bag final item",
+);
+console.log(
+  "Companion play passed: 13 original expressions, no repeated neighbours, shuffled full-round coverage, scene-change guard and wake response.",
+);

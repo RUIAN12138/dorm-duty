@@ -186,6 +186,7 @@ try {
         window.qaCalendarFrames.push({
           opacity: Number(style.opacity),
           translate: style.translate,
+          scale: Number(style.scale),
           durations: calendar
             .getAnimations()
             .map((a) => a.effect.getTiming().duration),
@@ -204,15 +205,17 @@ try {
       (f) =>
         f.opacity > 0 &&
         f.opacity < 1 &&
-        parseFloat(f.translate.split(" ").at(-1)) > 0,
+        parseFloat(f.translate.split(" ").at(-1)) > 0 &&
+        f.scale > 0.97 &&
+        f.scale < 1,
     ),
     "the actual async calendar has visible opacity and movement between its entrance endpoints",
   );
   check(
-    entryFrames.some((f) => f.durations.includes(200)) &&
+    entryFrames.some((f) => f.durations.includes(300)) &&
       entryFrames.at(-1).opacity === 1 &&
       entryFrames.at(-1).durations.length === 0,
-    "calendar enters as one 200ms layer and settles without delayed grid/header animations",
+    "calendar enters as one 300ms layer and settles without delayed grid/header animations",
   );
   check(
     !(await page.evaluate(() => window.qaLens)).some((p) => p > 0.2 && p < 1.8),
@@ -312,7 +315,7 @@ try {
   const cold = await page.evaluate(() => window.qaCalendarRuns);
   check(
     cold.length === 1 &&
-      cold[0].duration === 200 &&
+      cold[0].duration === 300 &&
       cold[0].frames[0].opacity === 0,
     "slow first-load calendar animates its real content once after the placeholder, rather than popping in",
   );
@@ -334,6 +337,19 @@ try {
       .getByTestId("chore-calendar")
       .evaluate((el) => el.getAnimations({ subtree: true }).length)) === 0,
     "reduced motion renders the calendar immediately without an entrance animation",
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.getByTestId("nav-duty").click();
+  await page.getByTestId("pane-duty").waitFor();
+  await page.getByTestId("nav-calendar").click();
+  await page.getByTestId("chore-calendar").waitFor();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForTimeout(40);
+  check(
+    (await page
+      .getByTestId("chore-calendar")
+      .evaluate((el) => el.getAnimations().length)) === 0,
+    "enabling reduced motion during entrance cancels the running calendar layer",
   );
   check(errors.length === 0, "no browser errors");
   console.log(

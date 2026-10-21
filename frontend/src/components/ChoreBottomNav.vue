@@ -95,6 +95,7 @@ function down(event: PointerEvent) {
   };
   requestedIndex = currentIndex.value;
   pressedIndex.value = position(event.clientX, nav).index;
+  selectTarget(pressedIndex.value);
   suppressClickUntil = 0;
   nav.setPointerCapture(event.pointerId);
 }
@@ -377,6 +378,11 @@ svg {
   gap: 5px;
   width: 100%;
   min-height: 54px;
+  scale: 1;
+  transition: scale var(--ui-release-time) var(--ui-ease-overshoot);
+}
+.chore-bottom-nav:not(.has-optical-glass) a.pressed .nav-native-content {
+  scale: 1.08;
 }
 .chore-bottom-nav .nav-selection {
   left: 8px;
@@ -386,6 +392,7 @@ svg {
   z-index: 1;
   border-radius: 29px;
   background: var(--glass-lens-surface);
+  background: color-mix(in srgb, var(--glass-lens-surface) 70%, transparent);
   border: 1px solid var(--glass-border);
   -webkit-backdrop-filter: blur(8px) saturate(125%);
   backdrop-filter: blur(8px) saturate(125%);
@@ -452,13 +459,17 @@ svg {
   scale: 1.07 0.94;
 }
 .chore-bottom-nav.is-dragging .nav-selection {
-  scale: 1.13 0.87;
+  scale: 1.20 1.38;
 }
 .chore-bottom-nav.glass-pressed .nav-selection {
-  scale: 0.9 0.83;
+  scale: 1.2 1.42;
 }
 @media (prefers-reduced-motion: reduce) {
   .chore-bottom-nav .nav-selection {
+    scale: 1 !important;
+    transition: none;
+  }
+  .nav-native-content {
     scale: 1 !important;
     transition: none;
   }

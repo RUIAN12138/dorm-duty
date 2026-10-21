@@ -22,6 +22,7 @@ import {
   onBeforeUnmount,
   onUnmounted,
   ref,
+  h,
   watch,
 } from "vue";
 import { completionFeedback } from "../interaction/completionFeedback";
@@ -59,7 +60,9 @@ import AsyncPageError from "./AsyncPageError.vue";
 const loadCalendarPage = () => import("./ChoreCalendar.vue");
 const ChoreCalendar = defineAsyncComponent({
   loader: loadCalendarPage,
-  loadingComponent: LoadingSkeleton,
+  loadingComponent: {
+    render: () => h(LoadingSkeleton, { variant: "calendar" }),
+  },
   errorComponent: AsyncPageError,
   delay: 0,
   timeout: 15000,
@@ -1280,7 +1283,10 @@ onUnmounted(() => {
       @settled="reminderBanner.settled"
       @presented="messagePresented"
     />
-    <LoadingSkeleton v-if="loading && !board" />
+    <LoadingSkeleton
+      v-if="loading && !board"
+      :variant="section === 'calendar' ? 'calendar' : 'task'"
+    />
     <div
       v-if="completionSyncPending && showSyncStatus"
       class="chore-sync-status"

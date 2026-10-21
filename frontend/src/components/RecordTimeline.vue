@@ -15,11 +15,13 @@ const props = withDefaults(
     creator?: boolean;
     undoIds?: number[];
     appearDelay?: number;
+    openRecordId?: number | null;
   }>(),
   { expanded: true, appearDelay: 0 },
 );
 const emit = defineEmits<{
   undo: [id: number];
+  "record-open": [id: number, open: boolean];
   toggle: [];
   edit: [record: ChoreRecord];
   "before-layout": [];
@@ -142,6 +144,9 @@ function entering(el: Element) {
           "
           :editable="editable && (creator || record.assignee_id === memberId)"
           :busy="busy"
+          :swipe="list"
+          :swipe-open="openRecordId === record.id"
+          @update:swipe-open="emit('record-open', record.id, $event)"
           :test-id="
             list
               ? `calendar-list-record-${record.id}`

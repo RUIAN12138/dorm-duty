@@ -675,7 +675,9 @@ try {
   const previous=page.getByRole('button',{name:'上一页记录',exact:true});
   while(await previous.count()&&await previous.isEnabled())await previous.click();
   for(const heading of await page.locator('.records-heading').all())if(await heading.getAttribute('aria-expanded')==='false')await heading.click();
-  await page.getByTestId(`calendar-list-record-${record.id}`).getByRole('button',{name:'修正小林的抬水记录',exact:true}).click();
+  const recordCell = page.getByTestId(`calendar-list-record-${record.id}`);
+  await recordCell.getByRole('button', {name:'显示小林的抬水记录操作',exact:true}).click();
+  await recordCell.getByRole('button',{name:'修正小林的抬水记录',exact:true}).click();
   const edit = page.getByRole("dialog", { name: "修正记录", exact: true });
   await edit.waitFor();
   await edit.getByText("修正记录 · 1", { exact: true }).waitFor();
