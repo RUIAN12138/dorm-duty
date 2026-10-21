@@ -268,6 +268,33 @@ try {
       )
     );
   }, `calendar-list-record-${floorId}`);
+  await page.evaluate((id) => {
+    window.swipeTrace = [];
+    const record = (event) => {
+      const root = document.querySelector(`[data-testid="${id}"]`);
+      window.swipeTrace.push({
+        event: event.type,
+        target: event.target?.className,
+        x: event.clientX,
+        y: event.clientY,
+        open: root?.className,
+        transform: root?.querySelector(".swipe-record-front")?.style.transform,
+        inert: root?.querySelector(".swipe-record-actions")?.inert,
+        at: performance.now(),
+      });
+    };
+    for (const event of [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "pointercancel",
+      "lostpointercapture",
+      "click",
+      "scroll",
+      "blur",
+    ])
+      window.addEventListener(event, record, { capture: true });
+  }, `calendar-list-record-${floorId}`);
   const rect = await frontSurface.boundingBox(),
     x = rect.x + rect.width * 0.7,
     y = rect.y + rect.height * 0.5;
@@ -457,6 +484,7 @@ try {
     console.error(
       JSON.stringify({
         errors,
+        swipeTrace: await page?.evaluate(() => window.swipeTrace),
         body: (await page?.locator("body").innerText())?.slice(0, 600),
       }),
     );
