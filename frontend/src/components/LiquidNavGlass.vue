@@ -7,6 +7,7 @@ import {
   glassFragment,
   nativeGlassClip,
   type NativeLabelBox,
+  GLASS_OVERFLOW,
 } from "../interaction/liquidGlass";
 const props = defineProps<{
   position: number;
@@ -35,6 +36,7 @@ let observer: ResizeObserver | undefined,
   dead = false,
   lost = false;
 let pressure = 0,
+  pressureSpeed = 0,
   wobble = 0,
   wobbleSpeed = 0,
   last = 0,
@@ -176,7 +178,8 @@ function draw(now: number) {
     last = now;
     const animate = motionAllowed() && !reduced.matches;
     const desired = animate && (props.pressed || props.dragging) ? 1 : 0;
-    pressure += (desired - pressure) * (1 - Math.exp(-22 * dt));
+    pressureSpeed += ((desired - pressure) * 420 - pressureSpeed * 27) * dt;
+    pressure += pressureSpeed * dt;
     velocity +=
       ((props.position - lastPosition) / dt - velocity) *
       (1 - Math.exp(-18 * dt));
@@ -186,18 +189,24 @@ function draw(now: number) {
       wobble += wobbleSpeed * dt;
     } else {
       pressure = 0;
+      pressureSpeed = 0;
       wobble = 0;
       wobbleSpeed = 0;
       velocity = 0;
     }
-    const lens = glassGeometry(
-      width,
-      height,
+    const geometry = glassGeometry(
+      width - GLASS_OVERFLOW * 2,
+      height - GLASS_OVERFLOW * 2,
       props.position,
-      pressure,
+      Math.max(0, Math.min(1.08, pressure)),
       velocity,
       Math.max(-0.095, Math.min(0.095, wobble)),
     );
+    const lens = {
+      ...geometry,
+      x: geometry.x + GLASS_OVERFLOW,
+      y: geometry.y + GLASS_OVERFLOW,
+    };
     gl.viewport(0, 0, w, h);
     gl.useProgram(program);
     if (now < sourceRefreshUntil) dirty = true;
@@ -206,6 +215,7 @@ function draw(now: number) {
     gl.uniform4f(uniforms.u_tint!, tint[0], tint[1], tint[2], tint[3]);
     gl.uniform2f(uniforms.u_size!, width, height);
     gl.uniform4f(uniforms.u_lens!, lens.x, lens.y, lens.width, lens.height);
+    gl.uniform1f(uniforms.u_zoom!, 1 + Math.max(0, pressure) * 0.1);
     gl.uniform1f(
       uniforms.u_energy!,
       Math.min(
@@ -227,6 +237,7 @@ function draw(now: number) {
         (props.moving ||
           props.dragging ||
           Math.abs(pressure - desired) > 0.001 ||
+          Math.abs(pressureSpeed) > 0.01 ||
           Math.abs(wobble) > 0.0002 ||
           Math.abs(wobbleSpeed) > 0.002 ||
           Math.abs(velocity) > 0.015))
@@ -269,6 +280,8 @@ watch(
   },
 );
 function preference() {
+  pressure = pressureSpeed = wobble = wobbleSpeed = velocity = 0;
+  lastPosition = props.position;
   if (transparency.matches) {
     cancelAnimationFrame(frame);
     frame = 0;
@@ -295,7 +308,8 @@ function visibility() {
   if (document.hidden) {
     cancelAnimationFrame(frame);
     frame = 0;
-    pressure = wobble = wobbleSpeed = velocity = 0;
+    pressure = pressureSpeed = wobble = wobbleSpeed = velocity = 0;
+    lastPosition = props.position;
     last = 0;
   } else {
     dirty = true;
@@ -305,6 +319,8 @@ function visibility() {
 function contextLost(event: Event) {
   event.preventDefault();
   lost = true;
+  pressure = pressureSpeed = wobble = wobbleSpeed = velocity = 0;
+  lastPosition = props.position;
   cancelAnimationFrame(frame);
   frame = 0;
   ready(false);
@@ -372,6 +388,7 @@ function initialize() {
       "u_size",
       "u_lens",
       "u_energy",
+      "u_zoom",
       "u_time",
       "u_backdrop",
       "u_tint",
@@ -429,16 +446,19 @@ onBeforeUnmount(() => {
   <canvas
     ref="canvas"
     class="liquid-nav-optics"
-    :style="{ opacity: enabled ? 1 : 0 }"
+    :style="{
+      opacity: enabled ? 1 : 0,
+      '--glass-overflow': `${GLASS_OVERFLOW}px`,
+    }"
     aria-hidden="true"
   />
 </template>
 <style scoped>
 .liquid-nav-optics {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: calc(-1 * var(--glass-overflow));
+  width: calc(100% + 2 * var(--glass-overflow));
+  height: calc(100% + 2 * var(--glass-overflow));
   pointer-events: none;
   z-index: 2;
 }

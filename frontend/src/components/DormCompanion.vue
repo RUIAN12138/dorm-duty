@@ -14,6 +14,7 @@ import {
   naturalGaze,
 } from "../interaction/companionTap";
 import type { CompanionScene } from "../interaction/companionSpeech";
+import { createCompanionPlay } from "../interaction/companionPlay";
 import {
   takeCompanionHandoff,
   finishCompanionHandoff,
@@ -49,20 +50,20 @@ const props = withDefaults(
   },
 );
 const emit = defineEmits<{ message: [] }>();
-const bubble = ref<InstanceType<typeof CompanionBubble>>();
+const play = createCompanionPlay();
 const tapGesture = createCompanionTapGesture({
   single: () => {
     if (!document.hidden && !props.muted && !flying) emit("message");
   },
-  double: () => {
-    tap();
-    bubble.value?.say("再双击一次，换个表情。");
-  },
+  double: tap,
 });
 watch(
   () => props.muted,
   (muted) => {
-    if (muted) tapGesture.cancel();
+    if (muted) {
+      tapGesture.cancel();
+      clearReaction();
+    }
   },
 );
 let flight: Animation | undefined;
@@ -124,10 +125,7 @@ let reactionTimer: ReturnType<typeof setTimeout> | undefined;
 let clock: ReturnType<typeof setInterval> | undefined;
 let observer: IntersectionObserver | undefined;
 let visible = true;
-let lastActivity = Date.now(),
-  previousTap = 0,
-  taps = 0,
-  rapidTaps = 0;
+let lastActivity = Date.now();
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 const label = computed(
   () => emotions.find((e) => e.id === actual.value)?.name || "球球",
@@ -136,6 +134,11 @@ function react(id: string, duration = 2600) {
   clearTimeout(reactionTimer);
   reaction.value = id;
   reactionTimer = setTimeout(() => (reaction.value = ""), duration);
+}
+function clearReaction() {
+  clearTimeout(reactionTimer);
+  reactionTimer = undefined;
+  reaction.value = "";
 }
 function activity(event?: Event) {
   if (!props.automatic) return;
@@ -150,27 +153,14 @@ function activity(event?: Event) {
   if (wasAsleep && props.automatic) react("01", 2300);
 }
 function tap() {
-  if (!props.interactive) return;
-  const asleep = ["00", "06", "15"].includes(actual.value);
-  const now = Date.now();
-  rapidTaps = now - previousTap < 650 ? rapidTaps + 1 : 1;
-  previousTap = now;
+  if (!props.interactive || props.muted || document.hidden || flying) return;
+  const current = actual.value;
   activity();
-  if (props.automatic)
-    react(
-      asleep
-        ? "07"
-        : rapidTaps >= 7
-          ? "21"
-          : rapidTaps >= 4
-            ? "17"
-            : ["10", "14", "03", "19"][taps++ % 4],
-      2600,
-    );
+  if (props.automatic) react(play.next(current));
   else engine?.setEmotion(props.mood);
 }
 function clicked(event: MouseEvent) {
-  if (flying) return;
+  if (flying || props.muted || document.hidden) return;
   if (!props.interactive) return;
   if (props.intent === "play") {
     tap();
@@ -205,8 +195,11 @@ function gaze(event: PointerEvent) {
   engine.setGaze(point.x, point.y);
 }
 function syncMotion() {
-  if (document.hidden) tapGesture.cancel();
-  if (!motionAllowed()) finishFlight();
+  if (!motionAllowed()) {
+    tapGesture.cancel();
+    clearReaction();
+    finishFlight();
+  }
   const animate =
     companionEnabled.value && visible && motionAllowed() && !media.matches;
   engine?.setActive(animate);
@@ -309,7 +302,7 @@ onBeforeUnmount(() => {
     >
       <span ref="host" class="emotion-ball-host" aria-hidden="true"></span>
     </component>
-    <CompanionBubble v-if="tips" ref="bubble" :scene="scene" :muted="muted" />
+    <CompanionBubble v-if="tips" :scene="scene" :muted="muted" />
   </span>
 </template>
 <style scoped>

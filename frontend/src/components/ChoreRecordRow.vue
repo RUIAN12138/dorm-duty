@@ -1,15 +1,31 @@
 <script setup lang="ts">
+import { computed, useAttrs } from "vue";
+import SwipeRecordCell from "./SwipeRecordCell.vue";
 import type { ChoreRecord } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
-defineProps<{
+defineOptions({ inheritAttrs: false });
+const attrs = useAttrs();
+const props = defineProps<{
   record: ChoreRecord;
   own: boolean;
   editable?: boolean;
   busy?: boolean;
   testId?: string;
+  swipe?: boolean;
+  swipeOpen?: boolean;
 }>();
-defineEmits<{ toggle: [id: number]; edit: [] }>();
+const emit = defineEmits<{
+  toggle: [id: number];
+  edit: [];
+  "update:swipeOpen": [open: boolean];
+}>();
+const canUndo = computed(
+  () => props.own && props.record.id > 0 && !props.record.corrected,
+);
+const actionCount = computed(
+  () => Number(canUndo.value) + Number(!!props.editable),
+);
 const time = (value: string) =>
   new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -19,54 +35,93 @@ const time = (value: string) =>
   }).format(new Date(value));
 </script>
 <template>
-  <div
-    class="record-row"
-    :data-record-id="record.id"
-    :class="{ 'own-record': own }"
-    :data-testid="
-      testId?.startsWith('calendar-list-record-') ? testId : undefined
-    "
+  <SwipeRecordCell
+    :enabled="swipe && actionCount > 0"
+    :open="swipeOpen"
+    :busy="busy"
+    :count="actionCount"
+    :test-id="testId"
+    :label="`${record.assignee_name}的${record.name}记录`"
+    @update:open="emit('update:swipeOpen', $event)"
   >
-    <span class="record-avatar"
-      ><MemberMark :id="record.marker_id" :size="28" inline
-    /></span>
-    <span class="record-description"
-      ><strong>{{ record.assignee_name }}</strong
-      ><span
-        ><ChoreTypeIcon :type="record.key === 'water' ? 'water' : 'duty'" />{{
-          record.name
-        }}</span
-      ></span
-    >
-    <span class="record-right"
-      ><time :datetime="record.completed_at">{{
-        time(record.completed_at)
-      }}</time
-      ><span class="record-completed"
-        ><van-icon name="success" aria-hidden="true" />已完成</span
-      ></span
-    >
-    <div class="record-controls">
+    <template #actions="{ close }">
       <button
-        v-if="own && record.id > 0 && !record.corrected"
+        v-if="canUndo"
+        type="button"
         :disabled="busy"
-        :data-testid="
-          testId?.startsWith('calendar-list-record-') ? undefined : testId
-        "
         :aria-label="`撤销${record.name}打卡`"
-        @click="$emit('toggle', record.id)"
+        @click="
+          close();
+          emit('toggle', record.id);
+        "
       >
-        撤销</button
-      ><button
+        撤销
+      </button>
+      <button
         v-if="editable"
+        type="button"
         :disabled="busy"
         :aria-label="`修正${record.assignee_name}的${record.name}记录`"
-        @click="$emit('edit')"
+        @click="
+          close();
+          emit('edit');
+        "
       >
         修正
       </button>
+    </template>
+    <div
+      v-bind="attrs"
+      class="record-row"
+      :data-record-id="record.id"
+      :class="{ 'own-record': own }"
+      :data-testid="
+        testId?.startsWith('calendar-list-record-') && !(swipe && actionCount)
+          ? testId
+          : undefined
+      "
+    >
+      <span class="record-avatar"
+        ><MemberMark :id="record.marker_id" :size="28" inline
+      /></span>
+      <span class="record-description"
+        ><strong>{{ record.assignee_name }}</strong
+        ><span
+          ><ChoreTypeIcon :type="record.key === 'water' ? 'water' : 'duty'" />{{
+            record.name
+          }}</span
+        ></span
+      >
+      <span class="record-right"
+        ><time :datetime="record.completed_at">{{
+          time(record.completed_at)
+        }}</time
+        ><span class="record-completed"
+          ><van-icon name="success" aria-hidden="true" />已完成</span
+        ></span
+      >
+      <div v-if="!swipe" class="record-controls">
+        <button
+          v-if="own && record.id > 0 && !record.corrected"
+          :disabled="busy"
+          :data-testid="
+            testId?.startsWith('calendar-list-record-') ? undefined : testId
+          "
+          :aria-label="`撤销${record.name}打卡`"
+          @click="$emit('toggle', record.id)"
+        >
+          撤销</button
+        ><button
+          v-if="editable"
+          :disabled="busy"
+          :aria-label="`修正${record.assignee_name}的${record.name}记录`"
+          @click="$emit('edit')"
+        >
+          修正
+        </button>
+      </div>
     </div>
-  </div>
+  </SwipeRecordCell>
 </template>
 <style scoped>
 .record-row {

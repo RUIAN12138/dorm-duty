@@ -1,0 +1,84 @@
+/* Text-entry surfaces only. Dimensions, type, spacing and focus rings stay
+   component-owned; scale composes with the existing validation shake. */
+:root {
+  --input-glass-fill: rgba(255, 255, 255, 0.64);
+  --input-glass-edge: inset 0 1px 0 #ffffffc9, inset 0 -1px 0 #b8c0ce16;
+}
+:root[data-theme="dark"] {
+  --input-glass-fill: rgba(64, 65, 69, 0.28);
+  --input-glass-edge: inset 0 1px 0 #ffffff18, inset 0 -1px 0 #00000028;
+}
+:root
+  body
+  :is(
+    input:not([type]),
+    input:is(
+        [type="text"],
+        [type="email"],
+        [type="password"],
+        [type="search"],
+        [type="tel"],
+        [type="url"],
+        [type="number"],
+        [type="date"],
+        [type="time"],
+        [type="datetime-local"]
+      ),
+    textarea
+  ) {
+  background: var(--input-glass-fill);
+  box-shadow: var(--input-glass-edge);
+  -webkit-backdrop-filter: blur(5px) saturate(115%);
+  backdrop-filter: blur(5px) saturate(115%);
+  scale: 1;
+  transform-origin: center;
+  transition: scale var(--ui-release-time, 360ms)
+    var(--ui-ease-overshoot, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-interaction="keyboard"])
+    body
+    :is(
+      input:not([type]),
+      input:is(
+          [type="text"],
+          [type="email"],
+          [type="password"],
+          [type="search"],
+          [type="tel"],
+          [type="url"],
+          [type="number"],
+          [type="date"],
+          [type="time"],
+          [type="datetime-local"]
+        ),
+      textarea
+    ):not(:disabled):not([readonly]):is(:focus, :active) {
+    scale: 1.015;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root
+    body
+    :is(
+      input:not([type]),
+      input:is(
+          [type="text"],
+          [type="email"],
+          [type="password"],
+          [type="search"],
+          [type="tel"],
+          [type="url"],
+          [type="number"],
+          [type="date"],
+          [type="time"],
+          [type="datetime-local"]
+        ),
+      textarea
+    ) {
+    background: var(--ui-surface, #fff);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+}

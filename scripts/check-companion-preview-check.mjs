@@ -32,15 +32,15 @@ const {glassGeometry}=await load('frontend/src/interaction/liquidGlass.ts');
 for(const width of [288,320,390,480])for(const position of [0,.25,.8,1,1.8,2])for(const pressure of [0,.5,1])for(const velocity of [-20,0,20])for(const wobble of [-.095,0,.095]){
  const lens=glassGeometry(width,70,position,pressure,velocity,wobble);
  assert.ok(Object.values(lens).every(Number.isFinite));assert.ok(lens.width>0&&lens.height>0);
- assert.ok(lens.x-lens.width/2>=0&&lens.x+lens.width/2<=width);
- assert.ok(lens.y-lens.height/2>=0&&lens.y+lens.height/2<=70);
+ assert.ok(lens.x-lens.width/2>=-16&&lens.x+lens.width/2<=width+16);
+ assert.ok(lens.y-lens.height/2>=-16&&lens.y+lens.height/2<=86);
 }
 const still=glassGeometry(390,70,1,0,0,0),pressed=glassGeometry(390,70,1,1,0,0),moving=glassGeometry(390,70,1,0,8,0);
-assert.ok(pressed.width<still.width&&pressed.height<still.height);
+assert.ok(pressed.width>still.width&&pressed.height>70);
 assert.ok(moving.width>still.width&&moving.height<still.height);
 const {rubberBand}=await load('frontend/src/interaction/gestures.ts');
 for(const pull of [-10000,-200,-20,0,20,200,10000]){const result=rubberBand(pull*.25,28);assert.ok(Math.abs(result)<28);assert.equal(Math.sign(result),Math.sign(pull));}
-console.log('PASS: 648 glass geometry states stay inside the navigation, press/drag deformation, bounded page rubber band.');
+console.log('PASS: 648 glass geometry states stay within optical overflow margins, held lens expands beyond the rail, drag deformation, bounded page rubber band.');
 
 const {pagePull,pagePullInput,pageSpringStep}=await load('frontend/src/interaction/pageElasticity.ts');
 for(const height of [280,390,568,844]){

@@ -45,6 +45,17 @@ if (memory.month !== props.month)
     expanded: [],
     collapsedToday: "",
   });
+const openedRecordId = ref<number | null>(null);
+function recordOpen(id: number, open: boolean) {
+  if (open) openedRecordId.value = id;
+  else if (openedRecordId.value === id) openedRecordId.value = null;
+}
+watch(
+  () => [props.records, props.month, props.busy, props.undoIds],
+  () => {
+    openedRecordId.value = null;
+  },
+);
 const scrollArea = ref<HTMLElement>();
 const root = ref<HTMLElement>(),
   page = ref(memory.page),
@@ -162,6 +173,7 @@ function toggle(date: string) {
 function setPage(value: number) {
   const next = Math.max(0, Math.min(total.value - 1, value));
   if (next !== page.value) {
+    openedRecordId.value = null;
     memory.scrollTop = 0;
     if (scrollArea.value) scrollArea.value.scrollTop = 0;
   }
@@ -227,6 +239,9 @@ const label = (date: string) =>
   date === props.today
     ? "今天"
     : `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
+watch(capacity, () => {
+  openedRecordId.value = null;
+});
 </script>
 <template>
   <section
@@ -262,7 +277,12 @@ const label = (date: string) =>
         :editable="editable"
         :creator="creator"
         :undo-ids="undoIds"
-        @toggle="toggle(group.date)"
+        :open-record-id="openedRecordId"
+        @record-open="recordOpen"
+        @toggle="
+          openedRecordId = null;
+          toggle(group.date);
+        "
         @before-layout="captureLayout"
         @after-layout="settleLayout"
         @collapse-start="followCollapse"

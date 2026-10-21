@@ -3329,10 +3329,10 @@ var require_node = __commonJS({
         };
       }, this);
     };
-    Node.prototype._init = function init(body) {
+    Node.prototype._init = function init(body2) {
       const state = this._baseState;
       assert(state.parent === null);
-      body.call(this);
+      body2.call(this);
       state.children = state.children.filter(function(child) {
         return child._baseState.parent === this;
       }, this);
@@ -3501,17 +3501,17 @@ var require_node = __commonJS({
           let save;
           if (state.any)
             save = input.save();
-          const body = this._decodeTag(
+          const body2 = this._decodeTag(
             input,
             state.implicit !== null ? state.implicit : state.tag,
             state.any
           );
-          if (input.isError(body))
-            return body;
+          if (input.isError(body2))
+            return body2;
           if (state.any)
             result = input.raw(save);
           else
-            input = body;
+            input = body2;
         }
         if (options && options.track && state.tag !== null)
           options.track(input.path(), start, input.length, "tagged");
@@ -4388,12 +4388,12 @@ var require_api = __commonJS({
     var decoders = require_decoders();
     var inherits = require_inherits();
     var api = exports2;
-    api.define = function define(name, body) {
-      return new Entity(name, body);
+    api.define = function define(name, body2) {
+      return new Entity(name, body2);
     };
-    function Entity(name, body) {
+    function Entity(name, body2) {
       this.name = name;
-      this.body = body;
+      this.body = body2;
       this.decoders = {};
       this.encoders = {};
     }
@@ -5889,8 +5889,8 @@ var require_ece = __commonJS({
       }
       return result;
     }
-    function isFunction(object) {
-      return typeof object === "function";
+    function isFunction(object2) {
+      return typeof object2 === "function";
     }
     module2.exports = {
       decrypt,
@@ -5956,13 +5956,13 @@ var require_encryption_helper = __commonJS({
 var require_web_push_error = __commonJS({
   "node_modules/web-push/src/web-push-error.js"(exports2, module2) {
     "use strict";
-    function WebPushError(message, statusCode, headers, body, endpoint) {
+    function WebPushError(message, statusCode, headers, body2, endpoint) {
       Error.captureStackTrace(this, this.constructor);
       this.name = this.constructor.name;
       this.message = message;
       this.statusCode = statusCode;
       this.headers = headers;
-      this.body = body;
+      this.body = body2;
       this.endpoint = endpoint;
     }
     require("util").inherits(WebPushError, Error);
@@ -7550,6 +7550,27 @@ var encoder = new TextEncoder();
 // worker/calendar.mjs
 var encoder2 = new TextEncoder();
 
+// shared/http-json.mjs
+function createJsonInput({ invalid: invalid2, fail: fail2 }) {
+  function object2(value, allowed, required = []) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !allowed.includes(key)) || required.some((key) => value[key] === void 0 || value[key] === null))
+      invalid2();
+    return value;
+  }
+  async function body2(request, allowed, required = []) {
+    const text = await request.text();
+    if (text.length > 65536) fail2(413, "body_too_large", "\u63D0\u4EA4\u5185\u5BB9\u8FC7\u957F");
+    let value;
+    try {
+      value = JSON.parse(text || "{}");
+    } catch {
+      invalid2();
+    }
+    return object2(value, allowed, required);
+  }
+  return { object: object2, body: body2 };
+}
+
 // worker/chores.mjs
 var DAY = 864e5;
 var KEYS = ["floor", "toilet", "sink", "water"];
@@ -7565,6 +7586,10 @@ var ChoreError = class extends Error {
 function fail(status, code, message) {
   throw new ChoreError(status, code, message);
 }
+function invalid(message = "\u8BF7\u68C0\u67E5\u4EFB\u52A1\u8BBE\u7F6E\u3001\u6210\u5458\u548C\u65E5\u671F") {
+  fail(422, "validation_error", message);
+}
+var { object, body } = createJsonInput({ invalid, fail });
 function stmt(db, sql, values = []) {
   return db.prepare(sql).bind(...values);
 }
