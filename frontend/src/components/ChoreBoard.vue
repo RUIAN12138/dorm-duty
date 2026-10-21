@@ -1387,7 +1387,7 @@ onUnmounted(() => {
             :scene="section"
             :message="
               board.overdue_categories?.length
-                ? `${board.overdue_categories.map((c) => c.name).join('、')}超过五天没做啦，记得安排一下。`
+                ? `${board.overdue_categories.map((c) => c.name).join('、')}超过五天没做啦，记得安排一下。长按我可以聊天。`
                 : ''
             "
             :muted="
