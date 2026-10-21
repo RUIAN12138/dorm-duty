@@ -115,6 +115,7 @@ jobs:
           path: |
             docs/evidence/interaction-foundation/failure.png
             docs/evidence/companion/
+            docs/evidence/companion-chat/
           if-no-files-found: ignore
           retention-days: 7
       - name: Build server website

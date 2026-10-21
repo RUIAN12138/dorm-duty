@@ -19,7 +19,7 @@ const html = path.join(front, name + ".html"),
 const h = await createHarness(),
   checks = [],
   errors = [];
-let browser, server, runtime;
+let browser, server, runtime, page;
 let failModel = false,
   modelDelay = 500;
 const check = (condition, label) => {
@@ -142,7 +142,7 @@ try {
         }
       : {}),
   });
-  const page = await browser.newPage({
+  page = await browser.newPage({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
     isMobile: true,
@@ -245,11 +245,29 @@ try {
       .evaluate((el) => getComputedStyle(el).backdropFilter.includes("blur")),
     "only chat overlay supplies the requested frosted backdrop",
   );
+  await page.getByLabel("和球球说句话", { exact: true }).fill("输入法候选");
+  await page
+    .getByLabel("和球球说句话", { exact: true })
+    .dispatchEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      isComposing: true,
+      bubbles: true,
+    });
+  check(
+    (await page.getByLabel("和球球说句话", { exact: true }).inputValue()) ===
+      "输入法候选" && (await page.locator(".chat-bubble.user").count()) === 0,
+    "Chinese IME confirmation never sends an unfinished message",
+  );
   await page.getByLabel("和球球说句话", { exact: true }).fill("你好");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await page.getByText("让我想一想", { exact: true }).waitFor();
   check(true, "thinking pre-message is visible while provider is pending");
   await page.getByText("有事就问我吧。", { exact: true }).waitFor();
+  check(
+    (await page.locator(".chat-bubble.user").count()) === 1,
+    "composition candidate confirmation never creates a hidden chat request",
+  );
   check(
     (await page.locator(".chat-bubble.assistant").count()) === 2,
     "reply is split into individual short glass bubbles",
@@ -260,16 +278,22 @@ try {
   );
   await page.evaluate(() => {
     window.composerFrames = [];
-    const end = performance.now() + 600;
-    function frame() {
-      window.composerFrames.push(
-        document
-          .querySelector('[data-testid="chat-voice"]')
-          .getBoundingClientRect().width,
-      );
-      if (performance.now() < end) requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
+    document.querySelector('[data-testid="chat-voice"]').addEventListener(
+      "pointerdown",
+      () => {
+        const end = performance.now() + 700;
+        function frame() {
+          window.composerFrames.push(
+            document
+              .querySelector('[data-testid="chat-voice"]')
+              .getBoundingClientRect().width,
+          );
+          if (performance.now() < end) requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      },
+      { once: true },
+    );
   });
   await page.getByTestId("chat-voice").click();
   await page.waitForTimeout(450);
@@ -441,6 +465,27 @@ try {
       2,
     ),
   );
+} catch (error) {
+  if (page) {
+    console.error(
+      JSON.stringify(
+        await page.evaluate(() => ({
+          text: document.body.innerText,
+          composerFrames: window.composerFrames,
+          hidden: document.hidden,
+          motion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+          voiceSupport: !!navigator.mediaDevices?.getUserMedia,
+          voiceWidth: document
+            .querySelector('[data-testid="chat-voice"]')
+            ?.getBoundingClientRect().width,
+        })),
+      ),
+    );
+    await page
+      .screenshot({ path: path.join(evidence, "failure.png") })
+      .catch(() => {});
+  }
+  throw error;
 } finally {
   await browser?.close();
   server?.kill();

@@ -38,9 +38,29 @@ function toText() {
   mode.value = "text";
   void nextTick(() => input.value?.focus());
 }
+let composing = false,
+  imeSubmitBlockedUntil = 0;
+function enter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229 || composing) {
+    // Preserve the input method's default commit while suppressing the form's
+    // implicit submit from this same key event (not a second send gesture).
+    imeSubmitBlockedUntil = performance.now() + 100;
+    return;
+  }
+  event.preventDefault();
+  imeSubmitBlockedUntil = 0;
+  send();
+}
 function send() {
   const value = text.value.trim();
-  if (!value || props.busy || !props.enabled) return;
+  if (
+    !value ||
+    props.busy ||
+    !props.enabled ||
+    composing ||
+    performance.now() < imeSubmitBlockedUntil
+  )
+    return;
   emit("send", value);
   text.value = "";
 }
@@ -143,9 +163,12 @@ defineExpose({ receive, cancel });
           aria-label="和球球说句话"
           placeholder="和球球说句话…"
           :disabled="busy || !enabled"
-          @keydown.enter.exact.prevent="send" /><button
+          @keydown.enter.exact="enter"
+          @compositionstart="composing = true"
+          @compositionend="composing = false" /><button
           type="submit"
           class="composer-send"
+          @pointerdown="imeSubmitBlockedUntil = 0"
           aria-label="发送消息"
           :disabled="busy || !enabled || !text.trim()"
         >

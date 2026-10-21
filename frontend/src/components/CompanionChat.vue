@@ -38,13 +38,14 @@ const available = ref(false),
   loading = ref(false),
   busy = ref(false),
   recording = ref(false),
+  awaiting = ref(false),
   error = ref(""),
   emotion = ref("02"),
   items = ref<{ id: string; role: "user" | "assistant"; text: string }[]>([]),
   reminders = ref<ChatReminder[]>([]),
   actionBusy = ref("");
 const viewport = ref({ top: 0, height: window.innerHeight }),
-  thinking = computed(() => busy.value && !recording.value);
+  thinking = computed(() => awaiting.value);
 let api = companionClient(props.invite, props.memberId, props.token),
   epoch = 0,
   controller: AbortController | undefined,
@@ -74,6 +75,7 @@ function cancel() {
   delayResolve = undefined;
   composer.value?.cancel();
   busy.value = false;
+  awaiting.value = false;
   recording.value = false;
   loading.value = false;
   actionBusy.value = "";
@@ -223,12 +225,14 @@ async function send(text: string, isRetry = false) {
   busy.value = true;
   error.value = "";
   emotion.value = "30";
+  awaiting.value = true;
   if (!isRetry)
     items.value.push({ id: request.id + ":user:0", role: "user", text });
   bottom();
   try {
     const reply = await api.send(request.text, request.id, c.signal);
     if (generation !== epoch) return;
+    awaiting.value = false;
     emotion.value = reply.emotion;
     for (let i = 0; i < reply.messages.length; i++) {
       if (generation !== epoch) return;
@@ -249,7 +253,10 @@ async function send(text: string, isRetry = false) {
       emotion.value = "12";
     }
   } finally {
-    if (generation === epoch) busy.value = false;
+    if (generation === epoch) {
+      busy.value = false;
+      awaiting.value = false;
+    }
   }
 }
 async function transcribe(audio: string) {
