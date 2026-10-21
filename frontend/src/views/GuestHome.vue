@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ScreenStage from "../components/ScreenStage.vue";
+import CheckForUpdates from "../components/CheckForUpdates.vue";
 import AppearanceSettings from "../components/AppearanceSettings.vue";
 const appearanceOpen = ref(false);
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -1456,8 +1457,8 @@ onUnmounted(() => {
     <van-icon name="setting-o" />
   </button>
   <ElasticSheet v-model="appearanceOpen" title="设置" expandable
-    ><AppearanceSettings
-  /></ElasticSheet>
+    ><AppearanceSettings /><CheckForUpdates />
+  </ElasticSheet>
 </template>
 
 <style scoped>

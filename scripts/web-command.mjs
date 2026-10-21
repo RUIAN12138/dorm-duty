@@ -89,6 +89,7 @@ const frontendStateScripts = [
   "scripts/check-history-mutation.mjs",
   "scripts/check-view-load.mjs",
   "scripts/check-push-identity.mjs",
+  "scripts/check-update-state.mjs",
 ];
 
 const verificationScripts = [

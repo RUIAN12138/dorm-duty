@@ -1,25 +1,34 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { onMounted, onUnmounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { registerSW } from "virtual:pwa-register";
 import { useSession } from "./stores/session";
 import { networkState } from "./api/network";
 import { logoutEvent } from "./api/logout";
 import { installNativeBack } from "./interactions/nativeBack";
+import {
+  configureUpdates,
+  announceUpdate,
+  installUpdate,
+  updateReady as update,
+} from "./interaction/appUpdates";
 import ReleaseNotice from "./components/ReleaseNotice.vue";
 let removeNativeBack: (() => void) | undefined;
 const route = useRoute(),
   router = useRouter(),
   session = useSession();
 const offline = computed(
-    () => networkState.offline || networkState.unreachable,
-  ),
-  update = ref(false);
-const applyUpdate = registerSW({
+  () => networkState.offline || networkState.unreachable,
+);
+registerSW({
+  onRegisteredSW(_url, registration) {
+    configureUpdates({ registration });
+  },
   onNeedRefresh() {
-    update.value = true;
+    announceUpdate();
   },
 });
+const applyUpdate = (_reload = true) => installUpdate();
 const active = computed(() =>
   route.path.startsWith("/schedule")
     ? "schedule"
@@ -80,10 +89,14 @@ onUnmounted(() => {
       查看最新任务需要联网
     </div>
     <div v-if="update" class="update-banner">
-      有新版本可用 <button @click="applyUpdate(true)">更新页面</button>
+      有新版本可用
+      <button @click="applyUpdate(true).catch(() => {})">更新页面</button>
     </div>
     <router-view />
-    <ReleaseNotice :update-ready="update" :apply-update="() => applyUpdate(true)" />
+    <ReleaseNotice
+      :update-ready="update"
+      :apply-update="() => applyUpdate(true)"
+    />
     <nav
       v-if="session.user && !route.meta.public"
       class="bottom-nav"

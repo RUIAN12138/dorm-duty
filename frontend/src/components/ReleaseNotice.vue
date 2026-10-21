@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>设置、轮次支持上拉展开</li>
-          <li>消息自动收起，长按即可回复</li>
-          <li>列表操作更圆润，帮助改为原位气泡</li>
+          <li>设置底部新增检查更新</li>
+          <li>发现新版本后可直接更新</li>
+          <li>更新后保留当前宿舍身份</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button
