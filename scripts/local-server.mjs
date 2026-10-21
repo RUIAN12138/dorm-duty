@@ -7,6 +7,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { EMAIL_GATE_CAPABILITY } from "../site/worker/backend.mjs";
 import pushRuntimeModule from "../site/runtime/push-runtime.cjs";
 import emailRuntimeModule from "../site/runtime/email-runtime.cjs";
+import {
+  createCompanionRuntime,
+  loadCompanionConfig,
+} from "./companion-ai.mjs";
 import { openDatabase, ensureLocalDemo } from "../site/local/database.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -52,6 +56,7 @@ let db,
   closing = false,
   pushRuntime,
   emailRuntime,
+  companionRuntime,
   reminderScheduler;
 const waits = new Set();
 
@@ -99,6 +104,7 @@ async function lockDatabase() {
 }
 
 async function release() {
+  await companionRuntime?.close();
   await reminderScheduler?.close();
   await Promise.allSettled(waits);
   await emailRuntime?.close();
@@ -165,6 +171,22 @@ try {
     env.PUSH_CONFIG = { available: false, public_key: null };
   }
   reminderScheduler = pushRuntimeModule.createReminderScheduler(db, { env });
+  let companionConfig = null;
+  try {
+    companionConfig = await loadCompanionConfig(path.dirname(databasePath));
+  } catch {
+    console.error("球球AI配置不可用，其他功能继续运行");
+  }
+  companionRuntime = createCompanionRuntime(db, {
+    config: companionConfig,
+    env,
+    dispatch: (next) =>
+      worker.fetch(
+        next,
+        { ...env, EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY },
+        ctx,
+      ),
+  });
   server = http.createServer(async (req, res) => {
     try {
       if (closing) {
@@ -183,7 +205,11 @@ try {
       let size = 0;
       for await (const chunk of req) {
         size += chunk.length;
-        if (size > 65_536) {
+        const voiceUpload =
+          req.method === "POST" &&
+          req.url?.split("?")[0] ===
+            `${webBase === "/" ? "" : webBase.slice(0, -1)}/chores/companion/transcribe`;
+        if (size > (voiceUpload ? 1_400_000 : 65_536)) {
           const response = failure(413, "提交内容过长");
           res.writeHead(response.status, Object.fromEntries(response.headers));
           res.end(await response.text());
@@ -209,15 +235,34 @@ try {
           ? String(req.headers["x-real-ip"] || req.socket.remoteAddress)
           : req.socket.remoteAddress || "unknown",
       );
+      const aiRequest = url.pathname.startsWith("/chores/companion/")
+        ? new AbortController()
+        : null;
+      if (aiRequest)
+        res.once("close", () => {
+          if (!res.writableEnded) aiRequest.abort();
+        });
       const request = new Request(url, {
+        ...(aiRequest ? { signal: aiRequest.signal } : {}),
         method: req.method,
         headers: requestHeaders,
         body: ["GET", "HEAD"].includes(req.method)
           ? undefined
           : Buffer.concat(chunks),
       });
-      let response = await emailRuntime.wrap(request, (next, emailCreator) =>
-        worker.fetch(next, { ...env, EMAIL_CREATOR: emailCreator, EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY }, ctx),
+      let response = await emailRuntime.wrap(
+        request,
+        async (next, emailCreator) =>
+          (await companionRuntime.route(next)) ||
+          worker.fetch(
+            next,
+            {
+              ...env,
+              EMAIL_CREATOR: emailCreator,
+              EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY,
+            },
+            ctx,
+          ),
       );
       if (url.pathname === "/health" && response.ok && req.method === "GET") {
         response = new Response(

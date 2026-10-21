@@ -70,6 +70,7 @@ function build({ frontend, worker, server = false }) {
 
 const frontendStateScripts = [
   "scripts/check-companion-preview-check.mjs",
+  "scripts/check-companion-voice.mjs",
   "scripts/check-screen-gesture-check.mjs",
   "scripts/check-theme-check.mjs",
   "scripts/check-stats-palette.mjs",
@@ -95,6 +96,7 @@ const frontendStateScripts = [
 const verificationScripts = [
   ...frontendStateScripts,
   "site/scripts/check-roommate-notes.mjs",
+  "site/scripts/check-companion-ai.mjs",
   "site/scripts/check-recompletion-history.mjs",
   "scripts/check-web-architecture.mjs",
   "site/scripts/check-worker.mjs",

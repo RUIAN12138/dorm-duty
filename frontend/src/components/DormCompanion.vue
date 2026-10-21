@@ -37,6 +37,7 @@ const props = withDefaults(
     muted?: boolean;
     scene?: CompanionScene;
     message?: string;
+    chatEnabled?: boolean;
   }>(),
   {
     mood: "02",
@@ -50,7 +51,54 @@ const props = withDefaults(
     scene: "general",
   },
 );
-const emit = defineEmits<{ message: [] }>();
+const emit = defineEmits<{ message: []; chat: [origin: DOMRect] }>();
+let holdTimer: ReturnType<typeof setTimeout> | undefined;
+let holdPoint: { id: number; x: number; y: number } | null = null;
+let suppressTapUntil = 0;
+function cancelHold() {
+  clearTimeout(holdTimer);
+  holdPoint = null;
+}
+function hold(event: PointerEvent) {
+  if (
+    !props.chatEnabled ||
+    !event.isPrimary ||
+    event.button !== 0 ||
+    props.muted ||
+    flying
+  )
+    return;
+  const button = event.currentTarget as HTMLElement;
+  cancelHold();
+  holdPoint = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  holdTimer = setTimeout(() => {
+    if (!holdPoint || props.muted || document.hidden) return;
+    tapGesture.cancel();
+    suppressTapUntil = performance.now() + 1000;
+    cancelHold();
+    emit("chat", button.getBoundingClientRect());
+  }, 550);
+}
+function moveHold(event: PointerEvent) {
+  if (
+    holdPoint &&
+    (event.pointerId !== holdPoint.id ||
+      Math.hypot(event.clientX - holdPoint.x, event.clientY - holdPoint.y) > 10)
+  )
+    cancelHold();
+}
+function keyboardChat(event: KeyboardEvent) {
+  if (
+    props.chatEnabled &&
+    event.shiftKey &&
+    event.key === "Enter" &&
+    !props.muted
+  ) {
+    event.preventDefault();
+    tapGesture.cancel();
+    emit("chat", (event.currentTarget as HTMLElement).getBoundingClientRect());
+  }
+}
 const play = createCompanionPlay();
 const tapGesture = createCompanionTapGesture({
   single: () => {
@@ -62,6 +110,7 @@ watch(
   () => props.muted,
   (muted) => {
     if (muted) {
+      cancelHold();
       tapGesture.cancel();
       clearReaction();
     }
@@ -161,6 +210,7 @@ function tap() {
   else engine?.setEmotion(props.mood);
 }
 function clicked(event: MouseEvent) {
+  if (performance.now() < suppressTapUntil) return;
   if (flying || props.muted || document.hidden) return;
   if (!props.interactive) return;
   if (props.intent === "play") {
@@ -267,6 +317,7 @@ onMounted(() => {
   media.addEventListener("change", syncMotion);
 });
 onBeforeUnmount(() => {
+  cancelHold();
   tapGesture.cancel();
   finishFlight();
   clearTimeout(reactionTimer);
@@ -294,12 +345,19 @@ onBeforeUnmount(() => {
       :style="{ width: `${size}px`, height: `${size}px` }"
       :aria-label="
         interactive
-          ? `球球，${label}，${intent === 'message' ? '单击给室友留言，双击互动' : '点击逗逗它'}`
+          ? `球球，${label}，${intent === 'message' ? '单击给室友留言，双击互动' : '点击逗逗它'}${chatEnabled ? '，长按聊天，键盘Shift加回车聊天' : ''}`
           : undefined
       "
       :aria-hidden="interactive ? undefined : true"
       :title="interactive ? label : undefined"
       @click.stop="clicked"
+      @pointerdown="hold"
+      @pointermove="moveHold"
+      @pointerup="cancelHold"
+      @pointercancel="cancelHold"
+      @pointerleave="cancelHold"
+      @keydown="keyboardChat"
+      @contextmenu="chatEnabled && $event.preventDefault()"
     >
       <span ref="host" class="emotion-ball-host" aria-hidden="true"></span>
     </component>
@@ -333,6 +391,8 @@ onBeforeUnmount(() => {
 .is-interactive {
   cursor: pointer;
   touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 .emotion-ball-host {
   display: block;

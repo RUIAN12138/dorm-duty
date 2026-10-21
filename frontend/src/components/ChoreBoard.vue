@@ -5,6 +5,7 @@ import {
   pageLayers,
 } from "../interaction/pageReveal";
 import CompanionNotes from "./CompanionNotes.vue";
+import CompanionChat from "./CompanionChat.vue";
 import DormCompanion from "./DormCompanion.vue";
 import CompanionSettings from "./CompanionSettings.vue";
 import {
@@ -293,6 +294,19 @@ const taskSwipe = createTaskSwipe(
   },
 );
 const detailTask = ref<ChoreTask | null>(null);
+const chatOpen = ref(false),
+  chatPresent = ref(false),
+  chatOrigin = ref<DOMRect | null>(null);
+function openChat(origin: DOMRect) {
+  if (demoChatUnavailable()) return;
+  chatOrigin.value = origin;
+  chatOpen.value = true;
+}
+function demoChatUnavailable() {
+  if (!props.demo) return false;
+  demoNotice();
+  return true;
+}
 const detailOpen = ref(false);
 const detailMotion = ref<"shared" | "bottom">("shared");
 const detailOrigin = ref<DOMRect | null>(null);
@@ -715,6 +729,7 @@ const reminderBanner = useReminderBanner(() => ({
     toolsOpen.value ||
     preferencesOpen.value ||
     companionOpen.value ||
+    chatPresent.value ||
     noteOpen.value ||
     orderOpen.value ||
     roundOpen.value ||
@@ -809,6 +824,7 @@ watch(
     toolsOpen,
     preferencesOpen,
     companionOpen,
+    chatPresent,
     noteOpen,
     orderOpen,
     roundOpen,
@@ -1346,6 +1362,9 @@ onUnmounted(() => {
             :automatic="!companionPreview"
             :track="true"
             :size="52"
+            :chat-enabled="!demo"
+            :style="{ visibility: chatPresent ? 'hidden' : undefined }"
+            @chat="openChat"
             intent="message"
             :tips="true"
             :scene="section"
@@ -1355,6 +1374,7 @@ onUnmounted(() => {
                 : ''
             "
             :muted="
+              chatPresent ||
               toolsOpen ||
               preferencesOpen ||
               companionOpen ||
@@ -1755,6 +1775,14 @@ onUnmounted(() => {
       >
         {{ actionError }}
       </p>
+      <CompanionChat
+        v-model="chatOpen"
+        :origin="chatOrigin"
+        :invite="invite"
+        :member-id="memberId"
+        :token="token"
+        @present="chatPresent = $event"
+      />
       <ChoreMenu
         v-model:tools="toolsOpen"
         v-model:preferences="preferencesOpen"

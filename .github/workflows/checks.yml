@@ -81,6 +81,7 @@ jobs:
           node site/scripts/check-scheduled-reminders.mjs
           node site/scripts/check-reminder-runtime.mjs
           node site/scripts/check-creator-recovery.mjs
+          node site/scripts/check-companion-ai.mjs
       - name: Install browser for interaction checks
         working-directory: frontend
         run: npx playwright install --with-deps chromium
@@ -93,6 +94,7 @@ jobs:
           node scripts/check-task-detail.mjs
           node scripts/check-sheet-banner-polish.mjs
           node scripts/check-companion-browser.mjs
+          node scripts/check-companion-chat-browser.mjs
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
           node scripts/check-theme-stats-polish.mjs
@@ -113,6 +115,8 @@ jobs:
           path: |
             docs/evidence/interaction-foundation/failure.png
             docs/evidence/companion/
+            docs/evidence/companion-chat/
+            docs/evidence/water-flex/
           if-no-files-found: ignore
           retention-days: 7
       - name: Build server website
