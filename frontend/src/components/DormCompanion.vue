@@ -23,6 +23,8 @@ import {
   displayedEmotion,
   emotions,
   type EmotionEngine,
+  acquireCompanion,
+  releaseCompanion,
 } from "../interaction/companion";
 const props = withDefaults(
   defineProps<{
@@ -38,6 +40,7 @@ const props = withDefaults(
     scene?: CompanionScene;
     message?: string;
     chatEnabled?: boolean;
+    continuous?: boolean;
   }>(),
   {
     mood: "02",
@@ -112,8 +115,11 @@ watch(
     if (muted) {
       cancelHold();
       tapGesture.cancel();
-      clearReaction();
+      if (props.continuous && engine) releaseCompanion(engine);
+    } else if (props.continuous && engine) {
+      acquireCompanion(engine);
     }
+    syncMotion();
   },
 );
 let flight: Animation | undefined;
@@ -155,7 +161,7 @@ const reaction = ref("");
 const idle = ref("02");
 const actual = ref(props.mood);
 const target = computed(() => {
-  if (!props.automatic) return props.mood;
+  if (!props.automatic) return reaction.value || props.mood;
   // Keep operation/error feedback above play; ordinary scene moods may react.
   if (
     ["11", "12", "13", "20", "32", "33", "34", "36", "38"].includes(props.mood)
@@ -206,8 +212,7 @@ function tap() {
   if (!props.interactive || props.muted || document.hidden || flying) return;
   const current = actual.value;
   activity();
-  if (props.automatic) react(play.next(current));
-  else engine?.setEmotion(props.mood);
+  react(play.next(current));
 }
 function clicked(event: MouseEvent) {
   if (performance.now() < suppressTapUntil) return;
@@ -252,16 +257,21 @@ function syncMotion() {
     finishFlight();
   }
   const animate =
-    companionEnabled.value && visible && motionAllowed() && !media.matches;
+    companionEnabled.value &&
+    !props.muted &&
+    visible &&
+    motionAllowed() &&
+    !media.matches;
   engine?.setActive(animate);
-  if (!animate) engine?.renderStatic();
+  if (!animate && !props.muted) engine?.renderStatic();
 }
-watch(target, (id) => engine?.setEmotion(id));
+watch(target, (id) => {
+  if (!props.muted) engine?.setEmotion(id);
+});
 watch(
   () => props.mood,
   () => {
-    clearTimeout(reactionTimer);
-    reaction.value = "";
+    // Scene navigation must not interrupt a tap reaction mid-sequence.
     lastActivity = Date.now();
     idle.value = "02";
   },
@@ -293,11 +303,13 @@ onMounted(() => {
     actual.value = id;
     if (props.track) displayedEmotion.value = id;
   });
+  const restored = props.continuous && acquireCompanion(engine);
   syncMotion();
-  engine.setEmotion(target.value);
+  if (!restored) engine.setEmotion(target.value);
   applyGaze();
   void flyFromLogin();
-  if (props.automatic && ["02", "19"].includes(props.mood)) react("05", 900);
+  if (!restored && props.automatic && ["02", "19"].includes(props.mood))
+    react("05", 900);
   observer = new IntersectionObserver((entries) => {
     visible = entries[0]?.isIntersecting ?? true;
     syncMotion();
@@ -323,6 +335,7 @@ onBeforeUnmount(() => {
   clearTimeout(reactionTimer);
   clearInterval(clock);
   observer?.disconnect();
+  if (props.continuous && engine) releaseCompanion(engine);
   engine?.destroy();
   window.removeEventListener("pointermove", gaze);
   window.removeEventListener("pointerdown", activity);

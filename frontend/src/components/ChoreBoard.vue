@@ -5,6 +5,7 @@ import {
   pageLayers,
 } from "../interaction/pageReveal";
 import CompanionNotes from "./CompanionNotes.vue";
+import { provideSheetNavigation } from "../interaction/sheetNavigation";
 import CompanionChat from "./CompanionChat.vue";
 import DormCompanion from "./DormCompanion.vue";
 import CompanionSettings from "./CompanionSettings.vue";
@@ -56,6 +57,7 @@ import ReminderBanner from "./ReminderBanner.vue";
 import RefreshNotice from "./RefreshNotice.vue";
 import { useReminderBanner } from "../composables/useReminderBanner";
 import ChoreReminderSheet from "./ChoreReminderSheet.vue";
+provideSheetNavigation();
 
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import AsyncPageError from "./AsyncPageError.vue";
@@ -205,14 +207,6 @@ function openTools() {
     detailOpen.value = false;
   } else toolsOpen.value = true;
 }
-function fromTools(action: () => void) {
-  queuedTool = action;
-  toolsOpen.value = false;
-}
-function fromPreferences(action: () => void) {
-  queuedTool = action;
-  preferencesOpen.value = false;
-}
 function menuAction(action: MenuAction) {
   const actions: Record<MenuAction, () => void> = {
     order: () => {
@@ -248,7 +242,26 @@ function menuAction(action: MenuAction) {
       void refreshArrangements();
     },
   };
-  (preferencesOpen.value ? fromPreferences : fromTools)(actions[action]);
+  const insideSettings =
+    [
+      "order",
+      "reminder",
+      "messages",
+      "push",
+      "companion",
+      "preferences",
+      "settings",
+      "marker",
+      "refresh",
+    ].includes(action) ||
+    (action === "recovery" && board.value?.is_creator);
+  if (insideSettings) actions[action]();
+  else {
+    // Route/account entry still closes settings before leaving this page.
+    queuedTool = actions[action];
+    toolsOpen.value = false;
+    preferencesOpen.value = false;
+  }
 }
 function runQueuedTool() {
   const action = queuedTool;
@@ -1361,6 +1374,7 @@ onUnmounted(() => {
             :mood="companionMood"
             :automatic="!companionPreview"
             :track="true"
+            continuous
             :size="52"
             :chat-enabled="!demo"
             :style="{ visibility: chatPresent ? 'hidden' : undefined }"

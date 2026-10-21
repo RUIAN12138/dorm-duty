@@ -14,6 +14,7 @@ import CompanionChatComposer from "./CompanionChatComposer.vue";
 import { companionClient, type ChatReminder } from "../api/companionChat";
 import { motionAllowed, motionTokens } from "../interaction/motion";
 import { registerNativeBack } from "../interactions/nativeBack";
+import { horizontalIntent, rubberBand } from "../interaction/gestures";
 const props = defineProps<{
   modelValue: boolean;
   origin: DOMRect | null;
@@ -26,8 +27,10 @@ const emit = defineEmits<{
   present: [value: boolean];
 }>();
 const present = ref(false),
+  prepared = ref(false),
   phase = ref<"opening" | "open" | "closing">("opening"),
   ball = ref<HTMLElement>(),
+  nameplate = ref<HTMLElement>(),
   surface = ref<HTMLElement>(),
   toolbar = ref<HTMLElement>(),
   footer = ref<HTMLElement>(),
@@ -145,7 +148,7 @@ function stopMotion() {
   controls = [];
 }
 const entryParts = () =>
-  [toolbar.value, historyFrame.value, footer.value].filter(
+  [toolbar.value, nameplate.value, historyFrame.value, footer.value].filter(
     Boolean,
   ) as HTMLElement[];
 const ballTravel = { type: "spring" as const, duration: 0.42, bounce: 0.08 };
@@ -169,6 +172,7 @@ function finishClose() {
 async function show() {
   const generation = ++motionEpoch;
   const wasPresent = present.value;
+  if (!wasPresent) prepared.value = false;
   stopMotion();
   cancel();
   endPull(true);
@@ -195,6 +199,7 @@ async function show() {
       ? getComputedStyle(ball.value).transform
       : originTransform;
     ball.value.style.transform = initial;
+    prepared.value = true;
     controls = [
       animate(
         ball.value,
@@ -226,13 +231,22 @@ async function show() {
           },
           {
             ...motionTokens.enter,
-            duration: 0.32,
-            delay: 0.08 + index * 0.055,
+            duration: 0.42,
+            delay: 0.06 + index * 0.065,
           },
         ),
       ),
     ];
   }
+  if (!motionAllowed()) {
+    for (const el of [backdrop.value, masthead.value, ...entryParts()]) {
+      if (el) {
+        el.style.opacity = "1";
+        el.style.transform = "none";
+      }
+    }
+  }
+  prepared.value = true;
   void load();
   await Promise.all(controls.map((c) => c.then(() => {})));
   if (generation !== motionEpoch || !present.value || closing) return;
@@ -295,7 +309,13 @@ async function hide() {
 }
 // Only boundary pulls are intercepted. Normal scrolling, text selection and
 // horizontal intent remain native; the timeline keeps a single transform owner.
-let pull: { x: number; y: number; top: boolean; bottom: boolean } | null = null;
+let pull: {
+  x: number;
+  y: number;
+  top: boolean;
+  bottom: boolean;
+  engaged: boolean;
+} | null = null;
 let pullControl: ReturnType<typeof animate> | undefined;
 function startPull(event: TouchEvent | PointerEvent) {
   if ("pointerType" in event && event.pointerType === "touch") return;
@@ -303,12 +323,12 @@ function startPull(event: TouchEvent | PointerEvent) {
   const point = "touches" in event ? event.touches[0] : event;
   if (!point || !scroll.value || phase.value !== "open") return;
   const el = scroll.value;
-  pullControl?.stop();
   pull = {
     x: point.clientX,
     y: point.clientY,
     top: el.scrollTop <= 1,
     bottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 1,
+    engaged: false,
   };
 }
 function movePull(event: TouchEvent | PointerEvent) {
@@ -323,6 +343,11 @@ function movePull(event: TouchEvent | PointerEvent) {
     return;
   if (event.cancelable) event.preventDefault();
   if (!motionAllowed()) return;
+  if (!pull.engaged) {
+    pullControl?.stop();
+    pullControl = undefined;
+  }
+  pull.engaged = true;
   const offset = (dy * 0.52) / (1 + Math.abs(dy) / 150);
   historyContent.value.style.transform = `translate3d(0,${offset}px,0) scaleX(${1 - Math.abs(offset) * 0.00012})`;
 }
@@ -330,8 +355,11 @@ function endPointerPull(event: PointerEvent) {
   if (event.pointerType !== "touch") endPull();
 }
 function endPull(immediate = false) {
+  const engaged = pull?.engaged;
   pull = null;
   if (!historyContent.value) return;
+  // Native scrolling does not need an animation or a synchronous style read.
+  if (!engaged && !immediate) return;
   pullControl?.stop();
   if (immediate || !motionAllowed())
     historyContent.value.style.transform = "none";
@@ -346,6 +374,71 @@ function endPull(immediate = false) {
       },
       travel,
     );
+}
+let edge: {
+  id: number;
+  x: number;
+  y: number;
+  active: boolean;
+  el: HTMLElement;
+} | null = null;
+let edgeControl: ReturnType<typeof animate> | undefined;
+function edgeDown(event: PointerEvent) {
+  const el = event.currentTarget as HTMLElement;
+  if (
+    !event.isPrimary ||
+    event.button !== 0 ||
+    phase.value !== "open" ||
+    event.clientX - el.getBoundingClientRect().left > 30 ||
+    (event.target as Element).closest("button,input,textarea,a")
+  )
+    return;
+  edgeControl?.stop();
+  edge = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    active: false,
+    el,
+  };
+}
+function edgeMove(event: PointerEvent) {
+  if (!edge || edge.id !== event.pointerId) return;
+  const dx = event.clientX - edge.x,
+    dy = event.clientY - edge.y;
+  if (!edge.active) {
+    const intent = horizontalIntent(dx, dy);
+    if (intent === "vertical" || dx < -8) {
+      edge = null;
+      return;
+    }
+    if (intent !== "horizontal") return;
+    edge.active = true;
+    edge.el.setPointerCapture(event.pointerId);
+    endPull(true);
+  }
+  event.preventDefault();
+  if (motionAllowed())
+    edge.el.style.transform = `translate3d(${rubberBand(Math.max(0, dx), 300)}px,0,0)`;
+}
+function edgeUp(event: PointerEvent) {
+  if (!edge || edge.id !== event.pointerId) return;
+  if (
+    event.type === "lostpointercapture" &&
+    edge.el.hasPointerCapture(event.pointerId)
+  )
+    return;
+  const g = edge;
+  edge = null;
+  if (g.el.hasPointerCapture(g.id)) g.el.releasePointerCapture(g.id);
+  if (!g.active) return;
+  if (event.type === "pointerup" && event.clientX - g.x > 80) close();
+  // Returning the surface also settles cancelled/short edge gestures.
+  edgeControl = animate(
+    g.el,
+    { transform: [getComputedStyle(g.el).transform, "translate3d(0,0,0)"] },
+    motionAllowed() ? { ...ballTravel, duration: 0.3 } : { duration: 0 },
+  );
 }
 const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提醒"];
 const hasConversation = computed(() =>
@@ -563,6 +656,7 @@ onBeforeUnmount(() => {
   cancel();
   motionEpoch++;
   stopMotion();
+  edgeControl?.stop();
   endPull(true);
   clearTimeout(errorTimer);
   removeBack?.();
@@ -601,6 +695,7 @@ function time(value: string) {
           /></div></DialogOverlay
       ><DialogContent
         class="companion-chat"
+        :data-ready="prepared"
         :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
         :style="{ top: viewport.top + 'px', height: viewport.height + 'px' }"
         :aria-describedby="undefined"
@@ -609,6 +704,11 @@ function time(value: string) {
         @interact-outside.prevent
         @open-auto-focus.prevent
         @close-auto-focus.prevent
+        @pointerdown="edgeDown"
+        @pointermove="edgeMove"
+        @pointerup="edgeUp"
+        @pointercancel="edgeUp"
+        @lostpointercapture="edgeUp"
       >
         <DialogTitle class="chat-sr-only">和球球聊天</DialogTitle
         ><DialogDescription class="chat-sr-only"
@@ -621,11 +721,16 @@ function time(value: string) {
               :size="88"
               :mood="emotion"
               :interactive="true"
+              automatic
+              continuous
               intent="play"
-              :tips="false"
+              :tips="true"
+              :muted="phase !== 'open'"
+              scene="chat"
             />
           </div>
         </div>
+        <div ref="nameplate" class="chat-nameplate">球球</div>
         <div
           ref="surface"
           class="chat-surface"
@@ -803,6 +908,7 @@ function time(value: string) {
   z-index: 2100;
 }
 .companion-chat-backdrop {
+  opacity: 0;
   position: fixed;
   inset: 0;
   z-index: 2100;
@@ -820,17 +926,21 @@ function time(value: string) {
   outline: 0;
   color: var(--ui-ink);
   --chat-ball-top: max(48px, calc(env(safe-area-inset-top) + 28px));
+  touch-action: pan-y pinch-zoom;
+}
+.companion-chat[data-ready="false"] {
+  visibility: hidden;
 }
 .chat-masthead {
+  opacity: 0;
   position: absolute;
   inset: 0 0 auto;
   height: calc(var(--chat-ball-top) + 160px);
-  border-radius: 0 0 32px 32px;
   background: color-mix(in srgb, var(--ui-surface) 74%, transparent);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
-  mask-image: linear-gradient(#000 60%, transparent);
-  -webkit-mask-image: linear-gradient(#000 60%, transparent);
+  mask-image: linear-gradient(#000 35%, #0009 65%, transparent);
+  -webkit-mask-image: linear-gradient(#000 35%, #0009 65%, transparent);
   pointer-events: none;
 }
 .chat-ball {
@@ -852,25 +962,54 @@ function time(value: string) {
   box-sizing: border-box;
 }
 .chat-toolbar {
+  opacity: 0;
   display: flex;
   justify-content: flex-start;
   flex: none;
-  padding-top: max(18px, env(safe-area-inset-top));
-  height: calc(var(--chat-ball-top) + 104px);
+  padding-top: max(24px, calc(var(--chat-ball-top) - 12px));
+  height: calc(var(--chat-ball-top) + 128px);
   box-sizing: border-box;
 }
 .chat-toolbar button {
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  border: 0;
-  background: transparent;
-  color: var(--ui-ink);
-  font-size: 26px;
+  border: 1px solid #ffffff28;
+  background: #161616b8;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #fff;
+  font-size: 29px;
   display: grid;
   place-items: center;
 }
+.chat-toolbar button:active {
+  transform: scaleX(1.06) scaleY(0.94);
+}
+.chat-nameplate {
+  opacity: 0;
+  position: absolute;
+  top: calc(var(--chat-ball-top) + 96px);
+  left: 50%;
+  translate: -50% 0;
+  padding: 5px 18px;
+  border-radius: 16px;
+  border: 1px solid #ffffff50;
+  background: var(--chat-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 14px;
+  z-index: 3;
+}
+.chat-ball :deep(.companion-bubble) {
+  left: 50%;
+  translate: -50% 0;
+  top: calc(100% + 40px);
+  max-width: 200px;
+  z-index: 6;
+}
 .chat-history-frame {
+  opacity: 0;
   --chat-edge: 0;
   position: relative;
   flex: 1;
@@ -880,8 +1019,15 @@ function time(value: string) {
 .chat-top-frost {
   position: absolute;
   z-index: 2;
-  inset: 0 0 auto;
-  height: clamp(40px, 9dvh, 72px);
+  inset: -32px -16px auto;
+  height: calc(clamp(40px, 9dvh, 72px) + 32px);
+  mask-image: linear-gradient(transparent, #000 24px, #000 50%, transparent);
+  -webkit-mask-image: linear-gradient(
+    transparent,
+    #000 24px,
+    #000 50%,
+    transparent
+  );
   pointer-events: none;
   opacity: var(--chat-edge);
 }
@@ -921,6 +1067,7 @@ function time(value: string) {
   -webkit-mask-image: linear-gradient(#000 0%, transparent 24%);
 }
 .chat-history {
+  touch-action: pan-y pinch-zoom;
   height: 100%;
   box-sizing: border-box;
   mask-image: linear-gradient(
@@ -987,8 +1134,6 @@ function time(value: string) {
   line-height: 1.5;
   overflow-wrap: anywhere;
   transform-origin: bottom left;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 .chat-bubble.user {
   align-self: flex-end;
@@ -1025,6 +1170,7 @@ function time(value: string) {
   }
 }
 .chat-footer {
+  opacity: 0;
   flex: none;
   padding-top: 8px;
 }
@@ -1170,8 +1316,13 @@ function time(value: string) {
   transform: scale(0.64);
 }
 .is-compact .chat-toolbar {
-  height: 90px;
+  height: 108px;
   padding-top: 12px;
+}
+.is-compact .chat-nameplate {
+  top: 79px;
+  padding: 3px 12px;
+  font-size: 12px;
 }
 .is-compact .chat-masthead {
   height: 125px;
@@ -1184,7 +1335,7 @@ function time(value: string) {
   padding-bottom: 12px;
 }
 .is-compact .chat-top-frost {
-  height: 32px;
+  height: 64px;
 }
 .is-compact .chat-error {
   bottom: 94px;

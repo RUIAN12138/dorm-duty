@@ -13,6 +13,8 @@ export interface EmotionEngine {
   destroy(): void;
   setGaze(x: number, y: number): void;
   clearGaze(): void;
+  captureState(): unknown;
+  restoreState(state: unknown): boolean;
   on(event: string, callback: (event: { id: string }) => void): void;
 }
 declare global {
@@ -28,6 +30,23 @@ export const emotions =
 export const companionPreview = ref("");
 export const companionEnabled = ref(true);
 export const displayedEmotion = ref("02");
+// Renderer state stays in memory: never conversation, identity or credentials.
+let liveBall: EmotionEngine | undefined;
+let ballState: unknown;
+export function releaseCompanion(engine: EmotionEngine) {
+  if (liveBall === engine) {
+    ballState = engine.captureState();
+    liveBall = undefined;
+  }
+}
+export function acquireCompanion(engine: EmotionEngine) {
+  if (liveBall === engine) return false;
+  const state = liveBall?.captureState() || ballState;
+  const restored = !!state && engine.restoreState(state);
+  liveBall = engine;
+  ballState = undefined;
+  return restored;
+}
 export const emotionUses: Record<string, string> = {
   "00": "久置 100 秒后睡觉",
   "01": "休息后继续操作，缓缓睁眼",

@@ -107,7 +107,7 @@ onMounted(() => {
   // Reveal the actual fitted layers, including a cold async mount.
   revealPage(
     calendarRoot.value || null,
-    "header,.calendar-view-selector,.calendar-mode,.compact-records,.stats-mode",
+    "header,.calendar-view-selector,.calendar-mode,.compact-records",
     45,
     {
       duration: motionTiming.reorder * 1000,
@@ -191,7 +191,13 @@ watch(
     void nextTick(() =>
       revealPage(
         calendarRoot.value || null,
-        ".calendar-mode,.compact-records,.stats-mode",
+        ".calendar-mode,.compact-records",
+        48,
+        {
+          duration: view.value === "stats" ? 520 : 460,
+          distance: 14,
+          scale: 0.985,
+        },
       ),
     ),
 );
@@ -1183,6 +1189,22 @@ h1 small {
 .stats-mode :deep(.summary-heading) {
   min-height: 24px;
   flex-shrink: 0;
+}
+.stats-mode[data-state="active"] :deep(.summary-heading) {
+  animation: stats-arrive 440ms var(--ui-ease-out) both;
+}
+.stats-mode[data-state="active"] :deep(.swipe-card-deck) {
+  animation: stats-arrive 560ms var(--ui-ease-out) 60ms both;
+}
+@keyframes stats-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 .stats-mode :deep(.swipe-card-deck) {
   flex: 1;

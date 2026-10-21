@@ -95,6 +95,7 @@ jobs:
           node scripts/check-sheet-banner-polish.mjs
           node scripts/check-companion-browser.mjs
           node scripts/check-companion-chat-browser.mjs
+          DORM_CONTINUITY_QA=1 node scripts/check-companion-chat-browser.mjs
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
           node scripts/check-theme-stats-polish.mjs

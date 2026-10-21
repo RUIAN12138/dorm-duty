@@ -6,6 +6,7 @@ import {
   createCompanionRuntime,
   shortMessages,
   normalizeCompanionConfig,
+  companionContext,
 } from "../../scripts/companion-ai.mjs";
 const h = await createHarness();
 const checks = [];
@@ -48,6 +49,50 @@ for (const [i, m] of members.entries()) {
     )
     .run(id, m.user_id, room.dorm.id, time.toISOString());
 }
+const boardForFacts = await (
+  await h.request(
+    `/chores/board?invite_code=${room.invite_code}&member_id=${members[0].user_id}`,
+    { token: claims[0] },
+  )
+).json();
+const previousDay = new Date(time.getTime() - 86400000).toISOString();
+const sample = structuredClone(boardForFacts);
+sample.today_tasks[0].status = "completed";
+sample.today_tasks[0].completed_at = previousDay;
+const factual = companionContext(
+  sample,
+  {
+    recent_records: [
+      {
+        key: "floor",
+        assignee_id: members[0].user_id,
+        assignee_name: "甲",
+        completed_at: previousDay,
+        completed_date: "1900-01-01",
+      },
+      {
+        key: "water",
+        assignee_id: members[1].user_id,
+        assignee_name: "乙",
+        completed_at: time.toISOString(),
+        completed_date: sample.today,
+      },
+    ],
+    last_completed: [{ key: "floor", completed_at: previousDay }],
+  },
+  time,
+);
+check(
+  factual.personal_tasks[0].status === "completed" &&
+    factual.today_completions.length === 1 &&
+    factual.today_completions[0].key === "water",
+  "a prior-round floor completion is not invented as a completion today",
+);
+check(
+  factual.water.current_assignee.id === sample.water_task.assignee_id &&
+    factual.last_completed[0].completed_at === previousDay,
+  "water cursor and dorm-wide last completion retain server facts",
+);
 const config = {
   base_url: "https://open.bigmodel.cn/api/paas/v4",
   model: "glm-4.7-flash",
@@ -75,6 +120,30 @@ const runtime = createCompanionRuntime(h.db, {
     if (url.endsWith("/audio/transcriptions"))
       return Response.json({ text: "明天八点提醒我" });
     const payload = JSON.parse(options.body);
+    const source = JSON.parse(
+      payload.messages
+        .find(
+          (m) => m.role === "system" && m.content.startsWith("真实任务上下文"),
+        )
+        .content.split(":")
+        .slice(1)
+        .join(":"),
+    );
+    check(
+      source.current_member.id === members[0].user_id &&
+        source.rounds.every((r) => r.members.length === members.length) &&
+        source.members.length === members.length,
+      "fresh grounded context identifies the speaker and all round members",
+    );
+    check(
+      source.personal_tasks.every(
+        (t) => t.assignee_id === source.current_member.id,
+      ) &&
+        "last_completed" in source &&
+        "today_completions" in source &&
+        "current_assignee" in source.water,
+      "personal assignments, today records and water cursor are explicitly distinguished",
+    );
     check(
       !JSON.stringify(payload).includes(room.invite_code) &&
         !JSON.stringify(payload).includes(claims[0]) &&

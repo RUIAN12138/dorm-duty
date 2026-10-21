@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { installInputMode } from "./interaction/inputMode";
 import { registerSW } from "virtual:pwa-register";
 import { useSession } from "./stores/session";
 import { networkState } from "./api/network";
@@ -41,20 +42,7 @@ const active = computed(() =>
 function network() {
   networkState.offline = !navigator.onLine;
 }
-function keyboardMode() {
-  document.documentElement.dataset.interaction = "keyboard";
-  window.dispatchEvent(new Event("ui-motion-change"));
-  for (const animation of document.getAnimations()) {
-    try {
-      animation.finish();
-    } catch {
-      animation.cancel();
-    }
-  }
-}
-function pointerMode() {
-  document.documentElement.dataset.interaction = "pointer";
-}
+let removeInputMode: (() => void) | undefined;
 function signedOut() {
   session.clear();
   if (!route.meta.public) void router.replace("/");
@@ -69,8 +57,7 @@ onMounted(() => {
   window.addEventListener("offline", network);
   window.addEventListener("auth-expired", expired);
   window.addEventListener(logoutEvent, signedOut);
-  window.addEventListener("keydown", keyboardMode);
-  window.addEventListener("pointerdown", pointerMode);
+  removeInputMode = installInputMode();
 });
 onUnmounted(() => {
   removeNativeBack?.();
@@ -78,8 +65,7 @@ onUnmounted(() => {
   window.removeEventListener("offline", network);
   window.removeEventListener("auth-expired", expired);
   window.removeEventListener(logoutEvent, signedOut);
-  window.removeEventListener("keydown", keyboardMode);
-  window.removeEventListener("pointerdown", pointerMode);
+  removeInputMode?.();
 });
 </script>
 <template>
