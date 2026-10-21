@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import DormCompanion from "./DormCompanion.vue";
 import {
   emotions,
@@ -9,6 +9,20 @@ import {
   saveCompanionEnabled,
   displayedEmotion,
 } from "../interaction/companion";
+const props = withDefaults(defineProps<{ active?: boolean }>(), {
+  active: true,
+});
+watch(
+  () => props.active,
+  (active) => {
+    if (!active) {
+      stop();
+      clearTimeout(closeTimer);
+      closing.value = false;
+      companionPreview.value = "";
+    }
+  },
+);
 const baseUrl = import.meta.env.BASE_URL;
 const touring = ref(false),
   closing = ref(false);

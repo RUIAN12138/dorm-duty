@@ -79,8 +79,9 @@ function hold(event: PointerEvent) {
     tapGesture.cancel();
     suppressTapUntil = performance.now() + 1000;
     cancelHold();
+    navigator.vibrate?.(10);
     emit("chat", button.getBoundingClientRect());
-  }, 550);
+  }, 380);
 }
 function moveHold(event: PointerEvent) {
   if (

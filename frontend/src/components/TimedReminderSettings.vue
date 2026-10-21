@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SettingsSkeleton from "./SettingsSkeleton.vue";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { showToast } from "vant";
 import {
@@ -93,16 +94,19 @@ async function save() {
 }
 watch(
   () => [props.active, props.token] as const,
-  ([active]) => {
+  ([active, token], previous) => {
     ++requestId;
     controller?.abort();
-    if (active) {
+    if (previous && token !== previous[1]) {
       expanded.value = false;
       plan.value = null;
       loading.value = false;
       saving.value = false;
       error.value = "";
     }
+    loading.value = false;
+    saving.value = false;
+    if (active && expanded.value && !plan.value) void load();
   },
 );
 onUnmounted(() => {
@@ -118,7 +122,7 @@ onUnmounted(() => {
     @toggle="toggle"
   >
     <summary>定时提醒</summary>
-    <p v-if="loading" role="status">正在读取…</p>
+    <SettingsSkeleton v-if="loading" variant="times" />
     <form v-else-if="plan" @submit.prevent="save">
       <fieldset :disabled="saving">
         <label class="plan-toggle"

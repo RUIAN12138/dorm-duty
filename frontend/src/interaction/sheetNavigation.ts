@@ -26,6 +26,8 @@ function createNavigation() {
     headerTarget = shallowRef<HTMLElement>(),
     pages = shallowRef<Page[]>([]);
   const current = computed(() => pages.value.at(-1));
+  const direction = ref("forward");
+  const scrollPositions = new Map<symbol | undefined, number>();
   return {
     active,
     target,
@@ -33,14 +35,21 @@ function createNavigation() {
     headerTarget,
     pages,
     current,
+    direction,
+    scrollPositions,
     start() {
+      scrollPositions.clear();
+      direction.value = "forward";
       active.value = true;
     },
     push(page: Page) {
-      if (!pages.value.some((p) => p.id === page.id))
+      if (!pages.value.some((p) => p.id === page.id)) {
+        direction.value = "forward";
         pages.value = [...pages.value, page];
+      }
     },
     remove(id: symbol) {
+      if (current.value?.id === id) direction.value = "back";
       pages.value = pages.value.filter((p) => p.id !== id);
     },
     back() {
@@ -48,6 +57,7 @@ function createNavigation() {
     },
     end() {
       active.value = false;
+      scrollPositions.clear();
       const previous = pages.value;
       pages.value = [];
       previous.reverse().forEach((p) => p.close());

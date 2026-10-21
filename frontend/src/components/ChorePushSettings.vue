@@ -2,6 +2,7 @@
 import { onUnmounted, ref, watch } from "vue";
 import { showToast } from "vant";
 import ElasticSheet from "./ElasticSheet.vue";
+import SettingsSkeleton from "./SettingsSkeleton.vue";
 import { pushCapability } from "../api/push";
 import { onNativePushReady } from "../api/nativePush";
 import TimedReminderSettings from "./TimedReminderSettings.vue";
@@ -29,13 +30,13 @@ const config = ref<MemberPushConfig | null>(null),
   loading = ref(false),
   error = ref("");
 const cap = ref(pushCapability());
-let requestId = 0;
+let requestId = 0,
+  loadedToken = "",
+  loadedAt = 0;
 async function refresh() {
   const id = ++requestId;
   cap.value = pushCapability();
   error.value = "";
-  config.value = null;
-  enabled.value = false;
   loading.value = true;
   const token = props.token;
   try {
@@ -43,6 +44,8 @@ async function refresh() {
     if (id !== requestId || !props.modelValue || token !== props.token) return;
     const active = await syncMemberPush(token);
     if (id !== requestId || !props.modelValue || token !== props.token) return;
+    loadedToken = token;
+    loadedAt = Date.now();
     config.value = next;
     enabled.value = active;
   } catch (e) {
@@ -57,10 +60,20 @@ const removeNativeReady = onNativePushReady(() => {
 });
 watch(
   () => [props.modelValue, props.token] as const,
-  ([open]) => {
+  ([open, token], previous) => {
     ++requestId;
     busy.value = false;
-    if (open) void refresh();
+    loading.value = false;
+    if (previous && token !== previous[1]) {
+      config.value = null;
+      loadedToken = "";
+      enabled.value = false;
+    }
+    if (
+      open &&
+      (!config.value || loadedToken !== token || Date.now() - loadedAt > 60000)
+    )
+      void refresh();
   },
   { immediate: true },
 );
@@ -123,7 +136,8 @@ async function test() {
     @update:model-value="emit('update:modelValue', $event)"
     @closed="emit('closed')"
   >
-    <div class="push-settings" data-testid="push-settings">
+    <SettingsSkeleton v-if="loading && !config" variant="notifications" />
+    <div v-else class="push-settings" data-testid="push-settings">
       <p class="push-status">
         {{
           enabled
@@ -201,6 +215,20 @@ async function test() {
   </ElasticSheet>
 </template>
 <style scoped>
+.push-settings {
+  animation: settings-content-enter var(--ui-release-time, 360ms)
+    var(--ui-ease-out);
+}
+@keyframes settings-content-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
 .push-status {
   font-size: 28px;
   font-weight: 600;

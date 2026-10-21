@@ -1922,7 +1922,7 @@ onUnmounted(() => {
         motion="bottom"
         @closed="presentNewReminders"
       >
-        <CompanionSettings />
+        <CompanionSettings :active="companionOpen" />
       </ElasticSheet>
       <ChoreMessages
         v-model="messagesOpen"

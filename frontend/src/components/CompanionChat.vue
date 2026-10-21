@@ -731,7 +731,7 @@ function time(value: string) {
               continuous
               intent="play"
               :tips="true"
-              :muted="phase !== 'open'"
+              :muted="!prepared"
               scene="chat"
             />
           </div>
@@ -1008,10 +1008,12 @@ function time(value: string) {
   z-index: 3;
 }
 .chat-ball :deep(.companion-bubble) {
-  left: 50%;
-  translate: -50% 0;
-  top: calc(100% + 40px);
-  max-width: 200px;
+  left: calc(100% - 6px);
+  top: -12px;
+  translate: 0 -50%;
+  max-width: min(128px, calc(50vw - 68px));
+  border-radius: 13px 13px 13px 4px;
+  transform-origin: bottom left;
   z-index: 6;
 }
 .chat-history-frame {

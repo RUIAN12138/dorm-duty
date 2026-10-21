@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { captureCompanionHandoff } from "../interaction/companion";
 import CompanionLogin from "./CompanionLogin.vue";
+import SettingsSkeleton from "./SettingsSkeleton.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   emailAccount,
@@ -341,8 +342,11 @@ onMounted(() => {
 <template>
   <div class="email-panel" data-testid="email-account-panel" :aria-busy="busy">
     <Transition name="email-step" mode="out-in" @after-enter="stepEntered">
+      <section v-if="busy && !emailAccount.loaded" key="loading">
+        <SettingsSkeleton variant="account" />
+      </section>
       <section
-        v-if="confirmUnbindRoom"
+        v-else-if="confirmUnbindRoom"
         key="unbind"
         class="email-unbind-confirm"
         aria-labelledby="unbind-title"

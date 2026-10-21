@@ -135,13 +135,15 @@ async function copy() {
 }
 watch(
   () => [props.active, props.token] as const,
-  ([active]) => {
+  ([active, token], previous) => {
     clear();
-    if (active) {
+    if (previous && token !== previous[1]) {
       config.value = null;
       expanded.value = false;
       error.value = "";
     }
+    if (active && config.value) accept(config.value);
+    else if (active && expanded.value) void run("load");
   },
 );
 onBeforeUnmount(clear);
