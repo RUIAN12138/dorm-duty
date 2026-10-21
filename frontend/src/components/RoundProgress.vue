@@ -89,8 +89,37 @@ function measure() {
   paintCompression(compression.get());
 }
 function scrollRanking() {
-  compress((ranking.value?.scrollTop || 0) > 8);
+  const top = ranking.value?.scrollTop || 0;
+  if (top > 8) compress(true);
+  else if (top === 0) compress(false);
 }
+// A short list can be clipped by the expanded ring yet fit the preallocated
+// native viewport. Accept the scroll intent too, without animating its height
+// or adding a blank spacer merely to manufacture scroll range.
+let listPointerY: number | null = null;
+function listPointerDown(event: PointerEvent) {
+  if (event.isPrimary) listPointerY = event.clientY;
+}
+function listPointerMove(event: PointerEvent) {
+  if (listPointerY === null) return;
+  const dy = event.clientY - listPointerY;
+  if (dy < -8) compress(true);
+  else if (dy > 8 && (ranking.value?.scrollTop || 0) < 1) compress(false);
+}
+function wheelRanking(event: WheelEvent) {
+  if (event.deltaY > 0) compress(true);
+  else if (event.deltaY < 0 && (ranking.value?.scrollTop || 0) < 1)
+    compress(false);
+}
+function keyRanking(event: KeyboardEvent) {
+  if (["ArrowDown", "PageDown", "End"].includes(event.key)) compress(true);
+  else if (
+    ["ArrowUp", "PageUp", "Home"].includes(event.key) &&
+    (ranking.value?.scrollTop || 0) < 1
+  )
+    compress(false);
+}
+
 watch(
   [
     filter,
@@ -320,7 +349,15 @@ onBeforeUnmount(() => {
       ref="ranking"
       class="round-ranking-viewport"
       data-native-scroll
+      tabindex="0"
+      aria-label="本轮成员名单"
       @scroll.passive="scrollRanking"
+      @wheel.passive="wheelRanking"
+      @pointerdown.passive="listPointerDown"
+      @pointermove.passive="listPointerMove"
+      @pointerup="listPointerY = null"
+      @pointercancel="listPointerY = null"
+      @keydown="keyRanking"
     >
       <TransitionGroup
         v-if="people.length"

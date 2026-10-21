@@ -46,7 +46,7 @@ try {
       `/chores/board?invite_code=${room.invite_code}&member_id=${p.user_id}`,
       p.token,
     );
-  for (const p of people.slice(0, 6)) {
+  for (const p of people.slice(0, 4)) {
     const b = await board(p);
     await api(
       `/chores/tasks/${b.today_tasks.find((t) => t.key === "floor").id}/complete`,
@@ -143,6 +143,7 @@ try {
   const before = await ring.boundingBox();
   await list.evaluate((el) => {
     el.scrollTop = 60;
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true }));
   });
   const frames = await ring.evaluate(async (el) => {
     const result = [];
@@ -172,30 +173,33 @@ try {
   );
   await list.evaluate((el) => {
     el.scrollTop = 0;
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -60, bubbles: true }));
   });
   await page.waitForTimeout(70);
   await list.evaluate((el) => {
     el.scrollTop = 40;
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true }));
   });
   await page.waitForTimeout(60);
   await list.evaluate((el) => {
     el.scrollTop = 0;
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -60, bubbles: true }));
   });
   await page.waitForTimeout(800);
   check(
     Math.abs((await ring.boundingBox()).width - before.width) < 1,
     "rapid scroll reversal restores the original ring without stale transforms",
   );
-  await page.getByRole("button", { name: "未完成 2", exact: true }).click();
+  await page.getByRole("button", { name: "未完成 4", exact: true }).click();
   await page.waitForTimeout(650);
   check(
-    (await page.locator(".round-ranking li").count()) === 2,
+    (await page.locator(".round-ranking li").count()) === 4,
     "pending filter shows the remaining members",
   );
-  await page.getByRole("button", { name: "已完成 6", exact: true }).click();
+  await page.getByRole("button", { name: "已完成 4", exact: true }).click();
   await page.waitForTimeout(650);
   check(
-    (await page.locator(".round-ranking li").count()) === 6,
+    (await page.locator(".round-ranking li").count()) === 4,
     "completed filter restores chronological ranks",
   );
   for (const width of [320, 390, 430]) {
