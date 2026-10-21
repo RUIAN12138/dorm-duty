@@ -623,7 +623,11 @@ const displayRound = computed(() => {
     : current;
 });
 watch(roundOpen, (open) => {
-  if (!open) completedRoundReceipt.value = null;
+  // Size once per opening. Changing the roster filter animates the contents,
+  // not the whole sheet jumping to a different height behind them.
+  if (open)
+    roundVisibleCount.value = displayRound.value?.completions?.length || 0;
+  else completedRoundReceipt.value = null;
 });
 
 const dutyCaption = computed(() =>
@@ -1818,7 +1822,7 @@ onUnmounted(() => {
       />
       <ElasticSheet
         v-model="roundOpen"
-        :content-height="`min(75dvh, 820px, calc(min(224px, 27dvh) + 180px + ${roundVisibleCount * 66}px + env(safe-area-inset-bottom, 0px)))`"
+        :content-height="`min(75dvh, 820px, calc(min(224px, 27dvh) + 224px + ${roundVisibleCount * 66}px + env(safe-area-inset-bottom, 0px)))`"
         contained
         fixed-content
         motion="bottom"
@@ -1834,7 +1838,6 @@ onUnmounted(() => {
             :round="displayRound"
             :active="roundOpen"
             :celebrate="completionEpoch"
-            @count="roundVisibleCount = $event"
           />
         </div>
       </ElasticSheet>

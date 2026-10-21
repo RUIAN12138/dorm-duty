@@ -34,7 +34,7 @@ import {ref,computed} from 'vue';import Sheet from './src/components/ElasticShee
 const open=ref(false),settings=ref(false);const members=Array.from({length:8},(_,i)=>({user_id:i+1,nickname:'室友'+(i+1),marker_id:i===7?'invalid-mark':'pixel-'+String(i+1).padStart(2,'0')}));
 const count=ref(8);(window as any).setCount=(n:number)=>count.value=n;const round=computed(()=>({completed:count.value,total:8,sequence:1,members,completions:members.slice(0,count.value).map((m,i)=>({...m,id:i+1,completed_at:'2026-10-17T01:00:00Z'}))}));
 const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地板','厕所','洗手池','抬水'][i],mode:key==='water'?'on_demand':'self_round',content:'清洁',start_date:'2026-10-17',deadline_time:'22:00',weekdays:[1,2,3,4,5,6,7],rotation_days:1,reminder_interval_days:3,rotation_order:members.map(m=>m.user_id),enabled:true}));
-</script><template><main><button data-testid="open" @click="open=true">轮次</button><button data-testid="settings" @click="settings=true">设置</button><Sheet v-model="open" title="本轮完成" :content-height="'min(90dvh, 820px, calc(min(224px, 27dvh) + 180px + '+(count*66)+'px + env(safe-area-inset-bottom, 0px)))'" contained fixed-content motion="bottom"><div class="round-members"><Round :round="round" :active="open"/></div></Sheet><Settings v-model="settings" :categories="categories" :members="members" :version="1" token="fixture"/></main></template>`,
+</script><template><main><button data-testid="open" @click="open=true">轮次</button><button data-testid="settings" @click="settings=true">设置</button><Sheet v-model="open" title="本轮完成" :content-height="'min(75dvh, 820px, calc(min(224px, 27dvh) + 224px + '+(count*66)+'px + env(safe-area-inset-bottom, 0px)))'" contained fixed-content motion="bottom"><div class="round-members"><Round :round="round" :active="open"/></div></Sheet><Settings v-model="settings" :categories="categories" :members="members" :version="1" token="fixture"/></main></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -99,12 +99,12 @@ const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地
     await page.evaluate(()=>window.setCount(8));
     await page.getByTestId("open").click();
     await page.waitForTimeout(700);
-    const ring=page.getByTestId("round-progress-ring"), list=page.getByTestId("round-ranking");
+    const ring=page.getByTestId("round-progress-ring"), list=page.locator(".round-ranking-viewport");
     const before=await ring.boundingBox();
     await list.evaluate(el=>el.scrollTop=el.scrollHeight);
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(700);
     const after=await ring.boundingBox();
-    check(Math.abs(before.y-after.y)<1,true,`${width}px ring stays fixed while roster scrolls`);
+    check(after.width<before.width*.6,true,`${width}px ring contracts while roster gains room`);
     check(await list.evaluate(el=>el.scrollTop>0),true,`${width}px roster has its own usable scroll area`);
     check(await list.locator('svg.member-mark path').count(),8,'every member renders inline including invalid marker fallback');
     check(await list.locator('svg.member-mark path').evaluateAll(paths=>paths.every(p=>!!p.getAttribute('d'))),true,'all marker paths contain drawing data');
