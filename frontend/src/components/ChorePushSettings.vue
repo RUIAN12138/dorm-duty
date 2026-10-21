@@ -84,6 +84,7 @@ onUnmounted(() => {
 async function enable() {
   if (busy.value || loading.value || !config.value) return;
   const id = requestId;
+  loadedAt = 0; // An interrupted mutation must be reconciled on the next visit.
   busy.value = true;
   error.value = "";
   try {
@@ -100,6 +101,7 @@ async function enable() {
 async function disable() {
   if (busy.value || loading.value) return;
   const id = requestId;
+  loadedAt = 0; // An interrupted mutation must be reconciled on the next visit.
   busy.value = true;
   error.value = "";
   try {

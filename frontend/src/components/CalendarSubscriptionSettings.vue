@@ -136,7 +136,9 @@ async function copy() {
 watch(
   () => [props.active, props.token] as const,
   ([active, token], previous) => {
+    const interrupted = busy.value;
     clear();
+    if (interrupted) config.value = null;
     if (previous && token !== previous[1]) {
       config.value = null;
       expanded.value = false;

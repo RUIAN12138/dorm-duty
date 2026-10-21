@@ -95,6 +95,7 @@ async function save() {
 watch(
   () => [props.active, props.token] as const,
   ([active, token], previous) => {
+    if (saving.value) plan.value = null;
     ++requestId;
     controller?.abort();
     if (previous && token !== previous[1]) {
