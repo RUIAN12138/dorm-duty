@@ -282,20 +282,26 @@ try {
     "hint visibly interpolates on opening",
   );
   const hintBox = await hint.boundingBox();
+  const hintTrigger = await page
+    .getByRole("button", { name: "邮箱验证说明", exact: true })
+    .boundingBox();
   check(
-    Math.abs(hintBox.y + hintBox.height / 2 - 844 / 2) < 2,
+    hintBox.x >= 15 &&
+      hintBox.x + hintBox.width <= 375 &&
+      Math.min(
+        Math.abs(hintBox.y + hintBox.height - hintTrigger.y),
+        Math.abs(hintBox.y - hintTrigger.y - hintTrigger.height),
+      ) < 24,
     true,
-    "hint is vertically centered",
+    "help is anchored to its question mark and fits the viewport",
   );
   check(
-    await page
-      .getByTestId("hint-glass")
-      .evaluate((el) => getComputedStyle(el).backdropFilter === "none"),
-    true,
-    "hint backdrop dims without blur",
+    await page.locator(".hint-glass").count(),
+    0,
+    "help does not cover or dim the underlying page",
   );
-  await page.screenshot({ path: path.join(evidence, "centered-hint.png") });
-  await page.getByRole("button", { name: "知道了", exact: true }).click();
+  await page.screenshot({ path: path.join(evidence, "anchored-hint.png") });
+  await page.keyboard.press("Escape");
   await hint.waitFor({ state: "hidden" });
   const control = page.getByRole("button", { name: "获取验证码", exact: true });
   const box = await control.boundingBox();
@@ -481,6 +487,49 @@ try {
     1,
     "new dorm automatically binds its creator to verified account",
   );
+  for (const source of ["duty", "water"]) {
+    await page.getByTestId(`nav-${source}`).click();
+    await page.getByTestId(`pane-${source}`).waitFor();
+    await page.waitForTimeout(450);
+    await page.evaluate(() => {
+      window.__routeFrames = [];
+      const until = performance.now() + 900;
+      function sample() {
+        const panes = [
+          ...document.querySelectorAll(
+            ".focus-pane:not([inert]) [data-testid^='pane-']",
+          ),
+        ].map((el) => el.dataset.testid);
+        const calendar = document.querySelector(".compact-calendar header");
+        window.__routeFrames.push({
+          panes,
+          opacity: calendar ? Number(getComputedStyle(calendar).opacity) : null,
+        });
+        if (performance.now() < until) requestAnimationFrame(sample);
+      }
+      sample();
+    });
+    await page.getByTestId("nav-calendar").click();
+    await page.getByTestId("pane-calendar").waitFor();
+    await page.waitForTimeout(950);
+    const frames = await page.evaluate(() => window.__routeFrames);
+    check(
+      frames.every(
+        (f) =>
+          f.panes.length <= 1 &&
+          f.panes.every((p) => p === `pane-${source}` || p === "pane-calendar"),
+      ),
+      true,
+      `real GuestHome ${source}-to-calendar transition never flashes another page`,
+    );
+    check(
+      frames.some((f) => f.opacity > 0 && f.opacity < 1),
+      true,
+      `real ${source}-to-calendar content has visible entrance frames`,
+    );
+  }
+  await page.getByTestId("nav-duty").click();
+  await page.getByTestId("pane-duty").waitFor();
   // Real email cookie + real GuestHome routes, not a component-only host.
   const receiptResponse = page.waitForResponse(
     (r) =>
@@ -800,12 +849,13 @@ try {
   await page.waitForTimeout(220);
   const joinHint = await page.locator(".hint-popover").boundingBox();
   check(
-    Math.abs(joinHint.y + joinHint.height / 2 - 844 / 2) < 2,
+    joinHint.x >= 15 && joinHint.x + joinHint.width <= 375,
     true,
-    "join help dialog is also centered",
+    "join help bubble fits the viewport",
   );
   await page.screenshot({ path: path.join(evidence, "join-hint.png") });
-  await page.getByRole("button", { name: "知道了", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.locator(".hint-popover").waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "返回当前任务", exact: true }).click();
   clock += 61000;
   const second = await context(320),

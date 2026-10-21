@@ -209,7 +209,10 @@ defineExpose({ close });
     ref="root"
     class="swipe-record-cell"
     :class="{ 'is-open': open, 'is-dragging': dragging }"
-    :style="{ '--swipe-action-width': `${width}px` }"
+    :style="{
+      '--swipe-action-width': `${width}px`,
+      '--swipe-reveal': Math.min(1, Math.max(0, -offset / width)),
+    }"
     :aria-label="label"
     role="group"
     :data-testid="testId"
@@ -260,7 +263,7 @@ defineExpose({ close });
 .swipe-record-cell {
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 18px;
 }
 .swipe-record-front {
   position: relative;
@@ -271,6 +274,7 @@ defineExpose({ close });
   touch-action: pan-y;
   transition: transform 260ms var(--ui-ease-out);
 }
+.is-dragging .swipe-record-actions,
 .is-dragging .swipe-record-front {
   transition: none;
   will-change: transform;
@@ -281,17 +285,26 @@ defineExpose({ close });
 }
 .swipe-record-actions {
   position: absolute;
-  inset: 0 0 0 auto;
+  inset: 7px 0 7px auto;
   display: flex;
   align-items: stretch;
   width: var(--swipe-action-width);
-  gap: 4px;
+  gap: 6px;
+  padding-left: 8px;
+  box-sizing: border-box;
+  transform: translateX(calc((1 - var(--swipe-reveal)) * 18px))
+    scale(calc(0.92 + var(--swipe-reveal) * 0.08));
+  opacity: var(--swipe-reveal);
+  transform-origin: right center;
+  transition:
+    transform 260ms var(--ui-ease-out),
+    opacity 180ms var(--ui-ease-out);
 }
 .swipe-record-actions :deep(button) {
   flex: 1;
   min-width: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: 18px;
   padding: 8px 4px;
   background: var(--ui-surface-muted);
   color: var(--ui-ink);

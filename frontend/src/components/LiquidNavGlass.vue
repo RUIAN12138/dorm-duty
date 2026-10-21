@@ -92,7 +92,7 @@ function paintSource(width: number, height: number, dpr: number) {
   const bounds = canvas.value!.getBoundingClientRect();
   clearClips();
   nativeLabels.clear();
-  for (const link of parent.querySelectorAll("a")) {
+  for (const link of parent.querySelectorAll("a, [data-glass-item]")) {
     const text = link.querySelector(".nav-native-caption"),
       icon = link.querySelector("svg");
     const native = link.querySelector<HTMLElement>(".nav-native-content");

@@ -66,6 +66,7 @@ export interface ChoreReminder {
   title?: string;
   body?: string;
   sender_name?: string;
+  sender_id?: number | null;
   task_name?: string;
   created_at: string;
   read_at: string | null;

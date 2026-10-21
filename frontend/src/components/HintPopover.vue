@@ -1,36 +1,51 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
 import {
-  DialogRoot,
-  DialogTrigger,
-  DialogPortal,
-  DialogOverlay,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
+  PopoverRoot,
+  PopoverTrigger,
+  PopoverPortal,
+  PopoverContent,
+  PopoverArrow,
 } from "reka-ui";
 import { registerNativeBack } from "../interactions/nativeBack";
 defineProps<{ title: string; text: string; label?: string }>();
 const open = ref(false);
+let timer: ReturnType<typeof setTimeout> | undefined;
 let removeBack: (() => void) | undefined;
+function pause() {
+  clearTimeout(timer);
+}
+function schedule() {
+  clearTimeout(timer);
+  if (open.value)
+    timer = setTimeout(() => {
+      open.value = false;
+    }, 6000);
+}
 watch(open, (value) => {
+  clearTimeout(timer);
   removeBack?.();
   removeBack = value
-    ? registerNativeBack(() => (open.value = false))
+    ? registerNativeBack(() => {
+        open.value = false;
+      })
     : undefined;
+  if (value) schedule();
 });
-onBeforeUnmount(() => removeBack?.());
+onBeforeUnmount(() => {
+  clearTimeout(timer);
+  removeBack?.();
+});
 </script>
 <template>
-  <DialogRoot v-model:open="open">
-    <DialogTrigger as-child>
-      <button class="hint-trigger" type="button" :aria-label="label || title">
+  <PopoverRoot v-model:open="open" :modal="false">
+    <PopoverTrigger as-child
+      ><button class="hint-trigger" type="button" :aria-label="label || title">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle
             cx="12"
             cy="12"
-            r="8.5"
+            r="9"
             stroke="currentColor"
             stroke-width="1.4"
           />
@@ -40,180 +55,110 @@ onBeforeUnmount(() => removeBack?.());
             stroke-width="1.5"
             stroke-linecap="round"
           />
-        </svg>
-      </button>
-    </DialogTrigger>
-    <DialogPortal>
-      <DialogOverlay
-        class="hint-glass"
-        data-testid="hint-glass"
-        @pointerdown.self.stop="open = false"
-      />
-      <DialogContent class="hint-popover" @escape-key-down.stop>
-        <div class="hint-heading">
-          <DialogTitle>{{ title }}</DialogTitle>
-        </div>
-        <DialogDescription>{{ text }}</DialogDescription>
-        <DialogClose class="hint-confirm galaxy-fill">知道了</DialogClose>
-      </DialogContent>
-    </DialogPortal>
-  </DialogRoot>
+        </svg></button
+    ></PopoverTrigger>
+    <PopoverPortal
+      ><PopoverContent
+        class="hint-popover"
+        side="top"
+        :side-offset="8"
+        :collision-padding="16"
+        :avoid-collisions="true"
+        :aria-label="title"
+        @open-auto-focus.prevent
+        @pointerenter="pause"
+        @pointerleave="schedule"
+        @focusin="pause"
+        @focusout="schedule"
+      >
+        <strong>{{ title }}</strong>
+        <p>{{ text }}</p>
+        <PopoverArrow
+          class="hint-arrow"
+          :width="12"
+          :height="6"
+        /> </PopoverContent
+    ></PopoverPortal>
+  </PopoverRoot>
 </template>
 <style>
 .hint-trigger {
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
   border: 0;
   border-radius: 50%;
-  color: var(--app-tone-h888, #888);
+  color: var(--ui-text-muted);
   background: transparent;
   cursor: pointer;
   vertical-align: middle;
+  transition: transform var(--ui-release-time) var(--ui-ease-out);
 }
 .hint-trigger svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 .hint-trigger:active {
   transform: scale(0.96);
   background: var(--ui-surface-muted);
 }
-.hint-glass {
-  position: fixed;
-  inset: 0;
-  z-index: 3999;
-  background: rgb(0 0 0 / 22%);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  pointer-events: auto;
+.hint-trigger:focus-visible {
+  outline: 2px solid var(--ui-ink);
+  outline-offset: 2px;
 }
 .hint-popover {
-  position: fixed;
   z-index: 4000;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(320px, calc(100vw - 40px));
-  max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-  padding: 22px;
-  border: 1px solid rgb(255 255 255 / 90%);
-  border-radius: 28px;
+  width: min(270px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
   background: var(--ui-surface);
-  color: var(--app-tone-h222, #222);
-  box-shadow:
-    0 20px 70px #00000014,
-    0 2px 8px #00000005;
+  color: var(--ui-ink);
+  box-shadow: 0 6px 24px #00000012;
   outline: none;
+  transform-origin: var(--reka-popover-content-transform-origin);
 }
-.hint-heading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  text-align: center;
-}
-.hint-heading h2 {
-  margin: 0;
-  font-size: 19px;
-  line-height: 1.35;
-  font-weight: 600;
-  letter-spacing: -0.4px;
-}
-.hint-popover > p {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.65;
-  color: var(--app-tone-h666, #666);
-}
-.hint-confirm {
+.hint-popover strong {
   display: block;
-  width: 100%;
-  min-height: 46px;
-  padding: 11px 16px;
-  margin-top: 24px;
-  border: 0;
-  border-radius: 16px;
-  color: var(--app-tone-hfff, #fff);
-  background: var(--app-tone-h111, #111);
-  font: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 6px;
 }
-.hint-trigger:focus-visible,
-.hint-confirm:focus-visible {
-  outline: 2px solid var(--app-tone-h111, #111);
-  outline-offset: 3px;
+.hint-popover p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ui-text-muted);
 }
-.hint-confirm:active {
-  transform: var(--ui-press-action);
-  transition-duration: var(--ui-press-time);
+.hint-arrow {
+  fill: var(--ui-surface);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .hint-trigger,
-  .hint-confirm {
-    transition:
-      transform var(--ui-release-time) var(--ui-ease-out),
-      background-color 140ms ease;
-  }
-  .hint-glass[data-state="open"] {
-    animation: hint-glass-in 160ms ease-out;
-  }
-  .hint-glass[data-state="closed"] {
-    animation: hint-glass-out 120ms ease-out;
-  }
   .hint-popover[data-state="open"] {
-    animation: hint-arrive 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: hint-arrive 240ms cubic-bezier(0.22, 1.12, 0.36, 1);
   }
   .hint-popover[data-state="closed"] {
-    animation: hint-depart 140ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  @keyframes hint-glass-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-  @keyframes hint-glass-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0;
-    }
+    animation: hint-depart 160ms var(--ui-ease-out);
   }
   @keyframes hint-arrive {
     from {
       opacity: 0;
-      transform: translate(-50%, calc(-50% + 6px)) scale(0.97);
+      transform: scale(0.9) translateY(4px);
     }
     to {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
+      transform: scale(1) translateY(0);
     }
   }
   @keyframes hint-depart {
-    from {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
     to {
       opacity: 0;
-      transform: translate(-50%, calc(-50% + 4px)) scale(0.98);
+      transform: scale(0.94) translateY(3px);
     }
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hint-trigger:active,
-  .hint-confirm:active {
-    transform: none;
   }
 }
 </style>

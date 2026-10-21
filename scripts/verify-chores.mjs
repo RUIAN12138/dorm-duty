@@ -804,44 +804,27 @@ try {
       .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
       .boundingBox();
     assert(
-      helpBounds.x >= 19 && helpBounds.x + helpBounds.width <= width - 19,
+      helpBounds.x >= 15 && helpBounds.x + helpBounds.width <= width - 15,
       "hint dialog keeps equal side margins",
     );
     assert(
       helpBounds.y > 0 && helpBounds.y + helpBounds.height < 844,
       "hint dialog stays inside viewport",
     );
-    const backdropStyle = await entry.page
-      .getByTestId("hint-glass")
-      .evaluate((el) => ({
-        filter: getComputedStyle(el).backdropFilter,
-        background: getComputedStyle(el).backgroundColor,
-      }));
-    assert.equal(backdropStyle.filter, "none", "help backdrop has no blur");
-    assert.notEqual(
-      backdropStyle.background,
-      "rgba(0, 0, 0, 0)",
-      "help backdrop dims the page",
-    );
-    assert(
-      helpBounds.y + helpBounds.height / 2 > 844 * 0.53,
-      "hint dialog rests a little below screen center",
+    assert.equal(
+      await entry.page.locator(".hint-glass").count(),
+      0,
+      "help bubble has no modal backdrop",
     );
     await snapshot(entry.page, `invite-help-${width}`);
-    await entry.page
-      .getByRole("button", { name: "知道了", exact: true })
-      .click();
-    await entry.page
-      .getByRole("dialog", { name: "邀请码在哪里？", exact: true })
-      .waitFor({ state: "hidden" });
+    await entry.page.keyboard.press("Escape");
+    await entry.page.locator(".hint-popover").waitFor({ state: "hidden" });
     await entry.page
       .getByRole("button", { name: "邀请码帮助", exact: true })
       .click();
-    await entry.page.getByTestId("hint-glass").waitFor();
-    await entry.page
-      .getByTestId("hint-glass")
-      .click({ position: { x: 8, y: 8 } });
-    await entry.page.getByTestId("hint-glass").waitFor({ state: "hidden" });
+    await entry.page.locator(".hint-popover").waitFor();
+    await entry.page.mouse.click(8, 820);
+    await entry.page.locator(".hint-popover").waitFor({ state: "hidden" });
     await noNavigation(entry.page);
     await entry.context.close();
   }

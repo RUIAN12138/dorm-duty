@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>抬水支持暂时跳过、提前完成</li>
-          <li>轮次圆环随名单滚动自然收展</li>
-          <li>日历分层入场，列表滑出撤销与修正</li>
+          <li>设置、轮次支持上拉展开</li>
+          <li>消息自动收起，长按即可回复</li>
+          <li>列表操作更圆润，帮助改为原位气泡</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

@@ -136,9 +136,15 @@ onBeforeUnmount(() => {
   padding: 6px;
   border: 1px solid var(--ui-border);
   border-radius: 50%;
-  background: var(--ui-surface);
+  background: var(--glass-lens-surface, var(--ui-surface));
+  box-shadow: var(--glass-shadow);
+  border-color: var(--glass-border);
+  transition: transform var(--ui-release-time) var(--ui-ease-out);
   color: var(--ui-ink);
   cursor: pointer;
+}
+.theme-toggle:active {
+  transform: scale(1.06);
 }
 .theme-toggle svg {
   width: 26px;

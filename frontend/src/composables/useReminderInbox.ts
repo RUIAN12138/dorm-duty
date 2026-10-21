@@ -41,9 +41,10 @@ export function useReminderInbox(
         : note,
     );
   }
-  async function read(id: number) {
+  async function read(id: number, fromBanner = false) {
     const s = source();
-    if (disposed || !s.open || busy.value || receipts.has(id)) return;
+    if (disposed || (!s.open && !fromBanner) || busy.value || receipts.has(id))
+      return;
     const generation = epoch,
       account = identity();
     busy.value = `read-${id}`;
@@ -58,10 +59,16 @@ export function useReminderInbox(
       const readAt = response?.read_at || new Date().toISOString();
       receipts.set(id, readAt);
       events.confirmed(id, readAt);
+      return true;
     } catch (cause) {
-      if (!disposed && generation === epoch && s.open && source().open)
+      if (
+        !disposed &&
+        generation === epoch &&
+        (fromBanner || (s.open && source().open))
+      )
         error.value =
           cause instanceof Error ? cause.message : "记录失败，请重试";
+      return false;
     } finally {
       if (!disposed) busy.value = "";
     }
