@@ -96,6 +96,7 @@ jobs:
           node scripts/check-focus-compact.mjs
           node scripts/check-theme-stats-polish.mjs
           node scripts/check-release-notice-browser.mjs
+          node scripts/check-manual-update.mjs
           node scripts/check-list-collapse-sync.mjs
           DORM_TOUCH=1 node scripts/check-focus-compact.mjs
           node scripts/check-completion-experience.mjs
@@ -118,7 +119,9 @@ jobs:
           DORM_WEB_BASE: /dorm-duty/
         run: npm run build --prefix frontend -- --outDir dist-server
       - name: Verify email account HTTPS and mobile flow
-        run: node scripts/check-email-experience.mjs
+        run: |
+          node scripts/check-page-exit.mjs
+          node scripts/check-email-experience.mjs
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 20

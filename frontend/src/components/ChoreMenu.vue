@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CheckForUpdates from "./CheckForUpdates.vue";
 import AppearanceSettings from "./AppearanceSettings.vue";
 import ElasticSheet from "./ElasticSheet.vue";
 import ActionItem from "./ActionItem.vue";
@@ -94,6 +95,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
         @click="emit('action', 'preferences')"
       />
     </div>
+    <CheckForUpdates />
   </ElasticSheet>
   <ElasticSheet
     v-model="preferences"
