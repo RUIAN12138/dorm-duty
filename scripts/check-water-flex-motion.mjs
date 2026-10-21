@@ -244,7 +244,31 @@ try {
   const cell = page.getByTestId(`calendar-list-record-${floorId}`);
   await cell.scrollIntoViewIfNeeded();
   await page.waitForTimeout(650);
-  const rect = await cell.boundingBox(),
+  // A real touch cannot land on a row while its stagger/FLIP entrance still
+  // moves underneath it. Wait for the front surface to own the hit point,
+  // rather than treating a fixed delay as evidence it is ready on a slow GPU.
+  const frontSurface = cell.locator(".swipe-record-front");
+  await frontSurface.scrollIntoViewIfNeeded();
+  await page.waitForFunction((id) => {
+    const root = document.querySelector(`[data-testid="${id}"]`);
+    const front = root?.querySelector(".swipe-record-front");
+    if (!front) return false;
+    const box = front.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      box.x + box.width * 0.7,
+      box.y + box.height * 0.5,
+    );
+    return (
+      !!hit &&
+      front.contains(hit) &&
+      !root.closest("[inert]") &&
+      !root.querySelector(".swipe-undo:disabled") &&
+      ![...root.getAnimations({ subtree: true })].some(
+        (a) => a.playState === "running",
+      )
+    );
+  }, `calendar-list-record-${floorId}`);
+  const rect = await frontSurface.boundingBox(),
     x = rect.x + rect.width * 0.7,
     y = rect.y + rect.height * 0.5;
   if (!safari) {
@@ -272,6 +296,9 @@ try {
     await page.mouse.up();
   }
   await page.waitForTimeout(300);
+  await cell
+    .getByRole("button", { name: "撤销地板打卡", exact: true })
+    .waitFor();
   check(
     (await cell
       .getByRole("button", { name: "撤销地板打卡", exact: true })
