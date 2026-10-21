@@ -31,11 +31,14 @@ const emit = defineEmits<{ read: [id: number]; closed: [] }>();
         :data-testid="`reminder-${note.id}`"
       >
         <p class="reminder-sender">
-          {{ note.sender_name || "室友"
-          }}{{ note.source === "note" ? "给你留言" : "提醒你" }}
+          {{
+            note.source === "note"
+              ? "给你留言"
+              : `${note.task_name || "宿舍任务"}提醒`
+          }}
         </p>
         <h3 class="reminder-task-name">
-          {{ note.task_name || "完成宿舍任务" }}
+          {{ note.sender_name || "室友" }}
         </h3>
         <p
           class="reminder-content"

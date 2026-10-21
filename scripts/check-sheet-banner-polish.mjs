@@ -328,6 +328,25 @@ try {
     !!(await board()).reminders.find((n) => n.body === "手动已读测试").read_at,
     "manual retract sends and persists the server read receipt",
   );
+  await page.getByTestId("open-tools").click();
+  await page.getByTestId("open-messages").click();
+  await page.getByTestId("chore-reminders").waitFor();
+  const note = (await board()).reminders.find((n) => n.body === "手动已读测试");
+  const card = page.getByTestId(`reminder-${note.id}`);
+  check(
+    (await card.locator("h3").innerText()) === people[3].nickname,
+    "roommate message uses its sender as the existing large heading",
+  );
+  check(
+    (await card.locator(".reminder-content").innerText()) === "手动已读测试" &&
+      !!(await card.locator("time").getAttribute("datetime")) &&
+      (await card.locator(".message-read").isVisible()),
+    "sender heading preserves the message body, time and read status",
+  );
+  await page.getByTestId("messages-close").click();
+  await page.getByTestId("chore-reminders").waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await page.locator(".sheet-layer").waitFor({ state: "hidden" });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByTestId("open-tools").click();
   await page.locator(".elastic-sheet").waitFor();

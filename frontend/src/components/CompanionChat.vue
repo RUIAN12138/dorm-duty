@@ -18,6 +18,7 @@ import { horizontalIntent, rubberBand } from "../interaction/gestures";
 const props = defineProps<{
   modelValue: boolean;
   origin: DOMRect | null;
+  returnRect?: () => DOMRect | null;
   invite: string;
   memberId: number;
   token: string;
@@ -70,6 +71,18 @@ let api = companionClient(props.invite, props.memberId, props.token),
   delayResolve: (() => void) | undefined;
 let controls: ReturnType<typeof animate>[] = [];
 let retry: { text: string; id: string } | null = null;
+let entryPointerPending = true;
+function chatPointerStarted() {
+  entryPointerPending = false;
+}
+function chatEntryClick(event: MouseEvent) {
+  // Safari may retarget the opening long press's release to the newly mounted
+  // back button. Only accept a pointer click whose press began inside chat.
+  if (entryPointerPending && event.detail > 0) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
 const scope = () => `${props.invite}:${props.memberId}:${props.token}`;
 const motionTransition = computed(() =>
   motionAllowed() ? motionTokens.drawer : { duration: 0 },
@@ -170,6 +183,7 @@ function finishClose() {
   closing = false;
 }
 async function show() {
+  entryPointerPending = true;
   const generation = ++motionEpoch;
   const wasPresent = present.value;
   if (!wasPresent) prepared.value = false;
@@ -252,9 +266,75 @@ async function show() {
   if (generation !== motionEpoch || !present.value || closing) return;
   phase.value = "open";
 }
+function returnFlight(start: DOMRect) {
+  return (progress: number) => {
+    const el = ball.value;
+    const visual = el?.querySelector<HTMLElement>(".chat-ball-visual");
+    const destination = props.returnRect?.() || props.origin;
+    if (!el || !visual || !destination) return;
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+    const scale = Math.hypot(matrix.a, matrix.b) || 1;
+    const parent = el.getBoundingClientRect(),
+      current = visual.getBoundingClientRect();
+    const centerX = parent.left + parent.width / 2,
+      centerY = parent.top + parent.height / 2;
+    const desiredScale =
+      (start.width + (destination.width - start.width) * progress) /
+      (current.width / scale);
+    const desiredX =
+      start.left +
+      start.width / 2 +
+      (destination.left +
+        destination.width / 2 -
+        start.left -
+        start.width / 2) *
+        progress;
+    const desiredY =
+      start.top +
+      start.height / 2 +
+      (destination.top +
+        destination.height / 2 -
+        start.top -
+        start.height / 2) *
+        progress;
+    const x =
+      desiredX -
+      (centerX - matrix.e) -
+      (desiredScale * (current.left + current.width / 2 - centerX)) / scale;
+    const y =
+      desiredY -
+      (centerY - matrix.f) -
+      (desiredScale * (current.top + current.height / 2 - centerY)) / scale;
+    el.style.transform = `translate3d(${x}px,${y}px,0) scale(${desiredScale})`;
+  };
+}
+async function awaitKeyboardReturn(
+  generation: number,
+  started: number,
+  paint: (progress: number) => void,
+) {
+  let stable = 0;
+  while (
+    generation === motionEpoch &&
+    closing &&
+    performance.now() - started < 900
+  ) {
+    paint(1);
+    const v = window.visualViewport;
+    if (!v || (v.height >= restingHeight - 8 && v.offsetTop < 1)) stable++;
+    else stable = 0;
+    if (stable >= 3 || document.hidden) return;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+  }
+}
 async function hide() {
   if (!present.value || closing) return;
   const generation = ++motionEpoch;
+  const keyboardReturning =
+    keyboardOpen.value || restingHeight - viewport.value.height > 110;
+  const started = performance.now();
   closing = true;
   cancel();
   endPull(true);
@@ -264,20 +344,14 @@ async function hide() {
   // Release the extra WebKit fallback under an opaque frosted backdrop, so
   // the page sharpens as that backdrop fades rather than snapping at unmount.
   document.documentElement.dataset.companionChat = "closing";
+  const start = ball.value
+    ?.querySelector(".chat-ball-visual")
+    ?.getBoundingClientRect();
+  const paintReturn = start ? returnFlight(start) : undefined;
   composer.value?.dismiss();
-  if (motionAllowed() && ball.value) {
-    const from = getComputedStyle(ball.value).transform;
-    ball.value.style.transform = "none";
-    const goal = openedBall();
-    ball.value.style.transform = from;
+  if (motionAllowed() && ball.value && paintReturn) {
     controls = [
-      animate(
-        ball.value,
-        {
-          transform: [from, goal],
-        },
-        { ...ballTravel, duration: 0.38 },
-      ),
+      animate(0, 1, { ...ballTravel, duration: 0.38, onUpdate: paintReturn }),
       ...(
         [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
       ).map((el) =>
@@ -305,7 +379,10 @@ async function hide() {
     ];
     await Promise.all(controls.map((c) => c.then(() => {})));
   }
+  if (keyboardReturning && paintReturn && motionAllowed())
+    await awaitKeyboardReturn(generation, started, paintReturn);
   if (generation !== motionEpoch || !closing) return;
+  paintReturn?.(1);
   finishClose();
 }
 // Only boundary pulls are intercepted. Normal scrolling, text selection and
@@ -704,6 +781,8 @@ function time(value: string) {
         :data-ready="prepared"
         :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
         :style="{ top: viewport.top + 'px', height: viewport.height + 'px' }"
+        @pointerdown.capture="chatPointerStarted"
+        @click.capture="chatEntryClick"
         :aria-describedby="undefined"
         @escape-key-down.prevent="close"
         @pointer-down-outside.prevent

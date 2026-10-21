@@ -312,7 +312,15 @@ const taskSwipe = createTaskSwipe(
 const detailTask = ref<ChoreTask | null>(null);
 const chatOpen = ref(false),
   chatPresent = ref(false),
-  chatOrigin = ref<DOMRect | null>(null);
+  chatOrigin = ref<DOMRect | null>(null),
+  companionHome = ref<HTMLElement>();
+function companionReturnRect() {
+  return (
+    companionHome.value
+      ?.querySelector(".dorm-companion")
+      ?.getBoundingClientRect() || chatOrigin.value
+  );
+}
 function openChat(origin: DOMRect) {
   if (demoChatUnavailable()) return;
   chatOrigin.value = origin;
@@ -330,6 +338,13 @@ const sectionOrder = ["duty", "water", "calendar"];
 const sectionPaths = ["/", "/water", "/calendar"];
 const sectionSwipeOffset = ref(0);
 const sectionSwipeDragging = ref(false);
+let sectionSuppressClickUntil = 0;
+function sectionSwipeClick(event: MouseEvent) {
+  if (performance.now() < sectionSuppressClickUntil) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
 let sectionPointer: {
   id: number;
   x: number;
@@ -351,7 +366,7 @@ function sectionSwipeDown(event: PointerEvent) {
   if (
     !(event.target instanceof Element) ||
     event.target.closest(
-      "button,a,input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll],[data-page-gesture]",
+      "input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll],[data-page-gesture]",
     )
   )
     return;
@@ -380,6 +395,7 @@ function sectionSwipeMove(event: PointerEvent) {
     active.surface.setPointerCapture(event.pointerId);
   }
   event.preventDefault();
+  sectionSuppressClickUntil = performance.now() + 500;
   sectionSwipeDragging.value = true;
   sectionSwipeOffset.value = rubberBand(x, 150);
 }
@@ -405,7 +421,8 @@ function sectionSwipeUp(event: PointerEvent) {
 function sectionSwipeCancel(event: PointerEvent) {
   if (
     event.type === "lostpointercapture" &&
-    sectionPointer?.surface.hasPointerCapture(event.pointerId)
+    (event.target !== sectionPointer?.surface ||
+      sectionPointer?.surface.hasPointerCapture(event.pointerId))
   )
     return;
   if (sectionPointer?.id === event.pointerId) resetSectionSwipe();
@@ -1371,7 +1388,7 @@ onUnmounted(() => {
         <button v-if="demo" class="demo-exit" @click="emit('exit-demo')">
           退出游客
         </button>
-        <div class="companion-identity">
+        <div ref="companionHome" class="companion-identity">
           <DormCompanion
             v-if="companionEnabled"
             :mood="companionMood"
@@ -1441,6 +1458,7 @@ onUnmounted(() => {
             1 - Math.min(0.42, Math.abs(sectionSwipeOffset) / 210),
           ),
         }"
+        @click.capture="sectionSwipeClick"
         @pointerdown="sectionSwipeDown"
         @pointermove="sectionSwipeMove"
         @pointerup="sectionSwipeUp"
@@ -1795,6 +1813,7 @@ onUnmounted(() => {
       <CompanionChat
         v-model="chatOpen"
         :origin="chatOrigin"
+        :return-rect="companionReturnRect"
         :invite="invite"
         :member-id="memberId"
         :token="token"
@@ -2183,6 +2202,14 @@ onUnmounted(() => {
 }
 .board-focus {
   touch-action: pan-y;
+}
+.board-focus :deep(button),
+.board-focus :deep(a) {
+  touch-action: pan-y;
+}
+.companion-identity {
+  user-select: none;
+  -webkit-user-select: none;
 }
 .board-focus :deep([data-section-swipe-handle]) {
   touch-action: pan-y;

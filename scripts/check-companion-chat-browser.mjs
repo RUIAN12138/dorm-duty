@@ -182,6 +182,31 @@ try {
     });
   });
   await page.addInitScript(() => {
+    window.qaPointerEvents = [];
+    for (const type of [
+      "pointerdown",
+      "pointerup",
+      "pointercancel",
+      "pointerleave",
+      "lostpointercapture",
+      "gotpointercapture",
+      "click",
+    ])
+      window.addEventListener(
+        type,
+        (e) => {
+          if (e.target instanceof Element)
+            window.qaPointerEvents.push({
+              type,
+              target: e.target.tagName + "." + e.target.getAttribute("class"),
+              x: e.clientX,
+              y: e.clientY,
+              at: performance.now(),
+              phase: document.documentElement.dataset.companionChat,
+            });
+        },
+        true,
+      );
     window.qaHaptics = [];
     Object.defineProperty(navigator, "vibrate", {
       configurable: true,
@@ -195,6 +220,16 @@ try {
       return kind === "webgl" ? null : get.call(this, kind, ...args);
     };
   });
+  if (process.env.DORM_CONTINUITY_QA === "1") {
+    const water = (await board()).water_task;
+    assert(water, "isolated room has a water task");
+    const complete = await h.request(`/chores/tasks/${water.id}/complete`, {
+      method: "PATCH",
+      token: room.access_token,
+      data: {},
+    });
+    assert(complete.ok, "prepare another roommate as current water assignee");
+  }
   await page.goto(url);
   await page.getByTestId("pane-duty").waitFor();
   await page.waitForTimeout(1000);
@@ -273,6 +308,118 @@ try {
       await page.mouse.move(x2, y, { steps: 14 });
       await page.mouse.up();
     }
+    // Real browser touch dispatch exercises implicit pointer capture and the
+    // browser's eventual synthetic click, unlike dispatchEvent/mouse alone.
+    const touch = safari ? null : await page.context().newCDPSession(page);
+    async function touchSwipe(locator, direction) {
+      const r = await locator.boundingBox();
+      const x = direction < 0 ? r.x + r.width * 0.78 : r.x + r.width * 0.22;
+      const y = r.y + r.height / 2;
+      if (!touch) return swipe(x, x + direction * 110, y);
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x, y }],
+      });
+      for (let i = 1; i <= 12; i++) {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: x + direction * i * 9, y: y + 1 }],
+        });
+        await page.waitForTimeout(12);
+      }
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+    }
+    const beforeSwipe = (await board()).today_tasks.map((t) => [
+      t.id,
+      t.status,
+    ]);
+    await touchSwipe(page.locator(".completion-surface").first(), -1);
+    await page.getByTestId("pane-water").waitFor();
+    await page.waitForTimeout(650);
+    check(
+      JSON.stringify(
+        (await board()).today_tasks.map((t) => [t.id, t.status]),
+      ) === JSON.stringify(beforeSwipe),
+      "swiping over the completion button changes page without completing a task",
+    );
+    await touchSwipe(page.getByTestId("water-nudge"), -1);
+    await page.getByTestId("pane-calendar").waitFor();
+    await page.waitForTimeout(650);
+    check(
+      (await board()).reminders.length === 0,
+      "swiping over the water name never sends an accidental nudge",
+    );
+    await touchSwipe(page.locator(".compact-calendar > header"), 1);
+    await page.getByTestId("pane-water").waitFor();
+    await page.waitForTimeout(650);
+    await touchSwipe(page.getByTestId("water-nudge"), 1);
+    await page.getByTestId("pane-duty").waitFor();
+    await page.waitForTimeout(650);
+    check(
+      true,
+      `${safari ? "pointer" : "native touch"} swipe navigates all three pages in both directions`,
+    );
+    const holdBox = await ball.boundingBox();
+    const hx = holdBox.x + holdBox.width / 2,
+      hy = holdBox.y + holdBox.height / 2;
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector(".companion-identity"));
+      getSelection().addRange(range);
+    });
+    if (touch) {
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: hx, y: hy }],
+      });
+      await page.waitForTimeout(120);
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: hx + 14, y: hy }],
+      });
+      await page.waitForTimeout(310);
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+    } else {
+      await page.mouse.move(hx, hy);
+      await page.mouse.down();
+      await page.waitForTimeout(120);
+      await page.mouse.move(hx + 14, hy);
+      await page.waitForTimeout(310);
+      await page.mouse.up();
+    }
+    await page.locator(".companion-chat").waitFor();
+    check(
+      true,
+      "long press tolerates a 14px finger drift and opens exactly one chat",
+    );
+    check(
+      await ball.evaluate(
+        (el) =>
+          getComputedStyle(el).webkitUserSelect === "none" &&
+          getComputedStyle(el.querySelector(".emotion-ball-host"))
+            .webkitUserSelect === "none",
+      ),
+      "ball and rendered descendants suppress iOS selection and callout",
+    );
+    if (touch)
+      check(
+        await page.evaluate(() => !getSelection().toString()),
+        "touch hold clears a pre-existing page selection",
+      );
+    await page.waitForTimeout(800);
+    await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
+    await page.locator(".companion-chat").waitFor({ state: "detached" });
+    await page.waitForTimeout(600);
+    check(
+      (await page.locator(".sheet-layer").count()) === 0,
+      "successful touch hold never leaks a delayed note action",
+    );
     await swipe(320, 65, 610);
     await page.getByTestId("pane-water").waitFor();
     await page.waitForTimeout(650);
@@ -670,6 +817,10 @@ try {
     check(
       (await page.locator(".companion-chat").count()) === 0,
       "moving before long-press threshold cancels chat",
+    );
+    check(
+      (await page.locator(".sheet-layer").count()) === 0,
+      "cancelled long press cannot become a delayed roommate-note click",
     );
     await page.evaluate(() => {
       window.chatFrames = [];
@@ -1221,11 +1372,28 @@ try {
     await page.waitForTimeout(280);
     await page.evaluate(() => {
       window.keyboardExitRects = [];
-      const stop = performance.now() + 600;
+      window.keyboardBallRects = [];
+      const started = performance.now(),
+        stop = started + 1000;
       function capture() {
         const root = document.querySelector(".companion-chat");
-        if (root)
+        if (root) {
           window.keyboardExitRects.push(root.getBoundingClientRect().toJSON());
+          window.keyboardBallRects.push(
+            document
+              .querySelector(".chat-ball-visual")
+              .getBoundingClientRect()
+              .toJSON(),
+          );
+        }
+        // Simulate the keyboard progressively restoring Safari's visual
+        // viewport, rather than pretending it remains collapsed until unmount.
+        const t = Math.min(
+          1,
+          Math.max(0, (performance.now() - started - 60) / 460),
+        );
+        window.keyboardFixture = { height: 410 + 434 * t, top: 44 * (1 - t) };
+        visualViewport.dispatchEvent(new Event("resize"));
         if (performance.now() < stop) requestAnimationFrame(capture);
       }
       requestAnimationFrame(capture);
@@ -1247,6 +1415,23 @@ try {
         ),
       ),
       "closing freezes keyboard viewport so shrinking keyboard cannot bend the ball path",
+    );
+    const keyboardLanding = await ball.evaluate((el) => {
+      const end = window.keyboardBallRects.at(-1),
+        home = el.getBoundingClientRect();
+      return {
+        end,
+        home: home.toJSON(),
+        frames: window.keyboardBallRects.slice(-4),
+        matches:
+          Math.abs(end.x - home.x) < 2 &&
+          Math.abs(end.y - home.y) < 2 &&
+          Math.abs(end.width - home.width) < 2,
+      };
+    });
+    check(
+      keyboardLanding.matches,
+      "keyboard-dismiss return lands at the actual live ball anchor before handoff",
     );
     await page.evaluate(() => {
       window.keyboardFixture = null;
@@ -1310,6 +1495,7 @@ try {
       JSON.stringify(
         await page.evaluate(() => ({
           text: document.body.innerText,
+          pointerEvents: window.qaPointerEvents?.slice(-30),
           composerFrames: window.composerFrames,
           closeDuration: performance.now() - window.chatCloseStart,
           closeFrames: window.chatCloseFrames?.filter((_, i) => i % 5 === 0),

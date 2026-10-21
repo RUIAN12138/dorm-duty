@@ -56,11 +56,19 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ message: []; chat: [origin: DOMRect] }>();
 let holdTimer: ReturnType<typeof setTimeout> | undefined;
-let holdPoint: { id: number; x: number; y: number } | null = null;
+let holdPoint: {
+  id: number;
+  x: number;
+  y: number;
+  surface: HTMLElement;
+} | null = null;
 let suppressTapUntil = 0;
 function cancelHold() {
   clearTimeout(holdTimer);
+  const active = holdPoint;
   holdPoint = null;
+  if (active?.surface.hasPointerCapture(active.id))
+    active.surface.releasePointerCapture(active.id);
 }
 function hold(event: PointerEvent) {
   if (
@@ -73,7 +81,14 @@ function hold(event: PointerEvent) {
     return;
   const button = event.currentTarget as HTMLElement;
   cancelHold();
-  holdPoint = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  holdPoint = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    surface: button,
+  };
+  button.setPointerCapture(event.pointerId);
+  if (event.pointerType === "touch") window.getSelection()?.removeAllRanges();
   holdTimer = setTimeout(() => {
     if (!holdPoint || props.muted || document.hidden) return;
     tapGesture.cancel();
@@ -87,9 +102,21 @@ function moveHold(event: PointerEvent) {
   if (
     holdPoint &&
     (event.pointerId !== holdPoint.id ||
-      Math.hypot(event.clientX - holdPoint.x, event.clientY - holdPoint.y) > 10)
-  )
+      Math.hypot(event.clientX - holdPoint.x, event.clientY - holdPoint.y) > 18)
+  ) {
+    suppressTapUntil = performance.now() + 1000;
+    tapGesture.cancel();
     cancelHold();
+  }
+}
+function leaveHold(event: PointerEvent) {
+  if (
+    event.type === "lostpointercapture" &&
+    event.target !== holdPoint?.surface
+  )
+    return;
+  if (holdPoint?.surface.hasPointerCapture(event.pointerId)) return;
+  cancelHold();
 }
 function keyboardChat(event: KeyboardEvent) {
   if (
@@ -369,7 +396,9 @@ onBeforeUnmount(() => {
       @pointermove="moveHold"
       @pointerup="cancelHold"
       @pointercancel="cancelHold"
-      @pointerleave="cancelHold"
+      @pointerleave="leaveHold"
+      @lostpointercapture="leaveHold"
+      @selectstart.prevent
       @keydown="keyboardChat"
       @contextmenu="chatEnabled && $event.preventDefault()"
     >
@@ -407,8 +436,15 @@ onBeforeUnmount(() => {
   touch-action: manipulation;
 }
 .is-chat-enabled {
+  touch-action: none;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
+}
+.is-chat-enabled :deep(*) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .emotion-ball-host {
   display: block;
