@@ -341,7 +341,7 @@ onBeforeUnmount(() => {
       :is="interactive ? 'button' : 'span'"
       :type="interactive ? 'button' : undefined"
       class="dorm-companion"
-      :class="{ 'is-interactive': interactive }"
+      :class="{ 'is-interactive': interactive, 'is-chat-enabled': chatEnabled }"
       :style="{ width: `${size}px`, height: `${size}px` }"
       :aria-label="
         interactive
@@ -391,6 +391,8 @@ onBeforeUnmount(() => {
 .is-interactive {
   cursor: pointer;
   touch-action: manipulation;
+}
+.is-chat-enabled {
   -webkit-touch-callout: none;
   user-select: none;
 }
