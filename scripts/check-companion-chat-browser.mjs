@@ -211,9 +211,11 @@ try {
   await page.evaluate(() => {
     window.chatFrames = [];
     const start = performance.now();
+    let appeared = 0;
     function frame() {
       const b = document.querySelector(".chat-ball");
       if (b) {
+        if (!appeared) appeared = performance.now();
         const r = b.getBoundingClientRect();
         window.chatFrames.push({
           x: r.x,
@@ -231,7 +233,8 @@ try {
           ),
         });
       }
-      if (performance.now() - start < 1500) requestAnimationFrame(frame);
+      if (performance.now() - (appeared || start) < (appeared ? 1200 : 5000))
+        requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   });
@@ -318,7 +321,16 @@ try {
   const inputBox = await editor.boundingBox();
   await page.mouse.move(inputBox.x + 12, inputBox.y + 12);
   await page.mouse.down();
-  await page.waitForTimeout(70);
+  // Keep the physical pointer held while waiting for a rendered press frame.
+  // A fixed 70ms sample races software rendering on the CI browser.
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector(".composer-text");
+      return el && new DOMMatrix(getComputedStyle(el).transform).d < 0.99;
+    },
+    null,
+    { timeout: 1000 },
+  );
   check(
     await page
       .locator(".composer-text")
