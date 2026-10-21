@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
         <ul v-if="!pending" class="release-changes">
           <li>设置底部新增检查更新</li>
           <li>发现新版本后可直接更新</li>
-          <li>更新后保留当前宿舍身份</li>
+          <li>修复任务页切出时的瞬间跳动</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

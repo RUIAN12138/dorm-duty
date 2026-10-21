@@ -1017,7 +1017,6 @@ onUnmounted(() => {
       class="guest-page"
       :class="{
         'has-chore-nav': navVisible,
-        'has-compact-calendar': navVisible && section === 'calendar',
         'is-name-entry': !navVisible && !!dorm && (!member || choosingMember),
         'is-entry-flow':
           !navVisible &&
@@ -1473,8 +1472,9 @@ onUnmounted(() => {
 .guest-page.is-name-entry {
   padding-top: calc(env(safe-area-inset-top, 0px) + clamp(40px, 8dvh, 72px));
 }
-.guest-page.has-compact-calendar {
-  /* The calendar already measures and reserves the actual fixed navigation. */
+.guest-page.has-chore-nav:has(.focus-pane.calendar-page) {
+  /* Follow the rendered pane, not the new route: the outgoing task must keep
+     its original container height until its fade has finished. */
   padding-bottom: 0;
 }
 .guest-brand-line {
