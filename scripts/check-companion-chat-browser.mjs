@@ -323,6 +323,23 @@ try {
   );
   await page.getByRole("button", { name: "取消提醒", exact: true }).click();
   await page.getByText("这条提醒已取消", { exact: true }).waitFor();
+  await page
+    .getByLabel("和球球说句话", { exact: true })
+    .fill("一小时后再提醒我一次");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await page.getByRole("button", { name: "确认安排", exact: true }).click();
+  await page.getByText("已安排提醒", { exact: true }).waitFor();
+  h.db.sqlite
+    .prepare(
+      "UPDATE companion_reminder_actions SET status='sent' WHERE status='pending'",
+    )
+    .run();
+  await page.getByRole("button", { name: "取消提醒", exact: true }).click();
+  await page.getByText("这条提醒已经发出", { exact: true }).waitFor();
+  check(
+    true,
+    "cancel racing with delivery reports sent instead of claiming cancellation",
+  );
   failModel = true;
   await page.getByLabel("和球球说句话", { exact: true }).fill("失败测试");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();

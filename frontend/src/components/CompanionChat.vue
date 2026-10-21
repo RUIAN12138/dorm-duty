@@ -279,11 +279,13 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
       id: crypto.randomUUID(),
       role: "assistant",
       text:
-        action === "cancel"
-          ? "这条提醒已取消"
-          : result.status === "sent"
-            ? "这条提醒已经发出"
-            : "好，到时提醒你们",
+        result.status === "sent"
+          ? "这条提醒已经发出"
+          : result.status === "expired"
+            ? "这条提醒已经过期"
+            : result.status === "cancelled"
+              ? "这条提醒已取消"
+              : "好，到时提醒你们",
     });
     emotion.value = "10";
     bottom();
@@ -298,6 +300,7 @@ const clearConfirm = ref(false);
 async function clear() {
   if (busy.value || loading.value || actionBusy.value) return;
   busy.value = true;
+  error.value = "";
   const generation = epoch,
     c = new AbortController();
   controller = c;
@@ -335,6 +338,8 @@ function quiet() {
       emit("present", false);
       removeBack?.();
       removeBack = undefined;
+      lastFocus?.isConnected && lastFocus.focus({ preventScroll: true });
+      closing = false;
     } else if (present.value) {
       phase.value = "open";
       if (!loading.value) void load();
