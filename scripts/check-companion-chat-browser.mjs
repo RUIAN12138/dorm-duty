@@ -765,6 +765,15 @@ try {
     visualViewport.dispatchEvent(new Event("resize"));
   });
   check(true, "native back closes chat without navigating out of dorm");
+  await hold();
+  check(
+    await page
+      .locator(".chat-ball-visual")
+      .evaluate((el) => Math.abs(el.getBoundingClientRect().width - 88) < 1),
+    "reopening after keyboard exit restores normal ball geometry before origin measurement",
+  );
+  await page.evaluate(() => window.DormNativeBack());
+  await page.locator(".companion-chat").waitFor({ state: "detached" });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await hold();
   check(

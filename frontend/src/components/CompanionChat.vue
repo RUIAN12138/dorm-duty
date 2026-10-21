@@ -186,6 +186,7 @@ async function show() {
   if (!wasPresent) lastFocus = document.activeElement as HTMLElement;
   await nextTick();
   fit();
+  await nextTick();
   removeBack?.();
   removeBack = registerNativeBack(close);
   if (!wasPresent) originTransform = openedBall();
