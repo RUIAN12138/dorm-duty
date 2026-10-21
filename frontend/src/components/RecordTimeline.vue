@@ -100,6 +100,10 @@ function entering(el: Element) {
       'is-list': list,
     }"
     data-testid="record-stack"
+    :data-stack-count="Math.min(records.length - 1, 4)"
+    :style="{
+      '--stack-depth': `${Math.min(Math.max(records.length - 1, 0), 4) * 3}px`,
+    }"
   >
     <button
       v-if="list"
@@ -215,7 +219,8 @@ function entering(el: Element) {
 .is-list::after {
   content: "";
   position: absolute;
-  inset: 5px 6px auto;
+  inset: 0 6px auto;
+  --stack-offset: calc(var(--stack-depth) * 0.5);
   height: 60px;
   box-sizing: border-box;
   z-index: -1;
@@ -230,7 +235,8 @@ function entering(el: Element) {
     transform 260ms var(--ui-ease-out);
 }
 .is-list::after {
-  inset: 10px 12px auto;
+  inset: 0 12px auto;
+  --stack-offset: var(--stack-depth);
   z-index: -2;
   background: var(--ui-surface);
 }
@@ -239,13 +245,18 @@ function entering(el: Element) {
 .is-list.is-stacked::before,
 .is-list.is-stacked::after {
   opacity: 1;
-  transform: translate3d(0, 0, 0) scaleX(1);
+  transform: translate3d(0, var(--stack-offset), 0) scaleX(1);
 }
 .is-list.is-collapsing::before {
   transition-delay: 70ms;
 }
 .is-list.is-collapsing::after {
   transition-delay: 110ms;
+}
+.is-list[data-stack-count="0"]::before,
+.is-list[data-stack-count="0"]::after,
+.is-list[data-stack-count="1"]::after {
+  opacity: 0;
 }
 .record-stack-body {
   box-sizing: border-box;

@@ -8,6 +8,7 @@ const props = defineProps<{
   memberId: number;
   token: string;
   invite: string;
+  initialTarget?: number;
 }>();
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
@@ -31,7 +32,11 @@ watch(
     error.value = "";
     if (props.modelValue) {
       text.value = "";
-      target.value = others.value.length === 1 ? others.value[0].user_id : null;
+      target.value = others.value.some((m) => m.user_id === props.initialTarget)
+        ? props.initialTarget!
+        : others.value.length === 1
+          ? others.value[0].user_id
+          : null;
     }
   },
 );

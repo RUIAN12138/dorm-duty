@@ -204,7 +204,8 @@ const categories=computed(()=>['floor','toilet','sink','water'].map((key,i)=>({k
   checks.push("separate footer saves the actual reordered draft");
   await page.getByTestId("open").click();
   await page.getByRole("button", { name: "调整轮序", exact: true }).click();
-  await page.getByRole("button", { name: "知道了", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.locator(".hint-popover").waitFor({ state: "hidden" });
   check(
     await page.locator(".sheet-layer").count(),
     1,

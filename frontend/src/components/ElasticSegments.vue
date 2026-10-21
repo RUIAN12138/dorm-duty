@@ -173,7 +173,7 @@ onUnmounted(() => {
   gap: 4px;
   padding: 4px;
   margin-bottom: 24px;
-  border-radius: var(--ui-control-radius);
+  border-radius: 999px;
   background: var(--ui-surface-muted);
   touch-action: pan-y;
   user-select: none;
@@ -188,10 +188,10 @@ onUnmounted(() => {
   width: calc(
     (100% - 8px - (var(--segment-count) - 1) * 4px) / var(--segment-count)
   );
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--ui-surface);
   /* Uiverse Pradeepsaranbishnoi heavy-dragonfly-92: isolated glider. */
-  box-shadow: none;
+  box-shadow: 0 1px 3px #00000008;
   border: var(--ui-card-border);
   pointer-events: none;
 }
@@ -202,7 +202,7 @@ onUnmounted(() => {
   min-height: 40px;
   padding: 5px 8px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
   color: var(--app-tone-h666, #666);
   font-size: 16px;

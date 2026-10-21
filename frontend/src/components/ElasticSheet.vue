@@ -20,6 +20,8 @@ const props = withDefaults(
     contained?: boolean;
     fixedContent?: boolean;
     contentHeight?: string;
+    expandable?: boolean;
+    expandFromScroll?: boolean;
     title: string;
     origin?: DOMRect | null;
     motion?: "shared" | "bottom";
@@ -31,6 +33,32 @@ const emit = defineEmits<{
   closed: [];
 }>();
 const present = ref(false);
+const allocated = ref(false);
+let expanded = false,
+  compactOffset = 0;
+const expansionHeight = "calc(100dvh - max(20px, env(safe-area-inset-top)))";
+function restGoal(): Goal {
+  return { ...opened, y: allocated.value && !expanded ? compactOffset : 0 };
+}
+function allocate() {
+  if (!props.expandable || allocated.value || !panel.value) return;
+  const before = panel.value.offsetHeight;
+  allocated.value = true;
+  panel.value.style.height = expansionHeight;
+  panel.value.style.maxHeight = expansionHeight;
+  compactOffset = Math.max(0, panel.value.offsetHeight - before);
+  paint({ ...pose, y: pose.y + compactOffset });
+}
+function releaseAllocation() {
+  if (!allocated.value || expanded || !panel.value) return;
+  allocated.value = false;
+  panel.value.style.height = props.contained
+    ? props.contentHeight || "min(75dvh, 820px)"
+    : "";
+  panel.value.style.maxHeight = "";
+  compactOffset = 0;
+  paint(opened);
+}
 const phase = ref<"opening" | "open" | "closing" | "dragging">("opening");
 provide("sheet-motion-phase", phase);
 const panel = ref<HTMLElement>();
@@ -72,6 +100,7 @@ let gesture: {
   element: HTMLElement;
   start: number;
   baseline: number;
+  initialExpanded: boolean;
   velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 function setPanel(value: unknown) {
@@ -146,7 +175,10 @@ async function go(goal: Goal, kind: "enter" | "exit" | "settle") {
     const running = [
       animate(
         panel.value,
-        { transform: transform(goal), opacity: goal.opacity },
+        {
+          transform: [transform(pose), transform(goal)],
+          opacity: [pose.opacity, goal.opacity],
+        },
         transition,
       ),
     ];
@@ -154,7 +186,7 @@ async function go(goal: Goal, kind: "enter" | "exit" | "settle") {
       running.push(
         animate(
           scrim.value,
-          { opacity: goal.scrimOpacity },
+          { opacity: [pose.scrimOpacity, goal.scrimOpacity] },
           motionTokens[kind === "exit" ? "exit" : "enter"],
         ),
       );
@@ -163,8 +195,10 @@ async function go(goal: Goal, kind: "enter" | "exit" | "settle") {
     if (id === generation) paint(goal);
   }
   if (id !== generation) return;
-  if (props.modelValue) phase.value = "open";
-  else {
+  if (props.modelValue) {
+    releaseAllocation();
+    phase.value = "open";
+  } else {
     present.value = false;
     removeBack?.();
     removeBack = undefined;
@@ -179,6 +213,7 @@ function requested(value: boolean) {
   if (!value) close();
 }
 function resetGesture() {
+  boundary = null;
   const active = gesture;
   gesture = null;
   if (active?.element.hasPointerCapture(active.id))
@@ -204,15 +239,22 @@ function down(event: PointerEvent) {
     element,
     start: event.clientY,
     baseline: pose.y,
+    initialExpanded: expanded,
     velocity: createVelocityTracker(event.clientY, performance.now()),
   };
   element.setPointerCapture(event.pointerId);
   phase.value = "dragging";
+  if (panel.value) panel.value.style.willChange = "transform";
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
   gesture.velocity.add(event.clientY, performance.now());
-  const delta = gesture.baseline + event.clientY - gesture.start;
+  const travel = event.clientY - gesture.start;
+  if (props.expandable && !allocated.value && travel < -4) {
+    allocate();
+    gesture.baseline += compactOffset;
+  }
+  const delta = gesture.baseline + travel;
   paint({ ...pose, y: delta < 0 ? rubberBand(delta) : delta });
 }
 function up(event: PointerEvent, cancelled = false) {
@@ -223,12 +265,98 @@ function up(event: PointerEvent, cancelled = false) {
   )
     return;
   const speed = gesture.velocity.read(performance.now());
+  const initialExpanded = gesture.initialExpanded;
+  const travel = event.clientY - gesture.start;
   resetGesture();
-  if (!cancelled && (pose.y > 130 || (pose.y > 35 && speed > 0.6))) close();
+  if (allocated.value) {
+    if (cancelled) expanded = initialExpanded;
+    else if (travel < -40 || speed < -0.55) expanded = true;
+    else if (initialExpanded && (travel > 70 || speed > 0.65)) expanded = false;
+    phase.value = "opening";
+    void go(restGoal(), "settle");
+  } else if (!cancelled && (pose.y > 130 || (pose.y > 35 && speed > 0.6)))
+    close();
   else {
     phase.value = "opening";
     void go(opened, "settle");
   }
+}
+let boundary: { y: number; start: number; engaged: boolean } | null = null;
+function boundaryStart(event: TouchEvent) {
+  if (
+    !props.expandFromScroll ||
+    !props.expandable ||
+    expanded ||
+    event.touches.length !== 1
+  )
+    return;
+  boundary = {
+    y: event.touches[0]!.clientY,
+    start: event.touches[0]!.clientY,
+    engaged: false,
+  };
+}
+function boundaryMove(event: TouchEvent) {
+  if (!boundary || event.touches.length !== 1 || !panel.value) return;
+  const y = event.touches[0]!.clientY;
+  const target =
+    event.target instanceof Element
+      ? event.target.closest<HTMLElement>(
+          "[data-native-scroll], [data-sheet-scroll]",
+        )
+      : null;
+  const bottom =
+    !target ||
+    target.scrollTop + target.clientHeight >= target.scrollHeight - 2;
+  if (!boundary.engaged) {
+    if (!bottom || y >= boundary.y) {
+      boundary.y = y;
+      return;
+    }
+    boundary.start = boundary.y;
+    if (boundary.start - y < 8) return;
+    stop();
+    allocate();
+    boundary.engaged = true;
+    phase.value = "dragging";
+  }
+  if (event.cancelable) event.preventDefault();
+  paint({ ...pose, y: Math.max(-12, compactOffset + y - boundary.start) });
+}
+function boundaryEnd(event: TouchEvent) {
+  const current = boundary;
+  boundary = null;
+  if (!current?.engaged) return;
+  expanded = event.type !== "touchcancel" && pose.y < compactOffset - 40;
+  phase.value = "opening";
+  void go(restGoal(), "settle");
+}
+function boundaryWheel(event: WheelEvent) {
+  if (
+    !props.expandFromScroll ||
+    !props.expandable ||
+    expanded ||
+    event.deltaY <= 0 ||
+    event.ctrlKey
+  )
+    return;
+  const target =
+    event.target instanceof Element
+      ? event.target.closest<HTMLElement>(
+          "[data-native-scroll], [data-sheet-scroll]",
+        )
+      : null;
+  if (
+    target &&
+    target.scrollTop + target.clientHeight < target.scrollHeight - 2
+  )
+    return;
+  event.preventDefault();
+  stop();
+  allocate();
+  expanded = true;
+  phase.value = "opening";
+  void go(restGoal(), "settle");
 }
 function escape(event: KeyboardEvent) {
   const confirmation = layer.value?.querySelector<HTMLElement>(".van-dialog");
@@ -244,7 +372,7 @@ function settleWhenInactive() {
   if (!present.value || motionAllowed()) return;
   resetGesture();
   void go(
-    props.modelValue ? opened : hiddenGoal(),
+    props.modelValue ? restGoal() : hiddenGoal(),
     props.modelValue ? "enter" : "exit",
   );
 }
@@ -260,6 +388,9 @@ watch(
     if (open) {
       const fresh = !present.value;
       if (fresh) {
+        expanded = false;
+        allocated.value = false;
+        compactOffset = 0;
         lastFocus =
           document.activeElement instanceof HTMLElement
             ? document.activeElement
@@ -325,10 +456,17 @@ onBeforeUnmount(() => {
               'has-contained-scroll': contained,
               'has-fixed-content': fixedContent,
               'has-sheet-footer': !!$slots.footer,
+              'is-expandable': expandable,
+              'is-expanded-sheet': allocated,
             }"
             :style="{
               transformOrigin: 'top left',
-              height: contained ? contentHeight : undefined,
+              height: allocated
+                ? expansionHeight
+                : contained
+                  ? contentHeight
+                  : undefined,
+              maxHeight: allocated ? expansionHeight : undefined,
               willChange: phase === 'open' ? 'auto' : 'transform',
             }"
           >
@@ -362,7 +500,17 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </header>
-            <div class="sheet-content" data-sheet-scroll><slot /></div>
+            <div
+              class="sheet-content"
+              data-sheet-scroll
+              @touchstart.passive="boundaryStart"
+              @touchmove="boundaryMove"
+              @touchend="boundaryEnd"
+              @touchcancel="boundaryEnd"
+              @wheel="boundaryWheel"
+            >
+              <slot />
+            </div>
             <footer v-if="$slots.footer" class="sheet-footer">
               <slot name="footer" />
             </footer>
@@ -478,6 +626,19 @@ onBeforeUnmount(() => {
 }
 .has-contained-scroll.has-sheet-footer .sheet-content {
   padding-bottom: 14px;
+}
+.sheet-content,
+.sheet-content :deep([data-native-scroll]) {
+  scrollbar-width: none;
+}
+.sheet-content::-webkit-scrollbar,
+.sheet-content :deep([data-native-scroll])::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.is-expanded-sheet .sheet-content {
+  flex: 1;
 }
 .sheet-footer {
   position: relative;

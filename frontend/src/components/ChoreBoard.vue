@@ -491,8 +491,12 @@ watch(companionEntering, (pending) => {
 });
 onUnmounted(() => clearTimeout(arrivalTimer));
 function openNote() {
-  if (!busy.value && !completionSyncPending.value) noteOpen.value = true;
+  if (!busy.value && !completionSyncPending.value) {
+    noteTarget.value = undefined;
+    noteOpen.value = true;
+  }
 }
+const noteTarget = ref<number>();
 const companionPulse = ref("");
 let companionPulseTimer: ReturnType<typeof setTimeout> | undefined;
 function pulseCompanion(id: string, duration = 2600) {
@@ -775,6 +779,28 @@ watch(
   },
   { flush: "post" },
 );
+async function dismissBannerMessage() {
+  const id = reminderBanner.active.value?.id;
+  reminderBanner.dismiss();
+  if (id) {
+    const confirmed = await markRead(id, true);
+    if (alive && !confirmed) showToast("未能标为已读，请稍后重试");
+  }
+}
+function replyBannerMessage() {
+  const note = reminderBanner.active.value;
+  if (!note) return;
+  const sender = board.value?.members.find(
+    (m) => m.user_id === note.sender_id && m.user_id !== props.memberId,
+  );
+  if (!sender) {
+    openBannerMessages();
+    return;
+  }
+  noteTarget.value = sender.user_id;
+  reminderBanner.dismiss();
+  noteOpen.value = true;
+}
 function openBannerMessages() {
   messagesOpen.value = true;
   reminderBanner.dismiss();
@@ -1288,7 +1314,9 @@ onUnmounted(() => {
   >
     <ReminderBanner
       :note="reminderBanner.active.value"
-      @dismiss="reminderBanner.dismiss"
+      @dismiss="dismissBannerMessage"
+      @expire="reminderBanner.dismiss"
+      @reply="replyBannerMessage"
       @open="openBannerMessages"
       @settled="reminderBanner.settled"
       @presented="messagePresented"
@@ -1391,6 +1419,7 @@ onUnmounted(() => {
       >
         <Transition
           name="focus-fade"
+          mode="out-in"
           appear
           @before-leave="hideLeaving"
           @before-enter="showEntered"
@@ -1822,6 +1851,8 @@ onUnmounted(() => {
       />
       <ElasticSheet
         v-model="roundOpen"
+        expandable
+        expand-from-scroll
         :content-height="`min(75dvh, 820px, calc(min(224px, 27dvh) + 224px + ${roundVisibleCount * 66}px + env(safe-area-inset-bottom, 0px)))`"
         contained
         fixed-content
@@ -1847,6 +1878,7 @@ onUnmounted(() => {
         :member-id="memberId"
         :token="token"
         :invite="invite"
+        :initial-target="noteTarget"
         @sent="load"
         @closed="presentNewReminders"
       />
@@ -3101,7 +3133,7 @@ onUnmounted(() => {
 
 <style scoped>
 .focus-fade-enter-active {
-  transition: opacity 720ms linear !important;
+  transition: none !important;
 }
 .focus-fade-enter-active.calendar-page {
   transition: none !important;

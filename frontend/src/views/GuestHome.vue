@@ -1455,7 +1455,7 @@ onUnmounted(() => {
   >
     <van-icon name="setting-o" />
   </button>
-  <ElasticSheet v-model="appearanceOpen" title="设置"
+  <ElasticSheet v-model="appearanceOpen" title="设置" expandable
     ><AppearanceSettings
   /></ElasticSheet>
 </template>

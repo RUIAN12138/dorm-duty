@@ -15,10 +15,26 @@ import { bannerSwipe, dismissBanner } from "../interaction/bannerMotion";
 const props = defineProps<{ note: ChoreReminder | null }>();
 const emit = defineEmits<{
   dismiss: [];
+  expire: [];
+  reply: [];
   open: [];
   settled: [id?: number];
   presented: [id: number];
 }>();
+let autoTimer: ReturnType<typeof setTimeout> | undefined;
+let longTimer: ReturnType<typeof setTimeout> | undefined;
+function clearTimers() {
+  clearTimeout(autoTimer);
+  clearTimeout(longTimer);
+}
+function scheduleExpiry() {
+  clearTimeout(autoTimer);
+  const id = props.note?.id;
+  if (id && !document.hidden)
+    autoTimer = setTimeout(() => {
+      if (props.note?.id === id && !gesture && !document.hidden) emit("expire");
+    }, 6500);
+}
 const offsetX = ref(0);
 let exitDirection = 0,
   returnFrame = 0,
@@ -190,12 +206,16 @@ function enter(element: Element, done: () => void) {
     () => {
       done();
       const id = Number(el.dataset?.reminderId);
-      if (id && el.isConnected && !document.hidden) emit("presented", id);
+      if (id && el.isConnected && !document.hidden) {
+        emit("presented", id);
+        scheduleExpiry();
+      }
     },
     "linear",
   );
 }
 function leave(element: Element, done: () => void) {
+  clearTimers();
   const el = element as HTMLElement;
   const pose = getComputedStyle(el);
   el.classList.add("is-leaving");
@@ -238,6 +258,15 @@ function down(event: PointerEvent) {
     velocityX: createVelocityTracker(event.clientX, performance.now()),
     velocity: createVelocityTracker(event.clientY, performance.now()),
   };
+  clearTimers();
+  const id = props.note?.id;
+  longTimer = setTimeout(() => {
+    if (gesture && !dragging.value && props.note?.id === id) {
+      suppressUntil = performance.now() + 800;
+      cancelGesture();
+      emit("reply");
+    }
+  }, 550);
   holdTo(0.94);
   element.setPointerCapture(event.pointerId);
 }
@@ -247,7 +276,10 @@ function move(event: PointerEvent) {
     x = event.clientX - gesture.x;
   gesture.velocity.add(event.clientY, performance.now());
   gesture.velocityX.add(event.clientX, performance.now());
-  if (!dragging.value && Math.hypot(x, y) > 3) dragging.value = true;
+  if (!dragging.value && Math.hypot(x, y) > 3) {
+    dragging.value = true;
+    clearTimeout(longTimer);
+  }
   if (!dragging.value) return;
   if (event.cancelable) event.preventDefault();
   offset.value = y;
@@ -261,6 +293,7 @@ function finish(event: PointerEvent, cancelled = false) {
       gesture.element.hasPointerCapture(event.pointerId))
   )
     return;
+  clearTimeout(longTimer);
   const current = gesture;
   const close =
     !cancelled &&
@@ -288,6 +321,7 @@ function finish(event: PointerEvent, cancelled = false) {
   } else {
     holdTo(1);
     returnHome();
+    scheduleExpiry();
     const el = current.element.parentElement;
     if (el)
       animateMotion(
@@ -310,6 +344,7 @@ function afterLeave(element?: Element) {
   emit("settled", id ? Number(id) : undefined);
 }
 function cancelGesture() {
+  clearTimers();
   stopReturn();
   offsetX.value = 0;
   exitDirection = 0;
@@ -338,11 +373,13 @@ function inactive() {
     document.querySelector(`[data-reminder-id="${props.note.id}"]`)
   ) {
     emit("presented", props.note.id);
+    scheduleExpiry();
   }
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 onMounted(() => {
   window.addEventListener("blur", cancelGesture);
+  window.addEventListener("focus", inactive);
   window.addEventListener("ui-motion-change", inactive);
   document.addEventListener("visibilitychange", inactive);
   media.addEventListener("change", inactive);
@@ -351,6 +388,7 @@ onBeforeUnmount(() => {
   cancelGesture();
   for (const el of [...flights.keys()]) stopMotion(el);
   window.removeEventListener("blur", cancelGesture);
+  window.removeEventListener("focus", inactive);
   window.removeEventListener("ui-motion-change", inactive);
   document.removeEventListener("visibilitychange", inactive);
   media.removeEventListener("change", inactive);
@@ -378,6 +416,7 @@ onBeforeUnmount(() => {
           data-testid="reminder-banner"
           :data-reminder-id="note.id"
           @keydown.esc.stop="emit('dismiss')"
+          @keydown.shift.enter.prevent="emit('reply')"
         >
           <div
             class="reminder-banner-card"
@@ -389,6 +428,7 @@ onBeforeUnmount(() => {
             @pointercancel="finish($event, true)"
             @lostpointercapture="finish($event, true)"
             @click="open"
+            @contextmenu.prevent
           >
             <DormCompanion
               v-if="companionEnabled"

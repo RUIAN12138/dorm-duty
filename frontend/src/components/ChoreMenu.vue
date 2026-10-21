@@ -35,6 +35,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
   <ElasticSheet
     v-model="tools"
     title="设置"
+    expandable
     motion="bottom"
     @closed="emit('closed')"
   >

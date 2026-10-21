@@ -136,11 +136,37 @@ source.invite = "OTHER";
 requests[4].resolve({});
 await pending;
 assert.equal(confirmed.length, 2, "old room result ignored");
+source.open = false;
+await inbox.read(10);
+assert.equal(
+  requests.length,
+  5,
+  "closed inbox does not accidentally mark messages read",
+);
+pending = inbox.read(10, true);
+assert.equal(
+  requests.length,
+  6,
+  "explicit banner dismiss can mark read without opening inbox",
+);
+requests[5].reject(Error("banner offline"));
+assert.equal(await pending, false);
+assert.equal(inbox.error.value, "banner offline");
+assert.equal(
+  inbox.reconcile([{ id: 10, read_at: null }])[0].read_at,
+  null,
+  "failed banner receipt remains unread",
+);
+pending = inbox.read(10, true);
+requests[6].resolve({ read_at: "2026-10-21T03:00:00Z" });
+assert.equal(await pending, true);
+assert.equal(confirmed.length, 3);
+source.open = true;
 pending = inbox.read(1);
 scope.stop();
-requests[5].resolve({});
+requests[7].resolve({});
 await pending;
-assert.equal(confirmed.length, 2, "unmounted inbox ignores late success");
+assert.equal(confirmed.length, 3, "unmounted inbox ignores late success");
 console.log(
   "Reminder inbox: duplicate prevention, retry, monotonic read receipt, unchanged input, no message resurrection, reopening, identity and disposal passed.",
 );
