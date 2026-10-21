@@ -249,7 +249,7 @@ try {
   // rather than treating a fixed delay as evidence it is ready on a slow GPU.
   const frontSurface = cell.locator(".swipe-record-front");
   await frontSurface.scrollIntoViewIfNeeded();
-  await page.waitForFunction((id) => {
+  await page.waitForFunction(async (id) => {
     const root = document.querySelector(`[data-testid="${id}"]`);
     const front = root?.querySelector(".swipe-record-front");
     if (!front) return false;
@@ -258,15 +258,32 @@ try {
       box.x + box.width * 0.7,
       box.y + box.height * 0.5,
     );
-    return (
+    const ready =
       !!hit &&
       front.contains(hit) &&
       !root.closest("[inert]") &&
       !root.querySelector(".swipe-undo:disabled") &&
       ![...root.getAnimations({ subtree: true })].some(
         (a) => a.playState === "running",
+      );
+    if (!ready) return false;
+    // The calendar tab's incoming parent and its scrollport can still move
+    // this row after its own stagger ended. A touch uses viewport coordinates,
+    // so wait for its full ancestor chain and actual hit rectangle to settle.
+    for (let el = root.parentElement; el; el = el.parentElement)
+      if (el.getAnimations().some((a) => a.playState === "running"))
+        return false;
+    for (let i = 0; i < 4; i++) {
+      await new Promise(requestAnimationFrame);
+      const next = front.getBoundingClientRect();
+      if (
+        Math.abs(next.x - box.x) > 0.5 ||
+        Math.abs(next.y - box.y) > 0.5 ||
+        Math.abs(next.width - box.width) > 0.5
       )
-    );
+        return false;
+    }
+    return true;
   }, `calendar-list-record-${floorId}`);
   const rect = await frontSurface.boundingBox(),
     x = rect.x + rect.width * 0.7,
