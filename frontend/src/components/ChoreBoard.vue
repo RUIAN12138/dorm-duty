@@ -418,13 +418,6 @@ function openTask(task: ChoreTask, event: MouseEvent) {
   detailTask.value = task;
   detailOpen.value = true;
 }
-function remindDetailTask() {
-  const task = detailTask.value;
-  if (!task || task.status !== "pending" || task.assignee_id === props.memberId)
-    return;
-  queuedTool = () => openReminder(task);
-  detailOpen.value = false;
-}
 function showEntered(element: Element) {
   element.removeAttribute("aria-hidden");
   element.removeAttribute("inert");
@@ -1803,31 +1796,27 @@ onUnmounted(() => {
           runQueuedTool();
         "
       >
-        <div v-if="detailTask" class="task-detail-card">
+        <div
+          v-if="detailTask"
+          class="task-detail-card"
+          data-testid="task-detail"
+        >
           <p class="task-full-content">{{ detailTask.content }}</p>
-          <div class="task-detail-meta">
-            <span>{{ statusText(detailTask) }}</span>
-            <span>{{ detailTask.assignee_name }}</span
-            ><span v-if="detailTask.mode === 'scheduled'"
-              >{{ dateText(detailTask.duty_date) }} ·
-              {{ clock(detailTask.deadline_at) }} 前</span
-            >
+          <div class="task-detail-person">
+            <MemberMark
+              :id="currentMember(detailTask.assignee_id)?.marker_id"
+              :size="30"
+            />
+            <strong class="task-detail-assignee">{{
+              detailTask.assignee_name
+            }}</strong>
+            <span class="task-detail-status">{{ statusText(detailTask) }}</span>
           </div>
-          <button
-            v-if="
-              !demo &&
-              detailTask.status === 'pending' &&
-              detailTask.assignee_id !== memberId
-            "
-            type="button"
-            class="order-trigger"
-            :disabled="!!busy"
-            data-testid="remind-detail-task"
-            @click="remindDetailTask"
-          >
-            提醒{{ detailTask.assignee_name }}
-          </button>
-          <p v-if="detailTask.completed_at" class="chore-completed">
+          <p v-if="detailTask.mode === 'scheduled'" class="task-detail-timing">
+            {{ dateText(detailTask.duty_date) }} ·
+            {{ clock(detailTask.deadline_at) }} 前
+          </p>
+          <p v-if="detailTask.completed_at" class="task-detail-timing">
             {{ clock(detailTask.completed_at) }} 已完成
           </p>
         </div>
@@ -2417,19 +2406,39 @@ onUnmounted(() => {
   padding: 8px 0;
 }
 .task-full-content {
+  margin: 0;
   font-size: 18px;
-  line-height: 1.7;
+  line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.task-detail-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+.task-detail-person {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
-  margin-top: 24px;
+  padding: 14px 16px;
+  border-radius: var(--ui-card-radius);
+  background: var(--ui-surface-muted);
+}
+.task-detail-assignee {
+  min-width: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.task-detail-status {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ui-text-muted);
+  text-align: right;
+}
+.task-detail-timing {
+  margin: 0;
   font-size: 15px;
-  color: var(--app-tone-h555, #555);
+  line-height: 1.5;
+  color: var(--ui-text-muted);
 }
 .board-loading {
   padding-top: 16px;
@@ -2922,10 +2931,12 @@ onUnmounted(() => {
 
 <style scoped>
 .task-detail-card {
-  padding: var(--ui-card-padding);
-  border: var(--ui-card-border);
-  border-radius: var(--ui-card-radius);
-  background: var(--ui-surface);
+  display: grid;
+  gap: 20px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
   transform: none;
 }
 .task-detail-card::after {

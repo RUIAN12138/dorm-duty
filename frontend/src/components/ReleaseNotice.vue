@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>设置底部新增检查更新</li>
-          <li>发现新版本后可直接更新</li>
-          <li>修复任务页切出时的瞬间跳动</li>
+          <li>任务详情排版更清晰</li>
+          <li>负责人和状态整齐呈现</li>
+          <li>移除详情内的提醒按钮</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

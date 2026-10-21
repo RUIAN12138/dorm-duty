@@ -90,6 +90,7 @@ jobs:
           node scripts/check-record-swipe.mjs
           node scripts/check-live-calendar-notes.mjs
           node scripts/check-water-flex-motion.mjs
+          node scripts/check-task-detail.mjs
           node scripts/check-sheet-banner-polish.mjs
           node scripts/check-companion-browser.mjs
           node scripts/check-interaction-foundation.mjs
