@@ -48,11 +48,13 @@ export interface ChoreRecord {
   completed_date: string;
 }
 export interface ChoreCompletion {
+  water_handoff?: WaterHandoff | null;
   task: ChoreTask;
   next_water: ChoreTask | null;
   version: number;
 }
 export interface WaterHandoff {
+  steps?: { member_id: number; task_id: number; completed_at: string }[];
   id: number;
   sequence: number;
   from_member_id: number;
@@ -88,6 +90,8 @@ export interface ChoreBoardData {
   next_tasks: ChoreTask[];
   water_task: ChoreTask | null;
   water_handoff?: WaterHandoff | null;
+  water_advance_task_id?: number | null;
+  overdue_categories?: { key: string; name: string; days: number }[];
   undo_tasks: ChoreTask[];
   water_order: number[];
   calendar: ChoreRecord[];

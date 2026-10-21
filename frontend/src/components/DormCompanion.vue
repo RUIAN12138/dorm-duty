@@ -36,6 +36,7 @@ const props = withDefaults(
     tips?: boolean;
     muted?: boolean;
     scene?: CompanionScene;
+    message?: string;
   }>(),
   {
     mood: "02",
@@ -302,7 +303,12 @@ onBeforeUnmount(() => {
     >
       <span ref="host" class="emotion-ball-host" aria-hidden="true"></span>
     </component>
-    <CompanionBubble v-if="tips" :scene="scene" :muted="muted" />
+    <CompanionBubble
+      v-if="tips"
+      :scene="scene"
+      :muted="muted"
+      :message="message"
+    />
   </span>
 </template>
 <style scoped>

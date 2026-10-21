@@ -43,6 +43,7 @@ import {
 } from "../api/chores";
 import RoundProgress from "./RoundProgress.vue";
 import WaterNudge from "./WaterNudge.vue";
+import WaterExceptionSheet from "./WaterExceptionSheet.vue";
 import WaterHandoffName from "./WaterHandoffName.vue";
 import WaterOrderSheet from "./WaterOrderSheet.vue";
 import TaskTitle from "./TaskTitle.vue";
@@ -189,7 +190,9 @@ const toolsOpen = ref(false),
   noteOpen = ref(false),
   orderOpen = ref(false);
 let alive = true;
+const waterExceptionOpen = ref(false);
 const roundOpen = ref(false);
+const roundVisibleCount = ref(0);
 const pushOpen = ref(false);
 const recoveryOpen = ref(false);
 let queuedTool: (() => void) | null = null;
@@ -939,12 +942,13 @@ function acceptCompletion(receipt: ChoreCompletion) {
   );
   if (finished.key === "water") {
     board.value.water_task = receipt.next_water;
-    board.value.water_handoff = {
-      id: finished.id,
-      sequence: finished.sequence || 0,
-      from_member_id: finished.assignee_id,
-      completed_at: finished.completed_at!,
-    };
+    if (finished.sequence != null)
+      board.value.water_handoff = receipt.water_handoff || {
+        id: finished.id,
+        sequence: finished.sequence || 0,
+        from_member_id: finished.assignee_id,
+        completed_at: finished.completed_at!,
+      };
   }
   if (detailTask.value?.id === finished.id) detailTask.value = finished;
   const round = board.value.rounds.find(
@@ -1064,8 +1068,10 @@ async function undo(id: number) {
     loading.value = false;
     backgroundRefresh.interrupt();
     applyCalendarReceipt(board.value, receipt.task);
-    if (receipt.task.key === "water") board.value.water_task = receipt.task;
-    else {
+    if (receipt.task.key === "water") {
+      if (receipt.task.sequence != null) board.value.water_task = receipt.task;
+      else board.value.water_advance_task_id = null;
+    } else {
       selectedTaskId.value = id;
       selectedTaskKey.value = receipt.task.key;
     }
@@ -1318,6 +1324,11 @@ onUnmounted(() => {
             intent="message"
             :tips="true"
             :scene="section"
+            :message="
+              board.overdue_categories?.length
+                ? `${board.overdue_categories.map((c) => c.name).join('、')}超过五天没做啦，记得安排一下。`
+                : ''
+            "
             :muted="
               toolsOpen ||
               preferencesOpen ||
@@ -1604,7 +1615,8 @@ onUnmounted(() => {
                           !reminderOpen &&
                           !markerOpen &&
                           !detailTask &&
-                          !roundOpen
+                          !roundOpen &&
+                          !waterExceptionOpen
                         "
                       >
                         <WaterNudge
@@ -1636,21 +1648,34 @@ onUnmounted(() => {
                     @complete="complete"
                     @undo="undo($event.id)"
                   />
-                  <div
-                    v-if="water.assignee_id !== memberId"
-                    class="water-nudge-actions"
-                  >
-                    <p class="hero-date" role="status">
+                  <div class="water-nudge-actions">
+                    <p
+                      v-if="water.assignee_id !== memberId"
+                      class="hero-date"
+                      role="status"
+                    >
                       {{ nudgeCaption }}
                     </p>
-                    <button
-                      class="water-remind"
-                      @click="openTask(water, $event)"
-                    >
-                      查看任务
-                    </button>
+                    <div class="water-task-links">
+                      <button
+                        class="water-remind"
+                        @click="openTask(water, $event)"
+                      >
+                        查看任务
+                      </button>
+                      <button
+                        class="water-exception-trigger"
+                        aria-label="抬水临时安排"
+                        @click="waterExceptionOpen = true"
+                      >
+                        ?
+                      </button>
+                    </div>
                   </div>
-                  <p v-else-if="!waterActionTask" class="hero-date">
+                  <p
+                    v-if="water.assignee_id === memberId && !waterActionTask"
+                    class="hero-date"
+                  >
                     {{ dateText(water.duty_date) }} 开始
                   </p>
                   <CompletionAction
@@ -1774,9 +1799,26 @@ onUnmounted(() => {
           </p>
         </div>
       </ElasticSheet>
+      <WaterExceptionSheet
+        v-if="water"
+        :open="waterExceptionOpen"
+        @update:open="waterExceptionOpen = $event"
+        :task="water"
+        :member-id="memberId"
+        :member-name="board.member.nickname"
+        :token="token"
+        :version="board.version"
+        :demo="demo"
+        :advance-task-id="board.water_advance_task_id"
+        @saved="load"
+        @completed="
+          acceptCompletion($event);
+          load();
+        "
+      />
       <ElasticSheet
         v-model="roundOpen"
-        :content-height="`min(75dvh, 820px, calc(min(224px, 27dvh) + 180px + ${Math.max(0, displayRound?.completions?.length || 0) * 66}px + env(safe-area-inset-bottom, 0px)))`"
+        :content-height="`min(75dvh, 820px, calc(min(224px, 27dvh) + 180px + ${roundVisibleCount * 66}px + env(safe-area-inset-bottom, 0px)))`"
         contained
         fixed-content
         motion="bottom"
@@ -1792,6 +1834,7 @@ onUnmounted(() => {
             :round="displayRound"
             :active="roundOpen"
             :celebrate="completionEpoch"
+            @count="roundVisibleCount = $event"
           />
         </div>
       </ElasticSheet>
@@ -3099,5 +3142,30 @@ onUnmounted(() => {
     width: 36px;
     height: 36px;
   }
+}
+</style>
+
+<style scoped>
+.water-task-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.water-exception-trigger {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--ui-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-text-muted);
+  font: inherit;
+  font-size: 15px;
+  transition: transform var(--ui-release-time) var(--ui-ease-out);
+}
+.water-exception-trigger:active {
+  transform: scale(0.96);
 }
 </style>

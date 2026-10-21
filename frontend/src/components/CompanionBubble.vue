@@ -45,7 +45,8 @@ async function tip() {
     const c = new AbortController();
     controller = c;
     try {
-      const value = await companionReply(props.scene, "tip", c.signal);
+      const value =
+        props.message || (await companionReply(props.scene, "tip", c.signal));
       if (!c.signal.aborted && !dead) say(value);
     } catch {}
   }

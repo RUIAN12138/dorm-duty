@@ -124,6 +124,12 @@ function finish(event: PointerEvent, cancelled = false) {
           (velocity <= 0.35 && offset.value < -width.value * 0.4),
   );
 }
+function lostCapture(event: PointerEvent) {
+  // Touch starts with implicit capture on the inner name/icon. Replacing it
+  // with our front surface emits a bubbling loss from that child. Only loss
+  // of this surface's own capture can cancel the swipe.
+  if (event.target === event.currentTarget) finish(event, true);
+}
 function frontClick(event: MouseEvent) {
   if (performance.now() < suppressUntil) {
     event.preventDefault();
@@ -208,6 +214,7 @@ defineExpose({ close });
     role="group"
     :data-testid="testId"
     data-page-gesture
+    data-native-scroll
     @pointerdown.capture="suppressUntil = 0"
     @click.capture="guardClick"
     @keydown="key"
@@ -229,7 +236,7 @@ defineExpose({ close });
       @pointermove="move"
       @pointerup="finish($event)"
       @pointercancel="finish($event, true)"
-      @lostpointercapture="finish($event, true)"
+      @lostpointercapture="lostCapture"
       @click.capture="frontClick"
     >
       <slot />
@@ -293,11 +300,26 @@ defineExpose({ close });
   cursor: pointer;
   transition: transform var(--ui-release-time) var(--ui-ease-out);
 }
+.swipe-record-actions :deep(.swipe-undo) {
+  background: #c94040;
+  color: #fff;
+}
+.swipe-record-actions :deep(.swipe-edit) {
+  background: #278451;
+  color: #fff;
+}
 .swipe-record-actions :deep(button:active:not(:disabled)) {
   transform: scale(0.96);
 }
 .swipe-record-actions :deep(button:disabled) {
   opacity: 0.4;
+}
+.record-swipe-toggle:not(:focus-visible) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .record-swipe-toggle {
   flex: none;
