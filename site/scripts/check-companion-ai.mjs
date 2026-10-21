@@ -5,6 +5,7 @@ import { createHarness } from "./check-cloud-backend.mjs";
 import {
   createCompanionRuntime,
   shortMessages,
+  normalizeCompanionConfig,
 } from "../../scripts/companion-ai.mjs";
 const h = await createHarness();
 const checks = [];
@@ -362,6 +363,87 @@ try {
     "email logout revokes chat access without relying on UI state",
   );
   await email.close();
+  const siliconConfig = normalizeCompanionConfig({
+    base_url: "https://api.siliconflow.cn/v1",
+    model: "Qwen/Qwen2.5-7B-Instruct",
+    api_key: "silicon-fixture",
+    asr_model: "glm-asr-2512",
+  });
+  check(
+    siliconConfig.asr_model === null,
+    "SiliconFlow does not inherit a BigModel speech credential",
+  );
+  assert.throws(() =>
+    normalizeCompanionConfig({
+      ...siliconConfig,
+      base_url: "https://evil.invalid/v1",
+    }),
+  );
+  assert.throws(() =>
+    normalizeCompanionConfig({ ...siliconConfig, model: "arbitrary-model" }),
+  );
+  check(true, "provider and model remain pinned to official allowlist");
+  const silicon = createCompanionRuntime(h.db, {
+    config: siliconConfig,
+    env: h.env,
+    autoStart: false,
+    now: () => time,
+    dispatch: (r) =>
+      h.request(new URL(r.url).pathname + new URL(r.url).search, {
+        token: claims[0],
+      }),
+    fetcher: async (url, options) => {
+      const payload = JSON.parse(options.body);
+      check(
+        url === "https://api.siliconflow.cn/v1/chat/completions" &&
+          options.headers.Authorization === "Bearer silicon-fixture",
+        "Qwen calls only the official SiliconFlow endpoint with its own key",
+      );
+      check(
+        payload.model === "Qwen/Qwen2.5-7B-Instruct" &&
+          !("thinking" in payload) &&
+          payload.response_format.type === "json_object",
+        "Qwen request omits BigModel-specific parameters and preserves structured short replies",
+      );
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                messages: ["你好，我是球球。"],
+                emotion: "10",
+                reminder: null,
+              }),
+            },
+          },
+        ],
+      });
+    },
+  });
+  try {
+    const reply = await silicon.route(
+      new Request("https://test.invalid/chores/companion/chat", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + claims[0],
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          invite: room.invite_code,
+          member_id: members[0].user_id,
+          text: "你好，新模型",
+          request_id: randomUUID(),
+        }),
+      }),
+    );
+    check(
+      reply.status === 200 &&
+        (await reply.json()).messages[0] === "你好，我是球球。",
+      "SiliconFlow reply passes through existing identity, validation and persistence",
+    );
+  } finally {
+    await silicon.close();
+  }
   console.log(
     JSON.stringify({ status: "passed", checks: checks.length, items: checks }),
   );

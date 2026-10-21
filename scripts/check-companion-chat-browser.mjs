@@ -62,8 +62,8 @@ try {
   runtime = createCompanionRuntime(h.db, {
     config: {
       api_key: "fixture",
-      model: "glm-4.7-flash",
-      asr_model: "glm-asr-2512",
+      base_url: "https://api.siliconflow.cn/v1",
+      model: "Qwen/Qwen2.5-7B-Instruct",
     },
     env: h.env,
     autoStart: false,
@@ -215,7 +215,21 @@ try {
       const b = document.querySelector(".chat-ball");
       if (b) {
         const r = b.getBoundingClientRect();
-        window.chatFrames.push({ x: r.x, y: r.y, width: r.width });
+        window.chatFrames.push({
+          x: r.x,
+          y: r.y,
+          width: r.width,
+          toolbar: Number(
+            getComputedStyle(document.querySelector(".chat-toolbar")).opacity,
+          ),
+          history: Number(
+            getComputedStyle(document.querySelector(".chat-history-frame"))
+              .opacity,
+          ),
+          footer: Number(
+            getComputedStyle(document.querySelector(".chat-footer")).opacity,
+          ),
+        });
       }
       if (performance.now() - start < 1500) requestAnimationFrame(frame);
     }
@@ -245,7 +259,155 @@ try {
       .evaluate((el) => getComputedStyle(el).backdropFilter.includes("blur")),
     "only chat overlay supplies the requested frosted backdrop",
   );
-  await page.getByLabel("和球球说句话", { exact: true }).fill("输入法候选");
+  check(
+    await page.evaluate(() => document.activeElement?.tagName !== "TEXTAREA"),
+    "opening chat never summons a keyboard",
+  );
+  check(
+    (await page.locator(".chat-toolbar button").count()) === 1 &&
+      (await page
+        .getByRole("button", { name: "返回宿舍", exact: true })
+        .isVisible()),
+    "toolbar contains only the back chevron",
+  );
+  check(
+    (await page.locator(".chat-bubble.assistant").count()) === 3 &&
+      (await page
+        .getByRole("button", { name: "今天做什么？", exact: true })
+        .isVisible()),
+    "entry offers three short greetings and ready-to-send questions",
+  );
+  check(
+    await page.evaluate(() =>
+      window.chatFrames.some(
+        (f) => f.toolbar > f.footer + 0.08 && f.history > 0 && f.footer < 0.95,
+      ),
+    ),
+    "entry parts fade in with distinct intermediate timing",
+  );
+  check(
+    await page
+      .locator(".chat-masthead")
+      .evaluate(
+        (el) =>
+          getComputedStyle(el).backdropFilter.includes("blur") &&
+          getComputedStyle(el).backgroundColor !== "rgba(0, 0, 0, 0)",
+      ),
+    "top has a translucent frosted surface",
+  );
+  check(
+    await page
+      .getByTestId("chat-composer")
+      .evaluate((el) => innerHeight - el.getBoundingClientRect().bottom >= 45),
+    "composer sits above the bottom safe gap",
+  );
+  check(
+    (await page
+      .getByRole("button", { name: "切换语音输入", exact: true })
+      .count()) === 0,
+    "chat is text-only with no microphone entry",
+  );
+  const editor = page.getByLabel("和球球说句话", { exact: true });
+  await editor.click();
+  check(
+    await editor.evaluate(
+      (el) => document.activeElement !== el && !el.readOnly,
+    ),
+    "first tap arms editing without forcing keyboard focus",
+  );
+  const inputBox = await editor.boundingBox();
+  await page.mouse.move(inputBox.x + 12, inputBox.y + 12);
+  await page.mouse.down();
+  await page.waitForTimeout(70);
+  check(
+    await page
+      .locator(".composer-text")
+      .evaluate(
+        (el) =>
+          getComputedStyle(el).transform !== "none" &&
+          new DOMMatrix(getComputedStyle(el).transform).d < 0.99,
+      ),
+    "input press visibly squashes its glass surface",
+  );
+  await page.mouse.up();
+  await page.waitForTimeout(550);
+  check(
+    await page
+      .locator(".composer-text")
+      .evaluate(
+        (el) =>
+          Math.abs(new DOMMatrix(getComputedStyle(el).transform).d - 1) < 0.002,
+      ),
+    "input release springs back without moving its layout",
+  );
+  await page.getByTestId("chat-history").evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  const track = page.locator(".chat-history-content"),
+    rect = await page.getByTestId("chat-history").boundingBox();
+  await page.mouse.move(rect.x + rect.width - 12, rect.y + 28);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width - 12, rect.y + 120, { steps: 8 });
+  check(
+    await track.evaluate(
+      (el) => new DOMMatrix(getComputedStyle(el).transform).f > 15,
+    ),
+    "top boundary drag follows with rubber resistance",
+  );
+  await page.mouse.up();
+  await page.waitForTimeout(700);
+  check(
+    await track.evaluate(
+      (el) => Math.abs(new DOMMatrix(getComputedStyle(el).transform).f) < 0.5,
+    ),
+    "timeline settles back to its original boundary",
+  );
+  if (!safari) {
+    const touch = await page.context().newCDPSession(page);
+    const tx = rect.x + rect.width - 10,
+      ty = rect.y + 24;
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: tx, y: ty }],
+    });
+    for (let i = 1; i <= 8; i++)
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: tx, y: ty + i * 10 }],
+      });
+    check(
+      await track.evaluate(
+        (el) => new DOMMatrix(getComputedStyle(el).transform).f > 12,
+      ),
+      "real touch event stream keeps boundary rubber tracking despite pointer cancellation",
+    );
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await page.waitForTimeout(700);
+    check(
+      await track.evaluate(
+        (el) => Math.abs(new DOMMatrix(getComputedStyle(el).transform).f) < 0.5,
+      ),
+      "touch release restores the timeline",
+    );
+    await touch.detach();
+  }
+  const chatBall = page.locator(".chat-ball .dorm-companion");
+  const emotionBefore = await chatBall.evaluate(
+    (el) => el.querySelector("svg")?.outerHTML,
+  );
+  await chatBall.click();
+  await page.waitForTimeout(250);
+  check(
+    await chatBall.evaluate(
+      (el, old) => el.querySelector("svg")?.outerHTML !== old,
+      emotionBefore,
+    ),
+    "chat ball remains interactive",
+  );
+  await editor.fill("输入法候选");
   await page
     .getByLabel("和球球说句话", { exact: true })
     .dispatchEvent("keydown", {
@@ -261,7 +423,13 @@ try {
   );
   await page.getByLabel("和球球说句话", { exact: true }).fill("你好");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  await page.getByText("让我想一想", { exact: true }).waitFor();
+  await page
+    .getByRole("status", { name: "球球正在思考", exact: true })
+    .waitFor();
+  check(
+    (await page.locator(".chat-thinking i").count()) === 3,
+    "thinking uses three floating vertical strokes",
+  );
   check(true, "thinking pre-message is visible while provider is pending");
   await page.getByText("有事就问我吧。", { exact: true }).waitFor();
   check(
@@ -269,58 +437,12 @@ try {
     "composition candidate confirmation never creates a hidden chat request",
   );
   check(
-    (await page.locator(".chat-bubble.assistant").count()) === 2,
+    (await page.locator(".chat-bubble.assistant").count()) === 5,
     "reply is split into individual short glass bubbles",
   );
   check(
     (await page.locator(".chat-ball").getByRole("img").count()) === 0,
     "ball uses its existing expression engine, not remote images",
-  );
-  await page.evaluate(() => {
-    window.composerFrames = [];
-    document.querySelector('[data-testid="chat-voice"]').addEventListener(
-      "pointerdown",
-      () => {
-        const end = performance.now() + 700;
-        function frame() {
-          window.composerFrames.push(
-            document
-              .querySelector('[data-testid="chat-voice"]')
-              .getBoundingClientRect().width,
-          );
-          if (performance.now() < end) requestAnimationFrame(frame);
-        }
-        requestAnimationFrame(frame);
-      },
-      { once: true },
-    );
-  });
-  await page.getByTestId("chat-voice").click();
-  await page.waitForTimeout(450);
-  check(
-    await page.evaluate(() =>
-      window.composerFrames.some((w) => w > 75 && w < 230),
-    ),
-    "composer morph crosses intermediate shapes instead of jumping",
-  );
-  check(
-    await page
-      .getByTestId("chat-voice")
-      .evaluate((el) => el.getBoundingClientRect().width > 180),
-    "voice button expands into an ellipse",
-  );
-  check(
-    (await page
-      .getByRole("button", { name: "切换文字输入", exact: true })
-      .isVisible()) &&
-      (await page.getByLabel("和球球说句话", { exact: true }).count()) === 0,
-    "collapsed text side is only a keyboard switch, not an active input",
-  );
-  await page.getByRole("button", { name: "切换文字输入", exact: true }).click();
-  await page.waitForTimeout(400);
-  check(
-    await page.getByLabel("和球球说句话", { exact: true }).isEditable(),
-    "keyboard switch restores editable text",
   );
   await page
     .getByLabel("和球球说句话", { exact: true })
@@ -372,6 +494,30 @@ try {
     await page.getByRole("button", { name: "重试", exact: true }).isVisible(),
     "provider failure exposes retry instead of fabricated success",
   );
+  await page.waitForTimeout(420);
+  check(
+    await page.getByRole("alert").evaluate((el) => {
+      const r = el.getBoundingClientRect(),
+        input = document
+          .querySelector(".chat-composer")
+          .getBoundingClientRect();
+      return (
+        r.width >= innerWidth - 30 &&
+        r.height >= 75.5 &&
+        r.bottom < input.top - 25 &&
+        !el.querySelector("[aria-label*=关闭]")
+      );
+    }),
+    "error notice is wider, raised and has no close cross",
+  );
+  await page.waitForTimeout(5900);
+  check(
+    (await page.getByRole("alert").count()) === 0,
+    "error notice animates away automatically",
+  );
+  await page.getByLabel("和球球说句话", { exact: true }).fill("再次失败测试");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await page.getByRole("alert").waitFor();
   failModel = false;
   await page.getByRole("button", { name: "重试", exact: true }).click();
   await page.waitForTimeout(1000);
@@ -425,8 +571,37 @@ try {
   await page.screenshot({
     path: path.join(evidence, `${safari ? "webkit" : "chromium"}-dark.png`),
   });
-  await page.getByRole("button", { name: "关闭球球聊天", exact: true }).click();
+  await page.evaluate(() => {
+    window.chatCloseFrames = [];
+    document.querySelector(".chat-toolbar button").addEventListener(
+      "pointerdown",
+      () => {
+        const start = performance.now();
+        function frame() {
+          const ball = document.querySelector(".chat-ball"),
+            footer = document.querySelector(".chat-footer");
+          if (ball)
+            window.chatCloseFrames.push({
+              width: ball.getBoundingClientRect().width,
+              opacity: Number(getComputedStyle(footer).opacity),
+            });
+          if (performance.now() - start < 1300) requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      },
+      { once: true },
+    );
+  });
+  await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
   await page.locator(".companion-chat").waitFor({ state: "detached" });
+  check(
+    await page.evaluate(() =>
+      window.chatCloseFrames.some(
+        (f) => f.width > 54 && f.width < 85 && f.opacity < 0.9,
+      ),
+    ),
+    "closing keeps intermediate ball poses while parts withdraw in reverse",
+  );
   check(await ball.isVisible(), "closing chat returns the original ball");
   await hold();
   check(
@@ -446,11 +621,18 @@ try {
   );
   await page.getByRole("button", { name: "清空聊天记录", exact: true }).click();
   await page.getByRole("button", { name: "清空", exact: true }).click();
-  await page.getByText("有事就问球球。", { exact: true }).waitFor();
+  await page.getByText("我在，想问什么？", { exact: true }).waitFor();
   check(
     h.db.sqlite.prepare("SELECT COUNT(*) n FROM companion_messages").get().n ===
       0,
     "clear history requires confirmation and clears persisted messages",
+  );
+  await page.getByRole("button", { name: "今天做什么？", exact: true }).click();
+  await page.getByText("有事就问我吧。", { exact: true }).waitFor();
+  check(
+    (await page.locator(".chat-bubble.user").count()) === 1 &&
+      (await page.locator(".chat-bubble.user").innerText()) === "今天做什么？",
+    "preset question sends a real chat only after user taps it",
   );
   check(errors.length === 0, "no browser runtime errors");
   console.log(

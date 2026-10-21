@@ -29,15 +29,17 @@ const present = ref(false),
   phase = ref<"opening" | "open" | "closing">("opening"),
   ball = ref<HTMLElement>(),
   surface = ref<HTMLElement>(),
+  toolbar = ref<HTMLElement>(),
+  footer = ref<HTMLElement>(),
+  masthead = ref<HTMLElement>(),
+  historyContent = ref<HTMLElement>(),
   backdrop = ref<HTMLElement>(),
   scroll = ref<HTMLElement>(),
   historyFrame = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
 const available = ref(false),
-  voiceAvailable = ref(false),
   loading = ref(false),
   busy = ref(false),
-  recording = ref(false),
   awaiting = ref(false),
   error = ref(""),
   emotion = ref("02"),
@@ -51,6 +53,9 @@ let api = companionClient(props.invite, props.memberId, props.token),
   controller: AbortController | undefined,
   removeBack: (() => void) | undefined,
   closing = false,
+  motionEpoch = 0,
+  originTransform = "none",
+  errorTimer: ReturnType<typeof setTimeout> | undefined,
   lastFocus: HTMLElement | null = null,
   delayTimer: ReturnType<typeof setTimeout> | undefined,
   delayResolve: (() => void) | undefined;
@@ -76,7 +81,6 @@ function cancel() {
   composer.value?.cancel();
   busy.value = false;
   awaiting.value = false;
-  recording.value = false;
   loading.value = false;
   actionBusy.value = "";
 }
@@ -98,7 +102,8 @@ function refreshEdge() {
 }
 function bottom() {
   void nextTick(() => {
-    if (scroll.value) scroll.value.scrollTop = scroll.value.scrollHeight;
+    if (scroll.value && !closing)
+      scroll.value.scrollTop = scroll.value.scrollHeight;
     refreshEdge();
   });
 }
@@ -116,64 +121,19 @@ function stopMotion() {
   controls.forEach((c) => c.stop());
   controls = [];
 }
-async function show() {
-  cancel();
-  closing = false;
-  phase.value = "opening";
-  loading.value = true;
-  clearConfirm.value = false;
-  present.value = true;
-  document.documentElement.dataset.companionChat = "true";
-  emit("present", true);
-  lastFocus = document.activeElement as HTMLElement;
-  await nextTick();
-  fit();
-  removeBack?.();
-  removeBack = registerNativeBack(close);
-  if (motionAllowed() && ball.value) {
-    const initial = openedBall();
-    ball.value.style.transform = initial;
-    controls = [
-      animate(
-        ball.value,
-        { transform: [initial, "translate3d(0,0,0) scale(1)"] },
-        { ...motionTokens.settle, duration: 0.4 },
-      ),
-      ...([backdrop.value, surface.value].filter(Boolean) as HTMLElement[]).map(
-        (el) => animate(el, { opacity: [0, 1] }, motionTokens.enter),
-      ),
-    ];
-    await Promise.all(controls.map((c) => c.then(() => {})));
-  }
-  if (!present.value || closing) return;
-  phase.value = "open";
-  void load();
-}
-async function hide() {
-  if (!present.value || closing) return;
-  closing = true;
-  cancel();
-  phase.value = "closing";
-  stopMotion();
-  if (motionAllowed() && ball.value) {
-    const from = getComputedStyle(ball.value).transform;
-    ball.value.style.transform = "none";
-    const goal = openedBall();
-    ball.value.style.transform = from;
-    controls = [
-      animate(ball.value, { transform: [from, goal] }, motionTokens.drawer),
-      ...([backdrop.value, surface.value].filter(Boolean) as HTMLElement[]).map(
-        (el) =>
-          animate(
-            el,
-            { opacity: [getComputedStyle(el).opacity, 0] },
-            motionTokens.exit,
-          ),
-      ),
-    ];
-    await Promise.all(controls.map((c) => c.then(() => {})));
-  }
-  if (!closing) return;
+const entryParts = () =>
+  [toolbar.value, historyFrame.value, footer.value].filter(
+    Boolean,
+  ) as HTMLElement[];
+const travel = {
+  type: "spring" as const,
+  stiffness: 260,
+  damping: 29,
+  mass: 1,
+  restDelta: 0.001,
+  restSpeed: 0.01,
+};
+function finishClose() {
   present.value = false;
   delete document.documentElement.dataset.companionChat;
   emit("present", false);
@@ -182,6 +142,199 @@ async function hide() {
   lastFocus?.isConnected && lastFocus.focus({ preventScroll: true });
   closing = false;
 }
+async function show() {
+  const generation = ++motionEpoch;
+  const wasPresent = present.value;
+  stopMotion();
+  cancel();
+  endPull(true);
+  closing = false;
+  phase.value = "opening";
+  loading.value = true;
+  clearConfirm.value = false;
+  present.value = true;
+  document.documentElement.dataset.companionChat = "true";
+  emit("present", true);
+  if (!wasPresent) lastFocus = document.activeElement as HTMLElement;
+  await nextTick();
+  fit();
+  removeBack?.();
+  removeBack = registerNativeBack(close);
+  if (!wasPresent) originTransform = openedBall();
+  if (motionAllowed() && ball.value) {
+    const initial = wasPresent
+      ? getComputedStyle(ball.value).transform
+      : originTransform;
+    ball.value.style.transform = initial;
+    controls = [
+      animate(
+        ball.value,
+        { transform: [initial, "translate3d(0,0,0) scale(1)"] },
+        travel,
+      ),
+      ...(
+        [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
+      ).map((el) =>
+        animate(
+          el,
+          {
+            opacity: [wasPresent ? Number(getComputedStyle(el).opacity) : 0, 1],
+          },
+          { duration: 0.32 },
+        ),
+      ),
+      ...entryParts().map((el, index) =>
+        animate(
+          el,
+          {
+            opacity: [wasPresent ? Number(getComputedStyle(el).opacity) : 0, 1],
+            transform: [
+              wasPresent
+                ? getComputedStyle(el).transform
+                : "translate3d(0,12px,0) scale(.985)",
+              "translate3d(0,0,0) scale(1)",
+            ],
+          },
+          {
+            ...motionTokens.enter,
+            duration: 0.32,
+            delay: 0.08 + index * 0.055,
+          },
+        ),
+      ),
+    ];
+  }
+  void load();
+  await Promise.all(controls.map((c) => c.then(() => {})));
+  if (generation !== motionEpoch || !present.value || closing) return;
+  phase.value = "open";
+}
+async function hide() {
+  if (!present.value || closing) return;
+  const generation = ++motionEpoch;
+  closing = true;
+  cancel();
+  endPull(true);
+  phase.value = "closing";
+  stopMotion();
+  if (motionAllowed() && ball.value) {
+    controls = [
+      animate(
+        ball.value,
+        {
+          transform: [getComputedStyle(ball.value).transform, originTransform],
+        },
+        travel,
+      ),
+      ...(
+        [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
+      ).map((el) =>
+        animate(
+          el,
+          { opacity: [Number(getComputedStyle(el).opacity), 0] },
+          { duration: 0.32, delay: 0.08 },
+        ),
+      ),
+      ...entryParts()
+        .reverse()
+        .map((el, index) =>
+          animate(
+            el,
+            {
+              opacity: [Number(getComputedStyle(el).opacity), 0],
+              transform: [
+                getComputedStyle(el).transform,
+                "translate3d(0,10px,0) scale(.985)",
+              ],
+            },
+            { ...motionTokens.exit, duration: 0.22, delay: index * 0.035 },
+          ),
+        ),
+    ];
+    await Promise.all(controls.map((c) => c.then(() => {})));
+  }
+  if (generation !== motionEpoch || !closing) return;
+  finishClose();
+}
+// Only boundary pulls are intercepted. Normal scrolling, text selection and
+// horizontal intent remain native; the timeline keeps a single transform owner.
+let pull: { x: number; y: number; top: boolean; bottom: boolean } | null = null;
+let pullControl: ReturnType<typeof animate> | undefined;
+function startPull(event: TouchEvent | PointerEvent) {
+  if ("pointerType" in event && event.pointerType === "touch") return;
+  if ((event.target as HTMLElement).closest("button,textarea,input,a")) return;
+  const point = "touches" in event ? event.touches[0] : event;
+  if (!point || !scroll.value || phase.value !== "open") return;
+  const el = scroll.value;
+  pullControl?.stop();
+  pull = {
+    x: point.clientX,
+    y: point.clientY,
+    top: el.scrollTop <= 1,
+    bottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 1,
+  };
+}
+function movePull(event: TouchEvent | PointerEvent) {
+  if ("pointerType" in event && event.pointerType === "touch") return;
+  if (!pull || !historyContent.value) return;
+  const point = "touches" in event ? event.touches[0] : event;
+  if (!point) return;
+  const dy = point.clientY - pull.y,
+    dx = point.clientX - pull.x;
+  if (Math.abs(dx) > 8 && Math.abs(dx) >= Math.abs(dy)) return endPull();
+  if (Math.abs(dy) < 6 || !((dy > 0 && pull.top) || (dy < 0 && pull.bottom)))
+    return;
+  if (event.cancelable) event.preventDefault();
+  if (!motionAllowed()) return;
+  const offset = (dy * 0.52) / (1 + Math.abs(dy) / 150);
+  historyContent.value.style.transform = `translate3d(0,${offset}px,0) scaleX(${1 - Math.abs(offset) * 0.00012})`;
+}
+function endPointerPull(event: PointerEvent) {
+  if (event.pointerType !== "touch") endPull();
+}
+function endPull(immediate = false) {
+  pull = null;
+  if (!historyContent.value) return;
+  pullControl?.stop();
+  if (immediate || !motionAllowed())
+    historyContent.value.style.transform = "none";
+  else
+    pullControl = animate(
+      historyContent.value,
+      {
+        transform: [
+          getComputedStyle(historyContent.value).transform,
+          "translate3d(0,0,0) scaleX(1)",
+        ],
+      },
+      travel,
+    );
+}
+const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提醒"];
+const hasConversation = computed(() =>
+  items.value.some((item) => !item.id.startsWith("welcome:")),
+);
+async function welcome(generation: number) {
+  const messages = [
+    "我在，想问什么？",
+    "值日、抬水都可以问我。",
+    "也能帮你安排提醒。",
+  ];
+  for (const [index, text] of messages.entries()) {
+    if (generation !== epoch || !props.modelValue) return;
+    items.value.push({ id: "welcome:" + index, role: "assistant", text });
+    bottom();
+    if (motionAllowed()) await pause(160);
+  }
+}
+watch(error, (message) => {
+  clearTimeout(errorTimer);
+  if (message)
+    errorTimer = setTimeout(() => {
+      error.value = "";
+    }, 5500);
+});
+
 async function load() {
   const generation = ++epoch;
   controller?.abort();
@@ -194,7 +347,6 @@ async function load() {
     const state = await api.state(c.signal);
     if (generation !== epoch || !props.modelValue) return;
     available.value = state.available;
-    voiceAvailable.value = state.voice_available;
     items.value = state.messages.flatMap((m) =>
       m.messages.map((text, i) => ({
         id: `${m.request_id}:${m.role}:${i}`,
@@ -206,6 +358,7 @@ async function load() {
     emotion.value = "39";
     if (!available.value) error.value = "球球还未接通AI服务";
     bottom();
+    if (!items.value.length && available.value) await welcome(generation);
   } catch (e) {
     if (generation === epoch && !c.signal.aborted)
       error.value = (e as Error).message;
@@ -259,27 +412,6 @@ async function send(text: string, isRetry = false) {
     }
   }
 }
-async function transcribe(audio: string) {
-  if (busy.value || actionBusy.value) return;
-  const generation = ++epoch,
-    c = new AbortController();
-  controller?.abort();
-  controller = c;
-  busy.value = true;
-  emotion.value = "16";
-  error.value = "";
-  try {
-    const result = await api.voice(audio, c.signal);
-    if (generation !== epoch) return;
-    composer.value?.receive(result.text);
-    emotion.value = "39";
-  } catch (e) {
-    if (generation === epoch && !c.signal.aborted)
-      error.value = (e as Error).message;
-  } finally {
-    if (generation === epoch) busy.value = false;
-  }
-}
 async function act(a: ChatReminder, action: "confirm" | "cancel") {
   if (actionBusy.value || busy.value || loading.value) return;
   const generation = epoch,
@@ -313,6 +445,13 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
   }
 }
 const clearConfirm = ref(false);
+function requestClear() {
+  clearConfirm.value = !clearConfirm.value;
+  if (clearConfirm.value)
+    void nextTick(() => {
+      if (scroll.value) scroll.value.scrollTop = 0;
+    });
+}
 async function clear() {
   if (busy.value || loading.value || actionBusy.value) return;
   busy.value = true;
@@ -327,6 +466,7 @@ async function clear() {
       reminders.value = reminders.value.filter((a) => a.status === "pending");
       retry = null;
       clearConfirm.value = false;
+      await welcome(generation);
     }
   } catch (e) {
     if (generation === epoch && !c.signal.aborted)
@@ -338,30 +478,28 @@ async function clear() {
 function inactive() {
   if (document.hidden) {
     cancel();
+    quiet();
     emotion.value = "02";
   } else if (props.modelValue && phase.value === "open") void load();
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function quiet() {
   if (!motionAllowed()) {
+    motionEpoch++;
     stopMotion();
+    endPull(true);
     if (ball.value) ball.value.style.transform = "none";
-    if (backdrop.value) backdrop.value.style.opacity = "1";
-    if (surface.value) surface.value.style.opacity = "1";
-    if (phase.value === "closing") {
-      present.value = false;
-      delete document.documentElement.dataset.companionChat;
-      emit("present", false);
-      removeBack?.();
-      removeBack = undefined;
-      lastFocus?.isConnected && lastFocus.focus({ preventScroll: true });
-      closing = false;
-    } else if (present.value) {
-      phase.value = "open";
-      if (!loading.value) void load();
+    for (const el of [backdrop.value, masthead.value, ...entryParts()]) {
+      if (el) {
+        el.style.opacity = "1";
+        el.style.transform = "none";
+      }
     }
+    if (phase.value === "closing") finishClose();
+    else if (present.value) phase.value = "open";
   }
 }
+
 watch(
   () => props.modelValue,
   (value) => {
@@ -385,7 +523,10 @@ media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
   delete document.documentElement.dataset.companionChat;
   cancel();
+  motionEpoch++;
   stopMotion();
+  endPull(true);
+  clearTimeout(errorTimer);
   removeBack?.();
   window.visualViewport?.removeEventListener("resize", fit);
   window.visualViewport?.removeEventListener("scroll", fit);
@@ -426,26 +567,26 @@ function time(value: string) {
       >
         <DialogTitle class="chat-sr-only">和球球聊天</DialogTitle
         ><DialogDescription class="chat-sr-only"
-          >输入文字，或切换语音转文字。提醒安排需要确认后才保存。</DialogDescription
+          >输入文字与球球聊天。提醒安排需要确认后才保存。</DialogDescription
         >
+        <div ref="masthead" class="chat-masthead" aria-hidden="true" />
         <div ref="ball" class="chat-ball" data-testid="chat-ball">
-          <DormCompanion :size="88" :mood="emotion" :interactive="false" />
+          <DormCompanion
+            :size="88"
+            :mood="emotion"
+            :interactive="true"
+            intent="play"
+            :tips="false"
+          />
         </div>
         <div
           ref="surface"
           class="chat-surface"
           :inert="phase === 'closing' ? true : undefined"
         >
-          <header class="chat-toolbar">
-            <button
-              type="button"
-              aria-label="清空聊天记录"
-              :disabled="busy || loading || !!actionBusy"
-              @click="clearConfirm = !clearConfirm"
-            >
-              <van-icon name="delete-o" /></button
-            ><button type="button" aria-label="关闭球球聊天" @click="close">
-              <van-icon name="cross" />
+          <header ref="toolbar" class="chat-toolbar">
+            <button type="button" aria-label="返回宿舍" @click="close">
+              <van-icon name="arrow-left" />
             </button>
           </header>
           <div ref="historyFrame" class="chat-history-frame">
@@ -453,85 +594,118 @@ function time(value: string) {
               ref="scroll"
               class="chat-history"
               @scroll.passive="refreshEdge"
+              @touchstart.passive="startPull"
+              @touchmove="movePull"
+              @touchend="endPull()"
+              @touchcancel="endPull()"
+              @pointerdown="startPull"
+              @pointermove="movePull"
+              @pointerup="endPointerPull"
+              @pointercancel="endPointerPull"
+              @pointerleave="endPointerPull"
               data-native-scroll
               role="log"
               aria-live="polite"
               aria-relevant="additions"
               data-testid="chat-history"
             >
-              <div
-                v-if="loading"
-                class="chat-loading"
-                aria-label="正在读取聊天"
-              >
-                <span /><span />
-              </div>
-              <div v-if="clearConfirm" class="chat-confirm">
-                <p>清空这段聊天？</p>
-                <div>
-                  <button @click="clearConfirm = false">保留</button
-                  ><button :disabled="busy" @click="clear">清空</button>
+              <div ref="historyContent" class="chat-history-content">
+                <div
+                  v-if="loading"
+                  class="chat-loading"
+                  aria-label="正在读取聊天"
+                >
+                  <span /><span />
                 </div>
-              </div>
-              <motion.div
-                v-for="item in items"
-                :key="item.id"
-                class="chat-bubble"
-                :class="item.role"
-                :initial="
-                  motionAllowed() ? { opacity: 0, y: 10, scale: 0.94 } : false
-                "
-                :animate="{ opacity: 1, y: 0, scale: 1 }"
-                :transition="motionTransition"
-                >{{ item.text }}</motion.div
-              >
-              <motion.div
-                v-if="thinking"
-                key="thinking"
-                class="chat-bubble assistant chat-thinking"
-                :initial="motionAllowed() ? { opacity: 0, scale: 0.94 } : false"
-                :animate="{ opacity: 1, scale: 1 }"
-                :transition="motionTransition"
-                ><span>让我想一想</span><i /><i /><i
-              /></motion.div>
-              <motion.div
-                v-for="a in reminders.filter(
-                  (a) => a.status === 'proposed' || a.status === 'pending',
-                )"
-                :key="a.id"
-                class="chat-reminder"
-                :initial="
-                  motionAllowed() ? { opacity: 0, y: 10, scale: 0.96 } : false
-                "
-                :animate="{ opacity: 1, y: 0, scale: 1 }"
-                :transition="motionTransition"
-                ><span>{{
-                  a.status === "pending" ? "已安排提醒" : "确认提醒"
-                }}</span
-                ><strong>{{ a.target_name }}</strong>
-                <p>{{ a.text }}</p>
-                <time>{{ time(a.due_at) }} · 北京时间</time>
-                <div>
+                <div v-if="clearConfirm" class="chat-confirm">
+                  <p>清空这段聊天？</p>
+                  <div>
+                    <button @click="clearConfirm = false">保留</button
+                    ><button :disabled="busy" @click="clear">清空</button>
+                  </div>
+                </div>
+                <motion.div
+                  v-for="item in items"
+                  :key="item.id"
+                  class="chat-bubble"
+                  :class="item.role"
+                  :initial="
+                    motionAllowed() ? { opacity: 0, y: 10, scale: 0.94 } : false
+                  "
+                  :animate="{ opacity: 1, y: 0, scale: 1 }"
+                  :transition="motionTransition"
+                  >{{ item.text }}</motion.div
+                >
+                <motion.div
+                  v-if="thinking"
+                  key="thinking"
+                  class="chat-bubble assistant chat-thinking"
+                  aria-label="球球正在思考"
+                  role="status"
+                  :initial="
+                    motionAllowed() ? { opacity: 0, scale: 0.94 } : false
+                  "
+                  :animate="{ opacity: 1, scale: 1 }"
+                  :transition="motionTransition"
+                  ><i /><i /><i
+                /></motion.div>
+                <motion.div
+                  v-for="a in reminders.filter(
+                    (a) => a.status === 'proposed' || a.status === 'pending',
+                  )"
+                  :key="a.id"
+                  class="chat-reminder"
+                  :initial="
+                    motionAllowed() ? { opacity: 0, y: 10, scale: 0.96 } : false
+                  "
+                  :animate="{ opacity: 1, y: 0, scale: 1 }"
+                  :transition="motionTransition"
+                  ><span>{{
+                    a.status === "pending" ? "已安排提醒" : "确认提醒"
+                  }}</span
+                  ><strong>{{ a.target_name }}</strong>
+                  <p>{{ a.text }}</p>
+                  <time>{{ time(a.due_at) }} · 北京时间</time>
+                  <div>
+                    <button
+                      :disabled="!!actionBusy || busy"
+                      @click="act(a, 'cancel')"
+                    >
+                      {{
+                        a.status === "pending" ? "取消提醒" : "不安排"
+                      }}</button
+                    ><button
+                      v-if="a.status === 'proposed'"
+                      class="chat-primary"
+                      :disabled="!!actionBusy || busy"
+                      @click="act(a, 'confirm')"
+                    >
+                      {{ actionBusy === a.id ? "正在保存…" : "确认安排" }}
+                    </button>
+                  </div></motion.div
+                >
+                <div
+                  v-if="!loading && !hasConversation"
+                  class="chat-quick-prompts"
+                >
                   <button
-                    :disabled="!!actionBusy || busy"
-                    @click="act(a, 'cancel')"
+                    v-for="prompt in quickPrompts"
+                    :key="prompt"
+                    :disabled="busy || !available"
+                    @click="send(prompt)"
                   >
-                    {{ a.status === "pending" ? "取消提醒" : "不安排" }}</button
-                  ><button
-                    v-if="a.status === 'proposed'"
-                    class="chat-primary"
-                    :disabled="!!actionBusy || busy"
-                    @click="act(a, 'confirm')"
-                  >
-                    {{ actionBusy === a.id ? "正在保存…" : "确认安排" }}
+                    {{ prompt }}
                   </button>
-                </div></motion.div
-              >
-              <div
-                v-if="!loading && !items.length && !error"
-                class="chat-empty"
-              >
-                有事就问球球。
+                </div>
+                <button
+                  v-if="hasConversation"
+                  class="chat-clear"
+                  aria-label="清空聊天记录"
+                  :disabled="busy || loading || !!actionBusy"
+                  @click="requestClear"
+                >
+                  清空聊天
+                </button>
               </div>
             </div>
             <div
@@ -542,31 +716,29 @@ function time(value: string) {
               <i /><i /><i /><i /><i />
             </div>
           </div>
-          <footer class="chat-footer">
-            <div v-if="error" class="chat-error" role="alert">
-              <span>{{ error }}</span
-              ><button v-if="retry && !busy" @click="send(retry.text, true)">
-                重试</button
-              ><button v-else-if="!available && !loading" @click="load">
-                重试连接
-              </button>
-            </div>
+          <footer ref="footer" class="chat-footer">
             <CompanionChatComposer
               ref="composer"
               :busy="busy || loading || !!actionBusy"
               :enabled="available && !loading && phase === 'open'"
-              :voice-enabled="voiceAvailable"
               @send="send"
-              @audio="transcribe"
-              @error="error = $event"
-              @recording="
-                recording = $event;
-                emotion = $event ? '16' : '30';
-              "
             />
           </footer>
-        </div> </DialogContent></DialogPortal
-  ></DialogRoot>
+          <Transition name="chat-error">
+            <div v-if="error" class="chat-error" role="alert">
+              <span>{{ error }}</span
+              ><button v-if="retry && !busy" @click="send(retry.text, true)">
+                重试
+              </button>
+              <button v-else-if="!available && !loading" @click="load">
+                重试连接
+              </button>
+            </div>
+          </Transition>
+        </div>
+      </DialogContent></DialogPortal
+    ></DialogRoot
+  >
 </template>
 <style scoped>
 /* Static page frost also covers WebKit compositors that drop backdrop blur
@@ -595,6 +767,18 @@ function time(value: string) {
   color: var(--ui-ink);
   --chat-ball-top: max(48px, calc(env(safe-area-inset-top) + 28px));
 }
+.chat-masthead {
+  position: absolute;
+  inset: 0 0 auto;
+  height: calc(var(--chat-ball-top) + 160px);
+  border-radius: 0 0 32px 32px;
+  background: color-mix(in srgb, var(--ui-surface) 74%, transparent);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  mask-image: linear-gradient(#000 60%, transparent);
+  -webkit-mask-image: linear-gradient(#000 60%, transparent);
+  pointer-events: none;
+}
 .chat-ball {
   position: absolute;
   top: var(--chat-ball-top);
@@ -608,12 +792,14 @@ function time(value: string) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0 20px max(18px, env(safe-area-inset-bottom));
+  padding: 0 20px max(58px, calc(env(safe-area-inset-bottom) + 34px));
+  position: relative;
+  z-index: 1;
   box-sizing: border-box;
 }
 .chat-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   flex: none;
   padding-top: max(18px, env(safe-area-inset-top));
   height: calc(var(--chat-ball-top) + 104px);
@@ -623,10 +809,10 @@ function time(value: string) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1px solid #ffffff30;
-  background: var(--chat-glass);
+  border: 0;
+  background: transparent;
   color: var(--ui-ink);
-  font-size: 20px;
+  font-size: 26px;
   display: grid;
   place-items: center;
 }
@@ -697,12 +883,42 @@ function time(value: string) {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
+  display: block;
+  padding: 16px 4px 22px;
+  margin: 0;
+}
+.chat-history-content {
+  min-height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
-  padding: 16px 4px 22px;
-  margin: 0;
+  transform-origin: center top;
+}
+.chat-quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.chat-quick-prompts button {
+  border: 1px solid #ffffff55;
+  border-radius: 20px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ui-ink);
+  background: var(--chat-glass);
+}
+.chat-clear {
+  align-self: center;
+  border: 0;
+  padding: 12px;
+  color: var(--ui-text-muted);
+  font: inherit;
+  font-size: 13px;
+  background: none;
 }
 .chat-history::-webkit-scrollbar {
   display: none;
@@ -729,16 +945,17 @@ function time(value: string) {
 .chat-thinking {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-.chat-thinking span {
-  margin-right: 5px;
+  gap: 5px;
+  min-height: 28px;
+  padding-inline: 18px;
 }
 .chat-thinking i {
-  width: 4px;
-  height: 4px;
+  display: block;
+  width: 3px;
+  height: 18px;
   background: currentColor;
-  border-radius: 50%;
+  border-radius: 3px;
+  transform-origin: center;
   animation: chat-think 900ms ease-in-out infinite alternate;
 }
 .chat-thinking i:nth-last-child(2) {
@@ -749,7 +966,7 @@ function time(value: string) {
 }
 @keyframes chat-think {
   to {
-    transform: translateY(-3px);
+    transform: translateY(-4px) scaleY(0.65);
     opacity: 0.35;
   }
 }
@@ -758,18 +975,43 @@ function time(value: string) {
   padding-top: 8px;
 }
 .chat-error {
-  margin-bottom: 12px;
+  position: absolute;
+  z-index: 5;
+  left: 12px;
+  right: 12px;
+  bottom: max(172px, calc(env(safe-area-inset-bottom) + 154px));
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  background: var(--chat-glass);
-  border-radius: 16px;
-  font-size: 14px;
+  padding: 22px;
+  min-height: 76px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--ui-surface) 96%, transparent);
+  border: 1px solid #ffffff60;
+  border-radius: 24px;
+  font-size: 16px;
+  line-height: 1.5;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 .chat-error button {
   white-space: nowrap;
+}
+.chat-error-enter-active {
+  transition:
+    transform 360ms cubic-bezier(0.22, 1.3, 0.36, 1),
+    opacity 220ms ease-out;
+}
+.chat-error-leave-active {
+  transition:
+    transform 220ms var(--ui-ease-out),
+    opacity 180ms ease-out;
+}
+.chat-error-enter-from,
+.chat-error-leave-to {
+  transform: translateY(12px) scale(0.96);
+  opacity: 0;
 }
 .chat-empty {
   margin: auto;
@@ -878,6 +1120,12 @@ function time(value: string) {
   .chat-toolbar {
     height: calc(var(--chat-ball-top) + 74px);
   }
+  .chat-surface {
+    padding-bottom: max(22px, env(safe-area-inset-bottom));
+  }
+  .chat-error {
+    bottom: 124px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-thinking i,
@@ -900,6 +1148,8 @@ function time(value: string) {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+  .chat-masthead,
+  .chat-error,
   .chat-bubble,
   .chat-reminder,
   .chat-confirm {
