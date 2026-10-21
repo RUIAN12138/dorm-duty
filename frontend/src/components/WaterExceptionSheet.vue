@@ -164,7 +164,10 @@ async function undo() {
   color: var(--ui-text-muted);
 }
 textarea {
-  width: 100%;
+  /* Reserve space for the focus outline AND the glass spring overshoot.
+     Keep the sheet's scroll clipping; it also protects slide-out content. */
+  width: calc(100% - 20px);
+  margin-inline: 10px;
   resize: none;
   padding: 14px 16px;
   border: 1px solid var(--ui-border);

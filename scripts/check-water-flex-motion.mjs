@@ -296,6 +296,29 @@ try {
   await page.getByTestId("nav-water").click();
   await page.getByRole("button", { name: "抬水临时安排", exact: true }).click();
   await page.getByRole("textbox", { name: "跳过原因" }).fill("上课");
+  const fieldEdges = await page
+    .getByRole("textbox", { name: "跳过原因" })
+    .evaluate(async (el) => {
+      const samples = [];
+      for (let i = 0; i < 28; i++) {
+        await new Promise(requestAnimationFrame);
+        const bounds = el.getBoundingClientRect(),
+          clip = el.closest(".sheet-content").getBoundingClientRect(),
+          style = getComputedStyle(el);
+        const outline =
+          (parseFloat(style.outlineWidth) || 0) +
+          Math.max(0, parseFloat(style.outlineOffset) || 0);
+        samples.push(
+          bounds.left - outline >= clip.left + 0.5 &&
+            bounds.right + outline <= clip.right - 0.5,
+        );
+      }
+      return samples;
+    });
+  check(
+    fieldEdges.every(Boolean),
+    "focused reason field keeps both borders and focus outline inside the sheet throughout glass overshoot",
+  );
   await page.getByRole("button", { name: "移到队尾", exact: true }).click();
   await page.waitForTimeout(600);
   check(
