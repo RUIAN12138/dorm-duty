@@ -17,7 +17,14 @@ const h = await createHarness(),
   checks = [],
   errors = [];
 const safari = process.env.DORM_BROWSER === "webkit";
-let server, browser;
+let server,
+  browser,
+  holdBoardReads = false;
+const heldBoardReads = [];
+function releaseBoardReads() {
+  holdBoardReads = false;
+  heldBoardReads.splice(0).forEach((resolve) => resolve());
+}
 function check(value, label) {
   assert(value, label);
   checks.push(label);
@@ -123,6 +130,8 @@ try {
           ...(req.postData() ? { data: JSON.parse(req.postData()) } : {}),
         },
       );
+      if (holdBoardReads && u.pathname.endsWith("/chores/board"))
+        await new Promise((resolve) => heldBoardReads.push(resolve));
       await route.fulfill({
         status: response.status,
         headers: { "content-type": "application/json" },
@@ -235,6 +244,10 @@ try {
     (await page.locator('[data-testid="loading-stats"]').count()) === 0,
     "cached statistics do not flash a placeholder on re-entry",
   );
+  // This assertion isolates the physical swipe. A fresh board snapshot intentionally
+  // closes an exposed rail (covered separately in check-record-swipe); don't race
+  // the 10s polling timer against a 300ms gesture on different CI renderers.
+  holdBoardReads = true;
   await page.getByTestId("calendar-view-list").click();
   const floorId = h.db.sqlite
     .prepare(
@@ -346,6 +359,7 @@ try {
       "rgb(39, 132, 81)",
     "exposed correction is green",
   );
+  releaseBoardReads();
   // The actual current member can skip from the adjacent question control.
   await page.getByTestId("nav-water").click();
   await page.getByRole("button", { name: "抬水临时安排", exact: true }).click();
@@ -491,6 +505,7 @@ try {
   }
   throw error;
 } finally {
+  releaseBoardReads();
   await browser?.close();
   server?.kill("SIGTERM");
   h.close();
