@@ -185,12 +185,83 @@ try {
   n++;
   assert.deepEqual(h.db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   n++;
-  const old = new Date(Date.now()-5*86400000-3600000).toISOString();
-  h.db.sqlite.prepare("UPDATE chore_tasks SET completed_at=? WHERE key='water' AND status='completed'").run(old);
-  state=await board();
-  assert(state.overdue_categories.some(c=>c.key==='water' && c.days===5)); n++;
-  await complete(state,b); state=await board();
-  assert(!state.overdue_categories.some(c=>c.key==='water')); n++;
+  const old = new Date(Date.now() - 5 * 86400000 - 3600000).toISOString();
+  h.db.sqlite
+    .prepare(
+      "UPDATE chore_tasks SET completed_at=? WHERE key='water' AND status='completed'",
+    )
+    .run(old);
+  state = await board();
+  assert(
+    state.overdue_categories.some((c) => c.key === "water" && c.days === 5),
+  );
+  n++;
+  await complete(state, b);
+  state = await board();
+  assert(!state.overdue_categories.some((c) => c.key === "water"));
+  n++;
+  // Two different skips cannot bring a completed person back ahead of debt.
+  const r2 = await api(
+    "/guest/create",
+    null,
+    { name: "连续跳过验收", nickname: "壹", members: ["贰", "叁"] },
+    201,
+  );
+  const roster = [];
+  for (const m of r2.dorm.members) {
+    const claim = await api(
+      "/chores/claim",
+      null,
+      { invite_code: r2.invite_code, nickname: m.nickname },
+      201,
+    );
+    roster.push({ ...m, token: claim.access_token });
+  }
+  const [one, two, three] = roster;
+  const b2 = () =>
+    api(
+      `/chores/board?invite_code=${r2.invite_code}&member_id=${one.user_id}`,
+      one.token,
+    );
+  let round = await b2();
+  await api("/chores/water/skip", one.token, {
+    version: round.version,
+    task_id: round.water_task.id,
+  });
+  round = await b2();
+  await complete(round, two);
+  round = await b2();
+  await api("/chores/water/skip", three.token, {
+    version: round.version,
+    task_id: round.water_task.id,
+  });
+  round = await b2();
+  assert.equal(round.water_task.assignee_id, one.user_id);
+  n++;
+  await complete(round, one);
+  round = await b2();
+  assert.equal(
+    round.water_task.assignee_id,
+    three.user_id,
+    "completed member two waits until the skipped debt is finished",
+  );
+  n++;
+  await api(
+    "/chores/water/skip",
+    three.token,
+    { version: round.version, task_id: round.water_task.id },
+    409,
+  );
+  await complete(round, three);
+  round = await b2();
+  assert.equal(
+    round.water_task.assignee_id,
+    one.user_id,
+    "new cycle follows configured order after last actual completer",
+  );
+  n++;
+  assert.equal(round.calendar.filter((r) => r.key === "water").length, 3);
+  n++;
   console.log(JSON.stringify({ ok: true, assertions: n }));
 } finally {
   h.close();

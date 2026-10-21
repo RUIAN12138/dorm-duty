@@ -15,31 +15,47 @@ export async function readWaterFlow(db, room, order, head) {
     "SELECT * FROM chore_water_flow WHERE dorm_id=?",
     [room.id],
   );
-  let queue = [];
+  let saved;
   try {
-    queue = JSON.parse(row?.queue || "[]");
+    saved = JSON.parse(row?.queue || "null");
   } catch {
     /* rebuild safely */
   }
-  if (!Array.isArray(queue)) queue = [];
+  const previousMembers = Array.isArray(saved?.members) ? saved.members : order;
+  let queue = Array.isArray(saved?.pending)
+    ? saved.pending
+    : Array.isArray(saved)
+      ? saved
+      : order.slice(Math.max(0, order.indexOf(head)));
   queue = [...new Set(queue.filter((id) => order.includes(id)))];
-  for (const id of order) if (!queue.includes(id)) queue.push(id);
+  // An absent old member is already done this cycle; only newly joined members
+  // are appended. Completed people must not reappear before skipped people.
+  for (const id of order)
+    if (!previousMembers.includes(id) && !queue.includes(id)) queue.push(id);
+  if (!queue.includes(head)) queue.unshift(head);
   return { queue: rotateWaterQueue(queue, head), row };
 }
-export function saveWaterFlow(mutation, queue, handoff = null, undo = null) {
+export function saveWaterFlow(
+  mutation,
+  queue,
+  handoff = null,
+  undo = null,
+  members = queue,
+) {
   mutation.raw(
     `INSERT INTO chore_water_flow(dorm_id,queue,handoff,undo_state)
     SELECT ?,?,?,? WHERE ${mutation.guard}
     ON CONFLICT(dorm_id) DO UPDATE SET queue=excluded.queue,handoff=excluded.handoff,undo_state=excluded.undo_state`,
     [
       mutation.room.id,
-      JSON.stringify(queue),
+      JSON.stringify({ pending: queue, members }),
       handoff && JSON.stringify(handoff),
       undo && JSON.stringify(undo),
       ...mutation.guardValues,
     ],
   );
 }
+
 export async function advanceWaterQueue({
   db,
   room,
@@ -62,7 +78,18 @@ export async function advanceWaterQueue({
   );
   const queue = initialQueue
     ? [...initialQueue]
-    : [...before.slice(1), before[0]];
+    : completed
+      ? before.slice(1)
+      : [...before.slice(1), before[0]];
+  const resetAfter = (uid) =>
+    rotateWaterQueue(
+      category.rotation_order,
+      category.rotation_order[
+        (category.rotation_order.indexOf(uid) + 1) %
+          category.rotation_order.length
+      ],
+    );
+  if (!queue.length) queue.push(...resetAfter(task.assignee_id));
   const credits =
     (
       await db
@@ -94,7 +121,8 @@ export async function advanceWaterQueue({
       "id=? AND status='pending'",
       [credit.id],
     );
-    queue.push(queue.shift());
+    const finished = queue.shift();
+    if (!queue.length) queue.push(...resetAfter(finished));
     sequence++;
   }
   const day =
@@ -122,6 +150,7 @@ export async function advanceWaterQueue({
     completed
       ? { task_id: task.id, before, credits: used, target_sequence: sequence }
       : { blocked: true },
+    category.rotation_order,
   );
   return handoff;
 }

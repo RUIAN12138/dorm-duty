@@ -1322,7 +1322,7 @@ async function reassignPendingWater(db, mutation, room, water, members, now) {
       water.rotation_order.length
     : 0;
   const member = members.find((m) => m.user_id === water.rotation_order[next]);
-  const queue = rotateWaterQueue(water.rotation_order, member.user_id);
+  const queue = water.rotation_order.slice(next);
   if (
     await first(
       db,
@@ -1352,7 +1352,7 @@ async function reassignPendingWater(db, mutation, room, water, members, now) {
     });
     return;
   }
-  saveWaterFlow(mutation, queue);
+  saveWaterFlow(mutation, queue, null, null, water.rotation_order);
   if (pending.assignee_id === member.user_id) return;
   mutation.update(
     "chore_tasks",
@@ -1790,7 +1790,13 @@ async function undoOnce(db, room, who, now, id) {
           "id=? AND consumed_by=?",
           [creditId, task.id],
         );
-      saveWaterFlow(mutation, before.before);
+      saveWaterFlow(
+        mutation,
+        before.before,
+        null,
+        null,
+        category.rotation_order,
+      );
     }
   }
   if (task.sequence !== null) {
@@ -2453,6 +2459,14 @@ async function waterException(request, db, room, who, now, skip) {
   if (skip) {
     if (members.length < 2)
       fail(422, "no_next_member", "至少两位成员才可以跳过");
+    const remaining = await readWaterFlow(
+      db,
+      room,
+      category.rotation_order,
+      task.assignee_id,
+    );
+    if (remaining.queue.length < 2)
+      fail(409, "last_water_member", "本轮只剩你尚未完成，暂时不能跳过");
     mutation.update(
       "chore_tasks",
       { status: "cancelled" },
