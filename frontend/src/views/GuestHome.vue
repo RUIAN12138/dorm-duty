@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import ScreenStage from "../components/ScreenStage.vue";
+import { provideSheetNavigation } from "../interaction/sheetNavigation";
+provideSheetNavigation();
 import CheckForUpdates from "../components/CheckForUpdates.vue";
 import AppearanceSettings from "../components/AppearanceSettings.vue";
 const appearanceOpen = ref(false);

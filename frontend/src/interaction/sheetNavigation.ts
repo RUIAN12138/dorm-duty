@@ -56,7 +56,7 @@ function createNavigation() {
 }
 // Only settings opts in. Task/calendar/entry sheets keep their presentation.
 export function provideSheetNavigation() {
-  const navigation = createNavigation();
+  const navigation = inject(key, undefined) || createNavigation();
   provide(key, navigation);
   return navigation;
 }

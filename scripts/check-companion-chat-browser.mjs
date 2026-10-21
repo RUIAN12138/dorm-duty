@@ -106,7 +106,7 @@ try {
   );
   await fs.writeFile(
     vue,
-    `<script setup lang="ts">import{computed}from'vue';import{useRoute}from'vue-router';import Stage from'./src/components/ScreenStage.vue';import Board from'./src/components/ChoreBoard.vue';import Nav from'./src/components/ChoreBottomNav.vue';import{setThemeMode}from'./src/interaction/theme';const route=useRoute(),section=computed(()=>route.path==='/water'?'water':route.path==='/calendar'?'calendar':'duty');(window as any).qa={theme:setThemeMode};</script><template><Stage signed-in><main class="guest-page"><Board invite="${room.invite_code}" dorm-name="交互验收" :member-id="${room.member_id}" token="${room.access_token}" :demo="false" :section="section"/></main></Stage><Nav :section="section"/></template>`,
+    `<script setup lang="ts">import{computed,ref}from'vue';import{provideSheetNavigation}from'./src/interaction/sheetNavigation';import ElasticSheet from'./src/components/ElasticSheet.vue';provideSheetNavigation();const externalOpen=ref(false);import{useRoute}from'vue-router';import Stage from'./src/components/ScreenStage.vue';import Board from'./src/components/ChoreBoard.vue';import Nav from'./src/components/ChoreBottomNav.vue';import{setThemeMode}from'./src/interaction/theme';const route=useRoute(),section=computed(()=>route.path==='/water'?'water':route.path==='/calendar'?'calendar':'duty');(window as any).qa={theme:setThemeMode};</script><template><Stage signed-in><main class="guest-page"><Board invite="${room.invite_code}" dorm-name="交互验收" :member-id="${room.member_id}" token="${room.access_token}" :demo="false" :section="section" @email-account="externalOpen=true"/></main></Stage><Nav :section="section"/><ElasticSheet v-model="externalOpen" title="邮箱账号"><p data-testid="external-account-page">邮箱账户验收</p></ElasticSheet></template>`,
   );
   const socket = net.createServer();
   await new Promise((r) => socket.listen(0, "127.0.0.1", r));
@@ -284,6 +284,15 @@ try {
     await page.getByTestId("open-preferences").click();
     await page.getByTestId("open-system-notifications").waitFor();
     await page.waitForTimeout(450);
+    await page.getByTestId("open-email-account").click();
+    await page.getByTestId("external-account-page").waitFor();
+    await page.waitForTimeout(400);
+    check(
+      (await page.locator(".sheet-layer").count()) === 1,
+      "parent-owned email panel shares the same settings drawer",
+    );
+    await page.getByLabel("返回上一层设置", { exact: true }).click();
+    await page.waitForTimeout(400);
     check(
       (await page.locator(".sheet-layer").count()) === 1 &&
         (await page

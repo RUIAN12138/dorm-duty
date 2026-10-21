@@ -242,19 +242,19 @@ function menuAction(action: MenuAction) {
       void refreshArrangements();
     },
   };
-  const insideSettings =
-    [
-      "order",
-      "reminder",
-      "messages",
-      "push",
-      "companion",
-      "preferences",
-      "settings",
-      "marker",
-      "refresh",
-    ].includes(action) ||
-    (action === "recovery" && board.value?.is_creator);
+  const insideSettings = [
+    "order",
+    "reminder",
+    "messages",
+    "push",
+    "companion",
+    "preferences",
+    "settings",
+    "marker",
+    "refresh",
+    "email",
+    "recovery",
+  ].includes(action);
   if (insideSettings) actions[action]();
   else {
     // Route/account entry still closes settings before leaving this page.
