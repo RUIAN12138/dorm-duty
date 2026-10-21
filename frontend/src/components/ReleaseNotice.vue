@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>球球聊天分层入场与回弹</li>
-          <li>文字输入与预设问法</li>
-          <li>切换千问，短句回答与提醒</li>
+          <li>球球收起与页面恢复更连贯</li>
+          <li>修复键盘遮挡与输入焦点</li>
+          <li>多行输入与最新回复保持可见</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

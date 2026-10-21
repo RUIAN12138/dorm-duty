@@ -211,9 +211,11 @@ try {
   await page.evaluate(() => {
     window.chatFrames = [];
     const start = performance.now();
+    let appeared = 0;
     function frame() {
       const b = document.querySelector(".chat-ball");
       if (b) {
+        if (!appeared) appeared = performance.now();
         const r = b.getBoundingClientRect();
         window.chatFrames.push({
           x: r.x,
@@ -231,7 +233,8 @@ try {
           ),
         });
       }
-      if (performance.now() - start < 1500) requestAnimationFrame(frame);
+      if (performance.now() - (appeared || start) < (appeared ? 1200 : 5000))
+        requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   });
@@ -318,7 +321,16 @@ try {
   const inputBox = await editor.boundingBox();
   await page.mouse.move(inputBox.x + 12, inputBox.y + 12);
   await page.mouse.down();
-  await page.waitForTimeout(70);
+  // Keep the physical pointer held while waiting for a rendered press frame.
+  // A fixed 70ms sample races software rendering on the CI browser.
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector(".composer-text");
+      return el && new DOMMatrix(getComputedStyle(el).transform).d < 0.99;
+    },
+    null,
+    { timeout: 1000 },
+  );
   check(
     await page
       .locator(".composer-text")
@@ -444,6 +456,88 @@ try {
     (await page.locator(".chat-ball").getByRole("img").count()) === 0,
     "ball uses its existing expression engine, not remote images",
   );
+  // iOS keeps its layout viewport tall while the visual viewport shrinks for
+  // the keyboard. Mock only that browser signal, never the component's state.
+  await page.evaluate(() => {
+    const v = window.visualViewport;
+    const height = v.height,
+      top = v.offsetTop;
+    Object.defineProperty(v, "height", {
+      configurable: true,
+      get: () => window.keyboardFixture?.height ?? height,
+    });
+    Object.defineProperty(v, "offsetTop", {
+      configurable: true,
+      get: () => window.keyboardFixture?.top ?? top,
+    });
+    window.keyboardFixture = { height: 410, top: 44 };
+    v.dispatchEvent(new Event("resize"));
+  });
+  await editor.focus();
+  await page.waitForTimeout(350);
+  check(
+    await page.locator(".companion-chat").evaluate((el) => {
+      const root = el.getBoundingClientRect(),
+        frame = el.querySelector(".chat-history-frame").getBoundingClientRect(),
+        input = el.querySelector(".chat-composer").getBoundingClientRect(),
+        ball = el.querySelector(".chat-ball-visual").getBoundingClientRect();
+      return (
+        el.classList.contains("is-keyboard") &&
+        frame.height > 180 &&
+        input.bottom <= 454 &&
+        454 - input.bottom <= 18 &&
+        ball.width < 60 &&
+        root.top === 44
+      );
+    }),
+    "visual keyboard resize compacts the header and keeps composer just above keyboard",
+  );
+  await editor.fill("第一行\n第二行\n第三行");
+  await page.waitForTimeout(80);
+  check(
+    await editor.evaluate(
+      (el) => el.clientHeight >= 76 && el.clientHeight <= 80,
+    ),
+    "multiline input grows up to three visible lines without clipping",
+  );
+  modelDelay = 1200;
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  check(
+    await editor.evaluate(
+      (el) => !el.disabled && document.activeElement === el,
+    ),
+    "sending preserves editor focus instead of dismissing mobile keyboard",
+  );
+  await editor.fill("下一条先写好");
+  await page.waitForTimeout(1600);
+  check(
+    (await editor.inputValue()) === "下一条先写好",
+    "draft typed while waiting survives the arriving reply",
+  );
+  check(
+    await page
+      .locator(".chat-bubble.assistant")
+      .last()
+      .evaluate((el) => {
+        const rect = el.getBoundingClientRect(),
+          frame = document
+            .querySelector(".chat-history")
+            .getBoundingClientRect();
+        return rect.top >= frame.top && rect.bottom <= frame.bottom + 1;
+      }),
+    "latest reply remains fully visible after keyboard layout and response",
+  );
+  await page.screenshot({
+    path: path.join(evidence, `${safari ? "webkit" : "chromium"}-keyboard.png`),
+  });
+  await editor.fill("");
+  await editor.blur();
+  await page.evaluate(() => {
+    window.keyboardFixture = null;
+    window.visualViewport.dispatchEvent(new Event("resize"));
+  });
+  await page.waitForTimeout(350);
+  modelDelay = 500;
   await page
     .getByLabel("和球球说句话", { exact: true })
     .fill("一小时后提醒我值日");
@@ -577,6 +671,14 @@ try {
       "pointerdown",
       () => {
         const start = performance.now();
+        window.chatCloseStart = start;
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector(".companion-chat")) {
+            window.chatCloseEnd = performance.now();
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
         function frame() {
           const ball = document.querySelector(".chat-ball"),
             footer = document.querySelector(".chat-footer");
@@ -584,6 +686,14 @@ try {
             window.chatCloseFrames.push({
               width: ball.getBoundingClientRect().width,
               opacity: Number(getComputedStyle(footer).opacity),
+              backdrop: Number(
+                getComputedStyle(
+                  document.querySelector(".companion-chat-backdrop"),
+                ).opacity,
+              ),
+              pageFilter: getComputedStyle(document.querySelector(".app-stage"))
+                .filter,
+              elapsed: performance.now() - start,
             });
           if (performance.now() - start < 1300) requestAnimationFrame(frame);
         }
@@ -603,14 +713,79 @@ try {
     "closing keeps intermediate ball poses while parts withdraw in reverse",
   );
   check(await ball.isVisible(), "closing chat returns the original ball");
+  check(
+    await page.evaluate(
+      () => window.chatCloseEnd - window.chatCloseStart < 560,
+    ),
+    "closing finishes promptly without waiting for an invisible spring tail",
+  );
+  check(
+    await page.evaluate(() =>
+      window.chatCloseFrames.some(
+        (f) =>
+          f.elapsed > 60 &&
+          f.backdrop > 0 &&
+          f.backdrop < 0.95 &&
+          f.pageFilter === "none",
+      ),
+    ),
+    "page frost releases beneath fading backdrop instead of snapping after exit",
+  );
   await hold();
   check(
     (await page.getByText("有事就问我吧。", { exact: true }).count()) > 0,
     "chat history survives closing and reopening",
   );
+  await editor.click();
+  await editor.focus();
+  await page.evaluate(() => {
+    window.keyboardFixture = { height: 410, top: 44 };
+    visualViewport.dispatchEvent(new Event("resize"));
+  });
+  await page.waitForTimeout(280);
+  await page.evaluate(() => {
+    window.keyboardExitRects = [];
+    const stop = performance.now() + 600;
+    function capture() {
+      const root = document.querySelector(".companion-chat");
+      if (root)
+        window.keyboardExitRects.push(root.getBoundingClientRect().toJSON());
+      if (performance.now() < stop) requestAnimationFrame(capture);
+    }
+    requestAnimationFrame(capture);
+  });
   await page.evaluate(() => window.DormNativeBack());
   await page.locator(".companion-chat").waitFor({ state: "detached" });
+  check(
+    await page.evaluate(
+      () =>
+        document.activeElement?.tagName !== "TEXTAREA" &&
+        !document.documentElement.dataset.companionChat,
+    ),
+    "keyboard-open back dismisses focus and fully releases chat state",
+  );
+  check(
+    await page.evaluate(() =>
+      window.keyboardExitRects.every(
+        (r) => Math.abs(r.top - 44) < 1 && Math.abs(r.height - 410) < 1,
+      ),
+    ),
+    "closing freezes keyboard viewport so shrinking keyboard cannot bend the ball path",
+  );
+  await page.evaluate(() => {
+    window.keyboardFixture = null;
+    visualViewport.dispatchEvent(new Event("resize"));
+  });
   check(true, "native back closes chat without navigating out of dorm");
+  await hold();
+  check(
+    await page
+      .locator(".chat-ball-visual")
+      .evaluate((el) => Math.abs(el.getBoundingClientRect().width - 88) < 1),
+    "reopening after keyboard exit restores normal ball geometry before origin measurement",
+  );
+  await page.evaluate(() => window.DormNativeBack());
+  await page.locator(".companion-chat").waitFor({ state: "detached" });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await hold();
   check(
@@ -654,6 +829,24 @@ try {
         await page.evaluate(() => ({
           text: document.body.innerText,
           composerFrames: window.composerFrames,
+          closeDuration: performance.now() - window.chatCloseStart,
+          closeFrames: window.chatCloseFrames?.filter((_, i) => i % 5 === 0),
+          geometry: [
+            ...document.querySelectorAll(
+              ".companion-chat,.chat-history-frame,.chat-composer,.chat-footer,.chat-surface,.chat-ball-visual",
+            ),
+          ].map((el) => ({
+            class: el.className,
+            rect: el.getBoundingClientRect().toJSON(),
+            padding: getComputedStyle(el).padding,
+            margin: getComputedStyle(el).margin,
+            transform: getComputedStyle(el).transform,
+          })),
+          focus: document.activeElement?.outerHTML.slice(0, 150),
+          viewport: {
+            height: visualViewport.height,
+            top: visualViewport.offsetTop,
+          },
           hidden: document.hidden,
           motion: matchMedia("(prefers-reduced-motion: reduce)").matches,
           voiceSupport: !!navigator.mediaDevices?.getUserMedia,

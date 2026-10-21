@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from "vue";
+import { ref, nextTick, watch, onBeforeUnmount } from "vue";
 const props = defineProps<{ busy: boolean; enabled: boolean }>();
-const emit = defineEmits<{ send: [text: string] }>();
+const emit = defineEmits<{ send: [text: string]; focus: []; resize: [] }>();
 const text = ref(""),
   editing = ref(false),
-  pressed = ref(false);
+  pressed = ref(false),
+  input = ref<HTMLTextAreaElement>(),
+  inputHeight = ref(26);
 const composing = ref(false);
 let imeSubmitBlockedUntil = 0;
 function prepare(event: PointerEvent) {
-  if (props.busy || !props.enabled) return;
+  if (!props.enabled) return;
   pressed.value = true;
   if (!editing.value) {
     // First touch opens editing without invoking the mobile keyboard. A later
@@ -16,6 +18,20 @@ function prepare(event: PointerEvent) {
     event.preventDefault();
     editing.value = true;
   }
+}
+function resize() {
+  if (!input.value) return;
+  input.value.style.height = "26px";
+  inputHeight.value = Math.min(78, Math.max(26, input.value.scrollHeight));
+  input.value.style.height = inputHeight.value + "px";
+  emit("resize");
+}
+watch(text, () => {
+  void nextTick(resize);
+});
+function dismiss() {
+  input.value?.blur();
+  release();
 }
 function release() {
   pressed.value = false;
@@ -55,7 +71,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("pointerup", release);
   window.removeEventListener("pointercancel", release);
 });
-defineExpose({ cancel });
+defineExpose({ cancel, dismiss });
 </script>
 <template>
   <form
@@ -69,12 +85,16 @@ defineExpose({ cancel });
       @pointerdown="prepare"
     >
       <textarea
+        ref="input"
+        :style="{ height: inputHeight + 'px' }"
         v-model="text"
         rows="1"
         maxlength="1000"
         aria-label="和球球说句话"
         placeholder="和球球说句话…"
-        :disabled="busy || !enabled"
+        :disabled="!enabled"
+        @focus="emit('focus')"
+        @blur="emit('focus')"
         :readonly="!editing"
         @keydown.enter.exact="enter"
         @compositionstart="composing = true"
@@ -83,7 +103,7 @@ defineExpose({ cancel });
       <button
         type="submit"
         class="composer-send"
-        @pointerdown.stop="imeSubmitBlockedUntil = 0"
+        @pointerdown.stop.prevent="imeSubmitBlockedUntil = 0"
         aria-label="发送消息"
         :disabled="busy || !enabled || !text.trim()"
       >
@@ -96,17 +116,18 @@ defineExpose({ cancel });
 </template>
 <style scoped>
 .chat-composer {
+  margin: 0;
   width: 100%;
   min-height: 58px;
 }
 .composer-text {
   width: 100%;
-  height: 58px;
+  min-height: 58px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 7px 0 20px;
+  padding: 6px 7px 6px 20px;
   border: 1px solid #ffffff65;
   border-radius: 30px;
   background: var(--chat-glass);
@@ -132,7 +153,9 @@ defineExpose({ cancel });
   outline: 0;
   resize: none;
   min-height: 26px;
-  height: 26px;
+  max-height: 78px;
+  overflow-y: auto;
+  scrollbar-width: none;
   padding: 0 !important;
   font: inherit;
   font-size: 16px;

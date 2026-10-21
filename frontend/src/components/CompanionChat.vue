@@ -47,6 +47,10 @@ const available = ref(false),
   reminders = ref<ChatReminder[]>([]),
   actionBusy = ref("");
 const viewport = ref({ top: 0, height: window.innerHeight }),
+  keyboardOpen = ref(false),
+  compactViewport = computed(
+    () => keyboardOpen.value || viewport.value.height < 560,
+  ),
   thinking = computed(() => awaiting.value);
 let api = companionClient(props.invite, props.memberId, props.token),
   epoch = 0,
@@ -55,6 +59,8 @@ let api = companionClient(props.invite, props.memberId, props.token),
   closing = false,
   motionEpoch = 0,
   originTransform = "none",
+  restingHeight = window.innerHeight,
+  viewportFrame = 0,
   errorTimer: ReturnType<typeof setTimeout> | undefined,
   lastFocus: HTMLElement | null = null,
   delayTimer: ReturnType<typeof setTimeout> | undefined,
@@ -66,11 +72,26 @@ const motionTransition = computed(() =>
   motionAllowed() ? motionTokens.drawer : { duration: 0 },
 );
 function fit() {
+  if (closing) return;
+  const el = scroll.value;
+  const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  const v = window.visualViewport;
   viewport.value = {
-    top: window.visualViewport?.offsetTop || 0,
-    height: window.visualViewport?.height || window.innerHeight,
+    top: v?.offsetTop || 0,
+    height: v?.height || window.innerHeight,
   };
+  const focused =
+    surface.value?.contains(document.activeElement) &&
+    document.activeElement?.tagName === "TEXTAREA";
+  if (!focused) restingHeight = Math.max(restingHeight, viewport.value.height);
+  keyboardOpen.value = !!focused && restingHeight - viewport.value.height > 110;
+  if (present.value && atBottom) bottom();
 }
+function scheduleFit() {
+  cancelAnimationFrame(viewportFrame);
+  viewportFrame = requestAnimationFrame(fit);
+}
+
 function cancel() {
   epoch++;
   controller?.abort();
@@ -113,7 +134,9 @@ function close() {
 function openedBall() {
   const el = ball.value;
   if (!el || !props.origin) return "translate3d(0,0,0) scale(1)";
-  const target = el.getBoundingClientRect(),
+  const target = (
+      el.querySelector(".chat-ball-visual") || el
+    ).getBoundingClientRect(),
     r = props.origin;
   return `translate3d(${r.left - target.left + (r.width - target.width) / 2}px,${r.top - target.top + (r.height - target.height) / 2}px,0) scale(${r.width / target.width})`;
 }
@@ -125,6 +148,7 @@ const entryParts = () =>
   [toolbar.value, historyFrame.value, footer.value].filter(
     Boolean,
   ) as HTMLElement[];
+const ballTravel = { type: "spring" as const, duration: 0.42, bounce: 0.08 };
 const travel = {
   type: "spring" as const,
   stiffness: 260,
@@ -151,6 +175,10 @@ async function show() {
   closing = false;
   phase.value = "opening";
   loading.value = true;
+  restingHeight = Math.max(
+    window.innerHeight,
+    window.visualViewport?.height || 0,
+  );
   clearConfirm.value = false;
   present.value = true;
   document.documentElement.dataset.companionChat = "true";
@@ -158,6 +186,7 @@ async function show() {
   if (!wasPresent) lastFocus = document.activeElement as HTMLElement;
   await nextTick();
   fit();
+  await nextTick();
   removeBack?.();
   removeBack = registerNativeBack(close);
   if (!wasPresent) originTransform = openedBall();
@@ -170,7 +199,7 @@ async function show() {
       animate(
         ball.value,
         { transform: [initial, "translate3d(0,0,0) scale(1)"] },
-        travel,
+        ballTravel,
       ),
       ...(
         [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
@@ -217,14 +246,22 @@ async function hide() {
   endPull(true);
   phase.value = "closing";
   stopMotion();
+  // Release the extra WebKit fallback under an opaque frosted backdrop, so
+  // the page sharpens as that backdrop fades rather than snapping at unmount.
+  document.documentElement.dataset.companionChat = "closing";
+  composer.value?.dismiss();
   if (motionAllowed() && ball.value) {
+    const from = getComputedStyle(ball.value).transform;
+    ball.value.style.transform = "none";
+    const goal = openedBall();
+    ball.value.style.transform = from;
     controls = [
       animate(
         ball.value,
         {
-          transform: [getComputedStyle(ball.value).transform, originTransform],
+          transform: [from, goal],
         },
-        travel,
+        { ...ballTravel, duration: 0.38 },
       ),
       ...(
         [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
@@ -232,7 +269,7 @@ async function hide() {
         animate(
           el,
           { opacity: [Number(getComputedStyle(el).opacity), 0] },
-          { duration: 0.32, delay: 0.08 },
+          { duration: 0.34, delay: 0.02 },
         ),
       ),
       ...entryParts()
@@ -516,8 +553,9 @@ watch(scope, () => {
   api = companionClient(props.invite, props.memberId, props.token);
   if (props.modelValue) close();
 });
-window.visualViewport?.addEventListener("resize", fit);
-window.visualViewport?.addEventListener("scroll", fit);
+window.visualViewport?.addEventListener("resize", scheduleFit);
+window.addEventListener("resize", scheduleFit);
+window.visualViewport?.addEventListener("scroll", scheduleFit);
 document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
@@ -528,8 +566,10 @@ onBeforeUnmount(() => {
   endPull(true);
   clearTimeout(errorTimer);
   removeBack?.();
-  window.visualViewport?.removeEventListener("resize", fit);
-  window.visualViewport?.removeEventListener("scroll", fit);
+  window.visualViewport?.removeEventListener("resize", scheduleFit);
+  window.removeEventListener("resize", scheduleFit);
+  cancelAnimationFrame(viewportFrame);
+  window.visualViewport?.removeEventListener("scroll", scheduleFit);
   document.removeEventListener("visibilitychange", inactive);
   media.removeEventListener("change", quiet);
 });
@@ -554,9 +594,14 @@ function time(value: string) {
     "
     ><DialogPortal
       ><DialogOverlay as-child
-        ><div ref="backdrop" class="companion-chat-backdrop" /></DialogOverlay
+        ><div class="companion-chat-overlay">
+          <div
+            ref="backdrop"
+            class="companion-chat-backdrop"
+          /></div></DialogOverlay
       ><DialogContent
         class="companion-chat"
+        :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
         :style="{ top: viewport.top + 'px', height: viewport.height + 'px' }"
         :aria-describedby="undefined"
         @escape-key-down.prevent="close"
@@ -571,13 +616,15 @@ function time(value: string) {
         >
         <div ref="masthead" class="chat-masthead" aria-hidden="true" />
         <div ref="ball" class="chat-ball" data-testid="chat-ball">
-          <DormCompanion
-            :size="88"
-            :mood="emotion"
-            :interactive="true"
-            intent="play"
-            :tips="false"
-          />
+          <div class="chat-ball-visual">
+            <DormCompanion
+              :size="88"
+              :mood="emotion"
+              :interactive="true"
+              intent="play"
+              :tips="false"
+            />
+          </div>
         </div>
         <div
           ref="surface"
@@ -721,6 +768,8 @@ function time(value: string) {
               ref="composer"
               :busy="busy || loading || !!actionBusy"
               :enabled="available && !loading && phase === 'open'"
+              @focus="scheduleFit"
+              @resize="bottom"
               @send="send"
             />
           </footer>
@@ -748,6 +797,11 @@ function time(value: string) {
   filter: blur(5px);
 }
 
+.companion-chat-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
 .companion-chat-backdrop {
   position: fixed;
   inset: 0;
@@ -1103,35 +1157,46 @@ function time(value: string) {
   overflow: hidden;
   clip-path: inset(50%);
 }
-@media (max-height: 600px) {
-  .companion-chat {
-    --chat-ball-top: max(18px, env(safe-area-inset-top));
-  }
-  .chat-ball {
-    width: 64px;
-    height: 64px;
-    left: calc(50% - 32px);
-  }
-  .chat-ball :deep(.companion-frame),
-  .chat-ball :deep(.dorm-companion) {
-    width: 64px !important;
-    height: 64px !important;
-  }
-  .chat-toolbar {
-    height: calc(var(--chat-ball-top) + 74px);
-  }
-  .chat-surface {
-    padding-bottom: max(22px, env(safe-area-inset-bottom));
-  }
-  .chat-error {
-    bottom: 124px;
-  }
+.chat-ball-visual {
+  width: 88px;
+  height: 88px;
+  transform-origin: center top;
+  transition: transform 220ms var(--ui-ease-out);
+}
+.is-compact {
+  --chat-ball-top: 18px;
+}
+.is-compact .chat-ball-visual {
+  transform: scale(0.64);
+}
+.is-compact .chat-toolbar {
+  height: 90px;
+  padding-top: 12px;
+}
+.is-compact .chat-masthead {
+  height: 125px;
+}
+.is-compact .chat-surface {
+  padding-bottom: 12px;
+}
+.is-compact .chat-history {
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+.is-compact .chat-top-frost {
+  height: 32px;
+}
+.is-compact .chat-error {
+  bottom: 94px;
+  min-height: 64px;
+  padding: 16px 20px;
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-thinking i,
   .chat-loading span {
     animation: none;
   }
+  .chat-ball-visual,
   .companion-chat button {
     transition: none;
   }
