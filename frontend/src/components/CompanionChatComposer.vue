@@ -38,10 +38,10 @@ function toText() {
   mode.value = "text";
   void nextTick(() => input.value?.focus());
 }
-let composing = false,
-  imeSubmitBlockedUntil = 0;
+const composing = ref(false);
+let imeSubmitBlockedUntil = 0;
 function enter(event: KeyboardEvent) {
-  if (event.isComposing || event.keyCode === 229 || composing) {
+  if (event.isComposing || event.keyCode === 229 || composing.value) {
     // Preserve the input method's default commit while suppressing the form's
     // implicit submit from this same key event (not a second send gesture).
     imeSubmitBlockedUntil = performance.now() + 100;
@@ -57,7 +57,7 @@ function send() {
     !value ||
     props.busy ||
     !props.enabled ||
-    composing ||
+    composing.value ||
     performance.now() < imeSubmitBlockedUntil
   )
     return;
