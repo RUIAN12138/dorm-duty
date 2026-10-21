@@ -260,6 +260,7 @@ async function hide() {
   endPull(true);
   phase.value = "closing";
   stopMotion();
+  edgeControl?.stop();
   // Release the extra WebKit fallback under an opaque frosted backdrop, so
   // the page sharpens as that backdrop fades rather than snapping at unmount.
   document.documentElement.dataset.companionChat = "closing";
@@ -432,7 +433,12 @@ function edgeUp(event: PointerEvent) {
   edge = null;
   if (g.el.hasPointerCapture(g.id)) g.el.releasePointerCapture(g.id);
   if (!g.active) return;
-  if (event.type === "pointerup" && event.clientX - g.x > 80) close();
+  if (event.type === "pointerup" && event.clientX - g.x > 80) {
+    // Keep the followed surface still while the ball travels to its source.
+    // Simultaneously resetting this parent would compensate the X offset twice.
+    close();
+    return;
+  }
   // Returning the surface also settles cancelled/short edge gestures.
   edgeControl = animate(
     g.el,

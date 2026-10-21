@@ -426,8 +426,31 @@ try {
       await page.locator(".companion-chat").isVisible(),
       "short chat back gesture cancels without closing",
     );
+    await page.evaluate(() => {
+      window.edgeExitFrames = [];
+      function sample() {
+        const el = document.querySelector(".chat-ball");
+        if (!el) return;
+        window.edgeExitFrames.push(el.getBoundingClientRect().toJSON());
+        requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
     await swipe(12, 170, 250);
     await page.locator(".companion-chat").waitFor({ state: "detached" });
+    check(
+      await ball.evaluate((el) => {
+        const source = el.getBoundingClientRect(),
+          end = window.edgeExitFrames.at(-1);
+        return (
+          end &&
+          Math.abs(end.x - source.x) < 4 &&
+          Math.abs(end.y - source.y) < 4 &&
+          Math.abs(end.width - source.width) < 3
+        );
+      }),
+      "edge back returns the ball to its source without a second parent-offset jump",
+    );
     check(
       await ball.isVisible(),
       "chat left-edge right swipe returns to the same dorm page",
