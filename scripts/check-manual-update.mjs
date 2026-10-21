@@ -70,6 +70,21 @@ try {
         });
         res.end(JSON.stringify(value));
       };
+      if (route === "/health/legacy.html") {
+        res.writeHead(200, {
+          "Content-Type": "text/html",
+          "Cache-Control": "no-store",
+        });
+        return res.end(`<button id="activate">旧版更新页面</button><script>
+          sessionStorage.setItem('legacy-boots',String(Number(sessionStorage.getItem('legacy-boots')||0)+1));
+          window.armed=false;
+          navigator.serviceWorker.addEventListener('controllerchange',()=>{if(window.armed){sessionStorage.setItem('legacy-controlled','yes');location.reload()}});
+          navigator.serviceWorker.register('/dorm-duty/sw.js',{scope:'/dorm-duty/'}).then(reg=>{
+            window.legacyReg=reg;
+            document.querySelector('button').onclick=()=>{window.armed=true;reg.waiting.postMessage({type:'SKIP_WAITING'})};
+          });
+        </script>`);
+      }
       if (route === "/health") {
         healthRequests++;
         await new Promise((r) => setTimeout(r, healthDelay));
@@ -291,6 +306,42 @@ try {
     "non-SW browser also installs the current server frontend from settings",
   );
   await plain.close();
+  deployed = 0;
+  const legacyContext = await browser.newContext({ serviceWorkers: "allow" });
+  const legacy = await legacyContext.newPage();
+  legacy.on("pageerror", (e) => errors.push(e.message));
+  await legacy.goto(origin + "/dorm-duty/health/legacy.html");
+  await legacy.waitForFunction(
+    () => !!window.legacyReg && !!navigator.serviceWorker.controller,
+  );
+  const boots = await legacy.evaluate(() =>
+    Number(sessionStorage.getItem("legacy-boots")),
+  );
+  deployed = 1;
+  await legacy.evaluate(async () => {
+    await window.legacyReg.update();
+  });
+  await legacy.waitForFunction(() => !!window.legacyReg.waiting);
+  await Promise.all([
+    legacy.waitForEvent("load"),
+    legacy.locator("#activate").click(),
+  ]);
+  check(
+    await legacy.evaluate(
+      () =>
+        sessionStorage.getItem("legacy-controlled") === "yes" &&
+        Number(sessionStorage.getItem("legacy-boots")) > 0,
+    ),
+    "pre-v63 update button receives controllerchange and reloads after explicit activation",
+  );
+  check(
+    (await legacy.evaluate(() =>
+      Number(sessionStorage.getItem("legacy-boots")),
+    )) > boots,
+    "legacy update really reloads instead of remaining on its old document",
+  );
+  await legacyContext.close();
+
   check(errors.length === 0, `no uncaught runtime errors: ${errors.join(";")}`);
   console.log(
     JSON.stringify({

@@ -263,4 +263,4 @@ CompletionAction、ChoreBoard、全局按压兜底、针对性逐帧和手机视
 
 - 设置底部增加“检查更新”，未入宿舍的设置同样提供。复用现有设置行、按压、图标与状态过渡，其他页面视觉不改。
 - 使用不缓存的正式健康接口比对已安装前端版本，并调用当前作用域Service Worker的update；下载就绪才提供“立即更新”，重复检查合并。离线、超时、安装失败均明确提示，可重试。
-- 更新必须等waiting worker真正激活后刷新；不能只发送SKIP_WAITING就声称完成，也不能依赖未声明clients.claim的worker触发controllerchange。无SW控制的浏览器明确点击后刷新。保留原身份存储，不强制退出；同一更新状态与原版本提示共享。
+- 更新必须等waiting worker真正激活后刷新；不能只发送SKIP_WAITING就声称完成，也不能依赖未声明clients.claim的worker触发controllerchange。无SW控制的浏览器明确点击后刷新。保留原身份存储，不强制退出；同一更新状态与原版本提示共享。新版worker激活后clientsClaim，使v62及之前依赖controllerchange的更新按钮也能完成本次升级；仍需明确点击SKIP_WAITING，不自动启用等待中的worker。

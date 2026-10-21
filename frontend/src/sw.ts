@@ -1,10 +1,14 @@
 /// <reference lib="webworker" />
+import { clientsClaim } from "workbox-core";
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { registerRoute, NavigationRoute } from "workbox-routing";
 import { createHandlerBoundToURL } from "workbox-precaching";
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
 };
+// After explicit SKIP_WAITING, let existing pre-v63 clients receive the
+// controllerchange event their update button already waits for.
+clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 const base = new URL(self.registration.scope).pathname;
