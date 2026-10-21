@@ -57,7 +57,7 @@ import ReminderBanner from "./ReminderBanner.vue";
 import RefreshNotice from "./RefreshNotice.vue";
 import { useReminderBanner } from "../composables/useReminderBanner";
 import ChoreReminderSheet from "./ChoreReminderSheet.vue";
-provideSheetNavigation();
+const settingsNavigation = provideSheetNavigation();
 
 import { lastWaterNudge, waterNudge, waterNudgeTime } from "../api/waterNudge";
 import AsyncPageError from "./AsyncPageError.vue";
@@ -264,6 +264,9 @@ function menuAction(action: MenuAction) {
   }
 }
 function runQueuedTool() {
+  // Embedded content exits before the root sheet. Route/entry actions must
+  // wait for the root's closed event, otherwise its cleanup closes the new UI.
+  if (settingsNavigation.active.value) return;
   const action = queuedTool;
   queuedTool = null;
   action?.();
