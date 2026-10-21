@@ -401,9 +401,38 @@
     get emotionId() { return this._def ? this._def.id : null; },
     get touring() { return this._touring; },
 
+    // Visual handoff only. Keep pose, springs and sequence on the same clock.
+    captureState: function () {
+      var state = {};
+      ['_seed', '_gaze', '_eyeScale', '_ringSrc', '_ringDst', '_ringCur',
+       '_ringSpring', '_ringSpeed', '_exprIdx', '_poolPos', '_poolNext',
+       '_open', '_blinkQ', '_blinkNext', '_anticNext', '_bounceAt', '_spin',
+       '_def', '_lastPose', '_prevPose', '_transStart', '_transDur',
+       '_emoStart', '_seq', '_lastActivity'].forEach(function (key) {
+        state[key] = structuredClone(this[key]);
+      }, this);
+      state.capturedAt = performance.now();
+      return state;
+    },
+    restoreState: function (state) {
+      if (!state || !state._def || !state._lastPose) return false;
+      Object.keys(this.captureState()).forEach(function (key) {
+        if (key !== 'capturedAt' && Object.prototype.hasOwnProperty.call(state, key)) this[key] = structuredClone(state[key]);
+      }, this);
+      var pause = Math.max(0, performance.now() - state.capturedAt);
+      ['_emoStart', '_transStart', '_poolNext', '_blinkNext', '_anticNext', '_lastActivity'].forEach(function (key) { this[key] += pause; }, this);
+      if (this._bounceAt >= 0) this._bounceAt += pause;
+      this._blinkQ.forEach(function (frame) { frame.at += pause; });
+      this._lastTick = performance.now();
+      this.ball.applyPose(this._lastPose);
+      this._emit('change', { id: this._def.id, def: this._def, auto: true });
+      return true;
+    },
+
     /* ---------- 核心：切换表情（含兜底） ---------- */
     setEmotion: function (id, o) {
       o = o || {};
+      if (this._def && this._def.id === id && !o.replay) return true;
       var def = EB.config.get(id);
       if (!def) {
         console.warn('[EmotionBall] 未知表情 ID "' + id + '"，回退到待机 (' + this._fallbackId + ')');
@@ -417,7 +446,7 @@
       this._def = def;
       this._emoStart = now;
       this._transStart = now;
-      this._transDur = this._prevPose ? def.transition : 0;
+      this._transDur = this._prevPose ? Math.max(360, def.transition) : 0;
       this._seq = def.sequence
         ? { frames: def.sequence.frames, settle: def.sequence.settle, done: false }
         : null;
@@ -560,7 +589,7 @@
       else ticker.remove(this);
     },
     replay: function () {
-      if (this._def) this.setEmotion(this._def.id, { auto: true });
+      if (this._def) this.setEmotion(this._def.id, { auto: true, replay: true });
     },
     /** 静态渲染一帧（缩略图用基础姿态，不播 sequence 第 0 帧；弹簧直接置终值） */
     renderStatic: function () {

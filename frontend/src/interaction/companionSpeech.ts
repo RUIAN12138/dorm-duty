@@ -4,6 +4,7 @@ export type CompanionScene =
   | "water"
   | "calendar"
   | "login"
+  | "chat"
   | "general";
 export type CompanionReplyProvider = (
   context: { scene: CompanionScene; intent: "tip" | "play" },
@@ -49,6 +50,11 @@ const tips: Record<CompanionScene, string[]> = {
     "切到统计，查看完成情况。",
   ],
   login: ["可以切换邮箱或账号登录。", "新用户可以切到注册。"],
+  chat: [
+    "点点我，也能换个表情。",
+    "从左边缘右滑，可以返回。",
+    "提醒安排，确认后才会生效。",
+  ],
   general: ["在设置里调整提醒和球球。", "双击球球，可以与它互动。"],
 };
 const tipCursor: Partial<Record<CompanionScene, number>> = {};

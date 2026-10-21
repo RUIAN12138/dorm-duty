@@ -173,13 +173,12 @@ try {
   const button = page.getByTestId("check-update");
   await button.waitFor();
   check(
-    await page
-      .locator(".sheet-content")
-      .evaluate(
-        (el) =>
-          el.lastElementChild?.getAttribute("data-testid") ===
-          "settings-update",
-      ),
+    await page.locator(".sheet-content").evaluate((el) => {
+      const page = el.querySelector(".sheet-navigation-page") || el;
+      return (
+        page.lastElementChild?.getAttribute("data-testid") === "settings-update"
+      );
+    }),
     "check updates is the last item in settings",
   );
   healthDelay = 800;
