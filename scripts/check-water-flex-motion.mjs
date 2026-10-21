@@ -17,14 +17,7 @@ const h = await createHarness(),
   checks = [],
   errors = [];
 const safari = process.env.DORM_BROWSER === "webkit";
-let server,
-  browser,
-  holdBoardReads = false;
-const heldBoardReads = [];
-function releaseBoardReads() {
-  holdBoardReads = false;
-  heldBoardReads.splice(0).forEach((resolve) => resolve());
-}
+let server, browser;
 function check(value, label) {
   assert(value, label);
   checks.push(label);
@@ -130,8 +123,6 @@ try {
           ...(req.postData() ? { data: JSON.parse(req.postData()) } : {}),
         },
       );
-      if (holdBoardReads && u.pathname.endsWith("/chores/board"))
-        await new Promise((resolve) => heldBoardReads.push(resolve));
       await route.fulfill({
         status: response.status,
         headers: { "content-type": "application/json" },
@@ -244,10 +235,6 @@ try {
     (await page.locator('[data-testid="loading-stats"]').count()) === 0,
     "cached statistics do not flash a placeholder on re-entry",
   );
-  // This assertion isolates the physical swipe. A fresh board snapshot intentionally
-  // closes an exposed rail (covered separately in check-record-swipe); don't race
-  // the 10s polling timer against a 300ms gesture on different CI renderers.
-  holdBoardReads = true;
   await page.getByTestId("calendar-view-list").click();
   const floorId = h.db.sqlite
     .prepare(
@@ -280,33 +267,6 @@ try {
         (a) => a.playState === "running",
       )
     );
-  }, `calendar-list-record-${floorId}`);
-  await page.evaluate((id) => {
-    window.swipeTrace = [];
-    const record = (event) => {
-      const root = document.querySelector(`[data-testid="${id}"]`);
-      window.swipeTrace.push({
-        event: event.type,
-        target: event.target?.className,
-        x: event.clientX,
-        y: event.clientY,
-        open: root?.className,
-        transform: root?.querySelector(".swipe-record-front")?.style.transform,
-        inert: root?.querySelector(".swipe-record-actions")?.inert,
-        at: performance.now(),
-      });
-    };
-    for (const event of [
-      "pointerdown",
-      "pointermove",
-      "pointerup",
-      "pointercancel",
-      "lostpointercapture",
-      "click",
-      "scroll",
-      "blur",
-    ])
-      window.addEventListener(event, record, { capture: true });
   }, `calendar-list-record-${floorId}`);
   const rect = await frontSurface.boundingBox(),
     x = rect.x + rect.width * 0.7,
@@ -359,7 +319,6 @@ try {
       "rgb(39, 132, 81)",
     "exposed correction is green",
   );
-  releaseBoardReads();
   // The actual current member can skip from the adjacent question control.
   await page.getByTestId("nav-water").click();
   await page.getByRole("button", { name: "抬水临时安排", exact: true }).click();
@@ -498,14 +457,12 @@ try {
     console.error(
       JSON.stringify({
         errors,
-        swipeTrace: await page?.evaluate(() => window.swipeTrace),
         body: (await page?.locator("body").innerText())?.slice(0, 600),
       }),
     );
   }
   throw error;
 } finally {
-  releaseBoardReads();
   await browser?.close();
   server?.kill("SIGTERM");
   h.close();
