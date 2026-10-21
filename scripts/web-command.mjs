@@ -111,6 +111,7 @@ const verificationScripts = [
   "site/scripts/check-email-hardening.mjs",
   "site/scripts/check-round-order.mjs",
   "site/scripts/check-water-reassign.mjs",
+  "site/scripts/check-water-flex.mjs",
   "site/scripts/check-undo.mjs",
   "site/scripts/check-native-push.mjs",
   "site/scripts/check-member-push.mjs",

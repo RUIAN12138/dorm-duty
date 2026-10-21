@@ -5,6 +5,7 @@ import type {
   ChoreBoardData,
   ChoreCategory,
 } from "../api/chores";
+import { revealPage, cancelPageReveal } from "../interaction/pageReveal";
 import TaskCategoryIcon from "./TaskCategoryIcon.vue";
 import HintPopover from "./HintPopover.vue";
 import SwipeCardDeck from "./SwipeCardDeck.vue";
@@ -57,12 +58,18 @@ function settleThemePalette() {
           /* Already finished. */
         }
 }
-onMounted(() =>
-  window.addEventListener("ui-theme-snapshot", settleThemePalette),
-);
-onBeforeUnmount(() =>
-  window.removeEventListener("ui-theme-snapshot", settleThemePalette),
-);
+onMounted(() => {
+  window.addEventListener("ui-theme-snapshot", settleThemePalette);
+  revealPage(summary.value || null, ".summary-heading,.swipe-card-deck", 55, {
+    duration: 300,
+    distance: 12,
+    scale: 0.985,
+  });
+});
+onBeforeUnmount(() => {
+  if (summary.value) cancelPageReveal(summary.value);
+  window.removeEventListener("ui-theme-snapshot", settleThemePalette);
+});
 function openColors() {
   previewDark.value = darkTheme.value;
   paletteTask.value = names[current.value]?.[0] || "floor";

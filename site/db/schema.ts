@@ -590,3 +590,54 @@ export const chorePushJobs = sqliteTable(
     ),
   ],
 );
+
+export const choreWaterFlow = sqliteTable("chore_water_flow", {
+  dormId: integer("dorm_id")
+    .primaryKey()
+    .references(() => dormitories.id),
+  queue: text("queue").notNull().default("[]"),
+  handoff: text("handoff"),
+  undoState: text("undo_state"),
+});
+export const choreWaterCredits = sqliteTable(
+  "chore_water_credits",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    dormId: integer("dorm_id")
+      .notNull()
+      .references(() => dormitories.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    taskId: integer("task_id")
+      .notNull()
+      .unique()
+      .references(() => choreTasks.id),
+    status: text("status").notNull(),
+    consumedBy: integer("consumed_by").references(() => choreTasks.id),
+  },
+  (table) => [
+    uniqueIndex("chore_water_credit_pending")
+      .on(table.dormId, table.userId)
+      .where(sql`${table.status}='pending'`),
+    check(
+      "chore_water_credit_status",
+      sql`${table.status} IN ('pending','consumed','cancelled')`,
+    ),
+  ],
+);
+export const choreWaterSkips = sqliteTable("chore_water_skips", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dormId: integer("dorm_id")
+    .notNull()
+    .references(() => dormitories.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  taskId: integer("task_id")
+    .notNull()
+    .unique()
+    .references(() => choreTasks.id),
+  reason: text("reason").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});

@@ -52,10 +52,9 @@ let suppressClickUntil = 0;
 let navigationRequest = 0;
 let requestedIndex = currentIndex.value;
 function selectTarget(index: number) {
-  // A tap can skip a tab. Keep the spring for adjacent moves/scrubbing,
-  // without sweeping a non-adjacent selection through the middle label.
-  if (Math.abs(index - selection.position.get()) > 1.01) selection.jump(index);
-  else selection.move(index);
+  // The lens crosses intermediate labels; routing still goes straight to the
+  // selected page. Lens position must never drive a route on a simple tap.
+  selection.move(index);
 }
 function navigate(index: number, replace = false) {
   if (
@@ -459,7 +458,7 @@ svg {
   scale: 1.07 0.94;
 }
 .chore-bottom-nav.is-dragging .nav-selection {
-  scale: 1.20 1.38;
+  scale: 1.2 1.38;
 }
 .chore-bottom-nav.glass-pressed .nav-selection {
   scale: 1.2 1.42;

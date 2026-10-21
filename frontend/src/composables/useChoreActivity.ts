@@ -8,8 +8,12 @@ interface ActivitySource {
   today: string;
   active: boolean;
 }
-// Component-local cache. Never shares a private room snapshot across identities.
-export function useChoreActivity(source: () => ActivitySource) {
+import type { ActivityMemory } from "../interaction/calendarViewMemory";
+// Board-owned cache survives tab unmounts, never an identity change.
+export function useChoreActivity(
+  source: () => ActivitySource,
+  memory?: ActivityMemory,
+) {
   const activity = ref<ChoreActivity | null>(null);
   const error = ref("");
   const loading = ref(false);
@@ -54,6 +58,11 @@ export function useChoreActivity(source: () => ActivitySource) {
           return false;
         activity.value = result;
         loadedKey = key;
+        if (memory) {
+          memory.identity = identity;
+          memory.key = key;
+          memory.value = result;
+        }
         return true;
       } catch (e) {
         if (
@@ -80,8 +89,13 @@ export function useChoreActivity(source: () => ActivitySource) {
       if (nextIdentity !== identity) {
         cancel();
         identity = nextIdentity;
-        loadedKey = "";
-        activity.value = null;
+        loadedKey = memory?.identity === identity ? memory.key : "";
+        activity.value = memory?.identity === identity ? memory.value : null;
+        if (memory && memory.identity !== identity) {
+          memory.identity = identity;
+          memory.key = "";
+          memory.value = null;
+        }
         error.value = "";
       }
       if (!current.active) {

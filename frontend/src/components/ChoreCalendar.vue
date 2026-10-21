@@ -104,13 +104,17 @@ function finishUnavailableMotion() {
 }
 onMounted(() => {
   fitViewport();
-  // The async placeholder may already have left. Animate the real, fitted
-  // calendar once as a single layer, with no delayed header/grid staggering.
-  revealPage(calendarRoot.value?.parentElement || null, ".chore-calendar", 0, {
-    duration: motionTiming.reorder * 1000,
-    distance: 14,
-    scale: 0.975,
-  });
+  // Reveal the actual fitted layers, including a cold async mount.
+  revealPage(
+    calendarRoot.value || null,
+    "header,.calendar-view-selector,.calendar-mode,.compact-records,.stats-mode",
+    45,
+    {
+      duration: motionTiming.reorder * 1000,
+      distance: 14,
+      scale: 0.975,
+    },
+  );
   window.addEventListener("resize", fitViewport);
   window.visualViewport?.addEventListener("resize", fitViewport);
   reducedMotion.addEventListener("change", finishUnavailableMotion);
@@ -205,13 +209,16 @@ const {
   error: activityError,
   loading: activityLoading,
   refresh: loadActivity,
-} = useChoreActivity(() => ({
-  invite: props.invite || "",
-  token: props.token || "",
-  version: props.version || 0,
-  today: props.today,
-  active: view.value === "stats",
-}));
+} = useChoreActivity(
+  () => ({
+    invite: props.invite || "",
+    token: props.token || "",
+    version: props.version || 0,
+    today: props.today,
+    active: view.value === "stats",
+  }),
+  memory.activity,
+);
 const allRecords = computed(() =>
   mergeCalendarRecords(props.records, props.neighbors),
 );

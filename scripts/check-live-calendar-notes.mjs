@@ -179,7 +179,7 @@ try {
         matrix ? matrix.m41 / el.getBoundingClientRect().width : null,
       );
       const calendar = document.querySelector(
-        ".calendar-page:not([inert]) .chore-calendar",
+        ".calendar-page:not([inert]) .calendar-mode",
       );
       if (calendar) {
         const style = getComputedStyle(calendar);
@@ -215,11 +215,11 @@ try {
     entryFrames.some((f) => f.durations.includes(300)) &&
       entryFrames.at(-1).opacity === 1 &&
       entryFrames.at(-1).durations.length === 0,
-    "calendar enters as one 300ms layer and settles without delayed grid/header animations",
+    "calendar layers enter progressively and settle at full opacity",
   );
   check(
-    !(await page.evaluate(() => window.qaLens)).some((p) => p > 0.2 && p < 1.8),
-    "non-adjacent tap selection does not sweep through middle tab",
+    (await page.evaluate(() => window.qaLens)).some((p) => p > 0.2 && p < 1.8),
+    "non-adjacent lens glides through the middle tab while route stays direct",
   );
   check(
     JSON.stringify(await page.evaluate(() => window.qaRoutes)) ===
@@ -299,7 +299,11 @@ try {
     const original = Element.prototype.animate;
     Element.prototype.animate = function (frames, options) {
       const animation = original.call(this, frames, options);
-      if (this.matches(".chore-calendar"))
+      if (
+        this.matches(
+          ".chore-calendar > header,.calendar-view-selector,.calendar-mode",
+        )
+      )
         window.qaCalendarRuns.push({ frames, duration: options.duration });
       return animation;
     };
@@ -314,7 +318,7 @@ try {
   await page.getByTestId("chore-calendar").waitFor();
   const cold = await page.evaluate(() => window.qaCalendarRuns);
   check(
-    cold.length === 1 &&
+    cold.length >= 3 &&
       cold[0].duration === 300 &&
       cold[0].frames[0].opacity === 0,
     "slow first-load calendar animates its real content once after the placeholder, rather than popping in",

@@ -49,6 +49,7 @@ const time = (value: string) =>
         v-if="canUndo"
         type="button"
         :disabled="busy"
+        class="swipe-undo"
         :aria-label="`撤销${record.name}打卡`"
         @click="
           close();
@@ -61,6 +62,7 @@ const time = (value: string) =>
         v-if="editable"
         type="button"
         :disabled="busy"
+        class="swipe-edit"
         :aria-label="`修正${record.assignee_name}的${record.name}记录`"
         @click="
           close();

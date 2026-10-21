@@ -144,9 +144,7 @@ try {
     path: new URL(`${safari ? "webkit" : "chromium"}-open-390.png`, evidence)
       .pathname,
   });
-  await second
-    .getByRole("button", { name: "显示小林的抬水记录操作", exact: true })
-    .click();
+  await drag(second, -110);
   await page.waitForTimeout(300);
   check(
     (await first
@@ -186,7 +184,8 @@ try {
       '["edit:1","undo:1"]',
     "undo emits once after explicit activation",
   );
-  await open().click();
+  await open().focus();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
   await page.getByTestId("record-group-2026-10-16").click();
   await page.waitForTimeout(450);
@@ -260,7 +259,8 @@ try {
       .getAttribute("aria-expanded")) === "false",
     "pointer cancellation restores the pre-gesture closed state",
   );
-  await open().click();
+  await open().focus();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
   await page.locator(".folded-record-page").evaluate((el) => {
     el.scrollTop = 20;
@@ -277,7 +277,8 @@ try {
     el.scrollTop = 0;
   });
   await page.waitForTimeout(80);
-  await open().click();
+  await open().focus();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
   await page.evaluate(
     () => (window.qa.records.value = [...window.qa.records.value]),
@@ -299,7 +300,8 @@ try {
   await page
     .getByTestId("calendar-list-record-3")
     .getByRole("button", { name: "显示室友3的地板记录操作", exact: true })
-    .click();
+    .focus();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
   check(
     (await page
@@ -315,7 +317,8 @@ try {
     "busy state releases open actions",
   );
   await page.evaluate(() => (window.qa.busy.value = false));
-  await open().click();
+  await open().focus();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(100);
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));
   await page.waitForTimeout(80);
@@ -324,7 +327,8 @@ try {
     "window blur closes an exposed rail and clears interaction state",
   );
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await open().click();
+  await open().focus();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(50);
   check(
     (await first

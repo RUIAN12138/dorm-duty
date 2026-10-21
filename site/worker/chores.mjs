@@ -6,6 +6,14 @@ import { notifyUser } from "../shared/notifications.mjs";
 import { calendarSettings, calendarFeed } from "./calendar.mjs";
 import { createJsonInput, jsonResponse as json } from "../shared/http-json.mjs";
 
+import {
+  readWaterFlow,
+  rotateWaterQueue,
+  saveWaterFlow,
+  advanceWaterQueue,
+  publicWaterHandoff,
+} from "./water-flow.mjs";
+
 const DAY = 86_400_000;
 const KEYS = ["floor", "toilet", "sink", "water"];
 const encoder = new TextEncoder();
@@ -978,6 +986,43 @@ async function board(request, db, env, now, url) {
         [room.id, water.sequence - 1],
       )
     : null;
+  const flowRow = water
+    ? await first(db, "SELECT handoff FROM chore_water_flow WHERE dorm_id=?", [
+        room.id,
+      ])
+    : null;
+  let flowHandoff = null;
+  try {
+    flowHandoff = JSON.parse(flowRow?.handoff || "null");
+  } catch {}
+  if (flowHandoff?.target_sequence !== water?.sequence) flowHandoff = null;
+  const advanceCredit =
+    who?.user_id === uid
+      ? await first(
+          db,
+          "SELECT c.task_id FROM chore_water_credits c WHERE c.dorm_id=? AND c.user_id=? AND c.status='pending'",
+          [room.id, uid],
+        )
+      : null;
+  const lastActivity = await all(
+    db,
+    `SELECT key,MAX(completed_at) AS completed_at FROM (${historySQL}) GROUP BY key`,
+    [room.id, room.id],
+  );
+  const overdue = settings
+    .filter((c) => c.enabled)
+    .map((c) => {
+      const at =
+        lastActivity.find((r) => r.key === c.key)?.completed_at ||
+        `${c.start_date}T00:00:00+08:00`;
+      return {
+        key: c.key,
+        name: c.name,
+        days: (now.getTime() - Date.parse(at)) / DAY,
+      };
+    })
+    .filter((c) => c.days > 5)
+    .map((c) => ({ ...c, days: Math.floor(c.days) }));
   const adjacentMonth = (delta) => {
     const date = new Date(`${month}-01T00:00:00Z`);
     date.setUTCMonth(date.getUTCMonth() + delta);
@@ -1003,7 +1048,7 @@ async function board(request, db, env, now, url) {
           `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
      WHERE t.dorm_id=? AND t.assignee_id=? AND t.status='completed' AND t.completed_at>=?
      AND t.id=(SELECT own.id FROM chore_tasks own WHERE own.dorm_id=t.dorm_id AND own.key=t.key AND own.assignee_id=t.assignee_id AND own.status='completed' ORDER BY own.completed_at DESC,own.id DESC LIMIT 1)
-     AND c.enabled=1 AND ((t.sequence IS NULL AND c.mode='scheduled') OR (t.sequence IS NOT NULL AND c.mode IN ('self_round','completion')))
+     AND c.enabled=1 AND ((t.key='water' AND EXISTS(SELECT 1 FROM chore_water_credits credit WHERE credit.task_id=t.id AND credit.status='pending')) OR (t.sequence IS NULL AND c.mode='scheduled') OR (t.sequence IS NOT NULL AND c.mode IN ('self_round','completion')))
      AND NOT EXISTS(SELECT 1 FROM chore_tasks later WHERE later.dorm_id=t.dorm_id AND later.key=t.key AND later.sequence>t.sequence AND later.status='completed')
      ORDER BY t.completed_at DESC,t.id DESC LIMIT 4`,
           [room.id, uid, new Date(now.getTime() - DAY).toISOString()],
@@ -1074,14 +1119,18 @@ async function board(request, db, env, now, url) {
       taskView(task, now, actorForTasks, settings, members),
     ),
     water_task: taskView(water, now, actorForTasks, settings, members),
-    water_handoff: waterHandoff
-      ? {
-          id: waterHandoff.id,
-          sequence: waterHandoff.sequence,
-          from_member_id: waterHandoff.assignee_id,
-          completed_at: waterHandoff.completed_at,
-        }
-      : null,
+    water_advance_task_id: advanceCredit?.task_id || null,
+    overdue_categories: overdue,
+    water_handoff:
+      publicWaterHandoff(flowHandoff) ||
+      (waterHandoff
+        ? {
+            id: waterHandoff.id,
+            sequence: waterHandoff.sequence,
+            from_member_id: waterHandoff.assignee_id,
+            completed_at: waterHandoff.completed_at,
+          }
+        : null),
     undo_tasks: undoRows.map((task) =>
       taskView(task, now, actorForTasks, settings, members),
     ),
@@ -1265,7 +1314,7 @@ async function reassignPendingWater(db, mutation, room, water, members, now) {
   if (!pending) return;
   const last = await first(
     db,
-    "SELECT assignee_id FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
+    "SELECT assignee_id FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC LIMIT 1",
     [room.id],
   );
   const next = last
@@ -1273,6 +1322,37 @@ async function reassignPendingWater(db, mutation, room, water, members, now) {
       water.rotation_order.length
     : 0;
   const member = members.find((m) => m.user_id === water.rotation_order[next]);
+  const queue = water.rotation_order.slice(next);
+  if (
+    await first(
+      db,
+      "SELECT id FROM chore_water_credits WHERE dorm_id=? AND user_id=? AND status='pending'",
+      [room.id, member.user_id],
+    )
+  ) {
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "id=? AND status='pending'",
+      [pending.id],
+    );
+    await advanceWaterQueue({
+      db,
+      room,
+      category: water,
+      task: pending,
+      members,
+      mutation,
+      now,
+      appendRows,
+      plannedRow,
+      localDate,
+      completed: false,
+      initialQueue: queue,
+    });
+    return;
+  }
+  saveWaterFlow(mutation, queue, null, null, water.rotation_order);
   if (pending.assignee_id === member.user_id) return;
   mutation.update(
     "chore_tasks",
@@ -1544,27 +1624,22 @@ async function completeOnce(db, room, who, now, id) {
     "id=? AND assignee_id=? AND status='pending'",
     [task.id, who.user_id],
   );
-  if (task.key === "water") {
-    const next =
-      (category.rotation_order.indexOf(who.user_id) + 1) %
-      category.rotation_order.length;
-    appendRows(
+  let handoff = null;
+  if (task.key === "water")
+    handoff = await advanceWaterQueue({
+      db,
+      room,
+      category,
+      task,
+      members,
       mutation,
-      [
-        plannedRow(
-          room,
-          category,
-          localDate(now) > category.start_date
-            ? localDate(now)
-            : category.start_date,
-          category.rotation_order[next],
-          members,
-          task.sequence + 1,
-        ),
-      ],
-      true,
-    );
-  }
+      now,
+      appendRows,
+      plannedRow,
+      localDate,
+      completed: true,
+    });
+
   if (category.mode === "self_round")
     await planRound(db, mutation, room, category, members, now, task.id);
   await mutation.finish();
@@ -1586,6 +1661,7 @@ async function completeOnce(db, room, who, now, id) {
   return json({
     task: taskView(finished, now, who, settings, members),
     next_water: taskView(nextWater, now, who, settings, members),
+    water_handoff: publicWaterHandoff(handoff),
     version: state.version + 1,
   });
 }
@@ -1610,6 +1686,46 @@ async function undoOnce(db, room, who, now, id) {
     fail(403, "not_assignee", "只能撤销自己的打卡");
   if (task.status !== "completed")
     fail(409, "not_completed", "这条打卡已撤销或尚未完成");
+  const credit =
+    task.key === "water"
+      ? await first(
+          db,
+          "SELECT * FROM chore_water_credits WHERE task_id=? AND dorm_id=?",
+          [id, room.id],
+        )
+      : null;
+  if (credit) {
+    if (credit.status !== "pending")
+      fail(
+        409,
+        "advance_consumed",
+        "这次提前抬水已抵扣轮次，请通过历史修正处理",
+      );
+    const mutation = new Mutation(db, room, state.version, who);
+    mutation.update(
+      "chore_water_credits",
+      { status: "cancelled" },
+      "id=? AND status='pending'",
+      [credit.id],
+    );
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled", completed_at: null },
+      "id=? AND status='completed'",
+      [id],
+    );
+    await mutation.finish();
+    return json({
+      task: taskView(
+        { ...task, status: "pending", completed_at: null },
+        now,
+        who,
+        settings,
+        members,
+      ),
+      version: state.version + 1,
+    });
+  }
   const category = settings.find((c) => c.key === task.key);
   if (
     !category?.enabled ||
@@ -1640,6 +1756,49 @@ async function undoOnce(db, room, who, now, id) {
     "EXISTS(SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND assignee_id=? AND status='completed')",
     [id, who.user_id],
   );
+  if (task.key === "water") {
+    const flow = await first(
+      db,
+      "SELECT * FROM chore_water_flow WHERE dorm_id=?",
+      [room.id],
+    );
+    if (flow) {
+      let before;
+      try {
+        before = JSON.parse(flow.undo_state || "null");
+      } catch {}
+      if (before && before.task_id !== task.id)
+        fail(409, "water_flow_changed", "抬水安排已调整，请通过历史修正处理");
+      if (!before) {
+        if (
+          await first(
+            db,
+            "SELECT id FROM chore_water_credits WHERE consumed_by=? AND status='consumed'",
+            [task.id],
+          )
+        )
+          fail(409, "water_flow_changed", "抬水安排已调整，请通过历史修正处理");
+        before = {
+          before: rotateWaterQueue(category.rotation_order, task.assignee_id),
+          credits: [],
+        };
+      }
+      for (const creditId of before.credits)
+        mutation.update(
+          "chore_water_credits",
+          { status: "pending", consumed_by: null },
+          "id=? AND consumed_by=?",
+          [creditId, task.id],
+        );
+      saveWaterFlow(
+        mutation,
+        before.before,
+        null,
+        null,
+        category.rotation_order,
+      );
+    }
+  }
   if (task.sequence !== null) {
     mutation.update(
       "chore_tasks",
@@ -2272,6 +2431,137 @@ async function nativePush(request, db, room, who, now, env, path) {
   env.PUSH_WAKE?.();
   return json({ ok: true, queued: true }, 202);
 }
+async function waterException(request, db, room, who, now, skip) {
+  const input = await body(
+    request,
+    ["version", "task_id", "reason"],
+    ["version", "task_id"],
+  );
+  const version = integer(input.version),
+    id = integer(input.task_id);
+  const reason = input.reason === undefined ? "" : str(input.reason, 0, 200);
+  const { state, settings, members } = await maintain(db, room, now);
+  if (state.version !== version)
+    fail(409, "stale_version", "安排已变化，请刷新后再试");
+  const task = await taskInRoom(db, room, id),
+    category = settings.find((c) => c.key === "water");
+  if (task.key !== "water" || task.status !== "pending" || !category.enabled)
+    fail(409, "water_changed", "当前抬水安排已变化");
+  if (task.duty_date > localDate(now))
+    fail(422, "future_task", "任务开始后才可以操作");
+  if (skip !== (task.assignee_id === who.user_id))
+    fail(
+      403,
+      "not_assignee",
+      skip ? "只能跳过自己当前的抬水任务" : "轮到自己时请直接完成抬水",
+    );
+  const mutation = new Mutation(db, room, version, who);
+  if (skip) {
+    if (members.length < 2)
+      fail(422, "no_next_member", "至少两位成员才可以跳过");
+    const remaining = await readWaterFlow(
+      db,
+      room,
+      category.rotation_order,
+      task.assignee_id,
+    );
+    if (remaining.queue.length < 2)
+      fail(409, "last_water_member", "本轮只剩你尚未完成，暂时不能跳过");
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "id=? AND status='pending'",
+      [id],
+    );
+    mutation.update(
+      "chore_push_jobs",
+      { status: "cancelled" },
+      "dorm_id=? AND status='pending' AND reminder_id IN (SELECT id FROM chore_reminders WHERE task_id=?)",
+      [room.id, id],
+    );
+    mutation.update(
+      "email_jobs",
+      { status: "cancelled", lease_until: null },
+      "status='pending' AND reminder_id IN (SELECT id FROM chore_reminders WHERE dorm_id=? AND task_id=?)",
+      [room.id, id],
+    );
+    mutation.update(
+      "chore_reminders",
+      { read_at: now.toISOString() },
+      "dorm_id=? AND task_id=? AND read_at IS NULL",
+      [room.id, id],
+    );
+    mutation.raw(
+      `INSERT INTO chore_water_skips(dorm_id,user_id,task_id,reason,created_at) SELECT ?,?,?,?,? WHERE ${mutation.guard}`,
+      [
+        room.id,
+        who.user_id,
+        id,
+        reason,
+        now.toISOString(),
+        ...mutation.guardValues,
+      ],
+    );
+    await advanceWaterQueue({
+      db,
+      room,
+      category,
+      task,
+      members,
+      mutation,
+      now,
+      appendRows,
+      plannedRow,
+      localDate,
+      completed: false,
+    });
+  } else {
+    if (
+      await first(
+        db,
+        "SELECT id FROM chore_water_credits WHERE dorm_id=? AND user_id=? AND status='pending'",
+        [room.id, who.user_id],
+      )
+    )
+      fail(409, "advance_exists", "你已经提前抬水，下次轮到你时会自动抵扣");
+    const row = plannedRow(
+      room,
+      category,
+      localDate(now),
+      who.user_id,
+      members,
+    );
+    row[2] = `advance-${random()}`;
+    mutation.raw(
+      `INSERT INTO chore_tasks(dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,sequence,status,completed_at)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,'completed',? WHERE ${mutation.guard}`,
+      [...row, now.toISOString(), ...mutation.guardValues],
+    );
+    mutation.raw(
+      `INSERT INTO chore_water_credits(dorm_id,user_id,task_id,status) SELECT ?,?,id,'pending' FROM chore_tasks WHERE dorm_id=? AND task_key=? AND ${mutation.guard}`,
+      [room.id, who.user_id, room.id, row[2], ...mutation.guardValues],
+    );
+  }
+  await mutation.finish();
+  const current = await first(
+    db,
+    "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
+    [room.id],
+  );
+  const finished = skip
+    ? null
+    : await first(
+        db,
+        "SELECT t.* FROM chore_tasks t JOIN chore_water_credits c ON c.task_id=t.id WHERE c.dorm_id=? AND c.user_id=? AND c.status='pending'",
+        [room.id, who.user_id],
+      );
+  return json({
+    ok: true,
+    task: taskView(finished, now, who, settings, members),
+    next_water: taskView(current, now, who, settings, members),
+    version: version + 1,
+  });
+}
 export async function handleChores(request, env, now) {
   const db = env.DB,
     url = new URL(request.url),
@@ -2298,6 +2588,11 @@ export async function handleChores(request, env, now) {
     return nativePush(request, db, room, who, now, env, path);
   if (path.startsWith("/chores/push/"))
     return memberPush(request, db, room, who, now, env, path);
+  if (
+    ["/chores/water/skip", "/chores/water/advance"].includes(path) &&
+    method === "POST"
+  )
+    return waterException(request, db, room, who, now, path.endsWith("/skip"));
   if (path === "/chores/order" && method === "PATCH")
     return configure(request, db, room, who, now, true);
   if (path === "/chores/settings" && method === "PATCH")

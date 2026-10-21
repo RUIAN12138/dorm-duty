@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
+import {
+  computed,
+  ref,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+} from "vue";
+import { animate as springAnimate, useMotionValue } from "motion-v";
+import { motionTokens } from "../interaction/motion";
 import type { ChoreBoardData } from "../api/chores";
 import MemberMark from "./MemberMark.vue";
 import { motionAllowed } from "../interaction/motion";
@@ -19,11 +28,120 @@ const completed = computed(() =>
 const digits = computed(() =>
   Array.from({ length: props.round.total + 1 }, (_, i) => i),
 );
+const emit = defineEmits<{ count: [count: number] }>();
+const filter = ref<"completed" | "pending">("completed");
 const people = computed(() =>
-  [...(props.round.completions || [])].sort(
-    (a, b) => a.completed_at.localeCompare(b.completed_at) || a.id - b.id,
-  ),
+  filter.value === "completed"
+    ? [...(props.round.completions || [])].sort(
+        (a, b) => a.completed_at.localeCompare(b.completed_at) || a.id - b.id,
+      )
+    : props.round.members
+        .filter((m) => !m.completed)
+        .map((m) => ({ ...m, id: m.user_id, completed_at: "" })),
 );
+const host = ref<HTMLElement>(),
+  header = ref<HTMLElement>(),
+  ranking = ref<HTMLElement>();
+const compression = useMotionValue(0);
+let compressed = false,
+  headerHeight = 0,
+  resize: ResizeObserver | undefined;
+function paintCompression(value: number) {
+  if (
+    props.compact ||
+    !host.value ||
+    !header.value ||
+    !host.value.closest(".has-fixed-content")
+  )
+    return;
+  const display = header.value.querySelector<HTMLElement>(
+    ".round-progress-display",
+  );
+  const diameter = display?.offsetHeight || 0;
+  const delta = Math.max(0, diameter * 0.55);
+  if (display)
+    display.style.transform = `translateY(${-4 * value}px) scale(${1 - value * 0.55},${1 - value * 0.55 + Math.sin(value * Math.PI) * 0.018})`;
+  for (const el of header.value.querySelectorAll<HTMLElement>(
+    ".round-summary,.round-filters",
+  ))
+    el.style.transform = `translateY(${-delta * value}px)`;
+  if (ranking.value) {
+    ranking.value.style.top = `${headerHeight}px`;
+    ranking.value.style.height = `${Math.max(0, host.value.clientHeight - headerHeight + delta)}px`;
+    ranking.value.style.transform = `translateY(${-delta * value}px)`;
+  }
+}
+const unsubscribe = compression.on("change", paintCompression);
+function compress(value: boolean) {
+  if (compressed === value) return;
+  compressed = value;
+  if (!motionAllowed()) compression.jump(value ? 1 : 0);
+  else
+    springAnimate(compression, value ? 1 : 0, {
+      ...motionTokens.settle,
+      stiffness: 440,
+      damping: 32,
+      velocity: compression.getVelocity(),
+    });
+}
+function measure() {
+  headerHeight = header.value?.offsetHeight || 0;
+  paintCompression(compression.get());
+}
+function scrollRanking() {
+  const top = ranking.value?.scrollTop || 0;
+  if (top > 8) compress(true);
+  else if (top === 0) compress(false);
+}
+// A short list can be clipped by the expanded ring yet fit the preallocated
+// native viewport. Accept the scroll intent too, without animating its height
+// or adding a blank spacer merely to manufacture scroll range.
+let listPointerY: number | null = null;
+function listPointerDown(event: PointerEvent) {
+  if (event.isPrimary) listPointerY = event.clientY;
+}
+function listPointerMove(event: PointerEvent) {
+  if (listPointerY === null) return;
+  const dy = event.clientY - listPointerY;
+  if (dy < -8) compress(true);
+  else if (dy > 8 && (ranking.value?.scrollTop || 0) < 1) compress(false);
+}
+function wheelRanking(event: WheelEvent) {
+  if (event.deltaY > 0) compress(true);
+  else if (event.deltaY < 0 && (ranking.value?.scrollTop || 0) < 1)
+    compress(false);
+}
+function keyRanking(event: KeyboardEvent) {
+  if (["ArrowDown", "PageDown", "End"].includes(event.key)) compress(true);
+  else if (
+    ["ArrowUp", "PageUp", "Home"].includes(event.key) &&
+    (ranking.value?.scrollTop || 0) < 1
+  )
+    compress(false);
+}
+
+watch(
+  [
+    filter,
+    () => props.active,
+    () => props.round.key,
+    () => props.round.sequence,
+  ],
+  async (_, previous) => {
+    if (
+      previous &&
+      (!props.active ||
+        previous[2] !== props.round.key ||
+        previous[3] !== props.round.sequence)
+    )
+      filter.value = "completed";
+    await nextTick();
+    if (ranking.value) ranking.value.scrollTop = 0;
+    compress(false);
+    measure();
+  },
+);
+watch(people, (value) => emit("count", value.length), { immediate: true });
 let frame = 0,
   pulse = 0;
 let timers: ReturnType<typeof setTimeout>[] = [];
@@ -127,13 +245,21 @@ function finishWhenMotionUnavailable() {
   if (motionAllowed()) return;
   stop();
   count.value = completed.value;
+  compression.jump(compressed ? 1 : 0);
 }
 onMounted(() => {
+  resize = new ResizeObserver(measure);
+  if (host.value) resize.observe(host.value);
+  if (header.value) resize.observe(header.value);
+  measure();
   document.addEventListener("visibilitychange", finishWhenMotionUnavailable);
   reducedMotion.addEventListener("change", finishWhenMotionUnavailable);
   window.addEventListener("ui-motion-change", finishWhenMotionUnavailable);
 });
 onBeforeUnmount(() => {
+  resize?.disconnect();
+  unsubscribe();
+  compression.destroy();
   stop();
   document.removeEventListener("visibilitychange", finishWhenMotionUnavailable);
   reducedMotion.removeEventListener("change", finishWhenMotionUnavailable);
@@ -142,80 +268,127 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div
+    ref="host"
     class="round-achievement"
     :class="{ 'quiet-motion': !motionAllowed(), 'is-compact': compact }"
   >
-    <div
-      class="round-progress-display"
-      data-testid="round-progress-ring"
-      role="progressbar"
-      :aria-valuenow="completed"
-      :aria-valuemin="0"
-      :aria-valuemax="round.total"
-      :aria-label="`本轮${completed}人已完成`"
-    >
-      <div ref="ring" class="round-ring-visual">
-        <svg viewBox="0 0 160 160" aria-hidden="true">
-          <circle class="round-progress-track" cx="80" cy="80" r="58" />
-          <circle
-            class="round-progress-value"
-            cx="80"
-            cy="80"
-            r="58"
-            :stroke-dasharray="circumference"
-            :stroke-dashoffset="
-              circumference * (1 - (round.total ? count / round.total : 0))
-            "
-          />
-        </svg>
-      </div>
-      <div class="round-progress-center" aria-hidden="true">
-        <strong class="round-number-window"
-          ><span
-            class="round-number-reel"
-            :style="{ transform: `translateY(${-count}em)` }"
-            ><span v-for="digit in digits" :key="digit">{{ digit }}</span></span
-          ></strong
+    <div ref="header" class="round-header">
+      <div
+        class="round-progress-display"
+        data-testid="round-progress-ring"
+        role="progressbar"
+        :aria-valuenow="completed"
+        :aria-valuemin="0"
+        :aria-valuemax="round.total"
+        :aria-label="`本轮${completed}人已完成`"
+      >
+        <div ref="ring" class="round-ring-visual">
+          <svg viewBox="0 0 160 160" aria-hidden="true">
+            <circle class="round-progress-track" cx="80" cy="80" r="58" />
+            <circle
+              class="round-progress-value"
+              cx="80"
+              cy="80"
+              r="58"
+              :stroke-dasharray="circumference"
+              :stroke-dashoffset="
+                circumference * (1 - (round.total ? count / round.total : 0))
+              "
+            />
+          </svg>
+        </div>
+        <div class="round-progress-center" aria-hidden="true">
+          <strong class="round-number-window"
+            ><span
+              class="round-number-reel"
+              :style="{ transform: `translateY(${-count}em)` }"
+              ><span v-for="digit in digits" :key="digit">{{
+                digit
+              }}</span></span
+            ></strong
+          >
+          <span class="round-total">/ {{ round.total }}</span>
+        </div>
+        <span class="round-sr" data-testid="round-count">{{
+          Math.floor(count)
+        }}</span>
+        <span
+          v-for="f in flights"
+          :key="f.id"
+          class="round-plus"
+          :style="{ '--side': f.side }"
+          aria-hidden="true"
+          >+1</span
         >
-        <span class="round-total">/ {{ round.total }}</span>
       </div>
-      <span class="round-sr" data-testid="round-count">{{
-        Math.floor(count)
-      }}</span>
-      <span
-        v-for="f in flights"
-        :key="f.id"
-        class="round-plus"
-        :style="{ '--side': f.side }"
-        aria-hidden="true"
-        >+1</span
+      <p v-if="!compact && completed" class="round-summary">
+        {{ completed === round.total ? "全员完成" : "本轮已完成" }}
+      </p>
+      <div
+        v-if="!compact"
+        class="round-filters"
+        role="group"
+        aria-label="本轮名单"
       >
+        <button
+          :aria-pressed="filter === 'completed'"
+          @click="filter = 'completed'"
+        >
+          已完成 {{ completed }}
+        </button>
+        <button
+          :aria-pressed="filter === 'pending'"
+          @click="filter = 'pending'"
+        >
+          未完成 {{ round.total - completed }}
+        </button>
+      </div>
     </div>
-    <p v-if="!compact && completed" class="round-summary">
-      {{ completed === round.total ? "全员完成" : "本轮已完成" }}
-    </p>
-    <TransitionGroup
-      v-if="!compact && people.length"
-      appear
-      name="round-rank"
-      tag="ol"
-      class="round-ranking"
-      data-testid="round-ranking"
+    <div
+      v-if="!compact"
+      ref="ranking"
+      class="round-ranking-viewport"
+      data-native-scroll
+      tabindex="0"
+      aria-label="本轮成员名单"
+      @scroll.passive="scrollRanking"
+      @wheel.passive="wheelRanking"
+      @pointerdown.passive="listPointerDown"
+      @pointermove.passive="listPointerMove"
+      @pointerup="listPointerY = null"
+      @pointercancel="listPointerY = null"
+      @keydown="keyRanking"
     >
-      <li
-        v-for="(person, index) in people"
-        :key="person.id"
-        :data-member-id="person.user_id"
-        :style="{ '--rank-delay': `${Math.min(index, 8) * 55}ms` }"
+      <TransitionGroup
+        v-if="people.length"
+        appear
+        name="round-rank"
+        tag="ol"
+        class="round-ranking"
+        data-testid="round-ranking"
       >
-        <span class="rank-number">{{ String(index + 1).padStart(2, "0") }}</span
-        ><MemberMark inline :id="person.marker_id" :size="28" /><strong>{{
-          person.nickname
-        }}</strong
-        ><van-icon name="success" aria-hidden="true" />
-      </li>
-    </TransitionGroup>
-    <p v-if="!compact && !completed" class="round-empty">等待第一位室友</p>
+        <li
+          v-for="(person, index) in people"
+          :key="person.id"
+          :data-member-id="person.user_id"
+          :style="{ '--rank-delay': `${Math.min(index, 8) * 55}ms` }"
+        >
+          <span class="rank-number">{{
+            String(index + 1).padStart(2, "0")
+          }}</span
+          ><MemberMark inline :id="person.marker_id" :size="28" /><strong>{{
+            person.nickname
+          }}</strong
+          ><van-icon
+            :name="filter === 'completed' ? 'success' : 'circle'"
+            aria-hidden="true"
+          />
+        </li>
+      </TransitionGroup>
+      <p v-if="!people.length" class="round-empty">
+        {{ filter === "completed" ? "等待第一位室友" : "全员完成" }}
+      </p>
+    </div>
   </div>
 </template>
 <style scoped>
@@ -466,5 +639,69 @@ circle {
 .has-fixed-content .round-empty {
   margin: 8px 0 16px;
   flex-shrink: 0;
+}
+</style>
+
+<style scoped>
+.round-achievement {
+  position: relative;
+  isolation: isolate;
+}
+.round-header {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.round-progress-display {
+  transform-origin: 50% 0;
+}
+.round-filters {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 0 12px;
+  pointer-events: auto;
+}
+.round-filters button {
+  border: 0;
+  border-radius: 16px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--ui-text-muted);
+  font: inherit;
+  font-size: 14px;
+  transition:
+    transform var(--ui-release-time) var(--ui-ease-out),
+    background-color 160ms;
+}
+.round-filters button[aria-pressed="true"] {
+  background: var(--ui-surface-muted);
+  color: var(--ui-ink);
+}
+.round-filters button:active {
+  transform: scale(0.96);
+}
+.round-ranking-viewport {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.has-fixed-content .round-ranking-viewport {
+  position: absolute;
+  inset-inline: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.has-fixed-content .round-ranking {
+  overflow: visible;
+}
+.has-fixed-content .round-achievement {
+  overflow: hidden;
+  display: block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .round-filters button {
+    transition: none;
+  }
 }
 </style>

@@ -57,6 +57,7 @@ jobs:
           node site/scripts/check-rounds.mjs
           node site/scripts/check-round-order.mjs
           node site/scripts/check-water-reassign.mjs
+          node site/scripts/check-water-flex.mjs
           node site/scripts/check-polling-cost.mjs
           node site/scripts/check-member-push.mjs
           node site/scripts/check-native-push.mjs
@@ -88,6 +89,7 @@ jobs:
           node scripts/check-glass-input-loading.mjs
           node scripts/check-record-swipe.mjs
           node scripts/check-live-calendar-notes.mjs
+          node scripts/check-water-flex-motion.mjs
           node scripts/check-companion-browser.mjs
           node scripts/check-interaction-foundation.mjs
           node scripts/check-focus-compact.mjs
