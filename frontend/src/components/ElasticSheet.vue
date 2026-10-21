@@ -7,6 +7,7 @@ import {
   onBeforeUnmount,
   provide,
   computed,
+  useSlots,
 } from "vue";
 import { useSheetNavigation } from "../interaction/sheetNavigation";
 import { animate } from "motion-v";
@@ -44,6 +45,7 @@ const emit = defineEmits<{
 }>();
 const present = ref(false);
 const allocated = ref(false);
+const slots = useSlots();
 const navigation = useSheetNavigation();
 const pageId = Symbol("sheet-page"),
   embedded = ref(false);
@@ -54,6 +56,12 @@ const nested = computed(
 const heading = computed(() =>
   nested.value ? nested.value.title.value : props.title,
 );
+const pageContained = computed(
+  () => props.contained || !!(nested.value && nested.value.contained),
+);
+const pageFixed = computed(
+  () => props.fixedContent || !!(nested.value && nested.value.fixedContent),
+);
 function rootBack() {
   if (nested.value) navigation?.back();
   else close();
@@ -61,6 +69,16 @@ function rootBack() {
 function setNavigationTarget(value: unknown) {
   if (props.navigationRoot && navigation)
     navigation.target.value = value instanceof HTMLElement ? value : undefined;
+}
+function setFooterTarget(value: unknown) {
+  if (props.navigationRoot && navigation)
+    navigation.footerTarget.value =
+      value instanceof HTMLElement ? value : undefined;
+}
+function setHeaderTarget(value: unknown) {
+  if (props.navigationRoot && navigation)
+    navigation.headerTarget.value =
+      value instanceof HTMLElement ? value : undefined;
 }
 function finishEmbeddedLeave() {
   if (!props.modelValue && embedded.value) {
@@ -437,6 +455,10 @@ watch(
           id: pageId,
           title: pageTitle,
           close: () => emit("update:modelValue", false),
+          footer: !!slots.footer,
+          contained: !!props.contained,
+          fixedContent: !!props.fixedContent,
+          height: props.contentHeight,
         });
       } else {
         const visible = navigation.current.value?.id === pageId;
@@ -497,11 +519,31 @@ onBeforeUnmount(() => {
         :data-sheet-page="title"
       >
         <slot />
-        <div v-if="$slots.footer" class="sheet-footer">
-          <slot name="footer" />
-        </div>
       </div>
     </Transition>
+  </Teleport>
+  <Teleport
+    v-if="embedded && navigation?.footerTarget.value && $slots.footer"
+    :to="navigation.footerTarget.value"
+  >
+    <Transition name="sheet-page" appear>
+      <div
+        v-if="navigation.current.value?.id === pageId"
+        class="sheet-navigation-footer"
+      >
+        <slot name="footer" />
+      </div>
+    </Transition>
+  </Teleport>
+  <Teleport
+    v-if="
+      embedded && navigation?.headerTarget.value && $slots['header-actions']
+    "
+    :to="navigation.headerTarget.value"
+  >
+    <div v-if="navigation.current.value?.id === pageId">
+      <slot name="header-actions" />
+    </div>
   </Teleport>
   <DialogRoot
     :open="present"
@@ -534,9 +576,9 @@ onBeforeUnmount(() => {
             :class="{
               'is-bottom-sheet': props.motion === 'bottom',
               'has-sticky-header': stickyHeader,
-              'has-contained-scroll': contained,
-              'has-fixed-content': fixedContent,
-              'has-sheet-footer': !!$slots.footer,
+              'has-contained-scroll': pageContained,
+              'has-fixed-content': pageFixed,
+              'has-sheet-footer': nested ? nested.footer : !!$slots.footer,
               'is-expandable': expandable,
               'is-expanded-sheet': allocated,
             }"
@@ -544,8 +586,10 @@ onBeforeUnmount(() => {
               transformOrigin: 'top left',
               height: allocated
                 ? expansionHeight
-                : contained
-                  ? contentHeight
+                : pageContained
+                  ? (nested && nested.height) ||
+                    contentHeight ||
+                    'min(75dvh, 820px)'
                   : undefined,
               maxHeight: allocated ? expansionHeight : undefined,
               willChange: phase === 'open' ? 'auto' : 'transform',
@@ -583,7 +627,8 @@ onBeforeUnmount(() => {
                 >
                   <van-icon name="arrow-left" />
                 </button>
-                <slot name="header-actions" />
+                <slot v-if="!nested" name="header-actions" />
+                <div v-if="navigationRoot" :ref="setHeaderTarget" />
                 <button type="button" aria-label="关闭详情" @click="close">
                   <van-icon name="cross" />
                 </button>
@@ -613,8 +658,16 @@ onBeforeUnmount(() => {
                 class="sheet-navigation-target"
               />
             </div>
-            <footer v-if="$slots.footer && !nested" class="sheet-footer">
-              <slot name="footer" />
+            <footer
+              v-if="nested ? nested.footer : !!$slots.footer"
+              class="sheet-footer"
+            >
+              <slot v-if="!nested" name="footer" />
+              <div
+                v-if="navigationRoot"
+                :ref="setFooterTarget"
+                class="sheet-navigation-target"
+              />
             </footer>
           </section>
         </div>
@@ -630,6 +683,15 @@ onBeforeUnmount(() => {
 }
 .sheet-navigation-page {
   min-width: 0;
+}
+.has-contained-scroll .sheet-navigation-target,
+.has-contained-scroll .sheet-navigation-page {
+  min-height: 0;
+}
+.has-fixed-content .sheet-navigation-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 .sheet-page-enter-active {
   transition:

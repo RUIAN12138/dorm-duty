@@ -330,6 +330,31 @@ try {
         themeMiddle !== (await page.locator(".theme-toggle svg").innerHTML()),
       "theme icon keeps intermediate sun-to-moon spring poses",
     );
+    await page.getByTestId("open-water-order").click();
+    await page.waitForTimeout(450);
+    check(
+      await page
+        .getByRole("button", { name: "保存轮序", exact: true })
+        .evaluate((el) => {
+          const footer = el.closest(".elastic-sheet > .sheet-footer");
+          const box = el.getBoundingClientRect();
+          return (
+            !!footer &&
+            !el.closest("[data-sheet-scroll]") &&
+            box.bottom <= innerHeight
+          );
+        }),
+      "embedded order keeps its save action outside the scrolling list",
+    );
+    check(
+      (await page
+        .locator(".sheet-heading")
+        .getByRole("button", { name: "调整轮序" })
+        .count()) > 0,
+      "embedded order retains its original header help",
+    );
+    await page.getByLabel("返回上一层设置", { exact: true }).click();
+    await page.waitForTimeout(400);
     await page.getByLabel("关闭详情", { exact: true }).click();
     await page.locator(".sheet-layer").waitFor({ state: "detached" });
     await page
@@ -379,16 +404,12 @@ try {
       }
       el.scrollTop = 100;
     });
-    await page
-      .getByTestId("chat-history")
-      .dispatchEvent("touchstart", {
-        touches: [{ identifier: 1, clientX: 180, clientY: 350 }],
-      });
-    await page
-      .getByTestId("chat-history")
-      .dispatchEvent("touchmove", {
-        touches: [{ identifier: 1, clientX: 180, clientY: 330 }],
-      });
+    await page.getByTestId("chat-history").dispatchEvent("touchstart", {
+      touches: [{ identifier: 1, clientX: 180, clientY: 350 }],
+    });
+    await page.getByTestId("chat-history").dispatchEvent("touchmove", {
+      touches: [{ identifier: 1, clientX: 180, clientY: 330 }],
+    });
     await page
       .getByTestId("chat-history")
       .dispatchEvent("touchend", { touches: [] });

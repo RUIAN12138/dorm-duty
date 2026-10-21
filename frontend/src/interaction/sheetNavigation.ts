@@ -7,18 +7,30 @@ import {
   type ComputedRef,
   type InjectionKey,
 } from "vue";
-type Page = { id: symbol; title: ComputedRef<string>; close: () => void };
+type Page = {
+  id: symbol;
+  title: ComputedRef<string>;
+  close: () => void;
+  footer: boolean;
+  contained: boolean;
+  fixedContent: boolean;
+  height?: string;
+};
 const key: InjectionKey<ReturnType<typeof createNavigation>> = Symbol(
   "settings-sheet-navigation",
 );
 function createNavigation() {
   const active = ref(false),
     target = shallowRef<HTMLElement>(),
+    footerTarget = shallowRef<HTMLElement>(),
+    headerTarget = shallowRef<HTMLElement>(),
     pages = shallowRef<Page[]>([]);
   const current = computed(() => pages.value.at(-1));
   return {
     active,
     target,
+    footerTarget,
+    headerTarget,
     pages,
     current,
     start() {
