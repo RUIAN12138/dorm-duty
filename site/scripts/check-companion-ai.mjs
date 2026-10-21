@@ -7,7 +7,14 @@ import {
   shortMessages,
   normalizeCompanionConfig,
   companionContext,
+  companionUsageGuide,
 } from "../../scripts/companion-ai.mjs";
+assert(
+  companionUsageGuide.includes("设置→任务轮序") &&
+    companionUsageGuide.includes("邮箱账号") &&
+    companionUsageGuide.includes("补记只补历史和统计") &&
+    companionUsageGuide.includes("不能代打卡"),
+);
 const h = await createHarness();
 const checks = [];
 let time = new Date(),
@@ -120,6 +127,10 @@ const runtime = createCompanionRuntime(h.db, {
     if (url.endsWith("/audio/transcriptions"))
       return Response.json({ text: "明天八点提醒我" });
     const payload = JSON.parse(options.body);
+    check(
+      payload.messages[0].content.includes(companionUsageGuide),
+      "every model request receives the audited usage guide with truthful action boundaries",
+    );
     const source = JSON.parse(
       payload.messages
         .find(

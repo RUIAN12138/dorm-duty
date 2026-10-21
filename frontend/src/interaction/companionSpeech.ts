@@ -26,6 +26,7 @@ export function speechPages(text: string): string[] {
 }
 const tips: Record<CompanionScene, string[]> = {
   duty: [
+    "长按我，就能和我聊天。",
     "单击我，给室友留言。",
     "双击我，看看我的新表情。",
     "点任务名称，可查看详情。",
@@ -38,12 +39,14 @@ const tips: Record<CompanionScene, string[]> = {
     "长按我，可以聊聊值日。",
   ],
   water: [
+    "长按我，就能和我聊天。",
     "抬完水，点“我已抬水”。",
     "点轮序，查看下一位室友。",
     "点提醒，可以通知抬水室友。",
     "长按我，可以聊聊抬水。",
   ],
   calendar: [
+    "长按我，就能和我聊天。",
     "点日期，查看当天完成记录。",
     "左右滑动月份，查看往月。",
     "切到记录，可按日期查看明细。",

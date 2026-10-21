@@ -50,6 +50,7 @@ const navigation = useSheetNavigation();
 const pageId = Symbol("sheet-page"),
   embedded = ref(false);
 const pageTitle = computed(() => props.title);
+const navigationScroll = ref<HTMLElement>();
 const nested = computed(
   () => props.navigationRoot && navigation?.current.value,
 );
@@ -57,7 +58,10 @@ const heading = computed(() =>
   nested.value ? nested.value.title.value : props.title,
 );
 const pageContained = computed(
-  () => props.contained || !!(nested.value && nested.value.contained),
+  () =>
+    props.navigationRoot ||
+    props.contained ||
+    !!(nested.value && nested.value.contained),
 );
 const pageFixed = computed(
   () => props.fixedContent || !!(nested.value && nested.value.fixedContent),
@@ -82,10 +86,29 @@ function setHeaderTarget(value: unknown) {
 }
 function finishEmbeddedLeave() {
   if (!props.modelValue && embedded.value) {
-    embedded.value = false;
+    // Keep visited content mounted until this settings session ends.
+    if (!navigation?.active.value) embedded.value = false;
     emit("closed");
   }
 }
+watch(
+  () => navigation?.active.value,
+  (active) => {
+    if (!active && embedded.value && !props.modelValue) embedded.value = false;
+  },
+);
+watch(
+  () => navigation?.current.value?.id,
+  async (id, previous) => {
+    if (!props.navigationRoot || !navigation || !navigationScroll.value) return;
+    navigation.scrollPositions.set(previous, navigationScroll.value.scrollTop);
+    await nextTick();
+    if (navigation.current.value?.id === id && navigationScroll.value)
+      navigationScroll.value.scrollTop =
+        navigation.scrollPositions.get(id) || 0;
+  },
+  { flush: "pre" },
+);
 let expanded = false,
   compactOffset = 0;
 const expansionHeight = "calc(100dvh - max(20px, env(safe-area-inset-top)))";
@@ -514,9 +537,10 @@ onBeforeUnmount(() => {
   >
     <Transition name="sheet-page" appear @after-leave="finishEmbeddedLeave">
       <div
-        v-if="navigation.current.value?.id === pageId"
+        v-show="navigation.current.value?.id === pageId"
         class="sheet-navigation-page"
         :data-sheet-page="title"
+        :inert="navigation.current.value?.id !== pageId ? true : undefined"
       >
         <slot />
       </div>
@@ -635,7 +659,11 @@ onBeforeUnmount(() => {
               </div>
             </header>
             <div
+              ref="navigationScroll"
               class="sheet-content"
+              :data-sheet-direction="
+                navigationRoot ? navigation?.direction.value : undefined
+              "
               data-sheet-scroll
               @touchstart.passive="boundaryStart"
               @touchmove="boundaryMove"
@@ -645,7 +673,9 @@ onBeforeUnmount(() => {
             >
               <Transition name="sheet-page">
                 <div
-                  v-if="navigationRoot && !nested"
+                  v-if="navigationRoot"
+                  v-show="!nested"
+                  :inert="nested ? true : undefined"
                   class="sheet-navigation-page"
                 >
                   <slot />
@@ -682,6 +712,9 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .sheet-navigation-page {
+  position: relative;
+  z-index: 2;
+  background: var(--canvas, var(--app-tone-hfff, #fff));
   min-width: 0;
 }
 .has-contained-scroll .sheet-navigation-target,
@@ -695,24 +728,29 @@ onBeforeUnmount(() => {
 }
 .sheet-page-enter-active {
   transition:
-    transform 340ms var(--ui-ease-out),
-    opacity 260ms var(--ui-ease-out);
+    transform var(--ui-release-time, 360ms) var(--ui-ease-out),
+    opacity var(--ui-release-time, 360ms) var(--ui-ease-out);
 }
 .sheet-page-leave-active {
+  z-index: 1;
   position: absolute;
   inset: 0;
   pointer-events: none;
   transition:
-    transform 220ms var(--ui-ease-out),
-    opacity 180ms var(--ui-ease-out);
+    transform var(--ui-release-time, 360ms) var(--ui-ease-out),
+    opacity var(--ui-release-time, 360ms) var(--ui-ease-out);
 }
 .sheet-page-enter-from {
-  transform: translate3d(14px, 0, 0) scale(0.985);
+  transform: translate3d(var(--sheet-page-enter-x, 100%), 0, 0);
   opacity: 0;
 }
 .sheet-page-leave-to {
-  transform: translate3d(-10px, 0, 0) scale(0.985);
+  transform: translate3d(var(--sheet-page-leave-x, -28%), 0, 0);
   opacity: 0;
+}
+.sheet-content[data-sheet-direction="back"] {
+  --sheet-page-enter-x: -28%;
+  --sheet-page-leave-x: 100%;
 }
 .sheet-content:has(.sheet-navigation-target) {
   position: relative;

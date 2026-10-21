@@ -151,7 +151,7 @@ try {
           builder.onResolve(
             {
               filter:
-                /^(vant|\.\/ElasticSheet\.vue|\.\/TimedReminderSettings\.vue|\.\/CalendarSubscriptionSettings\.vue|\.\.\/api\/memberPush|\.\.\/api\/push)$/,
+                /^(vant|\.\/ElasticSheet\.vue|\.\/SettingsSkeleton\.vue|\.\/TimedReminderSettings\.vue|\.\/CalendarSubscriptionSettings\.vue|\.\.\/api\/memberPush|\.\.\/api\/push)$/,
             },
             ({ path: id }) => ({ path: id, namespace: "mock" }),
           );
@@ -161,7 +161,8 @@ try {
               contents:
                 id === "vant"
                   ? "export const showToast=(message)=>globalThis.__pushSettingsMocks.toast(message)"
-                  : id.endsWith("TimedReminderSettings.vue") ||
+                  : id.endsWith("SettingsSkeleton.vue") ||
+                      id.endsWith("TimedReminderSettings.vue") ||
                       id.endsWith("CalendarSubscriptionSettings.vue")
                     ? "export default {render(){return null}}"
                     : id.endsWith("ElasticSheet.vue")

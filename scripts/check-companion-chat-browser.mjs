@@ -21,7 +21,8 @@ const h = await createHarness(),
   errors = [];
 let browser, server, runtime, page;
 let failModel = false,
-  modelDelay = 500;
+  modelDelay = 500,
+  pushConfigRequests = 0;
 const check = (condition, label) => {
   assert(condition, label);
   checks.push(label);
@@ -154,6 +155,11 @@ try {
       headers = { ...req.headers() };
     delete headers.origin;
     const body = req.postData();
+    if (u.pathname === "/chores/push/config") {
+      pushConfigRequests++;
+      if (process.env.DORM_CONTINUITY_QA === "1")
+        await new Promise((r) => setTimeout(r, 900));
+    }
     let r;
     if (u.pathname.startsWith("/chores/companion/"))
       r = await runtime.route(
@@ -176,6 +182,14 @@ try {
     });
   });
   await page.addInitScript(() => {
+    window.qaHaptics = [];
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: (ms) => {
+        window.qaHaptics.push(ms);
+        return true;
+      },
+    });
     const get = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (kind, ...args) {
       return kind === "webgl" ? null : get.call(this, kind, ...args);
@@ -189,7 +203,7 @@ try {
     const r = await ball.boundingBox();
     await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(620);
+    await page.waitForTimeout(430);
     await page.mouse.up();
     await page.getByRole("dialog").waitFor();
     await page.getByLabel("和球球说句话", { exact: true }).waitFor();
@@ -284,15 +298,39 @@ try {
     await page.getByTestId("open-preferences").click();
     await page.getByTestId("open-system-notifications").waitFor();
     await page.waitForTimeout(450);
+    await page.locator(".menu-advanced").evaluate((el) => {
+      el.open = true;
+      el.dataset.retained = "yes";
+    });
     await page.getByTestId("open-email-account").click();
     await page.getByTestId("external-account-page").waitFor();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(70);
+    check(
+      await page.getByTestId("external-account-page").evaluate((el) => {
+        const m = new DOMMatrixReadOnly(
+          getComputedStyle(el.closest(".sheet-navigation-page")).transform,
+        );
+        return m.m41 > 1 && Math.abs(m.m42) < 1;
+      }),
+      "forward settings transition has visible horizontal intermediate frames",
+    );
+    await page.waitForTimeout(330);
     check(
       (await page.locator(".sheet-layer").count()) === 1,
       "parent-owned email panel shares the same settings drawer",
     );
     await page.getByLabel("返回上一层设置", { exact: true }).click();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(70);
+    check(
+      await page
+        .locator('.sheet-navigation-page[data-sheet-page="账号与宿舍"]')
+        .evaluate(
+          (el) =>
+            new DOMMatrixReadOnly(getComputedStyle(el).transform).m41 < -1,
+        ),
+      "back settings transition reverses its horizontal direction",
+    );
+    await page.waitForTimeout(330);
     check(
       (await page.locator(".sheet-layer").count()) === 1 &&
         (await page
@@ -300,18 +338,82 @@ try {
           .isVisible()),
       "account settings switches inside one retained drawer",
     );
+    check(
+      await page
+        .locator(".menu-advanced")
+        .evaluate((el) => el.open && el.dataset.retained === "yes"),
+      "back preserves the actual parent DOM and expanded controls",
+    );
     const panel = await page.locator(".elastic-sheet").evaluate((el) => {
       el.dataset.qaRetained = "yes";
       return el.dataset.qaRetained;
     });
+    await page.locator(".sheet-content").evaluate((el) => {
+      el.scrollTop = 100;
+    });
+    await page.getByTestId("open-system-notifications").evaluate((el) =>
+      el.addEventListener(
+        "click",
+        () => {
+          window.parentScroll =
+            document.querySelector(".sheet-content").scrollTop;
+        },
+        { capture: true },
+      ),
+    );
     await page.getByTestId("open-system-notifications").click();
-    await page.waitForTimeout(500);
+    await page.getByTestId("settings-skeleton").waitFor();
+    check(
+      await page.getByTestId("settings-skeleton").evaluate((el) => {
+        const blocks = el.querySelectorAll(".placeholder");
+        return (
+          blocks.length === 5 &&
+          getComputedStyle(blocks[0], "::after").animationName.includes(
+            "settings-shimmer",
+          )
+        );
+      }),
+      "slow notification request shows a matching title, description, action and rows with shimmer",
+    );
+    check(
+      await page.locator(".sheet-content").evaluate((el) => el.scrollTop < 2),
+      "new settings page starts at its own top",
+    );
+    await page.getByTestId("push-settings").waitFor();
+    await page.screenshot({
+      path: path.join(
+        evidence,
+        `${safari ? "webkit" : "chromium"}-settings-retained.png`,
+      ),
+    });
+    await page.getByTestId("push-settings").evaluate((el) => {
+      el.dataset.retained = "yes";
+    });
+    await page.waitForTimeout(100);
     check(
       (await page.locator(".sheet-layer").count()) === 1 &&
         (await page
           .locator(".elastic-sheet")
           .getAttribute("data-qa-retained")) === panel,
       "third-level notification settings retain the same panel and overlay",
+    );
+    await page.getByLabel("返回上一层设置", { exact: true }).click();
+    await page.waitForTimeout(400);
+    check(
+      await page
+        .locator(".sheet-content")
+        .evaluate((el) => Math.abs(el.scrollTop - window.parentScroll) < 2),
+      "back restores the parent's own scroll offset",
+    );
+    await page.getByTestId("open-system-notifications").click();
+    await page.getByTestId("push-settings").waitFor();
+    await page.waitForTimeout(400);
+    check(
+      pushConfigRequests === 1 &&
+        (await page
+          .getByTestId("push-settings")
+          .getAttribute("data-retained")) === "yes",
+      "revisiting settings retains loaded DOM and avoids a second configuration request",
     );
     await page.getByLabel("返回上一层设置", { exact: true }).click();
     await page.waitForTimeout(400);
@@ -366,7 +468,8 @@ try {
     await page.waitForTimeout(400);
     await page.getByTestId("open-preferences").click();
     await page.waitForTimeout(350);
-    await page.locator(".menu-advanced summary").click();
+    if (!(await page.locator(".menu-advanced").evaluate((el) => el.open)))
+      await page.locator(".menu-advanced summary").click();
     await page.getByTestId("guest-create-dorm").click();
     await page.getByTestId("external-account-page").waitFor();
     await page.waitForTimeout(550);
@@ -415,6 +518,61 @@ try {
       await page.locator(".chat-ball .companion-bubble").isVisible(),
       "chat ball offers a small automatic tip",
     );
+    check(
+      await page.evaluate(
+        () => Number(getComputedStyle(document.documentElement).opacity) === 1,
+      ),
+      "settings skeleton dark styling never dims the rest of the application",
+    );
+    await page.screenshot({
+      path: path.join(
+        evidence,
+        `${safari ? "webkit" : "chromium"}-chat-tip.png`,
+      ),
+    });
+    await fs.writeFile(
+      path.join(evidence, `${safari ? "webkit" : "chromium"}-chat-layers.json`),
+      JSON.stringify(
+        await page.evaluate(() => ({
+          stack: document.elementsFromPoint(195, 100).map((el) => ({
+            tag: el.tagName,
+            cls: el.className,
+            opacity: getComputedStyle(el).opacity,
+            z: getComputedStyle(el).zIndex,
+          })),
+          layers: [
+            ...document.querySelectorAll(
+              "html,body,.companion-chat,.chat-ball,.chat-surface,.chat-history-frame,.chat-bubble,.chat-footer,.companion-chat-overlay",
+            ),
+          ].map((el) => ({
+            cls: el.className,
+            opacity: getComputedStyle(el).opacity,
+            color: getComputedStyle(el).color,
+            z: getComputedStyle(el).zIndex,
+            filter: getComputedStyle(el).filter,
+            style: el.getAttribute("style"),
+          })),
+        })),
+        null,
+        2,
+      ),
+    );
+    check(
+      await page.locator(".chat-ball .companion-bubble").evaluate((el) => {
+        const bubble = el.getBoundingClientRect(),
+          ball = el.closest(".chat-ball").getBoundingClientRect();
+        return (
+          bubble.left > ball.left + ball.width / 2 &&
+          bubble.top < ball.top + 20 &&
+          bubble.right <= innerWidth
+        );
+      }),
+      "chat tip grows from the upper-right of the ball within the viewport",
+    );
+    check(
+      await page.evaluate(() => window.qaHaptics.includes(10)),
+      "shortened long press activates one light supported-device haptic",
+    );
     await page.getByTestId("chat-history").evaluate((el) => {
       const container = el.querySelector(".chat-history-content");
       for (let i = 0; i < 20; i++) {
@@ -448,10 +606,12 @@ try {
     );
     await page.evaluate(() => {
       window.edgeExitFrames = [];
+      window.exitPoses = [];
       function sample() {
         const el = document.querySelector(".chat-ball");
         if (!el) return;
         window.edgeExitFrames.push(el.getBoundingClientRect().toJSON());
+        window.exitPoses.push(el.querySelector(".emotion-ball-host").innerHTML);
         requestAnimationFrame(sample);
       }
       requestAnimationFrame(sample);
@@ -470,6 +630,10 @@ try {
         );
       }),
       "edge back returns the ball to its source without a second parent-offset jump",
+    );
+    check(
+      await page.evaluate(() => new Set(window.exitPoses).size > 4),
+      "expression continues moving throughout chat return instead of freezing",
     );
     check(
       await ball.isVisible(),
@@ -846,7 +1010,7 @@ try {
       window.visualViewport.dispatchEvent(new Event("resize"));
     });
     await page.waitForTimeout(350);
-    modelDelay = 500;
+    (modelDelay = 500), (pushConfigRequests = 0);
     await page
       .getByLabel("和球球说句话", { exact: true })
       .fill("一小时后提醒我值日");

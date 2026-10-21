@@ -24,7 +24,7 @@ let previous=-1;
 for(let x=-100;x<=700;x++) {const p=naturalGaze(x,500,box,viewport);assert.ok(Number.isFinite(p.x)&&Number.isFinite(p.y));assert.ok(Math.abs(p.x)<1&&Math.abs(p.y)<1);assert.ok(p.x>=previous);if(x>-100)assert.ok(p.x-previous<.01);previous=p.x;}
 const speech=await load('frontend/src/interaction/companionSpeech.ts');
 const signal=new AbortController().signal, seen=new Set();
-for(let i=0;i<9;i++){const tip=await speech.companionReply('duty','tip',signal);assert.ok(/单击|双击|点|滑动/.test(tip));assert.ok(Array.from(tip).length<=20);assert.ok(!seen.has(tip));seen.add(tip);}
+for(let i=0;i<9;i++){const tip=await speech.companionReply('duty','tip',signal);assert.ok(/单击|双击|点|滑动|长按/.test(tip));assert.ok(Array.from(tip).length<=20);assert.ok(!seen.has(tip));seen.add(tip);}
 assert.deepEqual(speech.speechPages('球'.repeat(60)).map(s=>s.length),[20,20]);
 console.log('PASS: delayed single tap, touch double tap, slow double tap, triple-tap guard, cancellation, distinct taps, keyboard; smooth bounded gaze; 9 functional tips and speech limits.');
 
