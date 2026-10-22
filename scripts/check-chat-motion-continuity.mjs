@@ -34,7 +34,7 @@ if (android) {
 } else {
   browser = await (safari ? webkit : chromium).launch({
     headless: true,
-    ...(!safari
+    ...(!safari && process.platform === "darwin"
       ? {
           executablePath:
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",

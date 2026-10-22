@@ -41,6 +41,8 @@ export function createChatTravel({ ball, visual, onReveal }: TravelOptions) {
   let flightGeneration = 0;
   let runGeneration = 0;
   let destroyed = false;
+  let channelControls: (ReturnType<typeof animate> | undefined)[] = [];
+  let channelTargets: number[] = [];
 
   function paint() {
     const el = ball();
@@ -68,6 +70,8 @@ export function createChatTravel({ ball, visual, onReveal }: TravelOptions) {
     y.stop();
     scale.stop();
     reveal.stop();
+    channelControls = [];
+    channelTargets = [];
   }
 
   /**
@@ -127,6 +131,7 @@ export function createChatTravel({ ball, visual, onReveal }: TravelOptions) {
     const run = ++runGeneration;
     lastDirection = revealTo > 0.5 ? "open" : "close";
     if (instant || !motionAllowed()) {
+      stopValues();
       jump(geometry, revealTo);
       completeRun(run);
       return;
@@ -135,48 +140,37 @@ export function createChatTravel({ ball, visual, onReveal }: TravelOptions) {
       lastDirection === "open" ? chatMotion.expand : chatMotion.collapse;
     // Read velocity before stopping: reversing or retargeting continues in the
     // direction and speed the ball already had instead of restarting at rest.
-    const vx = x.getVelocity();
-    const vy = y.getVelocity();
-    const vs = scale.getVelocity();
-    const vr = reveal.getVelocity();
-    // Capture first, then hand the channels to the new spring. Starting the
-    // new animation replaces the old controls on each MotionValue.
-    x.stop();
-    y.stop();
-    scale.stop();
-    reveal.stop();
-    const animations = [
-      // Rest tolerances use each channel's own units. Sub-pixel precision is
-      // sufficient for position; treating pixels like a 0–1 opacity value
-      // keeps the invisible spring tail alive and delays the focus handoff.
-      animate(x, geometry.x, {
-        ...spring,
-        restDelta: 0.35,
-        restSpeed: 8,
-        velocity: vx,
-      }),
-      animate(y, geometry.y, {
-        ...spring,
-        restDelta: 0.35,
-        restSpeed: 8,
-        velocity: vy,
-      }),
-      animate(scale, geometry.scale, {
-        ...spring,
-        restDelta: 0.002,
-        restSpeed: 0.04,
-        velocity: vs,
-      }),
-      animate(reveal, revealTo, {
-        ...spring,
-        restDelta: 0.003,
-        restSpeed: 0.04,
-        velocity: vr,
-      }),
+    const values = [x, y, scale, reveal];
+    const targets = [geometry.x, geometry.y, geometry.scale, revealTo];
+    const tolerances = [0.05, 0.05, 0.0001, 0.0001];
+    const rest = [
+      { restDelta: 0.35, restSpeed: 8 },
+      { restDelta: 0.35, restSpeed: 8 },
+      { restDelta: 0.002, restSpeed: 0.04 },
+      { restDelta: 0.003, restSpeed: 0.04 },
     ];
+    // Keyboard resize may move just Y. Replacing the other three unchanged
+    // springs on every resize prevents them from settling and creates a long
+    // return tail. Retarget only a channel whose destination actually changed.
+    for (let i = 0; i < values.length; i++) {
+      if (
+        channelControls[i] &&
+        Math.abs(targets[i]! - channelTargets[i]!) < tolerances[i]!
+      )
+        continue;
+      const value = values[i]!;
+      const velocity = value.getVelocity();
+      value.stop();
+      channelTargets[i] = targets[i]!;
+      channelControls[i] = animate(value, targets[i]!, {
+        ...spring,
+        ...rest[i],
+        velocity,
+      });
+    }
     Promise.all(
-      animations.map((control) =>
-        control.then(
+      channelControls.map((control) =>
+        control?.then(
           () => {},
           () => {},
         ),
@@ -206,6 +200,7 @@ export function createChatTravel({ ball, visual, onReveal }: TravelOptions) {
     });
     if (!geometry) {
       animating = null;
+      stopValues();
       jump({ x: x.get(), y: y.get(), scale: scale.get() }, revealTo);
       settlePending("done");
       return result;
@@ -231,9 +226,7 @@ export function createChatTravel({ ball, visual, onReveal }: TravelOptions) {
       // The fresh DOM node has no transform yet; park the persistent values at
       // rest before measuring so the base box is not read through stale values.
       runGeneration++;
-      x.stop();
-      y.stop();
-      scale.stop();
+      stopValues();
       x.jump(0);
       y.jump(0);
       scale.jump(1);

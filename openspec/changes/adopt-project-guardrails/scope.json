@@ -26,9 +26,16 @@
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "部署到网站看看",
-    "authorizedDigest": "e83dd6230fbb7fbd0f763bdfe48a07f782528b7d4364a1f3678c82c635b39dca",
+    "userStatement": "部署到网站",
+    "authorizedDigest": "dd3549f9e16a192a6140401a1a241ca93cb60edd9ecfb669882bfacc12c377c3",
     "recordedOn": "2026-10-22",
-    "limits": "仅当前发布供查看；不代表全平台验收，不授权PR、推送或main合并。"
+    "limits": "仅当前批次代码发布；先备份和核对历史，不覆盖数据库与私密配置，不代表全平台验收。"
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "并且提交 pr",
+    "authorizedDigest": "dd3549f9e16a192a6140401a1a241ca93cb60edd9ecfb669882bfacc12c377c3",
+    "recordedOn": "2026-10-22",
+    "limits": "仅当前批次开发分支推送及正式PR；不代表实机或产品验收，不授权main合并。"
   }
 }

@@ -969,6 +969,12 @@ try {
           .isVisible()),
       "toolbar contains only the back chevron",
     );
+    // Opening no longer waits for the spring's invisible tail. The greetings
+    // and suggestions are API-driven and may finish after the local shell;
+    // wait for their own ready state, not an accidentally slow entry motion.
+    await page
+      .getByRole("button", { name: "今天做什么？", exact: true })
+      .waitFor();
     check(
       (await page.locator(".chat-bubble.assistant").count()) === 3 &&
         (await page
@@ -1526,6 +1532,11 @@ try {
           Math.abs(end.width - home.width) < 2,
       };
     });
+    if (!keyboardLanding.matches)
+      console.error(
+        "keyboard return geometry",
+        JSON.stringify(keyboardLanding),
+      );
     check(
       keyboardLanding.matches,
       "keyboard-dismiss return lands at the actual live ball anchor before handoff",

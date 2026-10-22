@@ -18,3 +18,5 @@ OpenSpec 校验结构，范围脚本检查文件边界。它们不能证明视�
 基线规范：openspec/specs/change-governance/spec.md。运行时交互事实以动效契约和已验收记录为准；尚在 changes 下的产品要求没有自动成为 main 或正式产品事实。
 
 用户明确要求“部署供查看”时，可在保持acceptance.pending的同时，记录publishAuthorization（action=deploy-for-review、userStatement原话、authorizedDigest当前摘要）。此记录只解锁相同内容的publish门禁，不能解锁PR或未来版本，发布仍需备份与冒烟。此例外来自本轮用户明确指令，不能由代理自行推断。
+
+用户明确要求“提交PR”时，同理记录独立prAuthorization（action=create-for-review、userStatement原话、authorizedDigest当前摘要）。只解锁相同内容的pr门禁及创建PR所需的开发分支推送，不授权发布或main合并，不追认产品/实机验收。两类授权各自限定动作，任意实现或规范变化均使旧摘要失效；“继续”、测试通过、SSH连接成功不能生成这些授权。

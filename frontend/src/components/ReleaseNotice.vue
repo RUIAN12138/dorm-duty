@@ -16,6 +16,17 @@ const props = defineProps<{
 }>();
 const version = import.meta.env.VITE_RELEASE_VERSION || "";
 const displayVersion = version.match(/v\d+$/i)?.[0] || version;
+const releaseChanges = /v73$/i.test(version)
+  ? [
+      "球球聊天连续展开，返回途中也能重开",
+      "消息与留言卡片平滑衔接，阅读历史不抢位置",
+      "日历、列表、卡片支持跟手滑动切换",
+    ]
+  : [
+      "单击球球聊天，留言确认后发送",
+      "聊天输入区渐进玻璃，边缘柔和透出",
+      "空白滑动切页，连续催促反馈增强",
+    ];
 const storageKey = "lundao-release-notices-v1";
 const open = ref(false),
   pending = ref(false),
@@ -142,9 +153,7 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>单击球球聊天，留言确认后发送</li>
-          <li>聊天输入区渐进玻璃，边缘柔和透出</li>
-          <li>空白滑动切页，连续催促反馈增强</li>
+          <li v-for="change in releaseChanges" :key="change">{{ change }}</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

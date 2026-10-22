@@ -49,6 +49,30 @@ try {
     assert.equal(checkScope(root, "publish").gate, "publish"));
   test("publish authorization does not grant PR acceptance", () =>
     assert.throws(() => checkScope(root, "pr"), /acceptance missing/));
+  const publish = m.publishAuthorization;
+  delete m.publishAuthorization;
+  m.prAuthorization = {
+    action: "create-for-review",
+    userStatement: "fixture: create PR for review only",
+    authorizedDigest: checkScope(root).digest,
+  };
+  save();
+  test("explicit PR authorization permits current review only", () =>
+    assert.equal(checkScope(root, "pr").gate, "pr"));
+  test("PR authorization does not grant publication", () =>
+    assert.throws(() => checkScope(root, "publish"), /acceptance missing/));
+  m.prAuthorization.userStatement = " ";
+  save();
+  test("empty PR authorization fails closed", () =>
+    assert.throws(() => checkScope(root, "pr"), /acceptance missing/));
+  m.prAuthorization.userStatement = "fixture: create PR for review only";
+  save();
+  write("feature.txt", "changed after PR request");
+  test("content change invalidates PR authorization", () =>
+    assert.throws(() => checkScope(root, "pr"), /stale/));
+  delete m.prAuthorization;
+  m.publishAuthorization = publish;
+  save();
   write("feature.txt", "changed after publish request");
   test("content change invalidates publish authorization", () =>
     assert.throws(() => checkScope(root, "publish"), /stale/));

@@ -92,6 +92,7 @@ export function checkScope(root, gate = "check") {
       const m = JSON.parse(content.toString());
       delete m.acceptance; // Avoid a circular digest, never ignore implementation.
       delete m.publishAuthorization;
+      delete m.prAuthorization;
       content = Buffer.from(JSON.stringify(m));
     }
     hash.update(file);
@@ -108,6 +109,15 @@ export function checkScope(root, gate = "check") {
     for (const m of manifests) {
       const a = m.acceptance;
       const publish = m.publishAuthorization;
+      const pr = m.prAuthorization;
+      if (
+        gate === "pr" &&
+        pr?.action === "create-for-review" &&
+        typeof pr.userStatement === "string" &&
+        pr.userStatement.trim() &&
+        pr.authorizedDigest === digest
+      )
+        continue;
       if (
         gate === "publish" &&
         publish?.action === "deploy-for-review" &&

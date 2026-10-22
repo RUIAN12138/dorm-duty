@@ -14,10 +14,10 @@
 - **THEN** 先说明必要性并取得授权，再更新规范和范围
 
 ### Requirement: Acceptance is separate from implementation
-开发者 MUST 区分实现、自动测试、模拟器、实体设备、用户验收与发布授权。未验收的隔离预览不得创建正式 PR、推送或合并 main；发布须取得独立、绑定当前版本的人类授权，不能由测试通过推断。
+开发者 MUST 区分实现、自动测试、模拟器、实体设备、用户验收与正式操作授权。未验收的隔离预览默认不得创建正式 PR、推送或合并 main；用户明确要求提交当前版本PR时，可使用独立、绑定当前摘要的PR授权，仅推送开发分支并创建PR，不代表产品验收或main合并授权。发布同样须取得独立、绑定当前版本的人类授权，不能由测试通过推断。
 #### Scenario: Tests pass but user has not accepted
 - **WHEN** 所有自动测试通过但没有用户明确验收当前版本的记录
-- **THEN** 状态仍为待用户验收，PR 门禁失败；没有独立发布授权时发布门禁同样失败，正式站点和数据保持不变
+- **THEN** 状态仍为待用户验收，没有独立PR授权时PR门禁失败；没有独立发布授权时发布门禁同样失败，正式站点和数据保持不变
 #### Scenario: Evidence has a limited platform
 - **WHEN** 只做了桌面 WebKit 或模拟器测试
 - **THEN** 报告明确标明范围，不能称为实体手机通知、输入法或帧率验收
@@ -36,3 +36,12 @@
 #### Scenario: Content changes after authorization
 - **WHEN** 发布授权记录的内容摘要与当前差异不一致
 - **THEN** 发布门禁拒绝，不自动复用旧指令发布其他内容
+
+### Requirement: Explicit pull request for review
+用户明确要求提交当前版本PR时，PR门禁 SHALL 只允许绑定当前差异摘要的prAuthorization，不将其当作产品验收、生产发布或main合并授权。
+#### Scenario: Submit current preview for review
+- **WHEN** 用户明确要求“提交 pr”，记录非空用户原话和匹配当前摘要的create-for-review授权
+- **THEN** 可推送当前开发分支并创建正式PR，验收仍pending，没有独立发布授权时不得发布，不得自行合并main
+#### Scenario: Content or action differs
+- **WHEN** 摘要不符、用户原话为空，或只有另一种操作的授权
+- **THEN** 当前操作门禁仍拒绝，不能复用旧授权

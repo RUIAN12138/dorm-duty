@@ -367,6 +367,10 @@ async function show() {
 function awaitKeyboardReturn(generation: number) {
   const view = window.visualViewport;
   if (!view) return Promise.resolve();
+  // The return spring already follows resize events. If it settled after the
+  // keyboard fully restored, there may be no second resize event to await.
+  if (view.height >= restingHeight - 8 && view.offsetTop < 1)
+    return Promise.resolve();
   return new Promise<void>((resolve) => {
     let stable = 0;
     let timer = 0;
@@ -489,6 +493,10 @@ function endPointerPull(event: PointerEvent) {
 function endPull(immediate = false) {
   const engaged = pull?.engaged;
   pull = null;
+  // A boundary pull can pause follow without changing scrollTop, so no native
+  // scroll event would restore near-bottom state. Recheck once on release;
+  // readers away from the bottom remain paused and keep their anchor.
+  if (!immediate) historyScroll.scroll();
   if (!historyContent.value) return;
   // Native scrolling does not need an animation or a synchronous style read.
   if (!engaged && !immediate) return;

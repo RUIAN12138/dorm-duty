@@ -1,6 +1,6 @@
 # 球球聊天物理动效：本地隔离预览
 
-本轮开发基线 `44d41de`，分支 `codex/ios-chat-motion`。本记录对应 OpenSpec `refine-ios-chat-motion`，不代表用户已经验收。没有创建 PR、推送分支、合并 main、部署生产或修改正式数据。
+本轮开发基线 `44d41de`，分支 `codex/ios-chat-motion`。本记录对应 OpenSpec `refine-ios-chat-motion`，不代表用户已经验收。下文为隔离验收阶段的记录，当时没有创建PR、推送、合并或部署。用户之后明确要求“部署到网站”“并且提交 pr”，对应动作另行记录于该change的verification.md，不能将其解释为实机验收或main合并授权。
 
 ## 打开预览
 

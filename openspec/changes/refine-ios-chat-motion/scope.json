@@ -22,5 +22,19 @@
     "status": "pending",
     "userStatement": null,
     "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "并且提交 pr",
+    "authorizedDigest": "dd3549f9e16a192a6140401a1a241ca93cb60edd9ecfb669882bfacc12c377c3",
+    "recordedOn": "2026-10-22",
+    "limits": "仅当前批次开发分支推送及正式PR；不代表实机或产品验收，不授权main合并。"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "部署到网站",
+    "authorizedDigest": "dd3549f9e16a192a6140401a1a241ca93cb60edd9ecfb669882bfacc12c377c3",
+    "recordedOn": "2026-10-22",
+    "limits": "仅当前批次代码发布；先备份和核对历史，不覆盖数据库与私密配置，不代表全平台验收。"
   }
 }
