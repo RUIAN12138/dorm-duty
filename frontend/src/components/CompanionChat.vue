@@ -8,17 +8,33 @@ import {
   DialogTitle,
   DialogDescription,
 } from "reka-ui";
-import { animate, motion } from "motion-v";
+import { animate, motion, AnimatePresence } from "motion-v";
 import DormCompanion from "./DormCompanion.vue";
 import CompanionChatComposer from "./CompanionChatComposer.vue";
-import { companionClient, type ChatReminder } from "../api/companionChat";
-import { motionAllowed, motionTokens } from "../interaction/motion";
+import ConversationNoteFlow from "./ConversationNoteFlow.vue";
+import { useConversationNotes } from "../composables/useConversationNotes";
+import type { ChoreMember } from "../api/chores";
+import {
+  companionClient,
+  chatRequestId,
+  type ChatReminder,
+} from "../api/companionChat";
+import { motionAllowed } from "../interaction/motion";
+import {
+  chatMotion,
+  chatTransition,
+  bubbleOrigin,
+} from "../interaction/chatMotion";
+import { createChatScroll } from "../interaction/chatScroll";
+import { createChatTravel } from "../interaction/chatTravel";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
 const props = defineProps<{
   modelValue: boolean;
   origin: DOMRect | null;
   returnRect?: () => DOMRect | null;
+  members?: ChoreMember[];
+  noteRequest?: { key: number; target: number };
   invite: string;
   memberId: number;
   token: string;
@@ -26,6 +42,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   present: [value: boolean];
+  noteSent: [];
 }>();
 const present = ref(false),
   prepared = ref(false),
@@ -41,13 +58,22 @@ const present = ref(false),
   scroll = ref<HTMLElement>(),
   historyFrame = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
+const draft = ref("");
+let loaded = false;
 const available = ref(false),
   loading = ref(false),
   busy = ref(false),
   awaiting = ref(false),
   error = ref(""),
   emotion = ref("02"),
-  items = ref<{ id: string; role: "user" | "assistant"; text: string }[]>([]),
+  items = ref<
+    {
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      fresh?: boolean;
+    }[]
+  >([]),
   reminders = ref<ChatReminder[]>([]),
   actionBusy = ref("");
 const viewport = ref({ top: 0, height: window.innerHeight }),
@@ -55,21 +81,19 @@ const viewport = ref({ top: 0, height: window.innerHeight }),
   compactViewport = computed(
     () => keyboardOpen.value || viewport.value.height < 560,
   ),
-  thinking = computed(() => awaiting.value);
+  thinking = computed(() => awaiting.value || notes.sending.value);
 let api = companionClient(props.invite, props.memberId, props.token),
   epoch = 0,
   controller: AbortController | undefined,
   removeBack: (() => void) | undefined,
   closing = false,
   motionEpoch = 0,
-  originTransform = "none",
   restingHeight = window.innerHeight,
   viewportFrame = 0,
   errorTimer: ReturnType<typeof setTimeout> | undefined,
   lastFocus: HTMLElement | null = null,
   delayTimer: ReturnType<typeof setTimeout> | undefined,
   delayResolve: (() => void) | undefined;
-let controls: ReturnType<typeof animate>[] = [];
 let retry: { text: string; id: string } | null = null;
 let entryPointerPending = true;
 function chatPointerStarted() {
@@ -84,29 +108,98 @@ function chatEntryClick(event: MouseEvent) {
   }
 }
 const scope = () => `${props.invite}:${props.memberId}:${props.token}`;
-const motionTransition = computed(() =>
-  motionAllowed() ? motionTokens.drawer : { duration: 0 },
+const notes = useConversationNotes(
+  () => ({
+    token: props.token,
+    invite: props.invite,
+    memberId: props.memberId,
+    members: props.members || [],
+  }),
+  (role, text) => {
+    items.value.push({
+      id: `note:${chatRequestId()}`,
+      role,
+      text,
+      fresh: true,
+    });
+    bottom();
+  },
+  () => emit("noteSent"),
 );
+watch(
+  () => props.noteRequest?.key,
+  () => {
+    if (props.noteRequest)
+      void notes.dispatch({ type: "start", target: props.noteRequest.target });
+  },
+);
+watch(notes.sending, (sending) => {
+  emotion.value = sending
+    ? "30"
+    : notes.state.value.phase === "sent"
+      ? "39"
+      : "12";
+});
+const motionTransition = computed(() => chatTransition("bubble"));
 function fit() {
   if (closing) return;
   const el = scroll.value;
   const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   const v = window.visualViewport;
-  viewport.value = {
-    top: v?.offsetTop || 0,
-    height: v?.height || window.innerHeight,
-  };
+  const nextTop = v?.offsetTop || 0;
+  const nextHeight = v?.height || window.innerHeight;
   const focused =
     surface.value?.contains(document.activeElement) &&
     document.activeElement?.tagName === "TEXTAREA";
-  if (!focused) restingHeight = Math.max(restingHeight, viewport.value.height);
-  keyboardOpen.value = !!focused && restingHeight - viewport.value.height > 110;
-  if (present.value && atBottom) bottom();
+  if (!focused) restingHeight = Math.max(restingHeight, nextHeight);
+  const nextKeyboard = !!focused && restingHeight - nextHeight > 110;
+  const nextCompact = nextKeyboard || nextHeight < 560;
+  // The compact class changes the history's padding, which moves the content
+  // under the reader. Capture before Vue applies the class and restore after
+  // the layout has been committed.
+  const compactChanged = nextCompact !== compactViewport.value;
+  if (compactChanged && !atBottom) historyScroll.capture();
+  viewport.value = { top: nextTop, height: nextHeight };
+  keyboardOpen.value = nextKeyboard;
+  if (present.value) {
+    // Viewport changes can move the source ball or the compact visual; one
+    // cached measurement here keeps the travel render free of layout reads.
+    chatTravel.measure();
+    if (atBottom) bottom(true);
+    else if (compactChanged) void nextTick(() => historyScroll.restore());
+  }
 }
 function scheduleFit() {
   cancelAnimationFrame(viewportFrame);
   viewportFrame = requestAnimationFrame(fit);
 }
+let footerObserver: ResizeObserver | undefined;
+watch(footer, (element) => {
+  footerObserver?.disconnect();
+  if (!element) return;
+  footerObserver = new ResizeObserver(() => {
+    const history = scroll.value;
+    const wasAtBottom =
+      !history ||
+      history.scrollHeight - history.scrollTop - history.clientHeight < 60;
+    surface.value?.style.setProperty(
+      "--chat-footer-height",
+      `${element.offsetHeight}px`,
+    );
+    surface.value?.style.setProperty(
+      "--chat-input-height",
+      `${element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58}px`,
+    );
+    if (wasAtBottom) bottom(true);
+    else {
+      // Footer/keyboard padding changes can shrink the scrollable range even
+      // when the content box itself did not resize.
+      historyScroll.restore();
+      refreshEdge();
+    }
+  });
+  footerObserver.observe(element);
+});
 
 function cancel() {
   epoch++;
@@ -137,43 +230,93 @@ function refreshEdge() {
     String(Math.min(1, Math.max(0, distance / 36))),
   );
 }
-function bottom() {
+const historyScroll = createChatScroll(
+  () => scroll.value,
+  refreshEdge,
+  () => historyContent.value,
+);
+function bottom(immediate = false) {
   void nextTick(() => {
-    if (scroll.value && !closing)
-      scroll.value.scrollTop = scroll.value.scrollHeight;
-    refreshEdge();
+    if (!closing) historyScroll.request(immediate);
   });
+}
+function historyScrolled() {
+  historyScroll.scroll();
 }
 function close() {
   if (!closing) emit("update:modelValue", false);
 }
-function openedBall() {
-  const el = ball.value;
-  if (!el || !props.origin) return "translate3d(0,0,0) scale(1)";
-  const target = (
-      el.querySelector(".chat-ball-visual") || el
-    ).getBoundingClientRect(),
-    r = props.origin;
-  return `translate3d(${r.left - target.left + (r.width - target.width) / 2}px,${r.top - target.top + (r.height - target.height) / 2}px,0) scale(${r.width / target.width})`;
-}
-function stopMotion() {
-  controls.forEach((c) => c.stop());
-  controls = [];
-}
+const glassParts = () =>
+  [backdrop.value, ...(masthead.value?.children || [])].filter(
+    Boolean,
+  ) as HTMLElement[];
 const entryParts = () =>
   [toolbar.value, nameplate.value, historyFrame.value, footer.value].filter(
     Boolean,
   ) as HTMLElement[];
-const ballTravel = { type: "spring" as const, duration: 0.42, bounce: 0.08 };
-const travel = {
-  type: "spring" as const,
-  stiffness: 260,
-  damping: 29,
-  mass: 1,
-  restDelta: 0.001,
-  restSpeed: 0.01,
-};
+const ENTRY_STAGGER = 0.06;
+// One opacity stage drives the backdrop, all four frost layers and the short
+// overlapping content entry. It is interruptible because it is a persistent
+// MotionValue, not a one-shot keyframe list.
+function paintReveal(value: number) {
+  const progress = Math.max(0, Math.min(1, value));
+  for (const el of glassParts()) el.style.opacity = String(progress);
+  entryParts().forEach((el, index) => {
+    const offset = index * ENTRY_STAGGER;
+    const local = Math.max(0, Math.min(1, (progress - offset) / (1 - offset)));
+    el.style.opacity = String(local);
+    el.style.transform =
+      local >= 1
+        ? "none"
+        : `translate3d(0,${((1 - local) * 12).toFixed(2)}px,0) scale(${(
+            1 -
+            (1 - local) * 0.015
+          ).toFixed(4)})`;
+  });
+}
+const chatTravel = createChatTravel({
+  ball: () => ball.value,
+  visual: () =>
+    ball.value?.querySelector<HTMLElement>(".chat-ball-visual") || undefined,
+  onReveal: paintReveal,
+});
+const settleSpring = chatMotion.layout;
+let stopReturnTracking: (() => void) | undefined;
+// During a close, only visualViewport events refresh the source endpoint and
+// cached base; no rAF loop measures or paints the return path.
+function trackReturnOnViewport() {
+  stopReturnTracking?.();
+  const view = window.visualViewport;
+  if (!view || !motionAllowed()) return;
+  const update = () => {
+    if (!closing || phase.value !== "closing") return;
+    chatTravel.refreshDestination();
+  };
+  view.addEventListener("resize", update);
+  view.addEventListener("scroll", update);
+  stopReturnTracking = () => {
+    view.removeEventListener("resize", update);
+    view.removeEventListener("scroll", update);
+    stopReturnTracking = undefined;
+  };
+}
+function reopenFromBall(event: PointerEvent) {
+  // Only the still-visible ball during closing is intercepted; in the open
+  // state every pointer interaction belongs to DormCompanion.
+  if (phase.value !== "closing") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closing = false;
+  phase.value = "opening";
+  emit("update:modelValue", true);
+}
+function reopenClick(event: MouseEvent) {
+  if (phase.value !== "closing") return;
+  event.preventDefault();
+  event.stopPropagation();
+}
 function finishClose() {
+  stopReturnTracking?.();
   present.value = false;
   delete document.documentElement.dataset.companionChat;
   emit("present", false);
@@ -186,13 +329,17 @@ async function show() {
   entryPointerPending = true;
   const generation = ++motionEpoch;
   const wasPresent = present.value;
-  if (!wasPresent) prepared.value = false;
-  stopMotion();
+  if (!wasPresent) {
+    prepared.value = false;
+    for (const item of items.value) item.fresh = false;
+  }
+  stopReturnTracking?.();
   cancel();
   endPull(true);
   closing = false;
   phase.value = "opening";
-  loading.value = true;
+  loading.value = !loaded;
+  historyScroll.pin();
   restingHeight = Math.max(
     window.innerHeight,
     window.visualViewport?.height || 0,
@@ -207,182 +354,87 @@ async function show() {
   await nextTick();
   removeBack?.();
   removeBack = registerNativeBack(close);
-  if (!wasPresent) originTransform = openedBall();
-  if (motionAllowed() && ball.value) {
-    const initial = wasPresent
-      ? getComputedStyle(ball.value).transform
-      : originTransform;
-    ball.value.style.transform = initial;
-    prepared.value = true;
-    controls = [
-      animate(
-        ball.value,
-        { transform: [initial, "translate3d(0,0,0) scale(1)"] },
-        ballTravel,
-      ),
-      ...(
-        [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
-      ).map((el) =>
-        animate(
-          el,
-          {
-            opacity: [wasPresent ? Number(getComputedStyle(el).opacity) : 0, 1],
-          },
-          { duration: 0.32 },
-        ),
-      ),
-      ...entryParts().map((el, index) =>
-        animate(
-          el,
-          {
-            opacity: [wasPresent ? Number(getComputedStyle(el).opacity) : 0, 1],
-            transform: [
-              wasPresent
-                ? getComputedStyle(el).transform
-                : "translate3d(0,12px,0) scale(.985)",
-              "translate3d(0,0,0) scale(1)",
-            ],
-          },
-          {
-            ...motionTokens.enter,
-            duration: 0.42,
-            delay: 0.06 + index * 0.065,
-          },
-        ),
-      ),
-    ];
-  }
-  if (!motionAllowed()) {
-    for (const el of [backdrop.value, masthead.value, ...entryParts()]) {
-      if (el) {
-        el.style.opacity = "1";
-        el.style.transform = "none";
-      }
-    }
-  }
+  // Cold open jumps to the source ball synchronously and springs from there;
+  // reopening during closing continues at the current pose and velocity.
+  const flight = chatTravel.open(props.origin, { fromClosed: !wasPresent });
   prepared.value = true;
   void load();
-  await Promise.all(controls.map((c) => c.then(() => {})));
+  const outcome = await flight;
+  if (outcome !== "done") return;
   if (generation !== motionEpoch || !present.value || closing) return;
   phase.value = "open";
 }
-function returnFlight(start: DOMRect) {
-  return (progress: number) => {
-    const el = ball.value;
-    const visual = el?.querySelector<HTMLElement>(".chat-ball-visual");
-    const destination = props.returnRect?.() || props.origin;
-    if (!el || !visual || !destination) return;
-    const matrix = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-    const scale = Math.hypot(matrix.a, matrix.b) || 1;
-    const parent = el.getBoundingClientRect(),
-      current = visual.getBoundingClientRect();
-    const centerX = parent.left + parent.width / 2,
-      centerY = parent.top + parent.height / 2;
-    const desiredScale =
-      (start.width + (destination.width - start.width) * progress) /
-      (current.width / scale);
-    const desiredX =
-      start.left +
-      start.width / 2 +
-      (destination.left +
-        destination.width / 2 -
-        start.left -
-        start.width / 2) *
-        progress;
-    const desiredY =
-      start.top +
-      start.height / 2 +
-      (destination.top +
-        destination.height / 2 -
-        start.top -
-        start.height / 2) *
-        progress;
-    const x =
-      desiredX -
-      (centerX - matrix.e) -
-      (desiredScale * (current.left + current.width / 2 - centerX)) / scale;
-    const y =
-      desiredY -
-      (centerY - matrix.f) -
-      (desiredScale * (current.top + current.height / 2 - centerY)) / scale;
-    el.style.transform = `translate3d(${x}px,${y}px,0) scale(${desiredScale})`;
-  };
-}
-async function awaitKeyboardReturn(
-  generation: number,
-  started: number,
-  paint: (progress: number) => void,
-) {
-  let stable = 0;
-  while (
-    generation === motionEpoch &&
-    closing &&
-    performance.now() - started < 900
-  ) {
-    paint(1);
-    const v = window.visualViewport;
-    if (!v || (v.height >= restingHeight - 8 && v.offsetTop < 1)) stable++;
-    else stable = 0;
-    if (stable >= 3 || document.hidden) return;
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
-  }
+function awaitKeyboardReturn(generation: number) {
+  const view = window.visualViewport;
+  if (!view) return Promise.resolve();
+  // The return spring already follows resize events. If it settled after the
+  // keyboard fully restored, there may be no second resize event to await.
+  if (view.height >= restingHeight - 8 && view.offsetTop < 1)
+    return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let stable = 0;
+    let timer = 0;
+    const finish = () => {
+      view.removeEventListener("resize", update);
+      view.removeEventListener("scroll", update);
+      clearTimeout(timer);
+      resolve();
+    };
+    const update = () => {
+      if (
+        generation !== motionEpoch ||
+        !closing ||
+        !present.value ||
+        document.hidden
+      )
+        return finish();
+      // The base and return endpoint follow the real source position while
+      // the keyboard retreats; no frame loop paints or measures.
+      chatTravel.refreshDestination();
+      if (view.height >= restingHeight - 8 && view.offsetTop < 1) stable++;
+      else stable = 0;
+      if (stable >= 2) finish();
+    };
+    view.addEventListener("resize", update);
+    view.addEventListener("scroll", update);
+    timer = window.setTimeout(finish, 1000);
+    update();
+  });
 }
 async function hide() {
   if (!present.value || closing) return;
   const generation = ++motionEpoch;
   const keyboardReturning =
     keyboardOpen.value || restingHeight - viewport.value.height > 110;
-  const started = performance.now();
   closing = true;
   cancel();
+  historyScroll.stop();
   endPull(true);
   phase.value = "closing";
-  stopMotion();
   edgeControl?.stop();
   // Release the extra WebKit fallback under an opaque frosted backdrop, so
   // the page sharpens as that backdrop fades rather than snapping at unmount.
   document.documentElement.dataset.companionChat = "closing";
-  const start = ball.value
-    ?.querySelector(".chat-ball-visual")
-    ?.getBoundingClientRect();
-  const paintReturn = start ? returnFlight(start) : undefined;
   composer.value?.dismiss();
-  if (motionAllowed() && ball.value && paintReturn) {
-    controls = [
-      animate(0, 1, { ...ballTravel, duration: 0.38, onUpdate: paintReturn }),
-      ...(
-        [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
-      ).map((el) =>
-        animate(
-          el,
-          { opacity: [Number(getComputedStyle(el).opacity), 0] },
-          { duration: 0.34, delay: 0.02 },
-        ),
-      ),
-      ...entryParts()
-        .reverse()
-        .map((el, index) =>
-          animate(
-            el,
-            {
-              opacity: [Number(getComputedStyle(el).opacity), 0],
-              transform: [
-                getComputedStyle(el).transform,
-                "translate3d(0,10px,0) scale(.985)",
-              ],
-            },
-            { ...motionTokens.exit, duration: 0.22, delay: index * 0.035 },
-          ),
-        ),
-    ];
-    await Promise.all(controls.map((c) => c.then(() => {})));
-  }
-  if (keyboardReturning && paintReturn && motionAllowed())
-    await awaitKeyboardReturn(generation, started, paintReturn);
-  if (generation !== motionEpoch || !closing) return;
-  paintReturn?.(1);
+  trackReturnOnViewport();
+  const destination = () => props.returnRect?.() || props.origin;
+  const outcome = await chatTravel.close(destination, {
+    instant: !motionAllowed(),
+  });
+  if (
+    outcome !== "done" ||
+    generation !== motionEpoch ||
+    !closing ||
+    !present.value
+  )
+    return;
+  stopReturnTracking?.();
+  if (keyboardReturning && motionAllowed())
+    await awaitKeyboardReturn(generation);
+  if (generation !== motionEpoch || !closing || !present.value) return;
+  // Hand the ball back only after the keyboard has settled, at the source's
+  // latest layout position.
+  chatTravel.snapClosed(props.returnRect?.() || props.origin);
   finishClose();
 }
 // Only boundary pulls are intercepted. Normal scrolling, text selection and
@@ -396,6 +448,12 @@ let pull: {
 } | null = null;
 let pullControl: ReturnType<typeof animate> | undefined;
 function startPull(event: TouchEvent | PointerEvent) {
+  // Touch interrupts programmatic follow. A mouse press alone is not a scroll
+  // intent; wheel already interrupts separately.
+  const isTouch =
+    "touches" in event ||
+    ("pointerType" in event && event.pointerType === "touch");
+  if (isTouch) historyScroll.interrupt();
   if ("pointerType" in event && event.pointerType === "touch") return;
   if ((event.target as HTMLElement).closest("button,textarea,input,a")) return;
   const point = "touches" in event ? event.touches[0] : event;
@@ -435,6 +493,10 @@ function endPointerPull(event: PointerEvent) {
 function endPull(immediate = false) {
   const engaged = pull?.engaged;
   pull = null;
+  // A boundary pull can pause follow without changing scrollTop, so no native
+  // scroll event would restore near-bottom state. Recheck once on release;
+  // readers away from the bottom remain paused and keep their anchor.
+  if (!immediate) historyScroll.scroll();
   if (!historyContent.value) return;
   // Native scrolling does not need an animation or a synchronous style read.
   if (!engaged && !immediate) return;
@@ -450,7 +512,7 @@ function endPull(immediate = false) {
           "translate3d(0,0,0) scaleX(1)",
         ],
       },
-      travel,
+      settleSpring,
     );
 }
 let edge: {
@@ -520,7 +582,7 @@ function edgeUp(event: PointerEvent) {
   edgeControl = animate(
     g.el,
     { transform: [getComputedStyle(g.el).transform, "translate3d(0,0,0)"] },
-    motionAllowed() ? { ...ballTravel, duration: 0.3 } : { duration: 0 },
+    motionAllowed() ? settleSpring : { duration: 0 },
   );
 }
 const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提醒"];
@@ -535,7 +597,12 @@ async function welcome(generation: number) {
   ];
   for (const [index, text] of messages.entries()) {
     if (generation !== epoch || !props.modelValue) return;
-    items.value.push({ id: "welcome:" + index, role: "assistant", text });
+    items.value.push({
+      id: "welcome:" + index,
+      role: "assistant",
+      text,
+      fresh: true,
+    });
     bottom();
     if (motionAllowed()) await pause(160);
   }
@@ -553,24 +620,31 @@ async function load() {
   controller?.abort();
   const c = new AbortController();
   controller = c;
-  loading.value = true;
+  loading.value = !loaded;
   error.value = "";
   retry = null;
   try {
     const state = await api.state(c.signal);
     if (generation !== epoch || !props.modelValue) return;
     available.value = state.available;
-    items.value = state.messages.flatMap((m) =>
-      m.messages.map((text, i) => ({
-        id: `${m.request_id}:${m.role}:${i}`,
-        role: m.role,
-        text,
-      })),
-    );
+    const localNotes = items.value.filter((m) => m.id.startsWith("note:"));
+    items.value = [
+      ...state.messages.flatMap((m) =>
+        m.messages.map((text, i) => ({
+          id: `${m.request_id}:${m.role}:${i}`,
+          role: m.role,
+          text,
+          fresh: false,
+        })),
+      ),
+      ...localNotes,
+    ];
     reminders.value = state.reminders;
+    const initialHistory = !loaded;
+    loaded = true;
     emotion.value = "39";
     if (!available.value) error.value = "球球还未接通AI服务";
-    bottom();
+    bottom(initialHistory);
     if (!items.value.length && available.value) await welcome(generation);
   } catch (e) {
     if (generation === epoch && !c.signal.aborted)
@@ -580,9 +654,11 @@ async function load() {
   }
 }
 async function send(text: string, isRetry = false) {
-  if (busy.value || loading.value || actionBusy.value || !available.value)
-    return;
-  const request = isRetry && retry ? retry : { text, id: crypto.randomUUID() };
+  if (busy.value || actionBusy.value || notes.sending.value) return;
+  // Sending must not pull a reader who has deliberately scrolled history.
+  if (!isRetry && notes.input(text)) return;
+  if (loading.value || !available.value) return;
+  const request = isRetry && retry ? retry : { text, id: chatRequestId() };
   retry = request;
   const generation = ++epoch,
     c = new AbortController();
@@ -593,7 +669,12 @@ async function send(text: string, isRetry = false) {
   emotion.value = "30";
   awaiting.value = true;
   if (!isRetry)
-    items.value.push({ id: request.id + ":user:0", role: "user", text });
+    items.value.push({
+      id: request.id + ":user:0",
+      role: "user",
+      text,
+      fresh: true,
+    });
   bottom();
   try {
     const reply = await api.send(request.text, request.id, c.signal);
@@ -606,6 +687,7 @@ async function send(text: string, isRetry = false) {
         id: `${request.id}:assistant:${i}`,
         role: "assistant",
         text: reply.messages[i]!,
+        fresh: true,
       });
       bottom();
       if (motionAllowed()) await pause(140);
@@ -637,8 +719,9 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
     if (generation !== epoch) return;
     a.status = result.status;
     items.value.push({
-      id: crypto.randomUUID(),
+      id: chatRequestId(),
       role: "assistant",
+      fresh: true,
       text:
         result.status === "sent"
           ? "这条提醒已经发出"
@@ -659,6 +742,7 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
 }
 const clearConfirm = ref(false);
 function requestClear() {
+  if (notes.active.value) return;
   clearConfirm.value = !clearConfirm.value;
   if (clearConfirm.value)
     void nextTick(() => {
@@ -666,7 +750,8 @@ function requestClear() {
     });
 }
 async function clear() {
-  if (busy.value || loading.value || actionBusy.value) return;
+  if (busy.value || loading.value || actionBusy.value || notes.active.value)
+    return;
   busy.value = true;
   error.value = "";
   const generation = epoch,
@@ -676,6 +761,7 @@ async function clear() {
     await api.clear(c.signal);
     if (generation === epoch) {
       items.value = [];
+      notes.reset();
       reminders.value = reminders.value.filter((a) => a.status === "pending");
       retry = null;
       clearConfirm.value = false;
@@ -698,17 +784,11 @@ function inactive() {
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function quiet() {
   if (!motionAllowed()) {
+    const closingNow = phase.value === "closing";
     motionEpoch++;
-    stopMotion();
+    chatTravel.complete(closingNow ? "close" : "open");
     endPull(true);
-    if (ball.value) ball.value.style.transform = "none";
-    for (const el of [backdrop.value, masthead.value, ...entryParts()]) {
-      if (el) {
-        el.style.opacity = "1";
-        el.style.transform = "none";
-      }
-    }
-    if (phase.value === "closing") finishClose();
+    if (closingNow) finishClose();
     else if (present.value) phase.value = "open";
   }
 }
@@ -723,6 +803,10 @@ watch(
 watch(scope, () => {
   cancel();
   items.value = [];
+  draft.value = "";
+  loaded = false;
+  historyScroll.stop();
+  notes.reset();
   reminders.value = [];
   retry = null;
   available.value = false;
@@ -735,10 +819,13 @@ window.visualViewport?.addEventListener("scroll", scheduleFit);
 document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
+  footerObserver?.disconnect();
+  historyScroll.destroy();
   delete document.documentElement.dataset.companionChat;
   cancel();
   motionEpoch++;
-  stopMotion();
+  stopReturnTracking?.();
+  chatTravel.destroy();
   edgeControl?.stop();
   endPull(true);
   clearTimeout(errorTimer);
@@ -779,6 +866,7 @@ function time(value: string) {
       ><DialogContent
         class="companion-chat"
         :data-ready="prepared"
+        :data-phase="phase"
         :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
         :style="{ top: viewport.top + 'px', height: viewport.height + 'px' }"
         @pointerdown.capture="chatPointerStarted"
@@ -799,8 +887,13 @@ function time(value: string) {
         ><DialogDescription class="chat-sr-only"
           >输入文字与球球聊天。提醒安排需要确认后才保存。</DialogDescription
         >
-        <div ref="masthead" class="chat-masthead" aria-hidden="true" />
-        <div ref="ball" class="chat-ball" data-testid="chat-ball">
+        <div
+          ref="ball"
+          class="chat-ball"
+          data-testid="chat-ball"
+          @pointerdown.capture="reopenFromBall"
+          @click.capture="reopenClick"
+        >
           <div class="chat-ball-visual">
             <DormCompanion
               :size="88"
@@ -830,7 +923,8 @@ function time(value: string) {
             <div
               ref="scroll"
               class="chat-history"
-              @scroll.passive="refreshEdge"
+              @scroll.passive="historyScrolled"
+              @wheel.passive="historyScroll.interrupt"
               @touchstart.passive="startPull"
               @touchmove="movePull"
               @touchend="endPull()"
@@ -866,10 +960,8 @@ function time(value: string) {
                   :key="item.id"
                   class="chat-bubble"
                   :class="item.role"
-                  :initial="
-                    motionAllowed() ? { opacity: 0, y: 10, scale: 0.94 } : false
-                  "
-                  :animate="{ opacity: 1, y: 0, scale: 1 }"
+                  :initial="item.fresh ? bubbleOrigin(item.role) : false"
+                  :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
                   :transition="motionTransition"
                   >{{ item.text }}</motion.div
                 >
@@ -934,30 +1026,93 @@ function time(value: string) {
                     {{ prompt }}
                   </button>
                 </div>
+                <AnimatePresence :initial="false"
+                  ><motion.div
+                    v-if="notes.active.value"
+                    :initial="
+                      motionAllowed()
+                        ? { opacity: 0, y: 10, scale: 0.97 }
+                        : false
+                    "
+                    :animate="{ opacity: 1, y: 0, scale: 1 }"
+                    :exit="{ opacity: 0, y: 5, scale: 0.97 }"
+                    :transition="chatTransition('layout')"
+                    style="width: 100%"
+                    key="note-flow"
+                  >
+                    <ConversationNoteFlow
+                      :state="notes.state.value"
+                      :members="members || []"
+                      :member-id="memberId"
+                      @choose="
+                        notes.dispatch({ type: 'choose', target: $event })
+                      "
+                      @edit="notes.dispatch({ type: 'edit', field: $event })"
+                      @cancel="notes.dispatch({ type: 'cancel' })"
+                      @confirm="
+                        notes.dispatch({ type: 'submit' })
+                      " /></motion.div
+                ></AnimatePresence>
                 <button
                   v-if="hasConversation"
                   class="chat-clear"
                   aria-label="清空聊天记录"
-                  :disabled="busy || loading || !!actionBusy"
+                  :disabled="
+                    busy || loading || !!actionBusy || notes.active.value
+                  "
                   @click="requestClear"
                 >
                   清空聊天
                 </button>
               </div>
             </div>
-            <div
-              class="chat-top-frost"
-              aria-hidden="true"
-              data-testid="chat-top-frost"
-            >
-              <i /><i /><i /><i /><i />
-            </div>
+          </div>
+          <div
+            ref="masthead"
+            class="chat-masthead chat-top-frost"
+            aria-hidden="true"
+            data-testid="chat-top-frost"
+          >
+            <i /><i /><i /><i />
           </div>
           <footer ref="footer" class="chat-footer">
+            <div
+              class="chat-footer-glass"
+              aria-hidden="true"
+              data-testid="chat-bottom-frost"
+            >
+              <i class="glass-top-soft" /><i class="glass-top-edge" />
+              <i class="glass-bottom-soft" /><i class="glass-bottom-edge" />
+            </div>
+            <button
+              v-if="!notes.active.value && !keyboardOpen"
+              class="chat-note-shortcut"
+              :disabled="busy || !!actionBusy || phase !== 'open'"
+              @click="notes.dispatch({ type: 'start' })"
+            >
+              我要留言
+            </button>
             <CompanionChatComposer
               ref="composer"
-              :busy="busy || loading || !!actionBusy"
-              :enabled="available && !loading && phase === 'open'"
+              v-model:draft="draft"
+              :busy="
+                busy ||
+                (loading && !notes.active.value) ||
+                !!actionBusy ||
+                notes.sending.value
+              "
+              :enabled="
+                (available || notes.active.value) &&
+                !notes.sending.value &&
+                phase === 'open'
+              "
+              :placeholder="
+                notes.state.value.phase === 'content'
+                  ? '写下留言内容…'
+                  : notes.state.value.phase === 'recipient'
+                    ? '输入完整姓名，或点选室友…'
+                    : '和球球说句话…'
+              "
               @focus="scheduleFit"
               @resize="bottom"
               @send="send"
@@ -980,6 +1135,24 @@ function time(value: string) {
   >
 </template>
 <style scoped>
+.chat-note-shortcut {
+  width: max-content;
+  min-height: 36px;
+  padding: 6px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
+  background: var(--chat-glass);
+  color: var(--ui-ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform var(--ui-release-time) var(--ui-ease-out);
+}
+.chat-note-shortcut:not(:disabled):active {
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
+}
 /* Static page frost also covers WebKit compositors that drop backdrop blur
    across fixed/contained siblings. Only the chat presence owns this state. */
 :global(html[data-companion-chat="true"] .app-stage),
@@ -1017,15 +1190,10 @@ function time(value: string) {
   visibility: hidden;
 }
 .chat-masthead {
-  opacity: 0;
   position: absolute;
+  z-index: 2;
   inset: 0 0 auto;
-  height: calc(var(--chat-ball-top) + 160px);
-  background: color-mix(in srgb, var(--ui-surface) 74%, transparent);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  mask-image: linear-gradient(#000 35%, #0009 65%, transparent);
-  -webkit-mask-image: linear-gradient(#000 35%, #0009 65%, transparent);
+  height: calc(var(--chat-ball-top) + 144px);
   pointer-events: none;
 }
 .chat-ball {
@@ -1038,15 +1206,21 @@ function time(value: string) {
   transform-origin: center;
 }
 .chat-surface {
+  --chat-footer-height: 102px;
+  --chat-input-height: 58px;
+  --chat-footer-gap: max(58px, calc(env(safe-area-inset-bottom) + 34px));
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0 20px max(58px, calc(env(safe-area-inset-bottom) + 34px));
+  padding: 0 20px;
   position: relative;
   z-index: 1;
   box-sizing: border-box;
 }
 .chat-toolbar {
+  position: relative;
+  z-index: 4;
+  pointer-events: none;
   opacity: 0;
   display: flex;
   justify-content: flex-start;
@@ -1056,6 +1230,7 @@ function time(value: string) {
   box-sizing: border-box;
 }
 .chat-toolbar button {
+  pointer-events: auto;
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -1098,85 +1273,56 @@ function time(value: string) {
 .chat-history-frame {
   opacity: 0;
   --chat-edge: 0;
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  margin: 0 -4px;
-}
-.chat-top-frost {
   position: absolute;
-  z-index: 2;
-  inset: -32px -16px auto;
-  height: calc(clamp(40px, 9dvh, 72px) + 32px);
-  mask-image: linear-gradient(transparent, #000 24px, #000 50%, transparent);
-  -webkit-mask-image: linear-gradient(
-    transparent,
-    #000 24px,
-    #000 50%,
-    transparent
-  );
-  pointer-events: none;
-  opacity: var(--chat-edge);
+  inset: 0 16px;
+  min-height: 0;
 }
 .chat-top-frost i {
+  opacity: 0;
   position: absolute;
   inset: 0;
   display: block;
+  background: color-mix(in srgb, var(--ui-surface) 9%, transparent);
 }
 .chat-top-frost i:nth-child(1) {
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  mask-image: linear-gradient(#000 0%, #000 50%, transparent);
-  -webkit-mask-image: linear-gradient(#000 0%, #000 50%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(#000 48%, transparent);
+  -webkit-mask-image: linear-gradient(#000 48%, transparent);
 }
 .chat-top-frost i:nth-child(2) {
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  mask-image: linear-gradient(#000 0%, #000 28%, transparent 85%);
-  -webkit-mask-image: linear-gradient(#000 0%, #000 28%, transparent 85%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(#000 24%, transparent 86%);
+  -webkit-mask-image: linear-gradient(#000 24%, transparent 86%);
 }
 .chat-top-frost i:nth-child(3) {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  mask-image: linear-gradient(#000 0%, transparent 65%);
-  -webkit-mask-image: linear-gradient(#000 0%, transparent 65%);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  mask-image: linear-gradient(#000, transparent 60%);
+  -webkit-mask-image: linear-gradient(#000, transparent 60%);
 }
 .chat-top-frost i:nth-child(4) {
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  mask-image: linear-gradient(#000 0%, transparent 42%);
-  -webkit-mask-image: linear-gradient(#000 0%, transparent 42%);
-}
-.chat-top-frost i:nth-child(5) {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  mask-image: linear-gradient(#000 0%, transparent 24%);
-  -webkit-mask-image: linear-gradient(#000 0%, transparent 24%);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  mask-image: linear-gradient(#000, transparent 34%);
+  -webkit-mask-image: linear-gradient(#000, transparent 34%);
 }
 .chat-history {
   touch-action: pan-y pinch-zoom;
   height: 100%;
   box-sizing: border-box;
-  mask-image: linear-gradient(
-    to bottom,
-    rgb(0 0 0 / calc(1 - var(--chat-edge))) 0px,
-    #000 48px
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    rgb(0 0 0 / calc(1 - var(--chat-edge))) 0px,
-    #000 48px
-  );
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
   display: block;
-  padding: 16px 4px 22px;
+  padding: calc(var(--chat-ball-top) + 144px) 4px
+    calc(var(--chat-footer-height) + var(--chat-footer-gap) + 22px);
   margin: 0;
 }
 .chat-history-content {
-  min-height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -1257,9 +1403,87 @@ function time(value: string) {
   }
 }
 .chat-footer {
+  position: absolute;
+  z-index: 3;
+  inset-inline: 20px;
+  bottom: var(--chat-footer-gap);
   opacity: 0;
   flex: none;
   padding-top: 8px;
+}
+.chat-footer::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -48px -20px calc(-1 * var(--chat-footer-gap));
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--ui-surface) 10%, transparent) 48px,
+    color-mix(in srgb, var(--ui-surface) 12%, transparent) 70%,
+    color-mix(in srgb, var(--ui-surface) 18%, transparent)
+  );
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(transparent, #000 48px);
+  -webkit-mask-image: linear-gradient(transparent, #000 48px);
+}
+.chat-footer > * {
+  position: relative;
+  z-index: 1;
+}
+.chat-footer > .chat-footer-glass {
+  position: absolute;
+  z-index: 0;
+  inset: -48px -20px calc(-1 * var(--chat-footer-gap));
+  pointer-events: none;
+}
+.chat-footer-glass i {
+  position: absolute;
+  inset-inline: 0;
+  display: block;
+  pointer-events: none;
+}
+.glass-top-soft,
+.glass-top-edge {
+  top: 0;
+  height: calc(
+    48px + var(--chat-footer-height) - var(--chat-input-height) + 24px
+  );
+}
+.glass-top-soft {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(transparent, #000 48%, #000 62%, transparent);
+  -webkit-mask-image: linear-gradient(
+    transparent,
+    #000 48%,
+    #000 62%,
+    transparent
+  );
+}
+.glass-top-edge {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  mask-image: linear-gradient(transparent 12%, #000 60%, transparent);
+  -webkit-mask-image: linear-gradient(transparent 12%, #000 60%, transparent);
+}
+.glass-bottom-soft {
+  bottom: 0;
+  height: calc(var(--chat-footer-gap) + var(--chat-input-height) * 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(transparent, #000 70%);
+  -webkit-mask-image: linear-gradient(transparent, #000 70%);
+}
+.glass-bottom-edge {
+  bottom: 0;
+  height: calc(var(--chat-footer-gap) + var(--chat-input-height) * 0.15);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  mask-image: linear-gradient(transparent 5%, #000);
+  -webkit-mask-image: linear-gradient(transparent 5%, #000);
 }
 .chat-error {
   position: absolute;
@@ -1415,14 +1639,16 @@ function time(value: string) {
   height: 125px;
 }
 .is-compact .chat-surface {
-  padding-bottom: 12px;
+  --chat-footer-gap: max(12px, env(safe-area-inset-bottom));
 }
 .is-compact .chat-history {
-  padding-top: 8px;
-  padding-bottom: 12px;
+  padding-top: 116px;
+  padding-bottom: calc(
+    var(--chat-footer-height) + var(--chat-footer-gap) + 12px
+  );
 }
 .is-compact .chat-top-frost {
-  height: 64px;
+  height: 125px;
 }
 .is-compact .chat-error {
   bottom: 94px;
@@ -1444,8 +1670,14 @@ function time(value: string) {
   :global(html[data-companion-chat="true"] .chore-bottom-nav) {
     filter: none;
   }
-  .chat-top-frost {
+  .chat-top-frost,
+  .chat-footer-glass {
     display: none;
+  }
+  .chat-footer::before {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--ui-surface);
   }
   .companion-chat-backdrop {
     backdrop-filter: none;

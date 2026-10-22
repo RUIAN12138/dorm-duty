@@ -1,4 +1,5 @@
 frontend/node_modules/
+/node_modules/
 frontend/dist/
 frontend/dist-server/
 # 生成的部署入口：由 site/scripts/embed-frontend.mjs 生成，不提交

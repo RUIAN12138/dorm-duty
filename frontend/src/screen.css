@@ -118,6 +118,26 @@
 .app-stage .screen-surface .water-title-stage h2 {
   font-size: clamp(42px, 13cqh, 80px);
 }
+/* Only water density changes: grow spacing from actual available page height.
+   Short/landscape layouts below retain their existing compact treatment. */
+@container page (min-height: 400px) {
+  .app-stage .screen-surface .water-pane {
+    --hero-anchor: clamp(140px, 35cqh, 320px);
+  }
+  .app-stage .screen-surface .water-pane > .chore-water {
+    gap: clamp(18px, 4cqh, 34px);
+  }
+  .app-stage .screen-surface .water-title-stage {
+    height: clamp(68px, 15cqh, 120px);
+  }
+  .app-stage .screen-surface .water-title-stage h2 {
+    font-size: clamp(48px, 13cqh, 88px);
+  }
+  .app-stage .screen-surface .water-pane .completion-surface,
+  .app-stage .screen-surface .water-pane .water-nudge-actions {
+    margin-top: clamp(22px, 5cqh, 48px);
+  }
+}
 .app-stage .screen-surface .calendar-pane {
   height: 100%;
   padding: 0;
@@ -336,5 +356,10 @@ body:has(.app-stage),
 /* The restored record stack is a native scroll island inside the elastic page. */
 .app-stage .screen-surface [data-native-scroll],
 .app-stage .screen-surface [data-native-scroll] * {
+  touch-action: pan-y pinch-zoom;
+}
+.app-stage.is-signed-in {
+  /* Include safe-area blank space; leave vertical native scrolling and pinch
+     available while the board alone decides whether to claim a page swipe. */
   touch-action: pan-y pinch-zoom;
 }

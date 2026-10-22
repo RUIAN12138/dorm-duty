@@ -27,6 +27,65 @@ const check = (condition, label) => {
   assert(condition, label);
   checks.push(label);
 };
+async function checkInputGlass(label) {
+  const result = await page.locator(".companion-chat").evaluate((root) => {
+    const panel = root.querySelector(".composer-text");
+    const footer = root.querySelector(".chat-footer");
+    const input = panel.querySelector("textarea");
+    const p = getComputedStyle(panel),
+      f = getComputedStyle(footer, "::before");
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    const rgba = (color) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1, 1);
+      return [...ctx.getImageData(0, 0, 1, 1).data];
+    };
+    const lum = (c) =>
+      c
+        .slice(0, 3)
+        .map((v) => v / 255)
+        .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+        .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ink = lum(rgba(getComputedStyle(input).color)),
+      surface = lum(rgba(p.getPropertyValue("--ui-surface")));
+    const contrast =
+      (Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05);
+    const r = footer.getBoundingClientRect();
+    return {
+      alpha: rgba(p.backgroundColor)[3] / 255,
+      veilAlpha: rgba(f.backgroundColor)[3] / 255,
+      blur: p.backdropFilter || p.webkitBackdropFilter,
+      safeBottom: Math.abs(
+        r.bottom - parseFloat(f.bottom) - root.getBoundingClientRect().bottom,
+      ),
+      contrast,
+      layers: [...footer.querySelectorAll(".chat-footer-glass i")].map(
+        (el) => ({
+          blur:
+            getComputedStyle(el).backdropFilter ||
+            getComputedStyle(el).webkitBackdropFilter,
+          mask: getComputedStyle(el).maskImage,
+        }),
+      ),
+    };
+  });
+  check(
+    result.alpha > 0.2 &&
+      result.alpha < 0.6 &&
+      result.veilAlpha < 0.5 &&
+      result.blur.includes("blur") &&
+      result.safeBottom < 2 &&
+      result.contrast >= 4.5 &&
+      result.layers.length === 4 &&
+      result.layers.every((el) => el.mask.includes("gradient")) &&
+      result.layers.map((el) => el.blur).join(",") ===
+        "blur(10px),blur(18px),blur(14px),blur(26px)",
+    label,
+  );
+}
 try {
   const room = await (
     await h.request("/guest/create", {
@@ -332,35 +391,58 @@ try {
         touchPoints: [],
       });
     }
+    async function blankSwipe(direction) {
+      const point = await page.evaluate((direction) => {
+        for (let y = 190; y < innerHeight - 150; y += 18)
+          for (const x of direction < 0
+            ? [innerWidth - 36, innerWidth - 70]
+            : [36, 70]) {
+            const el = document.elementFromPoint(x, y);
+            if (
+              el?.matches("div,section,header,main,article") &&
+              el.closest(".app-stage.is-signed-in") &&
+              !el.closest(
+                "button,a,[role=button],.calendar-surface,.task-title-stage,.water-title-stage,.task-selector,.round-progress,.completion-surface,.companion-frame,[data-page-gesture],[data-native-scroll]",
+              )
+            )
+              return { x, y };
+          }
+        throw new Error("No blank navigation region");
+      }, direction);
+      await swipe(point.x, point.x + direction * 110, point.y);
+      await page.waitForTimeout(650);
+    }
     const beforeSwipe = (await board()).today_tasks.map((t) => [
       t.id,
       t.status,
     ]);
     await touchSwipe(page.locator(".completion-surface").first(), -1);
-    await page.getByTestId("pane-water").waitFor();
     await page.waitForTimeout(650);
     check(
-      JSON.stringify(
-        (await board()).today_tasks.map((t) => [t.id, t.status]),
-      ) === JSON.stringify(beforeSwipe),
-      "swiping over the completion button changes page without completing a task",
+      (await page.getByTestId("pane-duty").isVisible()) &&
+        JSON.stringify(
+          (await board()).today_tasks.map((t) => [t.id, t.status]),
+        ) === JSON.stringify(beforeSwipe),
+      "completion control swipe neither changes page nor completes a task",
     );
+    await blankSwipe(-1);
+    await page.getByTestId("pane-water").waitFor();
     await touchSwipe(page.getByTestId("water-nudge"), -1);
-    await page.getByTestId("pane-calendar").waitFor();
     await page.waitForTimeout(650);
     check(
-      (await board()).reminders.length === 0,
-      "swiping over the water name never sends an accidental nudge",
+      (await page.getByTestId("pane-water").isVisible()) &&
+        (await board()).reminders.length === 0,
+      "water name swipe retains ownership and never sends a nudge",
     );
-    await touchSwipe(page.locator(".compact-calendar > header"), 1);
+    await blankSwipe(-1);
+    await page.getByTestId("pane-calendar").waitFor();
+    await blankSwipe(1);
     await page.getByTestId("pane-water").waitFor();
-    await page.waitForTimeout(650);
-    await touchSwipe(page.getByTestId("water-nudge"), 1);
+    await blankSwipe(1);
     await page.getByTestId("pane-duty").waitFor();
-    await page.waitForTimeout(650);
     check(
       true,
-      `${safari ? "pointer" : "native touch"} swipe navigates all three pages in both directions`,
+      "blank-only swipes navigate all three pages in both directions",
     );
     const holdBox = await ball.boundingBox();
     const hx = holdBox.x + holdBox.width / 2,
@@ -420,11 +502,11 @@ try {
       (await page.locator(".sheet-layer").count()) === 0,
       "successful touch hold never leaks a delayed note action",
     );
-    await swipe(320, 65, 610);
+    await blankSwipe(-1);
     await page.getByTestId("pane-water").waitFor();
     await page.waitForTimeout(650);
     check(true, "left swipe navigates duty to water");
-    await swipe(320, 65, 610);
+    await blankSwipe(-1);
     await page.getByTestId("pane-calendar").waitFor();
     await page.waitForTimeout(750);
     check(true, "left swipe navigates water to calendar");
@@ -887,6 +969,12 @@ try {
           .isVisible()),
       "toolbar contains only the back chevron",
     );
+    // Opening no longer waits for the spring's invisible tail. The greetings
+    // and suggestions are API-driven and may finish after the local shell;
+    // wait for their own ready state, not an accidentally slow entry motion.
+    await page
+      .getByRole("button", { name: "今天做什么？", exact: true })
+      .waitFor();
     check(
       (await page.locator(".chat-bubble.assistant").count()) === 3 &&
         (await page
@@ -908,8 +996,10 @@ try {
         .locator(".chat-masthead")
         .evaluate(
           (el) =>
-            getComputedStyle(el).backdropFilter.includes("blur") &&
-            getComputedStyle(el).backgroundColor !== "rgba(0, 0, 0, 0)",
+            el.children.length === 4 &&
+            [...el.children].every((layer) =>
+              getComputedStyle(layer).backdropFilter.includes("blur"),
+            ),
         ),
       "top has a translucent frosted surface",
     );
@@ -1113,6 +1203,9 @@ try {
       }),
       "visual keyboard resize compacts the header and keeps composer just above keyboard",
     );
+    await checkInputGlass(
+      "keyboard viewport retains translucent input glass and continuous safe-area veil",
+    );
     await editor.fill("第一行\n第二行\n第三行");
     await page.waitForTimeout(80);
     check(
@@ -1255,15 +1348,22 @@ try {
       );
     }
     await page.setViewportSize({ width: 390, height: 844 });
+    await checkInputGlass(
+      "light input glass stays translucent with readable foreground and safe-area continuity",
+    );
     await page.getByTestId("chat-history").evaluate((el) => {
       window.savedChatScroll = el.scrollTop;
       el.scrollTop = 0;
       el.dispatchEvent(new Event("scroll"));
     });
     check(
-      await page
-        .getByTestId("chat-top-frost")
-        .evaluate((el) => Number(getComputedStyle(el).opacity) === 0),
+      await page.getByTestId("chat-top-frost").evaluate((el) => {
+        const first = document.querySelector(".chat-bubble");
+        return (
+          first.getBoundingClientRect().top >=
+          el.getBoundingClientRect().bottom - 1
+        );
+      }),
       "top frost does not obscure the first message at the start of history",
     );
     await page.getByTestId("chat-history").evaluate((el) => {
@@ -1276,18 +1376,21 @@ try {
         .evaluate(
           (el) =>
             getComputedStyle(el).opacity === "1" &&
-            el.children.length === 5 &&
+            el.children.length === 4 &&
             [...el.children].every((i) =>
               getComputedStyle(i).maskImage.includes("gradient"),
             ),
         ),
-      "scrolled messages pass through five graded frost layers instead of a hard upper cut",
+      "scrolled messages pass through four graded frost layers instead of a hard upper cut",
     );
     await page.screenshot({
       path: path.join(evidence, `${safari ? "webkit" : "chromium"}-chat.png`),
     });
     await page.evaluate(() => window.qa.theme("dark"));
     await page.waitForTimeout(500);
+    await checkInputGlass(
+      "dark input glass preserves transparency, foreground contrast and continuous safe area",
+    );
     await page.screenshot({
       path: path.join(evidence, `${safari ? "webkit" : "chromium"}-dark.png`),
     });
@@ -1429,6 +1532,11 @@ try {
           Math.abs(end.width - home.width) < 2,
       };
     });
+    if (!keyboardLanding.matches)
+      console.error(
+        "keyboard return geometry",
+        JSON.stringify(keyboardLanding),
+      );
     check(
       keyboardLanding.matches,
       "keyboard-dismiss return lands at the actual live ball anchor before handoff",

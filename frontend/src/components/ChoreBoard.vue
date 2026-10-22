@@ -4,7 +4,6 @@ import {
   cancelPageReveal,
   pageLayers,
 } from "../interaction/pageReveal";
-import CompanionNotes from "./CompanionNotes.vue";
 import { provideSheetNavigation } from "../interaction/sheetNavigation";
 import CompanionChat from "./CompanionChat.vue";
 import DormCompanion from "./DormCompanion.vue";
@@ -190,7 +189,6 @@ const messagesOpen = ref(false),
 const toolsOpen = ref(false),
   preferencesOpen = ref(false),
   companionOpen = ref(false),
-  noteOpen = ref(false),
   orderOpen = ref(false);
 let alive = true;
 const waterExceptionOpen = ref(false);
@@ -353,9 +351,11 @@ let sectionPointer: {
   surface: HTMLElement;
   velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
+let sectionControlPointer: { id: number; x: number; y: number } | null = null;
 function resetSectionSwipe() {
   const active = sectionPointer;
   sectionPointer = null;
+  sectionControlPointer = null;
   sectionSwipeDragging.value = false;
   sectionSwipeOffset.value = 0;
   if (active?.surface.hasPointerCapture(active.id))
@@ -364,9 +364,37 @@ function resetSectionSwipe() {
 function sectionSwipeDown(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || sectionPointer) return;
   if (
+    !boardRoot.value ||
+    !(event.target instanceof Element) ||
+    !event.target.closest(".app-stage.is-signed-in")
+  )
+    return;
+  if (
+    event.clientX < 24 ||
+    event.clientX > window.innerWidth - 24 ||
+    chatPresent.value ||
+    document.querySelector('.sheet-layer,[role="dialog"]')
+  )
+    return;
+  // Observe (without capture or navigation) drags on the two tap actions, so a
+  // horizontal swipe cannot turn into an accidental completion or reminder.
+  if (event.target.closest('.completion-surface,[data-testid="water-nudge"]')) {
+    sectionControlPointer = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    return;
+  }
+  if (
+    !(event.target instanceof Element) ||
+    !event.target.matches("div,section,header,main,article,.identity-name")
+  )
+    return;
+  if (
     !(event.target instanceof Element) ||
     event.target.closest(
-      "input,textarea,select,[role=tablist],[contenteditable=true],.calendar-surface,.task-title-stage,[data-sheet-scroll],[data-page-gesture]",
+      "button,a,input,textarea,select,[role=tablist],[role=slider],[contenteditable=true],.calendar-surface,.task-title-stage,.water-title-stage,.task-selector,.completion-surface,.round-progress,.companion-frame,.stats-mode,.deck-stage,[role=button],[draggable=true],[data-sheet-scroll],[data-page-gesture],[data-native-scroll]",
     )
   )
     return;
@@ -375,11 +403,18 @@ function sectionSwipeDown(event: PointerEvent) {
     x: event.clientX,
     y: event.clientY,
     horizontal: false,
-    surface: event.currentTarget as HTMLElement,
+    surface: boardRoot.value,
     velocity: createVelocityTracker(event.clientX, performance.now()),
   };
 }
 function sectionSwipeMove(event: PointerEvent) {
+  const control = sectionControlPointer;
+  if (
+    control?.id === event.pointerId &&
+    Math.abs(event.clientX - control.x) > 12 &&
+    Math.abs(event.clientX - control.x) > Math.abs(event.clientY - control.y)
+  )
+    sectionSuppressClickUntil = performance.now() + 500;
   const active = sectionPointer;
   if (!active || active.id !== event.pointerId) return;
   const x = event.clientX - active.x;
@@ -400,6 +435,8 @@ function sectionSwipeMove(event: PointerEvent) {
   sectionSwipeOffset.value = rubberBand(x, 150);
 }
 function sectionSwipeUp(event: PointerEvent) {
+  if (sectionControlPointer?.id === event.pointerId)
+    sectionControlPointer = null;
   const active = sectionPointer;
   if (!active || active.id !== event.pointerId) return;
   const x = event.clientX - active.x;
@@ -419,6 +456,8 @@ function sectionSwipeUp(event: PointerEvent) {
   else showToast(x < 0 ? "已经是最后一页" : "已经是第一页");
 }
 function sectionSwipeCancel(event: PointerEvent) {
+  if (sectionControlPointer?.id === event.pointerId)
+    sectionControlPointer = null;
   if (
     event.type === "lostpointercapture" &&
     (event.target !== sectionPointer?.surface ||
@@ -441,11 +480,23 @@ function sectionHidden() {
   }
 }
 onMounted(() => {
+  // ScreenStage owns the safe-area blank space outside the board itself.
+  // Listen at the window, but admit only signed-in stage blank regions above.
+  window.addEventListener("pointerdown", sectionSwipeDown);
+  window.addEventListener("pointermove", sectionSwipeMove, { passive: false });
+  window.addEventListener("pointerup", sectionSwipeUp);
+  window.addEventListener("pointercancel", sectionSwipeCancel);
+  window.addEventListener("lostpointercapture", sectionSwipeCancel);
   window.addEventListener("blur", resetSectionSwipe);
   document.addEventListener("visibilitychange", sectionHidden);
 });
 onUnmounted(() => {
   resetSectionSwipe();
+  window.removeEventListener("pointerdown", sectionSwipeDown);
+  window.removeEventListener("pointermove", sectionSwipeMove);
+  window.removeEventListener("pointerup", sectionSwipeUp);
+  window.removeEventListener("pointercancel", sectionSwipeCancel);
+  window.removeEventListener("lostpointercapture", sectionSwipeCancel);
   window.removeEventListener("blur", resetSectionSwipe);
   document.removeEventListener("visibilitychange", sectionHidden);
 });
@@ -530,13 +581,8 @@ watch(companionEntering, (pending) => {
     );
 });
 onUnmounted(() => clearTimeout(arrivalTimer));
-function openNote() {
-  if (!busy.value && !completionSyncPending.value) {
-    noteTarget.value = undefined;
-    noteOpen.value = true;
-  }
-}
-const noteTarget = ref<number>();
+const chatNoteRequest = ref<{ key: number; target: number }>();
+let chatNoteSequence = 0;
 const companionPulse = ref("");
 let companionPulseTimer: ReturnType<typeof setTimeout> | undefined;
 function pulseCompanion(id: string, duration = 2600) {
@@ -763,7 +809,6 @@ const reminderBanner = useReminderBanner(() => ({
     preferencesOpen.value ||
     companionOpen.value ||
     chatPresent.value ||
-    noteOpen.value ||
     orderOpen.value ||
     roundOpen.value ||
     pushOpen.value ||
@@ -838,9 +883,9 @@ function replyBannerMessage() {
     openBannerMessages();
     return;
   }
-  noteTarget.value = sender.user_id;
+  chatNoteRequest.value = { key: ++chatNoteSequence, target: sender.user_id };
   reminderBanner.dismiss();
-  noteOpen.value = true;
+  openChat(companionReturnRect() || new DOMRect(20, 20, 52, 52));
 }
 function openBannerMessages() {
   messagesOpen.value = true;
@@ -858,7 +903,6 @@ watch(
     preferencesOpen,
     companionOpen,
     chatPresent,
-    noteOpen,
     orderOpen,
     roundOpen,
     pushOpen,
@@ -1292,7 +1336,6 @@ function visibleRefresh(event?: Event) {
     !toolsOpen.value &&
     !preferencesOpen.value &&
     !companionOpen.value &&
-    !noteOpen.value &&
     !orderOpen.value &&
     !roundOpen.value &&
     !pushOpen.value &&
@@ -1348,6 +1391,7 @@ onUnmounted(() => {
   <div
     ref="boardRoot"
     class="chore-board"
+    @click.capture="sectionSwipeClick"
     :class="{
       'arrival-pending': companionEntering,
       'arrival-reveal': arrivalReveal,
@@ -1399,12 +1443,13 @@ onUnmounted(() => {
             :chat-enabled="!demo"
             :style="{ visibility: chatPresent ? 'hidden' : undefined }"
             @chat="openChat"
-            intent="message"
+            @chat-cancel="chatOpen = false"
+            intent="chat"
             :tips="true"
             :scene="section"
             :message="
               board.overdue_categories?.length
-                ? `${board.overdue_categories.map((c) => c.name).join('、')}超过五天没做啦，记得安排一下。长按我可以聊天。`
+                ? `${board.overdue_categories.map((c) => c.name).join('、')}超过五天没做啦，记得安排一下。点我可以聊天。`
                 : ''
             "
             :muted="
@@ -1412,13 +1457,11 @@ onUnmounted(() => {
               toolsOpen ||
               preferencesOpen ||
               companionOpen ||
-              noteOpen ||
               reminderOpen ||
               messagesOpen ||
               settingsOpen ||
               !!detailTask
             "
-            @message="openNote"
           />
           <span class="identity-name"
             ><span>{{ dormName }}</span
@@ -1458,12 +1501,6 @@ onUnmounted(() => {
             1 - Math.min(0.42, Math.abs(sectionSwipeOffset) / 210),
           ),
         }"
-        @click.capture="sectionSwipeClick"
-        @pointerdown="sectionSwipeDown"
-        @pointermove="sectionSwipeMove"
-        @pointerup="sectionSwipeUp"
-        @pointercancel="sectionSwipeCancel"
-        @lostpointercapture="sectionSwipeCancel"
       >
         <Transition
           name="focus-fade"
@@ -1689,7 +1726,6 @@ onUnmounted(() => {
                           !toolsOpen &&
                           !preferencesOpen &&
                           !companionOpen &&
-                          !noteOpen &&
                           !pushOpen &&
                           !settingsOpen &&
                           !recoveryOpen &&
@@ -1814,6 +1850,9 @@ onUnmounted(() => {
         v-model="chatOpen"
         :origin="chatOrigin"
         :return-rect="companionReturnRect"
+        :members="board.members"
+        :note-request="chatNoteRequest"
+        @note-sent="load"
         :invite="invite"
         :member-id="memberId"
         :token="token"
@@ -1925,16 +1964,6 @@ onUnmounted(() => {
           />
         </div>
       </ElasticSheet>
-      <CompanionNotes
-        v-model="noteOpen"
-        :members="board.members"
-        :member-id="memberId"
-        :token="token"
-        :invite="invite"
-        :initial-target="noteTarget"
-        @sent="load"
-        @closed="presentNewReminders"
-      />
       <ElasticSheet
         v-model="companionOpen"
         title="球球设置"

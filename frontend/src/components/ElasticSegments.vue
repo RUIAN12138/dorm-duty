@@ -14,6 +14,8 @@ const props = defineProps<{
   modelValue: string;
   options: SegmentOption[];
   groupLabel: string;
+  /** Calendar opts in; other segmented controls retain release-to-select. */
+  scrub?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
@@ -35,9 +37,11 @@ let pointerId: number | null = null;
 let startX = 0;
 let startY = 0;
 let suppressClickUntil = 0;
+let originValue = props.modelValue;
 
 function down(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || pointerId !== null) return;
+  originValue = props.modelValue;
   pointerId = event.pointerId;
   startX = event.clientX;
   startY = event.clientY;
@@ -47,6 +51,17 @@ function down(event: PointerEvent) {
 }
 function move(event: PointerEvent) {
   if (event.pointerId !== pointerId) return;
+  if (props.scrub) {
+    const bounds = track.value?.getBoundingClientRect();
+    if (
+      !bounds ||
+      event.clientY < bounds.top - 24 ||
+      event.clientY > bounds.bottom + 24
+    ) {
+      cancelGesture();
+      return;
+    }
+  }
   const deltaX = event.clientX - startX;
   const deltaY = event.clientY - startY;
   if (!dragging.value) {
@@ -57,6 +72,7 @@ function move(event: PointerEvent) {
     }
     if (intent !== "horizontal") return;
     dragging.value = true;
+    if (props.scrub) track.value?.setPointerCapture(event.pointerId);
   }
   event.preventDefault();
   const rect = track.value?.getBoundingClientRect();
@@ -71,6 +87,11 @@ function move(event: PointerEvent) {
     ),
   );
   selection.track(previewIndex.value);
+  if (props.scrub) {
+    const option = props.options[Math.round(previewIndex.value)];
+    if (option && option.value !== props.modelValue)
+      emit("update:modelValue", option.value);
+  }
 }
 function up(event: PointerEvent) {
   if (event.pointerId !== pointerId) return;
@@ -86,6 +107,14 @@ function up(event: PointerEvent) {
   reset();
 }
 function cancel(event: PointerEvent) {
+  // Touch starts with implicit capture on TabsTrigger. Transferring capture to
+  // the rail emits lostpointercapture on that child, which bubbles here. It is
+  // a handoff, not cancellation, while this rail still owns the same pointer.
+  if (
+    event.type === "lostpointercapture" &&
+    track.value?.hasPointerCapture(event.pointerId)
+  )
+    return;
   if (event.pointerId === pointerId) {
     cancelGesture();
   }
@@ -93,7 +122,16 @@ function cancel(event: PointerEvent) {
 function cancelGesture() {
   if (pointerId === null) return;
   suppressClickUntil = performance.now() + 500;
-  selection.move(selectedIndex.value);
+  if (props.scrub && props.modelValue !== originValue)
+    emit("update:modelValue", originValue);
+  selection.move(
+    props.scrub
+      ? Math.max(
+          0,
+          props.options.findIndex((o) => o.value === originValue),
+        )
+      : selectedIndex.value,
+  );
   reset();
 }
 function cancelWhenHidden() {
@@ -102,7 +140,10 @@ function cancelWhenHidden() {
 window.addEventListener("blur", cancelGesture);
 document.addEventListener("visibilitychange", cancelWhenHidden);
 function reset() {
+  const id = pointerId;
   pointerId = null;
+  if (id !== null && track.value?.hasPointerCapture(id))
+    track.value.releasePointerCapture(id);
   dragging.value = false;
   previewIndex.value = null;
   window.removeEventListener("pointermove", move);
@@ -141,7 +182,8 @@ onUnmounted(() => {
       class="calendar-view-selector"
       :class="{ 'is-dragging': dragging }"
       :style="{ '--segment-count': options.length }"
-      @pointerdown="down"
+      @pointerdown.stop="down"
+      @lostpointercapture="cancel"
       @mousedown.capture.prevent
       @click.capture="suppressClick"
       @dragstart.prevent

@@ -273,11 +273,20 @@ try {
   await page.getByTestId("nav-duty").click();
   await page.waitForTimeout(450);
   await page.locator(".dorm-companion").click();
-  await page.locator("#companion-note-text").waitFor();
-  await page.getByRole("button", { name: "所有人", exact: true }).click();
-  await page.locator("#companion-note-text").fill("今晚一起打扫。");
-  await page.getByRole("button", { name: "送给所有人", exact: true }).click();
-  await page.locator("#companion-note-text").waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "我要留言", exact: true }).click();
+  const note = page.getByTestId("conversation-note");
+  await note.getByRole("button", { name: "所有人", exact: true }).click();
+  await page.getByLabel("和球球说句话", { exact: true }).click();
+  await page.getByLabel("和球球说句话", { exact: true }).fill("今晚一起打扫。");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  check(
+    h.db.sqlite
+      .prepare("SELECT COUNT(*) n FROM chore_reminders WHERE source='note'")
+      .get().n === 0,
+    "broadcast preview does not send before explicit confirmation",
+  );
+  await note.getByRole("button", { name: "确认发送", exact: true }).click();
+  await note.waitFor({ state: "hidden" });
   const delivered = h.db.sqlite
     .prepare(
       "SELECT target_member_id,task_content_snapshot FROM chore_reminders WHERE source='note'",
