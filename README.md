@@ -6,7 +6,7 @@
 
 Vue 3 · TypeScript · Vite · Node.js · SQLite · Android · HarmonyOS
 
-[体验网页](https://8.148.190.114/dorm-duty/) · [使用说明](docs/CHORES.md) · [开发进度](docs/PROGRESS.md) · [参与协作](CONTRIBUTING.md)
+[本地部署](#本地运行) · [使用说明](docs/CHORES.md) · [开发进度](docs/PROGRESS.md) · [参与协作](CONTRIBUTING.md)
 
 </div>
 
@@ -33,11 +33,17 @@ Vue 3 · TypeScript · Vite · Node.js · SQLite · Android · HarmonyOS
 
 **球球交互、聊天体验、玻璃动效等持续优化中。** 查看 [Pull Requests](../../pulls) 了解尚未合并的工作；正式上线状态以发布和验收记录为准。
 
-## 快速体验
+## 项目截图
 
-**正式入口：** https://8.148.190.114/dorm-duty/
+项目采用面向手机的黑白极简界面，涵盖值日任务、抬水轮换、日历记录与球球互动等场景。
 
-正式成员需先验证邮箱，再创建宿舍或通过邀请码与完整姓名绑定身份；游客体验使用演示数据，不代表正式宿舍数据。
+**截图待补充：** 为保证展示内容与实际版本一致，仓库主页仅使用真实运行截图，不使用概念图或伪造的 UI。可将经过隐私处理的截图存放于 `docs/screenshots/`，并在此展示首页、日历、抬水和球球聊天等页面。
+
+## 使用方式
+
+**本项目的个人服务器仅供作者自用，不对外开放。** 仓库不提供公共在线体验入口，也不接受通过作者服务器注册或使用。
+
+感兴趣的开发者可以克隆仓库，在自己的电脑上运行本地版本；本地数据与作者的私人服务器完全独立。
 
 ## 本地运行
 
@@ -73,7 +79,7 @@ dorm-duty/
 └── backend/    历史 FastAPI 代码（非正式部署入口）
 ```
 
-**正式业务链路：** `scripts/local-server.mjs → site/worker/`（Node.js + SQLite）。
+**当前自用服务器业务链路：** `scripts/local-server.mjs → site/worker/`（Node.js + SQLite）。
 
 `backend/` 为历史代码，不具备当前邮箱准入机制；旧 Cloudflare Worker/Pages 代码也不是当前正式业务部署入口。正式发布应使用 `deploy/prepare-release.py` 和 `deploy/install-release.py`，不要将历史服务直接发布为生产环境。参见 [架构与发布审计](docs/AUTH_RELEASE_AUDIT.md)。
 
