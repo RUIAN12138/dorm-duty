@@ -16,3 +16,5 @@ OpenSpec 校验结构，范围脚本检查文件边界。它们不能证明视�
 本轮已有预览按事实回填，不伪装成事前 OpenSpec 流程。上一轮模拟器验证不等于本次毛玻璃/涟漪的模拟器验收。
 
 基线规范：openspec/specs/change-governance/spec.md。运行时交互事实以动效契约和已验收记录为准；尚在 changes 下的产品要求没有自动成为 main 或正式产品事实。
+
+用户明确要求“部署供查看”时，可在保持acceptance.pending的同时，记录publishAuthorization（action=deploy-for-review、userStatement原话、authorizedDigest当前摘要）。此记录只解锁相同内容的publish门禁，不能解锁PR或未来版本，发布仍需备份与冒烟。此例外来自本轮用户明确指令，不能由代理自行推断。

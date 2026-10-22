@@ -91,6 +91,7 @@ export function checkScope(root, gate = "check") {
     if (/^openspec\/changes\/[^/]+\/scope\.json$/.test(file)) {
       const m = JSON.parse(content.toString());
       delete m.acceptance; // Avoid a circular digest, never ignore implementation.
+      delete m.publishAuthorization;
       content = Buffer.from(JSON.stringify(m));
     }
     hash.update(file);
@@ -106,6 +107,15 @@ export function checkScope(root, gate = "check") {
       throw Error("No reviewable batch diff; do not reuse stale acceptance");
     for (const m of manifests) {
       const a = m.acceptance;
+      const publish = m.publishAuthorization;
+      if (
+        gate === "publish" &&
+        publish?.action === "deploy-for-review" &&
+        typeof publish.userStatement === "string" &&
+        publish.userStatement.trim() &&
+        publish.authorizedDigest === digest
+      )
+        continue;
       if (
         a?.status !== "accepted" ||
         typeof a.userStatement !== "string" ||

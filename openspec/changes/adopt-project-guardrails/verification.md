@@ -7,3 +7,5 @@
 - status/instructions apply JSON 确认可读 config 与 tasks。CI 仅增加结构/范围检查，尚未在 GitHub 触发；不声称远程 CI 已通过。
 - 官方生成技能保留原文件，项目以 npm run spec 包装本地 CLI 并关闭进程遥测。
 - 未推送、未建 PR、未合并、未发布；用户验收待完成。脚本不是权限沙箱，不能证明视觉效果或鉴别记录填写者。
+
+发布查看授权追加：用户明确“部署到网站看看”，新增绑定摘要的publishAuthorization，仅发布门禁可读取，不改变acceptance.pending；14项门禁测试通过，含PR仍拒绝与改内容后发布授权失效。此为用户最新指令对应的发布动作，不是代理自行免除验收。

@@ -39,6 +39,22 @@ try {
     assert.throws(() => checkScope(root, "pr"), /acceptance missing/));
   test("publish requires actual acceptance record", () =>
     assert.throws(() => checkScope(root, "publish"), /acceptance missing/));
+  m.publishAuthorization = {
+    action: "deploy-for-review",
+    userStatement: "fixture: deploy for review only",
+    authorizedDigest: checkScope(root).digest,
+  };
+  save();
+  test("explicit publish authorization permits only current publication", () =>
+    assert.equal(checkScope(root, "publish").gate, "publish"));
+  test("publish authorization does not grant PR acceptance", () =>
+    assert.throws(() => checkScope(root, "pr"), /acceptance missing/));
+  write("feature.txt", "changed after publish request");
+  test("content change invalidates publish authorization", () =>
+    assert.throws(() => checkScope(root, "publish"), /stale/));
+  write("feature.txt", "new");
+  delete m.publishAuthorization;
+  save();
   write("hidden-stage.txt", "staged only");
   git("add", "hidden-stage.txt");
   fs.rmSync(path.join(root, "hidden-stage.txt"));

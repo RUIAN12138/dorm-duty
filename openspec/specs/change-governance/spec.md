@@ -14,10 +14,10 @@
 - **THEN** 先说明必要性并取得授权，再更新规范和范围
 
 ### Requirement: Acceptance is separate from implementation
-开发者 MUST 区分实现、自动测试、模拟器、实体设备、用户验收与发布授权。未验收的隔离预览不得创建正式 PR、推送、合并 main 或发布。
+开发者 MUST 区分实现、自动测试、模拟器、实体设备、用户验收与发布授权。未验收的隔离预览不得创建正式 PR、推送或合并 main；发布须取得独立、绑定当前版本的人类授权，不能由测试通过推断。
 #### Scenario: Tests pass but user has not accepted
 - **WHEN** 所有自动测试通过但没有用户明确验收当前版本的记录
-- **THEN** 状态仍为待用户验收，PR 和发布门禁失败，正式站点和数据保持不变
+- **THEN** 状态仍为待用户验收，PR 门禁失败；没有独立发布授权时发布门禁同样失败，正式站点和数据保持不变
 #### Scenario: Evidence has a limited platform
 - **WHEN** 只做了桌面 WebKit 或模拟器测试
 - **THEN** 报告明确标明范围，不能称为实体手机通知、输入法或帧率验收
@@ -27,3 +27,12 @@
 #### Scenario: An animation is removed to pass a check
 - **WHEN** 测试要求的中间帧消失而最终文案正确
 - **THEN** 验收仍失败，保留原功能并修复连续性
+
+### Requirement: Explicit publication for review
+用户明确要求部署供查看时，发布门禁 SHALL 仅允许绑定当前差异摘要的发布授权，不将其当作完整产品验收或PR/推送/main合并授权。
+#### Scenario: Publish current preview without declaring device acceptance
+- **WHEN** 用户明确要求“部署到网站看看”且记录对应版本的发布授权
+- **THEN** 可备份并发布当前版本，验收仍pending，未完成的原生Safari/iPhone测试明确保留，PR门禁继续关闭
+#### Scenario: Content changes after authorization
+- **WHEN** 发布授权记录的内容摘要与当前差异不一致
+- **THEN** 发布门禁拒绝，不自动复用旧指令发布其他内容

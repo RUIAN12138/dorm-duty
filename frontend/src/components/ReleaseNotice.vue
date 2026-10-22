@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
           {{ pending ? "新版已准备好，更新后查看本次变化。" : displayVersion }}
         </DialogDescription>
         <ul v-if="!pending" class="release-changes">
-          <li>球球表情连续播放，聊天互动更自然</li>
-          <li>聊天支持边缘返回，回答读取真实任务</li>
-          <li>设置内切页，统计卡片渐进入场</li>
+          <li>单击球球聊天，留言确认后发送</li>
+          <li>聊天输入区渐进玻璃，边缘柔和透出</li>
+          <li>空白滑动切页，连续催促反馈增强</li>
         </ul>
         <p v-if="error" class="release-error" role="alert">{{ error }}</p>
         <button

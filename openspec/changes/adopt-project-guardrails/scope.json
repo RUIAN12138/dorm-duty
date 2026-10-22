@@ -23,5 +23,12 @@
     "status": "pending",
     "userStatement": null,
     "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "部署到网站看看",
+    "authorizedDigest": "e83dd6230fbb7fbd0f763bdfe48a07f782528b7d4364a1f3678c82c635b39dca",
+    "recordedOn": "2026-10-22",
+    "limits": "仅当前发布供查看；不代表全平台验收，不授权PR、推送或main合并。"
   }
 }
