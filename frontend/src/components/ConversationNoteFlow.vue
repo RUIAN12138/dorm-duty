@@ -126,19 +126,29 @@ const sending = computed(() => props.state.phase === "sending");
 </template>
 <style scoped>
 .conversation-note {
+  --note-tint: var(--ui-tint-3);
   position: relative;
   transform-origin: top left;
   padding: 16px;
   border: 1px solid var(--ui-border);
   border-radius: 24px;
-  background: var(--chat-glass);
-  color: var(--ui-ink);
+  background: color-mix(in srgb, var(--note-tint) 82%, transparent);
+  color: var(--ui-chat-body-ink);
 }
 .conversation-note strong {
   display: block;
   margin: 8px 0 12px;
   font-size: 22px;
+  color: var(--ui-chat-title-ink);
   overflow-wrap: anywhere;
+  line-break: loose;
+  text-wrap: pretty;
+}
+:global(html[data-theme="dark"]) .conversation-note {
+  font-weight: 450;
+}
+:global(html[data-theme="dark"]) .conversation-note strong {
+  font-weight: 610;
 }
 .note-label {
   font-size: 13px;
@@ -147,6 +157,8 @@ const sending = computed(() => props.state.phase === "sending");
 .conversation-note-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  line-break: loose;
+  text-wrap: pretty;
   line-height: 1.6;
   margin: 0 0 16px;
 }

@@ -16,16 +16,16 @@
   },
   "prAuthorization": {
     "action": "create-for-review",
-    "userStatement": "并且提交 pr",
-    "authorizedDigest": "91a7fc3c52f8d5262bdcc2856bf1d7262c2ea31d986a50ece353e43cd223e671",
+    "userStatement": "这次做完直接提交 pr 部署网站",
+    "authorizedDigest": "925c9f11a42cbb8764d026fdd4eb2993ff145449c43c2615aea5217595f757b1",
     "recordedOn": "2026-10-22",
-    "limits": "仅当前批次开发分支推送及正式PR；不代表实机或产品验收，不授权main合并。"
+    "limits": "仅v74当前批次开发分支推送/PR及备份后的代码部署；不合并main，不代表产品或实体验收，不覆盖数据库/私密配置。"
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "部署到网站",
-    "authorizedDigest": "dd3549f9e16a192a6140401a1a241ca93cb60edd9ecfb669882bfacc12c377c3",
+    "userStatement": "这次做完直接提交 pr 部署网站",
+    "authorizedDigest": "925c9f11a42cbb8764d026fdd4eb2993ff145449c43c2615aea5217595f757b1",
     "recordedOn": "2026-10-22",
-    "limits": "仅当前批次代码发布；先备份和核对历史，不覆盖数据库与私密配置，不代表全平台验收。"
+    "limits": "仅v74当前批次开发分支推送/PR及备份后的代码部署；不合并main，不代表产品或实体验收，不覆盖数据库/私密配置。"
   }
 }

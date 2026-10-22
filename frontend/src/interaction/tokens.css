@@ -46,4 +46,13 @@
   --ui-press-small: scale(0.96);
   --ui-press-squash: scaleX(1.02) scaleY(0.94);
   --ui-press-action: var(--ui-press-squash);
+  /* Local 1–3% relative-lightness lifts. They mix the ink into the surface so
+     light theme darkens a hair and dark theme lifts a hair. */
+  --ui-tint-1: color-mix(in srgb, var(--ui-surface) 99%, var(--ui-ink));
+  --ui-tint-2: color-mix(in srgb, var(--ui-surface) 98%, var(--ui-ink));
+  --ui-tint-3: color-mix(in srgb, var(--ui-surface) 97%, var(--ui-ink));
+  --ui-chat-body-ink: var(--ui-ink);
+  --ui-chat-title-ink: var(--ui-ink);
+  --ui-focus-ring: color-mix(in srgb, var(--ui-ink) 16%, transparent);
+  --ui-focus-glow: color-mix(in srgb, var(--ui-ink) 10%, transparent);
 }

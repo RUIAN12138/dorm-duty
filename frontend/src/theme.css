@@ -154,6 +154,11 @@
   --ui-category-sink-bg: #302b23;
   --ui-category-water: #9fc8dc;
   --ui-category-water-bg: #222e35;
+  /* Chat body and titles move independently in dark mode: body stays just
+     below full ink, titles keep full contrast. Numbers only get tabular
+     spacing elsewhere. */
+  --ui-chat-body-ink: color-mix(in srgb, var(--ui-ink) 94%, var(--ui-surface));
+  --ui-chat-title-ink: color-mix(in srgb, var(--ui-ink) 99%, var(--ui-surface));
 }
 html[data-theme="dark"] {
   color-scheme: dark;

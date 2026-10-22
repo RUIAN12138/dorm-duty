@@ -18,6 +18,9 @@ export function createChatScroll(
   let pinned = true;
   let smooth = false;
   let userPaused = false;
+  // While the first history frame is being measured, every layout follow must
+  // be instant. It is released only after the caller has positioned history.
+  let initial = false;
   let smoothTimer: ReturnType<typeof setTimeout> | undefined;
   let anchor: { el: HTMLElement; offset: number } | null = null;
   let observer: ResizeObserver | undefined;
@@ -43,7 +46,7 @@ export function createChatScroll(
     if (!el || !pinned) return;
     // Read the size once per coalesced batch, never inside a frame loop.
     const target = Math.max(0, el.scrollHeight - el.clientHeight);
-    if (immediate || !motionAllowed()) {
+    if (immediate || initial || !motionAllowed()) {
       stopSmooth();
       el.scrollTo({ top: target, behavior: "auto" });
       paint();
@@ -60,7 +63,7 @@ export function createChatScroll(
   }
 
   function request(immediate = false) {
-    wantImmediate = wantImmediate || immediate;
+    wantImmediate = wantImmediate || immediate || initial;
     if (!pinned) return;
     ensureObserver();
     if (frame) return;
@@ -70,6 +73,32 @@ export function createChatScroll(
       wantImmediate = false;
       flush(next);
     });
+  }
+
+  // Synchronous first frame. `scrollTo({behavior:"auto"})` still animates when
+  // the scroller inherits CSS scroll-behavior: smooth, so temporarily force
+  // the computed behavior and assign scrollTop directly. No fixed timer or
+  // smooth flight is involved.
+  function positionInitial() {
+    const el = element();
+    if (!el) return;
+    cancelFrame();
+    wantImmediate = false;
+    stopSmooth();
+    pinned = true;
+    userPaused = false;
+    anchor = null;
+    initial = true;
+    ensureObserver();
+    const previous = el.style.scrollBehavior;
+    el.style.scrollBehavior = "auto";
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.style.scrollBehavior = previous;
+    paint();
+  }
+
+  function releaseInitial() {
+    initial = false;
   }
 
   function captureAnchor() {
@@ -112,10 +141,20 @@ export function createChatScroll(
     observed = host;
     anchor = null;
     observer = new ResizeObserver(() => {
-      // Layout changes below the reader should not scroll them; if pinned,
-      // coalesce a single follow into the next frame.
-      if (pinned) request();
-      else restoreAnchor();
+      // During initial history positioning the first frame must never become
+      // a visible smooth flight. Afterwards layout changes below the reader
+      // should not scroll them; if pinned, coalesce one follow.
+      if (initial) {
+        positionInitial();
+        return;
+      }
+      if (pinned) {
+        // Revealing the first history frame changes content height while the
+        // reader is already at the bottom; follow that layout instantly. A
+        // genuinely appended message leaves a gap and keeps the smooth path.
+        const el = element();
+        request(!el || distance(el) < 1.5);
+      } else restoreAnchor();
     });
     observer.observe(host);
   }
@@ -142,6 +181,7 @@ export function createChatScroll(
   function interrupt() {
     cancelFrame();
     wantImmediate = false;
+    initial = false;
     stopSmooth();
     pinned = false;
     userPaused = true;
@@ -156,6 +196,7 @@ export function createChatScroll(
   function stop() {
     cancelFrame();
     wantImmediate = false;
+    initial = false;
     clearTimeout(smoothTimer);
     smoothTimer = undefined;
     smooth = false;
@@ -178,6 +219,9 @@ export function createChatScroll(
     pin,
     stop,
     destroy,
+    positionInitial,
+    releaseInitial,
+    isPinned: () => pinned,
     // Exposed for callers that know a layout change is about to happen.
     capture: captureAnchor,
     restore: restoreAnchor,

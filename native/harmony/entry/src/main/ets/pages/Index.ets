@@ -8,7 +8,7 @@ import { JPushInterface } from '@jg/push';
 import { JPUSH_APP_KEY, WEB_ORIGIN, WEB_BASE } from '../PushConfig';
 import { PageLoadState } from '../PageLoadState';
 import { BasicPush } from '../BasicPush';
-interface BridgeRequest { id: string; command: string; token?: string; }
+interface BridgeRequest { id: string; command: string; token?: string; url?: string; }
 interface BridgeResult { id: string; ok: boolean; enabled: boolean; configured: boolean; message: string; platform: string; }
 interface DeviceBody { platform: string; device_id: string; device_secret: string; registration_id?: string; }
 @Entry
@@ -104,6 +104,7 @@ struct Index {
     if (raw.length > 8192 || !this.validURL(this.controller.getUrl())) return;
     let request: BridgeRequest;
     try { request = JSON.parse(raw) as BridgeRequest; } catch (_) { return; }
+    if (request.command === 'openExternal') { void this.openExternal(request, port); return; }
     const prefs = preferences.getPreferencesSync(this.context, { name: 'install' });
     const result: BridgeResult = { id: request.id, ok: false, enabled: false, configured: JPUSH_APP_KEY.length === 24, message: '', platform: 'harmony' };
     if (this.pending) { result.message = '请等待当前通知操作完成'; this.respond(port, result); return; }
@@ -134,6 +135,25 @@ struct Index {
       }
     } catch (error) { result.message = (error as Error).message || '通知操作失败，请重试'; }
     finally { this.pending = false; this.respond(port, result); }
+  }
+  private safeExternal(value: string): boolean {
+    if (!value || value.length > 4096) return false;
+    const match = /^https:\/\/([^/?#]+)(?:[/?#][^\s]*)?$/.exec(value);
+    if (!match) return false;
+    const authority: string = match[1] || '';
+    // Reject userinfo and empty authorities; only HTTPS reaches the system link
+    // handler. No WebView fallback is attempted on failure.
+    return authority.length > 0 && authority.indexOf('@') < 0;
+  }
+  private async openExternal(request: BridgeRequest, port: webview.WebMessagePort): Promise<void> {
+    const result: BridgeResult = { id: request.id, ok: false, enabled: false, configured: false, message: '', platform: 'harmony' };
+    try {
+      const url = request.url || '';
+      if (!this.safeExternal(url)) throw new Error('仅支持安全的 HTTPS 链接');
+      await this.context.openLink(url);
+      result.ok = true;
+    } catch (error) { result.message = (error as Error).message || '打开链接失败，可复制后手动访问'; }
+    this.respond(port, result);
   }
   private respond(port: webview.WebMessagePort, result: BridgeResult): void {
     try { port.postMessageEvent(JSON.stringify(result)); } catch (_) { /* The initiating document may already be closed. */ }

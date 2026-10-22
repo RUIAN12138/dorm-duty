@@ -10,6 +10,7 @@ import {
 } from "reka-ui";
 import { animate, motion, AnimatePresence } from "motion-v";
 import DormCompanion from "./DormCompanion.vue";
+import ChatReplyText from "./ChatReplyText.vue";
 import CompanionChatComposer from "./CompanionChatComposer.vue";
 import ConversationNoteFlow from "./ConversationNoteFlow.vue";
 import { useConversationNotes } from "../composables/useConversationNotes";
@@ -29,20 +30,27 @@ import { createChatScroll } from "../interaction/chatScroll";
 import { createChatTravel } from "../interaction/chatTravel";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
-const props = defineProps<{
-  modelValue: boolean;
-  origin: DOMRect | null;
-  returnRect?: () => DOMRect | null;
-  members?: ChoreMember[];
-  noteRequest?: { key: number; target: number };
-  invite: string;
-  memberId: number;
-  token: string;
-}>();
+// `committed` separates the optimistic visual preview from the irreversible
+// chat requests. Existing callers keep the previous behaviour by default.
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    origin: DOMRect | null;
+    returnRect?: () => DOMRect | null;
+    members?: ChoreMember[];
+    noteRequest?: { key: number; target: number };
+    invite: string;
+    memberId: number;
+    token: string;
+    committed?: boolean;
+  }>(),
+  { committed: true },
+);
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   present: [value: boolean];
   noteSent: [];
+  reopen: [];
 }>();
 const present = ref(false),
   prepared = ref(false),
@@ -59,7 +67,14 @@ const present = ref(false),
   historyFrame = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
 const draft = ref("");
+const historyReady = ref(false);
 let loaded = false;
+// The first state response after opening is always positioned instantly, even
+// when cached history was already visible.
+let initialStatePending = false;
+// One preview opens once, one commit starts exactly one initial state read,
+// even if show() and the committed watcher interleave.
+let stateRequestedForOpen = false;
 const available = ref(false),
   loading = ref(false),
   busy = ref(false),
@@ -126,11 +141,15 @@ const notes = useConversationNotes(
   },
   () => emit("noteSent"),
 );
+let handledNoteKey: number | undefined;
 watch(
-  () => props.noteRequest?.key,
+  () => [props.noteRequest?.key, props.committed] as const,
   () => {
-    if (props.noteRequest)
-      void notes.dispatch({ type: "start", target: props.noteRequest.target });
+    const request = props.noteRequest;
+    if (request && props.committed && request.key !== handledNoteKey) {
+      handledNoteKey = request.key;
+      void notes.dispatch({ type: "start", target: request.target });
+    }
   },
 );
 watch(notes.sending, (sending) => {
@@ -175,6 +194,7 @@ function scheduleFit() {
 }
 let footerObserver: ResizeObserver | undefined;
 watch(footer, (element) => {
+  document.fonts?.removeEventListener("loadingdone", fontMetricsChanged);
   footerObserver?.disconnect();
   if (!element) return;
   footerObserver = new ResizeObserver(() => {
@@ -308,6 +328,8 @@ function reopenFromBall(event: PointerEvent) {
   event.stopPropagation();
   closing = false;
   phase.value = "opening";
+  // Reopening a chat that was already confirmed is not an optimistic preview.
+  emit("reopen");
   emit("update:modelValue", true);
 }
 function reopenClick(event: MouseEvent) {
@@ -325,14 +347,47 @@ function finishClose() {
   lastFocus?.isConnected && lastFocus.focus({ preventScroll: true });
   closing = false;
 }
+// Reveal the history only after the real layout exists, then pin it
+// synchronously. The observer stays instant until releaseInitial() below, so
+// late layout work can never turn the first frame into a smooth scroll.
+async function settleHistory() {
+  const generation = motionEpoch;
+  if (!present.value) return;
+  historyReady.value = true;
+  await nextTick();
+  if (generation !== motionEpoch || !present.value) return;
+  historyScroll.positionInitial();
+  historyScroll.releaseInitial();
+  const fonts = document.fonts;
+  void fonts?.ready.then(() => {
+    // Late font metrics can change bubble height after the first paint.
+    if (
+      generation === motionEpoch &&
+      present.value &&
+      !closing &&
+      historyScroll.isPinned()
+    )
+      historyScroll.request(true);
+  });
+}
+function requestInitialState() {
+  if (stateRequestedForOpen) return;
+  if (!props.committed || !props.modelValue) return;
+  stateRequestedForOpen = true;
+  void load();
+}
 async function show() {
   entryPointerPending = true;
   const generation = ++motionEpoch;
   const wasPresent = present.value;
+  stateRequestedForOpen = false;
   if (!wasPresent) {
     prepared.value = false;
-    for (const item of items.value) item.fresh = false;
+    historyReady.value = false;
   }
+  // Reopened history never replays the reply reveal.
+  for (const item of items.value) item.fresh = false;
+  initialStatePending = true;
   stopReturnTracking?.();
   cancel();
   endPull(true);
@@ -358,7 +413,17 @@ async function show() {
   // reopening during closing continues at the current pose and velocity.
   const flight = chatTravel.open(props.origin, { fromClosed: !wasPresent });
   prepared.value = true;
-  void load();
+  if (wasPresent) {
+    // Reopening during close keeps the cached surface visible, but still
+    // pins the latest history in the same frame.
+    historyScroll.positionInitial();
+    historyScroll.releaseInitial();
+  } else if (loaded) {
+    void settleHistory();
+  }
+  // Optimistic previews never touch the companion API; only a confirmed tap
+  // (or the existing long-press/keyboard/reply entries) starts the load.
+  requestInitialState();
   const outcome = await flight;
   if (outcome !== "done") return;
   if (generation !== motionEpoch || !present.value || closing) return;
@@ -589,6 +654,17 @@ const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提�
 const hasConversation = computed(() =>
   items.value.some((item) => !item.id.startsWith("welcome:")),
 );
+// Until the first history frame has been measured and pinned, only the
+// existing skeleton exists in the history area. The ball, input and glass have
+// already expanded around it.
+const visibleItems = computed(() => (historyReady.value ? items.value : []));
+const visibleReminders = computed(() =>
+  historyReady.value
+    ? reminders.value.filter(
+        (a) => a.status === "proposed" || a.status === "pending",
+      )
+    : [],
+);
 async function welcome(generation: number) {
   const messages = [
     "我在，想问什么？",
@@ -616,6 +692,7 @@ watch(error, (message) => {
 });
 
 async function load() {
+  if (!props.committed) return;
   const generation = ++epoch;
   controller?.abort();
   const c = new AbortController();
@@ -627,6 +704,10 @@ async function load() {
     const state = await api.state(c.signal);
     if (generation !== epoch || !props.modelValue) return;
     available.value = state.available;
+    // A reader who moved away from the bottom keeps their anchor even if the
+    // first state response arrives late.
+    const keepReading = !historyScroll.isPinned();
+    if (keepReading) historyScroll.capture();
     const localNotes = items.value.filter((m) => m.id.startsWith("note:"));
     items.value = [
       ...state.messages.flatMap((m) =>
@@ -640,20 +721,48 @@ async function load() {
       ...localNotes,
     ];
     reminders.value = state.reminders;
-    const initialHistory = !loaded;
     loaded = true;
     emotion.value = "39";
     if (!available.value) error.value = "球球还未接通AI服务";
-    bottom(initialHistory);
+    const firstState = initialStatePending;
+    initialStatePending = false;
+    loading.value = false;
+    await nextTick();
+    if (generation !== epoch || !props.modelValue) return;
+    if (!historyReady.value) await settleHistory();
+    else if (keepReading) {
+      await nextTick();
+      if (generation === epoch) historyScroll.restore();
+    } else if (firstState) {
+      // Cached history was already visible and pinned; the first state
+      // response re-pins the latest messages instantly instead of
+      // top-then-smooth.
+      historyScroll.positionInitial();
+      historyScroll.releaseInitial();
+    } else bottom();
     if (!items.value.length && available.value) await welcome(generation);
   } catch (e) {
-    if (generation === epoch && !c.signal.aborted)
+    if (generation === epoch && !c.signal.aborted) {
       error.value = (e as Error).message;
+      // A failed refresh must reveal the retained history (or an empty but
+      // selectable view) together with the error, never hide it forever.
+      const firstState = initialStatePending;
+      initialStatePending = false;
+      loading.value = false;
+      await nextTick();
+      if (generation !== epoch || !props.modelValue) return;
+      if (!historyReady.value) await settleHistory();
+      else if (firstState && historyScroll.isPinned()) {
+        historyScroll.positionInitial();
+        historyScroll.releaseInitial();
+      }
+    }
   } finally {
     if (generation === epoch) loading.value = false;
   }
 }
 async function send(text: string, isRetry = false) {
+  if (!props.committed) return;
   if (busy.value || actionBusy.value || notes.sending.value) return;
   // Sending must not pull a reader who has deliberately scrolled history.
   if (!isRetry && notes.input(text)) return;
@@ -708,6 +817,7 @@ async function send(text: string, isRetry = false) {
   }
 }
 async function act(a: ChatReminder, action: "confirm" | "cancel") {
+  if (!props.committed) return;
   if (actionBusy.value || busy.value || loading.value) return;
   const generation = epoch,
     c = new AbortController();
@@ -750,6 +860,7 @@ function requestClear() {
     });
 }
 async function clear() {
+  if (!props.committed) return;
   if (busy.value || loading.value || actionBusy.value || notes.active.value)
     return;
   busy.value = true;
@@ -779,7 +890,8 @@ function inactive() {
     cancel();
     quiet();
     emotion.value = "02";
-  } else if (props.modelValue && phase.value === "open") void load();
+  } else if (props.modelValue && props.committed && phase.value === "open")
+    void load();
 }
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function quiet() {
@@ -800,11 +912,22 @@ watch(
     else void hide();
   },
 );
+watch(
+  () => props.committed,
+  (value) => {
+    // A late commit for an already closed conversation must never reopen it.
+    if (value && props.modelValue && present.value && !closing)
+      requestInitialState();
+  },
+);
 watch(scope, () => {
   cancel();
   items.value = [];
   draft.value = "";
   loaded = false;
+  historyReady.value = false;
+  initialStatePending = false;
+  stateRequestedForOpen = false;
   historyScroll.stop();
   notes.reset();
   reminders.value = [];
@@ -813,6 +936,11 @@ watch(scope, () => {
   api = companionClient(props.invite, props.memberId, props.token);
   if (props.modelValue) close();
 });
+function fontMetricsChanged() {
+  if (present.value && !closing && historyScroll.isPinned())
+    historyScroll.request(true);
+}
+document.fonts?.addEventListener("loadingdone", fontMetricsChanged);
 window.visualViewport?.addEventListener("resize", scheduleFit);
 window.addEventListener("resize", scheduleFit);
 window.visualViewport?.addEventListener("scroll", scheduleFit);
@@ -923,6 +1051,7 @@ function time(value: string) {
             <div
               ref="scroll"
               class="chat-history"
+              :inert="!committed ? true : undefined"
               @scroll.passive="historyScrolled"
               @wheel.passive="historyScroll.interrupt"
               @touchstart.passive="startPull"
@@ -942,7 +1071,7 @@ function time(value: string) {
             >
               <div ref="historyContent" class="chat-history-content">
                 <div
-                  v-if="loading"
+                  v-if="!historyReady"
                   class="chat-loading"
                   aria-label="正在读取聊天"
                 >
@@ -956,17 +1085,19 @@ function time(value: string) {
                   </div>
                 </div>
                 <motion.div
-                  v-for="item in items"
+                  v-for="item in visibleItems"
                   :key="item.id"
                   class="chat-bubble"
                   :class="item.role"
                   :initial="item.fresh ? bubbleOrigin(item.role) : false"
                   :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
                   :transition="motionTransition"
-                  >{{ item.text }}</motion.div
-                >
+                  ><ChatReplyText
+                    :text="item.text"
+                    :animated="item.role === 'assistant' && !!item.fresh"
+                /></motion.div>
                 <motion.div
-                  v-if="thinking"
+                  v-if="thinking && historyReady"
                   key="thinking"
                   class="chat-bubble assistant chat-thinking"
                   aria-label="球球正在思考"
@@ -979,9 +1110,7 @@ function time(value: string) {
                   ><i /><i /><i
                 /></motion.div>
                 <motion.div
-                  v-for="a in reminders.filter(
-                    (a) => a.status === 'proposed' || a.status === 'pending',
-                  )"
+                  v-for="a in visibleReminders"
                   :key="a.id"
                   class="chat-reminder"
                   :initial="
@@ -1014,7 +1143,7 @@ function time(value: string) {
                   </div></motion.div
                 >
                 <div
-                  v-if="!loading && !hasConversation"
+                  v-if="historyReady && !loading && !hasConversation"
                   class="chat-quick-prompts"
                 >
                   <button
@@ -1028,7 +1157,7 @@ function time(value: string) {
                 </div>
                 <AnimatePresence :initial="false"
                   ><motion.div
-                    v-if="notes.active.value"
+                    v-if="notes.active.value && historyReady"
                     :initial="
                       motionAllowed()
                         ? { opacity: 0, y: 10, scale: 0.97 }
@@ -1054,7 +1183,7 @@ function time(value: string) {
                       " /></motion.div
                 ></AnimatePresence>
                 <button
-                  v-if="hasConversation"
+                  v-if="historyReady && hasConversation"
                   class="chat-clear"
                   aria-label="清空聊天记录"
                   :disabled="
@@ -1175,7 +1304,10 @@ function time(value: string) {
   -webkit-backdrop-filter: blur(12px);
 }
 .companion-chat {
-  --chat-glass: color-mix(in srgb, var(--ui-surface) 82%, transparent);
+  /* Local 1–3% lift only for the conversation surfaces; the rest of the app
+     keeps its existing palette. The glass alpha and edges are unchanged. */
+  --chat-tint: var(--ui-tint-3);
+  --chat-glass: color-mix(in srgb, var(--chat-tint) 82%, transparent);
   position: fixed;
   inset-inline: 0;
   max-width: 520px;
@@ -1363,9 +1495,12 @@ function time(value: string) {
   border-radius: 20px 20px 20px 7px;
   background: var(--chat-glass);
   border: 1px solid #ffffff40;
+  color: var(--ui-chat-body-ink);
   font-size: 16px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+  line-break: loose;
+  text-wrap: pretty;
   transform-origin: bottom left;
 }
 .chat-bubble.user {
@@ -1373,6 +1508,12 @@ function time(value: string) {
   border-radius: 20px 20px 7px 20px;
   background: color-mix(in srgb, var(--ui-surface-muted) 88%, transparent);
   transform-origin: bottom right;
+}
+:global(html[data-theme="dark"]) .chat-bubble {
+  font-weight: 450;
+}
+:global(html[data-theme="dark"]) .chat-reminder strong {
+  font-weight: 610;
 }
 .chat-thinking {
   display: flex;
@@ -1547,13 +1688,19 @@ function time(value: string) {
   font-size: 14px;
   color: var(--ui-text-muted);
 }
+.chat-reminder time {
+  font-variant-numeric: tabular-nums;
+}
 .chat-reminder strong {
   font-size: 20px;
+  color: var(--ui-chat-title-ink);
 }
 .chat-reminder p,
 .chat-confirm p {
   margin: 0;
   line-height: 1.5;
+  line-break: loose;
+  text-wrap: pretty;
 }
 .chat-reminder > div,
 .chat-confirm > div {
