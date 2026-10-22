@@ -46,6 +46,15 @@ export function createChatScroll(
     if (!el || !pinned) return;
     // Read the size once per coalesced batch, never inside a frame loop.
     const target = Math.max(0, el.scrollHeight - el.clientHeight);
+    // A mounting composer may request follow before history arrives. Starting
+    // a native smooth scroll from 0 to 0 is still an unwanted scroll session.
+    if (!immediate && !initial && Math.abs(target - el.scrollTop) < 0.5) {
+      smooth = false;
+      clearTimeout(smoothTimer);
+      smoothTimer = undefined;
+      paint();
+      return;
+    }
     if (immediate || initial || !motionAllowed()) {
       stopSmooth();
       el.scrollTo({ top: target, behavior: "auto" });
@@ -99,6 +108,23 @@ export function createChatScroll(
 
   function releaseInitial() {
     initial = false;
+  }
+
+  // Layout changed in the current viewport frame. Settle before paint without
+  // reinitialising history or changing the user's pinned/reading intent.
+  function settleLayout() {
+    const el = element();
+    if (!el) return;
+    cancelFrame();
+    wantImmediate = false;
+    const previous = el.style.scrollBehavior;
+    el.style.scrollBehavior = "auto";
+    if (pinned) flush(true);
+    else {
+      stopSmooth();
+      restoreAnchor();
+    }
+    el.style.scrollBehavior = previous;
   }
 
   function captureAnchor() {
@@ -221,6 +247,7 @@ export function createChatScroll(
     destroy,
     positionInitial,
     releaseInitial,
+    settleLayout,
     isPinned: () => pinned,
     // Exposed for callers that know a layout change is about to happen.
     capture: captureAnchor,

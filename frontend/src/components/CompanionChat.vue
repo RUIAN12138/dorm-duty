@@ -28,6 +28,11 @@ import {
 } from "../interaction/chatMotion";
 import { createChatScroll } from "../interaction/chatScroll";
 import { createChatTravel } from "../interaction/chatTravel";
+import {
+  createChatViewport,
+  isCompactViewportHeight,
+  type ChatViewportState,
+} from "../interaction/chatViewport";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
 // `committed` separates the optimistic visual preview from the irreversible
@@ -91,11 +96,11 @@ const available = ref(false),
   >([]),
   reminders = ref<ChatReminder[]>([]),
   actionBusy = ref("");
-const viewport = ref({ top: 0, height: window.innerHeight }),
+const viewport = ref({ top: 0, height: window.innerHeight, inset: 0 }),
   keyboardOpen = ref(false),
-  compactViewport = computed(
-    () => keyboardOpen.value || viewport.value.height < 560,
-  ),
+  // Compact is decided once when the conversation enters. The keyboard may
+  // never move or resize the ball, nameplate, toolbar or top frost.
+  compactViewport = ref(false),
   thinking = computed(() => awaiting.value || notes.sending.value);
 let api = companionClient(props.invite, props.memberId, props.token),
   epoch = 0,
@@ -104,7 +109,6 @@ let api = companionClient(props.invite, props.memberId, props.token),
   closing = false,
   motionEpoch = 0,
   restingHeight = window.innerHeight,
-  viewportFrame = 0,
   errorTimer: ReturnType<typeof setTimeout> | undefined,
   lastFocus: HTMLElement | null = null,
   delayTimer: ReturnType<typeof setTimeout> | undefined,
@@ -160,37 +164,48 @@ watch(notes.sending, (sending) => {
       : "12";
 });
 const motionTransition = computed(() => chatTransition("bubble"));
-function fit() {
+function composerFocused() {
+  const active = document.activeElement;
+  return !!surface.value?.contains(active) && active?.tagName === "TEXTAREA";
+}
+// One rAF-driven state is the only writer of the real visual viewport. The
+// root, footer gap, frosted glass and history all read this same geometry.
+function applyViewport(next: ChatViewportState) {
+  // Closing intentionally freezes the viewport pose; the return spring follows
+  // the live destination through the controller subscription instead.
   if (closing) return;
-  const el = scroll.value;
-  const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-  const v = window.visualViewport;
-  const nextTop = v?.offsetTop || 0;
-  const nextHeight = v?.height || window.innerHeight;
-  const focused =
-    surface.value?.contains(document.activeElement) &&
-    document.activeElement?.tagName === "TEXTAREA";
-  if (!focused) restingHeight = Math.max(restingHeight, nextHeight);
-  const nextKeyboard = !!focused && restingHeight - nextHeight > 110;
-  const nextCompact = nextKeyboard || nextHeight < 560;
-  // The compact class changes the history's padding, which moves the content
-  // under the reader. Capture before Vue applies the class and restore after
-  // the layout has been committed.
-  const compactChanged = nextCompact !== compactViewport.value;
-  if (compactChanged && !atBottom) historyScroll.capture();
-  viewport.value = { top: nextTop, height: nextHeight };
-  keyboardOpen.value = nextKeyboard;
-  if (present.value) {
-    // Viewport changes can move the source ball or the compact visual; one
-    // cached measurement here keeps the travel render free of layout reads.
-    chatTravel.measure();
-    if (atBottom) bottom(true);
-    else if (compactChanged) void nextTick(() => historyScroll.restore());
-  }
+  const previous = viewport.value;
+  restingHeight = next.restingHeight;
+  if (
+    previous.top === next.top &&
+    previous.height === next.height &&
+    previous.inset === next.inset &&
+    keyboardOpen.value === next.keyboard
+  )
+    return;
+  const active = present.value;
+  // Preserve the reader before any Vue style/padding change. Near-bottom
+  // followers use the controller's pinned state, never a post-layout distance.
+  const pinned = historyScroll.isPinned();
+  if (active && !pinned) historyScroll.capture();
+  viewport.value = {
+    top: next.top,
+    height: next.height,
+    inset: next.inset,
+  };
+  keyboardOpen.value = next.keyboard;
+  if (!active) return;
+  // Only an opening/closing ball has a moving source endpoint. A normal
+  // keyboard change must not measure layout on every frame.
+  if (phase.value !== "open") chatTravel.measure();
+  void nextTick(() => {
+    if (!present.value || closing) return;
+    historyScroll.settleLayout();
+    refreshEdge();
+  });
 }
 function scheduleFit() {
-  cancelAnimationFrame(viewportFrame);
-  viewportFrame = requestAnimationFrame(fit);
+  viewportController.schedule();
 }
 let footerObserver: ResizeObserver | undefined;
 watch(footer, (element) => {
@@ -198,25 +213,24 @@ watch(footer, (element) => {
   footerObserver?.disconnect();
   if (!element) return;
   footerObserver = new ResizeObserver(() => {
-    const history = scroll.value;
-    const wasAtBottom =
-      !history ||
-      history.scrollHeight - history.scrollTop - history.clientHeight < 60;
-    surface.value?.style.setProperty(
-      "--chat-footer-height",
-      `${element.offsetHeight}px`,
-    );
-    surface.value?.style.setProperty(
-      "--chat-input-height",
-      `${element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58}px`,
-    );
-    if (wasAtBottom) bottom(true);
-    else {
-      // Footer/keyboard padding changes can shrink the scrollable range even
-      // when the content box itself did not resize.
-      historyScroll.restore();
-      refreshEdge();
+    // Read both sizes before writing; skip writes that would not change the
+    // layout so the observer cannot restyle itself in a loop.
+    const footerHeight = element.offsetHeight;
+    const inputHeight =
+      element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58;
+    const host = surface.value;
+    if (host) {
+      const footerValue = `${footerHeight}px`;
+      const inputValue = `${inputHeight}px`;
+      if (host.style.getPropertyValue("--chat-footer-height") !== footerValue)
+        host.style.setProperty("--chat-footer-height", footerValue);
+      if (host.style.getPropertyValue("--chat-input-height") !== inputValue)
+        host.style.setProperty("--chat-input-height", inputValue);
     }
+    // The same pinned state as viewport and message updates decides whether
+    // this footer/keyboard padding change follows the latest message.
+    historyScroll.settleLayout();
+    refreshEdge();
   });
   footerObserver.observe(element);
 });
@@ -300,26 +314,17 @@ const chatTravel = createChatTravel({
     ball.value?.querySelector<HTMLElement>(".chat-ball-visual") || undefined,
   onReveal: paintReveal,
 });
+const viewportController = createChatViewport({
+  focused: composerFocused,
+  onFrame: applyViewport,
+});
 const settleSpring = chatMotion.layout;
-let stopReturnTracking: (() => void) | undefined;
-// During a close, only visualViewport events refresh the source endpoint and
-// cached base; no rAF loop measures or paints the return path.
-function trackReturnOnViewport() {
-  stopReturnTracking?.();
-  const view = window.visualViewport;
-  if (!view || !motionAllowed()) return;
-  const update = () => {
-    if (!closing || phase.value !== "closing") return;
-    chatTravel.refreshDestination();
-  };
-  view.addEventListener("resize", update);
-  view.addEventListener("scroll", update);
-  stopReturnTracking = () => {
-    view.removeEventListener("resize", update);
-    view.removeEventListener("scroll", update);
-    stopReturnTracking = undefined;
-  };
-}
+// All visualViewport/window events coalesce here. During a close the same
+// frames only refresh the return destination; no fixed-delay loop is added.
+viewportController.subscribe(() => {
+  if (closing && phase.value === "closing") chatTravel.refreshDestination();
+});
+viewportController.start();
 function reopenFromBall(event: PointerEvent) {
   // Only the still-visible ball during closing is intercepted; in the open
   // state every pointer interaction belongs to DormCompanion.
@@ -338,7 +343,6 @@ function reopenClick(event: MouseEvent) {
   event.stopPropagation();
 }
 function finishClose() {
-  stopReturnTracking?.();
   present.value = false;
   delete document.documentElement.dataset.companionChat;
   emit("present", false);
@@ -388,7 +392,6 @@ async function show() {
   // Reopened history never replays the reply reveal.
   for (const item of items.value) item.fresh = false;
   initialStatePending = true;
-  stopReturnTracking?.();
   cancel();
   endPull(true);
   closing = false;
@@ -399,13 +402,20 @@ async function show() {
     window.innerHeight,
     window.visualViewport?.height || 0,
   );
+  // A short screen decides its own compact layout before the surface exists.
+  // Reopening the same conversation keeps that entry decision.
+  if (!wasPresent)
+    compactViewport.value = isCompactViewportHeight(restingHeight);
   clearConfirm.value = false;
   present.value = true;
   document.documentElement.dataset.companionChat = "true";
   emit("present", true);
   if (!wasPresent) lastFocus = document.activeElement as HTMLElement;
   await nextTick();
-  fit();
+  viewportController.flush();
+  // Closing freezes the rendered pose while the controller continues tracking
+  // the keyboard. Reapply its snapshot even if no new viewport event arrives.
+  applyViewport(viewportController.state());
   await nextTick();
   removeBack?.();
   removeBack = registerNativeBack(close);
@@ -430,22 +440,26 @@ async function show() {
   phase.value = "open";
 }
 function awaitKeyboardReturn(generation: number) {
-  const view = window.visualViewport;
-  if (!view) return Promise.resolve();
-  // The return spring already follows resize events. If it settled after the
-  // keyboard fully restored, there may be no second resize event to await.
-  if (view.height >= restingHeight - 8 && view.offsetTop < 1)
+  const initial = viewportController.state();
+  // If the viewport already restored before the close spring settled, there
+  // may be no later event to await.
+  if (
+    initial.height >= initial.restingHeight - 8 &&
+    Math.abs(initial.top - initial.restingTop) <= 8
+  )
     return Promise.resolve();
   return new Promise<void>((resolve) => {
     let stable = 0;
     let timer = 0;
+    let unsubscribe = () => {};
     const finish = () => {
-      view.removeEventListener("resize", update);
-      view.removeEventListener("scroll", update);
+      unsubscribe();
       clearTimeout(timer);
       resolve();
     };
-    const update = () => {
+    // The same coalesced frames that refresh the return destination also
+    // decide when the keyboard has actually restored; no second listener set.
+    unsubscribe = viewportController.subscribe((state) => {
       if (
         generation !== motionEpoch ||
         !closing ||
@@ -453,17 +467,20 @@ function awaitKeyboardReturn(generation: number) {
         document.hidden
       )
         return finish();
-      // The base and return endpoint follow the real source position while
-      // the keyboard retreats; no frame loop paints or measures.
-      chatTravel.refreshDestination();
-      if (view.height >= restingHeight - 8 && view.offsetTop < 1) stable++;
+      if (
+        state.height >= state.restingHeight - 8 &&
+        Math.abs(state.top - state.restingTop) <= 8
+      )
+        stable++;
       else stable = 0;
       if (stable >= 2) finish();
-    };
-    view.addEventListener("resize", update);
-    view.addEventListener("scroll", update);
+      else if (stable === 1) viewportController.schedule();
+    });
     timer = window.setTimeout(finish, 1000);
-    update();
+    // Sample the current viewport immediately and again on the next frame so
+    // a restoration that arrived before subscribing is not missed.
+    viewportController.flush();
+    viewportController.schedule();
   });
 }
 async function hide() {
@@ -481,7 +498,6 @@ async function hide() {
   // the page sharpens as that backdrop fades rather than snapping at unmount.
   document.documentElement.dataset.companionChat = "closing";
   composer.value?.dismiss();
-  trackReturnOnViewport();
   const destination = () => props.returnRect?.() || props.origin;
   const outcome = await chatTravel.close(destination, {
     instant: !motionAllowed(),
@@ -493,7 +509,6 @@ async function hide() {
     !present.value
   )
     return;
-  stopReturnTracking?.();
   if (keyboardReturning && motionAllowed())
     await awaitKeyboardReturn(generation);
   if (generation !== motionEpoch || !closing || !present.value) return;
@@ -941,9 +956,6 @@ function fontMetricsChanged() {
     historyScroll.request(true);
 }
 document.fonts?.addEventListener("loadingdone", fontMetricsChanged);
-window.visualViewport?.addEventListener("resize", scheduleFit);
-window.addEventListener("resize", scheduleFit);
-window.visualViewport?.addEventListener("scroll", scheduleFit);
 document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
@@ -952,16 +964,12 @@ onBeforeUnmount(() => {
   delete document.documentElement.dataset.companionChat;
   cancel();
   motionEpoch++;
-  stopReturnTracking?.();
+  viewportController.stop();
   chatTravel.destroy();
   edgeControl?.stop();
   endPull(true);
   clearTimeout(errorTimer);
   removeBack?.();
-  window.visualViewport?.removeEventListener("resize", scheduleFit);
-  window.removeEventListener("resize", scheduleFit);
-  cancelAnimationFrame(viewportFrame);
-  window.visualViewport?.removeEventListener("scroll", scheduleFit);
   document.removeEventListener("visibilitychange", inactive);
   media.removeEventListener("change", quiet);
 });
@@ -996,7 +1004,11 @@ function time(value: string) {
         :data-ready="prepared"
         :data-phase="phase"
         :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
-        :style="{ top: viewport.top + 'px', height: viewport.height + 'px' }"
+        :style="{
+          top: viewport.top + 'px',
+          height: viewport.height + 'px',
+          '--chat-keyboard-inset': viewport.inset + 'px',
+        }"
         @pointerdown.capture="chatPointerStarted"
         @click.capture="chatEntryClick"
         :aria-describedby="undefined"
@@ -1340,7 +1352,15 @@ function time(value: string) {
 .chat-surface {
   --chat-footer-height: 102px;
   --chat-input-height: 58px;
-  --chat-footer-gap: max(58px, calc(env(safe-area-inset-bottom) + 34px));
+  /* The idle gap is preserved; the real keyboard occlusion is subtracted in
+     one continuous step. No further safe-area is added while a keyboard is
+     attached, so a rounded 34px gap cannot reappear. */
+  --chat-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --chat-footer-gap-idle: max(58px, calc(var(--chat-safe-bottom) + 34px));
+  --chat-footer-gap: max(
+    10px,
+    calc(var(--chat-footer-gap-idle) - var(--chat-keyboard-inset, 0px))
+  );
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1786,7 +1806,7 @@ function time(value: string) {
   height: 125px;
 }
 .is-compact .chat-surface {
-  --chat-footer-gap: max(12px, env(safe-area-inset-bottom));
+  --chat-footer-gap-idle: max(12px, var(--chat-safe-bottom));
 }
 .is-compact .chat-history {
   padding-top: 116px;

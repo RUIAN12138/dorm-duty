@@ -1,0 +1,14 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "039b73ab42c19277d739185c9666f6a0831515ae",
+  "allowed": [
+    "frontend/src/components/DormCompanion.vue",
+    "scripts/check-companion-tap-arbitration.mjs",
+    "openspec/changes/fix-ball-source-hit-region/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

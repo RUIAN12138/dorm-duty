@@ -137,6 +137,56 @@ try {
       });
       await f.context.close();
     }
+  // The 52px source ball spans both points below; the pair is ~50px apart, so
+  // it only works when the whole original rect stays a double-tap target.
+  for (const kind of ["touch", "mouse"])
+    for (const edge of [
+      {
+        name: "lower-left to upper-right",
+        first: { x: -22, y: 12 },
+        second: { x: 22, y: -12 },
+      },
+      {
+        name: "upper-right to lower-left",
+        first: { x: 22, y: -12 },
+        second: { x: -22, y: 12 },
+      },
+    ]) {
+      const f = await fixture();
+      const start = await f.pos(f.ball);
+      const initial = await f.ball.getAttribute("title");
+      await f.tap(
+        { x: start.x + edge.first.x, y: start.y + edge.first.y },
+        kind,
+      );
+      await f.page.waitForTimeout(130);
+      await f.tap(
+        { x: start.x + edge.second.x, y: start.y + edge.second.y },
+        kind,
+      );
+      await f.page.locator(".companion-chat").waitFor({ state: "detached" });
+      await f.page.waitForTimeout(350);
+      check(
+        (await f.page.locator(".companion-chat").count()) === 0,
+        kind + " " + edge.name + " source-ball edges reverse chat",
+      );
+      check(
+        f.calls.length === 0,
+        kind + " " + edge.name + " source-ball edges send no chat requests",
+      );
+      check(
+        (await f.ball.getAttribute("title")) !== initial,
+        kind + " " + edge.name + " source-ball edges reach expression",
+      );
+      results.push({
+        kind,
+        target: "source-edges:" + edge.name,
+        initial,
+        after: await f.ball.getAttribute("title"),
+        calls: f.calls,
+      });
+      await f.context.close();
+    }
   {
     const f = await fixture();
     const p = await f.pos(f.ball);
@@ -241,6 +291,83 @@ try {
       (await f.page.locator(".companion-chat").count()) === 0 &&
         f.calls.length === 0,
       "reduced motion preserves double exclusivity and direct terminal state",
+    );
+    await f.context.close();
+  }
+  // After 280ms the single tap is confirmed; the source rect must no longer
+  // capture presses, so a real back-button tap still closes the chat.
+  for (const kind of ["touch", "mouse"]) {
+    const f = await fixture();
+    const start = await f.pos(f.ball);
+    await f.tap(start, kind);
+    await f.page.waitForTimeout(400);
+    const back = f.page.locator(
+      '.companion-chat button[aria-label="返回宿舍"]',
+    );
+    const box = await back.boundingBox();
+    assert(box);
+    const before = await f.ball.getAttribute("title");
+    await f.tap({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, kind);
+    // A double would activate an expression immediately; a normal back tap
+    // only starts the close, which hands the shared ball back later.
+    await f.page.waitForTimeout(120);
+    check(
+      (await f.ball.getAttribute("title")) === before,
+      kind + " expired window does not become an expression double tap",
+    );
+    await f.page.locator(".companion-chat").waitFor({ state: "detached" });
+    check(
+      (await f.page.locator(".companion-chat").count()) === 0,
+      kind +
+        " expired window leaves the old source area to the chat back button",
+    );
+    check(
+      f.calls.filter((c) => c.url.includes("/state")).length === 1,
+      kind + " expired window keeps exactly one confirmed history read",
+    );
+    await f.context.close();
+  }
+  // A press inside the opening window but outside both ball areas must reach
+  // the chat instead of being intercepted by the arbiter.
+  for (const kind of ["touch", "mouse"]) {
+    const f = await fixture();
+    const start = await f.pos(f.ball);
+    const initial = await f.ball.getAttribute("title");
+    await f.tap(start, kind);
+    await f.page.waitForTimeout(130);
+    const outside = { x: start.x + 280, y: start.y + 16 };
+    await f.page.evaluate(() => {
+      window.outsidePressReachedChat = false;
+      document
+        .querySelector(".companion-chat")
+        .addEventListener(
+          "pointerdown",
+          () => (window.outsidePressReachedChat = true),
+          { once: true },
+        );
+    });
+    const mark = await f.page.evaluate(() => performance.now());
+    await f.tap(outside, kind);
+    await f.page.waitForTimeout(300);
+    const trace = await f.page.evaluate(() => window.tapTrace);
+    check(
+      (await f.page.evaluate(() => window.outsidePressReachedChat)) &&
+        trace.some(
+          (e) =>
+            e.type === "click" &&
+            e.at >= mark &&
+            Math.abs(e.x - outside.x) < 2 &&
+            Math.abs(e.y - outside.y) < 2,
+        ),
+      kind + " press outside both balls reaches the chat operation",
+    );
+    check(
+      (await f.ball.getAttribute("title")) === initial,
+      kind + " press outside both balls does not become a double tap",
+    );
+    check(
+      (await f.page.locator(".companion-chat").count()) === 1,
+      kind + " press outside both balls keeps the chat open",
     );
     await f.context.close();
   }
