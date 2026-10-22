@@ -66,6 +66,34 @@ public final class MainActivity extends Activity {
           } else io.execute(()->handle(request,reply));
         } catch(Exception ignored){ /* Never log credentials or provider data. */ }
       });
+      // External navigation has its own listener so the push reply proxy and
+      // its single onmessage handler are never overwritten.
+      WebViewCompat.addWebMessageListener(web,"DormExternalUrl",Collections.singleton(ORIGIN),(view,message,origin,mainFrame,reply)->{
+        if(!mainFrame || !trusted(view.getUrl()) || !ORIGIN.equals(origin.toString())) return;
+        String id="";
+        try {
+          String raw=message.getData();if(raw==null||raw.length()>4096) return;
+          JSONObject request=new JSONObject(raw);id=request.optString("id");
+          final String requestId=id;
+          String url=request.optString("url");
+          if(!"openExternal".equals(request.optString("command")) || id.isEmpty() || !safeExternal(url)) {
+            respondExternal(reply,id,false,"仅支持安全的 HTTPS 链接");
+            return;
+          }
+          runOnUiThread(()->{
+            try {
+              Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(url));
+              intent.addCategory(Intent.CATEGORY_BROWSABLE);
+              startActivity(intent);
+              respondExternal(reply,requestId,true,"");
+            } catch(android.content.ActivityNotFoundException error) {
+              respondExternal(reply,requestId,false,"未找到可打开链接的应用，可复制后手动访问");
+            } catch(Exception error) {
+              respondExternal(reply,requestId,false,"打开链接失败，可复制后手动访问");
+            }
+          });
+        } catch(Exception ignored){ respondExternal(reply,id,false,"链接无效，可复制后手动访问"); }
+      });
     }
     String route=getIntent().getStringExtra("route");
     if(state==null || web.restoreState(state)==null)web.loadUrl(trusted(route)?route:BASE);
@@ -132,6 +160,17 @@ public final class MainActivity extends Activity {
       try(java.io.OutputStream out=connection.getOutputStream()){out.write(body.toString().getBytes(StandardCharsets.UTF_8));}
       int status=connection.getResponseCode();if(status<200||status>=300)throw new Exception(status==503?"服务器尚未配置安装版推送":status==429?"刚刚已发送测试，等一分钟再试":status==401?"身份已失效，请重新选择自己":"通知设备绑定失败，请重试");
     }finally{connection.disconnect();}
+  }
+  private static boolean safeExternal(String value){
+    if(value==null||value.length()>4096) return false;
+    Uri uri=Uri.parse(value);
+    return "https".equals(uri.getScheme()) && uri.getHost()!=null && !uri.getHost().isEmpty() && uri.getUserInfo()==null;
+  }
+  private void respondExternal(JavaScriptReplyProxy reply,String id,boolean ok,String message){
+    try {
+      String value=new JSONObject().put("id",id).put("ok",ok).put("message",message).toString();
+      runOnUiThread(()->{try{if(!isDestroyed()&&WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);}catch(IllegalStateException ignored){ /* The initiating document may already be closed. */ }});
+    }catch(JSONException ignored){}
   }
   private void respond(JavaScriptReplyProxy reply,JSONObject request,boolean ok,String message,boolean enabled){
     try {String value=new JSONObject().put("id",request.optString("id")).put("ok",ok).put("message",message).put("enabled",enabled).put("platform","android").put("configured",BuildConfig.JPUSH_APPKEY.matches("[a-fA-F0-9]{24}")).toString();runOnUiThread(()->{try{if(!isDestroyed()&&WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);}catch(IllegalStateException ignored){ /* The initiating document may already be closed. */ }});}catch(JSONException ignored){}

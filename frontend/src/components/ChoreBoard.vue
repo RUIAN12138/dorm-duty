@@ -309,6 +309,7 @@ const taskSwipe = createTaskSwipe(
 );
 const detailTask = ref<ChoreTask | null>(null);
 const chatOpen = ref(false),
+  chatCommitted = ref(false),
   chatPresent = ref(false),
   chatOrigin = ref<DOMRect | null>(null),
   companionHome = ref<HTMLElement>();
@@ -322,8 +323,27 @@ function companionReturnRect() {
 function openChat(origin: DOMRect) {
   if (demoChatUnavailable()) return;
   chatOrigin.value = origin;
+  chatCommitted.value = true;
   chatOpen.value = true;
 }
+function previewChat(origin: DOMRect) {
+  if (demoChatUnavailable()) return;
+  chatOrigin.value = origin;
+  chatCommitted.value = false;
+  chatOpen.value = true;
+}
+function commitChat() {
+  // A late commit for an already closed preview must not reopen the dialog.
+  if (!chatOpen.value) return;
+  chatCommitted.value = true;
+}
+function cancelChat() {
+  chatOpen.value = false;
+  chatCommitted.value = false;
+}
+watch(chatOpen, (open) => {
+  if (!open) chatCommitted.value = false;
+});
 function demoChatUnavailable() {
   if (!props.demo) return false;
   demoNotice();
@@ -1443,7 +1463,9 @@ onUnmounted(() => {
             :chat-enabled="!demo"
             :style="{ visibility: chatPresent ? 'hidden' : undefined }"
             @chat="openChat"
-            @chat-cancel="chatOpen = false"
+            @chat-preview="previewChat"
+            @chat-commit="commitChat"
+            @chat-cancel="cancelChat"
             intent="chat"
             :tips="true"
             :scene="section"
@@ -1848,10 +1870,12 @@ onUnmounted(() => {
       </p>
       <CompanionChat
         v-model="chatOpen"
+        :committed="chatCommitted"
         :origin="chatOrigin"
         :return-rect="companionReturnRect"
         :members="board.members"
         :note-request="chatNoteRequest"
+        @reopen="chatCommitted = true"
         @note-sent="load"
         :invite="invite"
         :member-id="memberId"
@@ -2540,6 +2564,7 @@ onUnmounted(() => {
   font-size: 15px;
   line-height: 1.5;
   color: var(--ui-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 .board-loading {
   padding-top: 16px;

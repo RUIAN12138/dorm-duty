@@ -160,6 +160,9 @@ jobs:
           cd frontend && npx playwright install --with-deps chromium
       - name: Verify isolated conversation and calendar motion
         run: |
+          node scripts/check-external-url.mjs
+          node scripts/check-companion-tap-arbitration.mjs
+          node scripts/check-chat-entry-polish.mjs
           node scripts/check-conversation-state.mjs
           node scripts/check-ios-chat-motion.mjs
           node scripts/check-chat-motion-continuity.mjs
@@ -171,6 +174,7 @@ jobs:
         with:
           name: conversation-motion-evidence
           path: |
+            data/tap-arbitration/
             data/ios-chat-motion/
             data/chat-motion-continuity/
             data/conversation-preview/*-checks.json

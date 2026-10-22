@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { showConfirmDialog, showToast } from "vant";
+import { openExternalUrl, copyText } from "../interaction/openExternalUrl";
 import CheckForUpdates from "./CheckForUpdates.vue";
 import AppearanceSettings from "./AppearanceSettings.vue";
 import ElasticSheet from "./ElasticSheet.vue";
@@ -31,6 +33,39 @@ defineProps<{
 const tools = defineModel<boolean>("tools", { required: true });
 const preferences = defineModel<boolean>("preferences", { required: true });
 const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
+const projectUrl = "https://github.com/RUIAN12138/dorm-duty";
+async function followProject(event: MouseEvent) {
+  if (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  )
+    return;
+  event.preventDefault();
+  try {
+    await openExternalUrl(projectUrl);
+  } catch {
+    try {
+      await showConfirmDialog({
+        title: "无法打开链接",
+        message: "可以复制链接，在浏览器中打开。",
+        confirmButtonText: "复制链接",
+        cancelButtonText: "取消",
+      });
+      const ok = await copyText(projectUrl);
+      showToast({
+        message: ok ? "链接已复制" : "复制失败，请长按链接复制",
+        position: "top",
+        duration: 2500,
+        className: "chore-notice",
+      });
+    } catch {
+      /* The user dismissed the copy alternative. */
+    }
+  }
+}
 </script>
 <template>
   <ElasticSheet
@@ -169,6 +204,7 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
       target="_blank"
       rel="noopener noreferrer"
       data-testid="project-github"
+      @click="followProject"
       ><van-icon name="link-o" aria-hidden="true" /><span
         >项目源码 · GitHub</span
       ><span aria-hidden="true">↗</span></a
@@ -201,10 +237,12 @@ const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
   gap: 10px;
 }
 .menu-section {
+  /* Local settings lift; other sheets and the global palette stay untouched. */
+  --menu-surface-tint: var(--ui-tint-2);
   padding: 7px;
   margin-top: 16px;
   border-radius: 22px;
-  background: var(--app-tone-hfafafa, #fafafa);
+  background: var(--menu-surface-tint);
 }
 .menu-section + .menu-section {
   margin-top: 12px;

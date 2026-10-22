@@ -1,0 +1,51 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "6a1e47e3e12e9aa95b71aa52c296d532339fe663",
+  "allowed": [
+    "frontend/src/interaction/companionTap.ts",
+    "frontend/src/components/DormCompanion.vue",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/CompanionChatComposer.vue",
+    "frontend/src/components/ConversationNoteFlow.vue",
+    "frontend/src/components/CompanionSettings.vue",
+    "frontend/src/components/ChoreMenu.vue",
+    "frontend/src/components/ChatReplyText.vue",
+    "frontend/src/interaction/chatScroll.ts",
+    "frontend/src/interaction/openExternalUrl.ts",
+    "frontend/src/interaction/tokens.css",
+    "frontend/src/theme.css",
+    "frontend/src/components/ReleaseNotice.vue",
+    "frontend/src/interaction/releaseNotes.ts",
+    "native/android/app/src/main/java/cn/lundao/dorm/MainActivity.java",
+    "native/harmony/entry/src/main/ets/pages/Index.ets",
+    "scripts/check-companion-preview-check.mjs",
+    "scripts/check-companion-tap-arbitration.mjs",
+    "scripts/check-chat-entry-polish.mjs",
+    "scripts/check-external-url.mjs",
+    "docs/COMPANION_ENTRY_POLISH.md",
+    "docs/FRONTEND_MOTION_CONTRACT.md",
+    "openspec/",
+    ".github/workflows/checks.yml",
+    "scripts/check-chat-motion-continuity.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "这次做完直接提交 pr 部署网站",
+    "authorizedDigest": "2a87f5a35da6e55dff77960b5af8d87e88f251a1745591cc63610e2f9dc43c0f",
+    "recordedOn": "2026-10-22",
+    "limits": "仅本批次v74及v75移动边缘修复的分支推送/PR与备份后代码部署，不合并main，不追认实体验收，不覆盖数据库或私密配置。"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "这次做完直接提交 pr 部署网站",
+    "authorizedDigest": "6ebc004dc69f8cd508d37fd259007f893bbe5caa47ab1db47cfdf060a3044088",
+    "recordedOn": "2026-10-22",
+    "limits": "仅本批次v74及v75移动边缘修复的分支推送/PR与备份后代码部署，不合并main，不追认实体验收，不覆盖数据库或私密配置。"
+  }
+}

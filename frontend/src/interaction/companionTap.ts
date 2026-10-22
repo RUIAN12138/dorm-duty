@@ -1,4 +1,10 @@
-// Touch browsers do not consistently increment MouseEvent.detail.
+// One controller owns the whole tap decision: the first tap previews
+// immediately, while only the 280ms window can turn it into a double tap and
+// request a rollback. Touch browsers do not consistently increment
+// MouseEvent.detail, so this timing and the reserved second press are the
+// source of truth.
+export const COMPANION_TAP_WINDOW = 280;
+export const COMPANION_TAP_RADIUS = 36;
 export function createCompanionTapGesture(
   actions: {
     single: () => void;
@@ -24,24 +30,30 @@ export function createCompanionTapGesture(
     pending = null;
     secondPress = false;
   }
+  const within = (x: number, y: number, from: { x: number; y: number }) =>
+    Math.hypot(x - from.x, y - from.y) <= COMPANION_TAP_RADIUS;
   return {
     cancel() {
-      const active = !!pending;
+      const active = !!pending || secondPress;
       reset();
       if (active) actions.rollback?.();
     },
-    press(x: number, y: number) {
-      if (
-        pending &&
-        clock.now() - pending.at <= 480 &&
-        Math.hypot(x - pending.x, y - pending.y) <= 36
-      ) {
-        // Reserve the second tap at finger-down. On WebView a slow frame may
-        // deliver finger-up after the single-tap timer would otherwise fire.
-        stop?.();
-        stop = undefined;
-        secondPress = true;
-      }
+    // Returns whether this pointer-down belongs to the open arbitration
+    // window. Callers must not intercept the event when it returns false:
+    // an expired window can never swallow a normal chat/back click.
+    press(x: number, y: number, mapped?: { x: number; y: number }) {
+      if (!pending || clock.now() - pending.at > COMPANION_TAP_WINDOW)
+        return false;
+      // A tap on the shared ball after it has travelled is still the same
+      // gesture; the caller maps it back to the first tap coordinates.
+      const point = mapped || { x, y };
+      if (!within(point.x, point.y, pending)) return false;
+      // Reserve the second tap at finger-down. On WebView a slow frame may
+      // deliver finger-up after the single-tap timer would otherwise fire.
+      stop?.();
+      stop = undefined;
+      secondPress = true;
+      return true;
     },
     tap(x: number, y: number, keyboard = false) {
       const now = clock.now();
@@ -53,8 +65,8 @@ export function createCompanionTapGesture(
       if (now < blockedUntil) return;
       if (
         pending &&
-        (secondPress || now - pending.at <= 480) &&
-        Math.hypot(x - pending.x, y - pending.y) <= 36
+        (secondPress ||
+          (now - pending.at <= COMPANION_TAP_WINDOW && within(x, y, pending)))
       ) {
         reset();
         actions.rollback?.();
@@ -71,7 +83,7 @@ export function createCompanionTapGesture(
       stop = clock.later(() => {
         reset();
         actions.single();
-      }, 480);
+      }, COMPANION_TAP_WINDOW);
     },
   };
 }

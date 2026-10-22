@@ -185,7 +185,17 @@ defineExpose({ cancel, dismiss });
   transform-origin: center;
 }
 .composer-text:focus-within {
+  /* Two local layers: a crisp edge and a soft outer glow, both scoped to the
+     input glass. Keyboard focus still gets its visible outline below. */
+  outline: none;
+  box-shadow:
+    0 0 0 1px var(--ui-focus-ring),
+    0 10px 26px var(--ui-focus-glow);
+  transition: box-shadow 180ms var(--ui-ease-out);
+}
+.composer-text:has(textarea:focus-visible) {
   outline: 1px solid var(--ui-border);
+  outline-offset: 2px;
 }
 .composer-text textarea {
   flex: 1;
@@ -236,7 +246,8 @@ defineExpose({ cancel, dismiss });
   stroke-linejoin: round;
 }
 @media (prefers-reduced-motion: reduce) {
-  .composer-send {
+  .composer-send,
+  .composer-text {
     transition: none;
   }
 }

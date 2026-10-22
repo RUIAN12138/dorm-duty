@@ -10,6 +10,7 @@ import {
 import { motionAllowed } from "../interaction/motion";
 import CompanionBubble from "./CompanionBubble.vue";
 import {
+  COMPANION_TAP_RADIUS,
   createCompanionTapGesture,
   naturalGaze,
 } from "../interaction/companionTap";
@@ -57,10 +58,18 @@ const props = withDefaults(
 const emit = defineEmits<{
   message: [];
   chat: [origin: DOMRect];
+  chatPreview: [origin: DOMRect];
+  chatCommit: [];
   chatCancel: [];
 }>();
 let holdTimer: ReturnType<typeof setTimeout> | undefined;
 let holdPoint: {
+  id: number;
+  x: number;
+  y: number;
+  surface: HTMLElement;
+} | null = null;
+let pointerTap: {
   id: number;
   x: number;
   y: number;
@@ -71,18 +80,64 @@ let tapOrigin: DOMRect | null = null;
 let tapPoint = { x: 0, y: 0 };
 let predictingChat = false,
   queuedDouble = false;
-let secondPointer: { id: number; x: number; y: number } | null = null;
-let suppressSecondClick = 0;
+let secondPointer: {
+  id: number;
+  x: number;
+  y: number;
+  cancelled: boolean;
+} | null = null;
+let pointerClicks: { x: number; y: number; until: number }[] = [];
+function suppressPointerClick(event: PointerEvent) {
+  pointerClicks.push({
+    x: event.clientX,
+    y: event.clientY,
+    until: performance.now() + 500,
+  });
+}
 // The first tap moves the ball immediately. Its old hit area remains a short
 // arbitration target even after the dialog covers it; the second tap reverses
-// that same flight instead of accidentally clicking the new back button.
+// that same flight instead of accidentally clicking the new back button. The
+// shared ball inside the opening chat is the same physical target, so its
+// pointer-down is mapped back to the first tap coordinates and never reaches
+// the chat ball or the back button.
 function predictiveDown(event: PointerEvent) {
+  // A fresh physical press after the handoff cannot be an old synthetic click.
+  if (!predictingChat && !props.muted) pointerClicks = [];
   if (!predictingChat || !event.isPrimary || event.button !== 0 || !tapOrigin)
     return;
-  if (Math.hypot(event.clientX - tapPoint.x, event.clientY - tapPoint.y) > 36)
-    return;
-  secondPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
-  tapGesture.press(event.clientX, event.clientY);
+  const target = event.target instanceof Element ? event.target : null;
+  let sharedBall = !!target?.closest(".chat-ball .dorm-companion");
+  if (
+    !sharedBall &&
+    Math.hypot(event.clientX - tapPoint.x, event.clientY - tapPoint.y) >
+      COMPANION_TAP_RADIUS
+  ) {
+    // The ball keeps travelling between a finger's position sample and the
+    // delivered press. Apply the same touch tolerance to its current bounds,
+    // not only to the original point or the exact DOM hit target. One layout
+    // read on this second press; never a per-frame hit-test loop.
+    const rect = document
+      .querySelector(".chat-ball .dorm-companion")
+      ?.getBoundingClientRect();
+    sharedBall =
+      !!rect &&
+      event.clientX >= rect.left - COMPANION_TAP_RADIUS &&
+      event.clientX <= rect.right + COMPANION_TAP_RADIUS &&
+      event.clientY >= rect.top - COMPANION_TAP_RADIUS &&
+      event.clientY <= rect.bottom + COMPANION_TAP_RADIUS;
+  }
+  const engaged = tapGesture.press(
+    event.clientX,
+    event.clientY,
+    sharedBall ? tapPoint : undefined,
+  );
+  if (!engaged) return;
+  secondPointer = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    cancelled: false,
+  };
   event.preventDefault();
   event.stopImmediatePropagation();
 }
@@ -94,31 +149,54 @@ function predictiveMove(event: PointerEvent) {
       event.clientY - secondPointer.y,
     ) > 18
   ) {
-    secondPointer = null;
+    secondPointer.cancelled = true;
     tapGesture.cancel();
   }
 }
 function predictiveUp(event: PointerEvent) {
   if (secondPointer?.id !== event.pointerId) return;
+  const press = secondPointer;
   secondPointer = null;
-  suppressSecondClick = performance.now() + 350;
+  suppressPointerClick(event);
   event.preventDefault();
   event.stopImmediatePropagation();
-  if (event.type === "pointercancel") tapGesture.cancel();
+  if (event.type === "pointercancel" || press.cancelled) tapGesture.cancel();
   else tapGesture.tap(event.clientX, event.clientY);
 }
 function predictiveClick(event: MouseEvent) {
-  if (performance.now() >= suppressSecondClick || !tapOrigin) return;
-  if (
-    Math.hypot(
-      event.clientX - (tapOrigin.left + tapOrigin.width / 2),
-      event.clientY - (tapOrigin.top + tapOrigin.height / 2),
-    ) < 52
-  ) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }
+  if (event.detail === 0) return;
+  pointerClicks = pointerClicks.filter((p) => performance.now() < p.until);
+  const index = pointerClicks.findIndex(
+    (p) =>
+      Math.hypot(event.clientX - p.x, event.clientY - p.y) <=
+      COMPANION_TAP_RADIUS,
+  );
+  if (index < 0) return;
+  pointerClicks.splice(index, 1);
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }
+function released(event: PointerEvent) {
+  const press = pointerTap;
+  pointerTap = null;
+  cancelHold();
+  if (
+    !press ||
+    press.id !== event.pointerId ||
+    event.button !== 0 ||
+    props.muted ||
+    flying ||
+    document.hidden ||
+    performance.now() < suppressTapUntil
+  )
+    return;
+  if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 18) return;
+  tapOrigin = press.surface.getBoundingClientRect();
+  tapPoint = { x: event.clientX, y: event.clientY };
+  suppressPointerClick(event);
+  tapGesture.tap(event.clientX, event.clientY);
+}
+
 function cancelHold() {
   clearTimeout(holdTimer);
   const active = holdPoint;
@@ -133,8 +211,15 @@ function hold(event: PointerEvent) {
     event.button === 0 &&
     !props.muted &&
     !flying
-  )
+  ) {
+    pointerTap = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      surface: event.currentTarget as HTMLElement,
+    };
     tapGesture.press(event.clientX, event.clientY);
+  }
   if (
     !props.chatEnabled ||
     !event.isPrimary ||
@@ -155,6 +240,7 @@ function hold(event: PointerEvent) {
   if (event.pointerType === "touch") window.getSelection()?.removeAllRanges();
   holdTimer = setTimeout(() => {
     if (!holdPoint || props.muted || document.hidden) return;
+    pointerTap = null;
     tapGesture.cancel();
     suppressTapUntil = performance.now() + 1000;
     cancelHold();
@@ -163,6 +249,16 @@ function hold(event: PointerEvent) {
   }, 380);
 }
 function moveHold(event: PointerEvent) {
+  if (
+    pointerTap &&
+    (event.pointerId !== pointerTap.id ||
+      Math.hypot(event.clientX - pointerTap.x, event.clientY - pointerTap.y) >
+        18)
+  ) {
+    pointerTap = null;
+    suppressTapUntil = performance.now() + 1000;
+    tapGesture.cancel();
+  }
   if (
     holdPoint &&
     (event.pointerId !== holdPoint.id ||
@@ -183,6 +279,7 @@ function leaveHold(event: PointerEvent) {
   cancelHold();
 }
 function abortHold() {
+  pointerTap = null;
   cancelHold();
   tapGesture.cancel();
 }
@@ -209,7 +306,7 @@ const tapGesture = createCompanionTapGesture({
     )
       return;
     predictingChat = true;
-    emit("chat", tapOrigin);
+    emit("chatPreview", tapOrigin);
   },
   rollback: () => {
     if (!predictingChat) return;
@@ -218,7 +315,9 @@ const tapGesture = createCompanionTapGesture({
   },
   single: () => {
     if (predictingChat) {
+      // The preview is now confirmed. No request was made before this point.
       predictingChat = false;
+      emit("chatCommit");
       return;
     }
     if (document.hidden || props.muted || flying) return;
@@ -348,6 +447,9 @@ function clicked(event: MouseEvent) {
     tap();
     return;
   }
+  // Pointer releases already went through the arbiter. Only keyboard/assistive
+  // activation belongs to click, even when a browser delays/reorders clicks.
+  if (event.detail > 0) return;
   tapOrigin = (event.currentTarget as HTMLElement).getBoundingClientRect();
   tapPoint = { x: event.clientX, y: event.clientY };
   tapGesture.tap(
@@ -506,7 +608,7 @@ onBeforeUnmount(() => {
       @click.stop="clicked"
       @pointerdown="hold"
       @pointermove="moveHold"
-      @pointerup="cancelHold"
+      @pointerup="released"
       @pointercancel="abortHold"
       @pointerleave="leaveHold"
       @lostpointercapture="leaveHold"
