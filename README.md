@@ -1,52 +1,86 @@
+<div align="center">
+
 # 轮到 · 宿舍值日管理系统
 
-宿舍值日、抬水轮换、完成日历与提醒。Vue 手机网页、Node SQLite 后台、Android / HarmonyOS 安装版工程。
+**让宿舍值日、抬水轮换和提醒变得清楚、公平、可追溯。**
 
-**正式公网入口：** [打开轮到](https://8.148.190.114/dorm-duty/)。先验证邮箱，再创建宿舍或凭邀请码与完整名字绑定身份；游客体验只访问演示数据。
+Vue 3 · TypeScript · Vite · Node.js · SQLite · Android · HarmonyOS
 
-**新的账号路线：** 邮箱验证码注册 / 登录、现有身份绑定、跨设备找回和 SMTP 邮件提醒已实现；正式 SMTP 测试邮件及验证码绑定已由用户确认成功。新版正式入口要求先验证邮箱，新建宿舍自动关联创建者；旧成员重新验证后恢复原身份。极光基础通知作为 App 在线补充，iOS 原有 Web Push 保留，详见 [邮箱账号与邮件提醒](docs/EMAIL_ACCOUNTS.md)。
+[体验网页](https://8.148.190.114/dorm-duty/) · [使用说明](docs/CHORES.md) · [开发进度](docs/PROGRESS.md) · [参与协作](CONTRIBUTING.md)
 
-## 唯一正式部署路线
+</div>
 
-正式服务使用 `scripts/local-server.mjs` + `site/` Node/SQLite 邮箱准入包装层，发布入口是 `deploy/prepare-release.py` / `deploy/install-release.py`。
-`backend/` Python/FastAPI 已废弃，仅保留历史回归，不具备邮箱准入，禁止作为正式服务部署。根目录 compose 仅可显式启用 `legacy` profile。
-旧 Cloudflare Worker/Pages 代码不包含 Node 邮箱包装层，不得重新发布为业务入口；旧域名停用状态须经控制面和公网核验，详见 `docs/AUTH_RELEASE_AUDIT.md`。
+---
 
-## 快速开始
+## 项目简介
 
-先运行 `./scripts/setup.sh` 安装锁定依赖，然后在项目根目录运行：
+**轮到**是一套面向宿舍日常协作的多端值日管理系统。通过任务轮换、完成打卡、日历记录和提醒，减少“今天该谁做”的沟通成本。
+
+提供移动端 Web 页面，以及 Android / HarmonyOS 安装版工程。前端重视简洁排版、细腻的动效与触控体验；业务数据由 Node.js + SQLite 服务维护。
+
+> **版本说明：** 本 README 介绍 `main` 分支已包含的架构与基础功能。正在开发或待合并的交互动效、聊天功能与平台能力，以对应 PR、CI 和实际验收结果为准；PR 创建不代表已发布。
+
+## 主要功能
+
+| 功能 | 说明 |
+| --- | --- |
+| 值日轮换 | 地板、厕所等任务可分别轮换；支持自由轮次及按日排班 |
+| 抬水交接 | 按顺序轮换，实际完成后打卡并交给下一位 |
+| 日历与记录 | 按实际完成日期查看热力、成员记录及历史情况 |
+| 提醒与通知 | 站内提醒、Web Push，以及账号邮件提醒相关能力 |
+| 宿舍与身份 | 邮箱验证、邀请码加入宿舍、成员身份绑定及跨设备恢复 |
+| 多端使用 | 移动网页、Android 和 HarmonyOS 工程，共享核心业务体验 |
+
+**球球交互、聊天体验、玻璃动效等持续优化中。** 查看 [Pull Requests](../../pulls) 了解尚未合并的工作；正式上线状态以发布和验收记录为准。
+
+## 快速体验
+
+**正式入口：** https://8.148.190.114/dorm-duty/
+
+正式成员需先验证邮箱，再创建宿舍或通过邀请码与完整姓名绑定身份；游客体验使用演示数据，不代表正式宿舍数据。
+
+## 本地运行
+
+要求 **Node.js 22.13.0 或更新版本**。
 
 ```bash
+git clone https://github.com/RUIAN12138/dorm-duty.git
+cd dorm-duty
+./scripts/setup.sh
 npm run web:dev
 ```
 
-访问 http://127.0.0.1:8081/。本地数据库 `data/dorm-local.db` 与正式服务器数据独立，不自动同步。
+浏览器访问 http://127.0.0.1:8081/ 。
 
-根级 Web 命令：`npm run web:dev` 启动、`npm run web:build` 构建、`npm run web:verify` 验收、`npm run web:release -- <名称>` 只生成发布包。双击 `启动.command` 或运行 `scripts/local.sh` 仍启动同一 Node/SQLite 服务；它们是兼容入口。
+常用命令：
 
-> 注意：`site/worker/index.js` 仅是本地开发兼容入口，不提交到仓库。`web:build` 产物写入带时间戳的 `data/web-build-*/`；发布包写入 `data/<名称>/`，不会覆盖正式入口。
+```bash
+npm run web:build    # 构建网页
+npm run web:verify   # Web 与业务验收
+```
 
-`web:verify` 在临时目录重新构建前端和服务入口，Worker 资源检查与真实 HTTP 重启检查使用同一份产物，不依赖开发目录的残留文件。单独检查构建结果时，通过 `DORM_WORKER_INPUT` 指定入口绝对路径，`DORM_FRONTEND_DIST` 指定对应前端目录。运行要求 Node.js 22.13.0 或更新版本；CI 使用 22.23.0。
+本地 SQLite 数据库 `data/dorm-local.db` 与正式服务器数据相互独立，不会自动同步。更多启动与发布说明见 [部署文档](docs/SERVER_DEPLOYMENT.md)。
 
-## 核心规则
+## 技术架构
 
-- **值日**：地板、厕所默认各自使用自由轮次，每人本轮主动做一次，全员完成这一项后自动开启下一轮；创建者也可切换为按日排班并配置时间。
-- **抬水**：按顺序轮换，实际抬完才打卡，自动交给下一位。
-- **日历**：按上海时区实际完成日期显示热力深浅，点击日期查看人员与记录；列表按日期折叠。
-- **提醒**：站内提醒（同一发送人、接收人、任务一分钟内最多一条）与系统通知（Web Push，iPhone 需 iOS 16.4+ 添加主屏幕并授权）。
-- **身份**：正式成员先验证邮箱，再凭邀请码和完整名字绑定；名字本身不是秘密凭证，已绑定身份不能被其他邮箱抢占。创建者恢复规则见 [创建者恢复](docs/CREATOR_RECOVERY.md)。
+```text
+dorm-duty/
+├── frontend/   Vue 3 / TypeScript / Vite / Vant / Pinia / Router
+├── site/       业务服务、SQLite 适配器、数据库迁移
+├── scripts/    本地 Node 服务、构建与验证脚本
+├── native/     Android / HarmonyOS 工程
+├── docs/       产品规则、设计、进度与部署说明
+└── backend/    历史 FastAPI 代码（非正式部署入口）
+```
 
-完整规则见 [CHORES](docs/CHORES.md)。
+**正式业务链路：** `scripts/local-server.mjs → site/worker/`（Node.js + SQLite）。
 
-## 检查
+`backend/` 为历史代码，不具备当前邮箱准入机制；旧 Cloudflare Worker/Pages 代码也不是当前正式业务部署入口。正式发布应使用 `deploy/prepare-release.py` 和 `deploy/install-release.py`，不要将历史服务直接发布为生产环境。参见 [架构与发布审计](docs/AUTH_RELEASE_AUDIT.md)。
+
+## 质量检查
 
 ```bash
 npm run web:verify
-```
-
-业务检查（独立测试数据库）：
-
-```bash
 node site/scripts/check-cloud-backend.mjs
 node site/scripts/check-chores.mjs
 node site/scripts/check-recency.mjs
@@ -54,35 +88,26 @@ node site/scripts/check-rounds.mjs
 node site/scripts/check-worker.mjs
 ```
 
-## 技术与目录
+GitHub Actions 对 PR 和 main 执行自动检查。**CI 通过不等于真机验收完成，也不等于生产环境已经部署。**
 
-```text
-dorm-duty/
-├── frontend/   Vue 3 / TS / Vite / Vant / Pinia / Router
-├── backend/    原 FastAPI 账号版（历史只读）
-├── site/       Worker 业务、文件 SQLite 适配器、Drizzle 迁移
-├── scripts/    local.sh / local-server.mjs 等本地脚本
-├── docs/       规格、进度、验收、部署与验证证据
-└── native/     Android / HarmonyOS 安装版工程
-```
+## 文档导航
 
-当前线上业务只使用 `scripts/local-server.mjs -> site/worker/` 的 Node/SQLite 链路；`backend/` 和 Cloudflare/Pages 发布脚本均为历史代码。改当前轮次与抬水规则时，先看 `site/worker/chores.mjs`。
+- [值日与抬水规则](docs/CHORES.md)
+- [邮箱账号与提醒](docs/EMAIL_ACCOUNTS.md)
+- [当前开发进度](docs/PROGRESS.md)
+- [界面与动效设计](docs/FOCUS_COMPACT_UI.md)
+- [App 演进路线](docs/APP_ROADMAP.md)
+- [部署与备份](docs/SERVER_DEPLOYMENT.md)
+- [协作与提交规范](CONTRIBUTING.md)
 
-## 文档
+## 参与开发
 
-- [聚焦任务与一屏日历](docs/FOCUS_COMPACT_UI.md) —— 恢复大字任务、交接动画、合并热度与分页叠卡
+欢迎通过 [Issues](../../issues) 反馈问题、提出需求，或查看 [Pull Requests](../../pulls) 参与代码审查。请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，在独立分支开发并通过 PR 提交。
 
-- [P0 界面与历史修正](docs/P0_INTERFACE.md) —— 统一代币、简约任务卡、三月统计、补改记录及动效边界
+---
 
-- [协作开发](CONTRIBUTING.md) —— Issue、任务分支、PR 与审查流程
-- [当前进度](docs/PROGRESS.md) —— 交付状态与待完成项
-- [部署说明](docs/SERVER_DEPLOYMENT.md) —— 服务器部署、证书与备份
-- [App 演进清单](docs/APP_ROADMAP.md) —— 通知、替干、请假、水票、桌面卡片等目标
+<div align="center">
 
-## 协作
+**轮到 · 让每一次值日都有记录，让下一次轮换有据可循。**
 
-两人协作请先阅读 [CONTRIBUTING](CONTRIBUTING.md)，在 Issues 选择问题或开发任务模板，各自使用任务分支，通过 PR 互相审查。PR 自动提供验收与发布交接模板。GitHub Actions 在 main 提交和 PR 上自动构建网页、检查业务 / 通知规则及安卓安装版；合并后由发布负责人单独验收与发布。
-
-最新界面与间隔提醒说明见 [RESTORE_MOTION_RECENCY](docs/RESTORE_MOTION_RECENCY.md)。
-
-当前架构及后续分阶段计划见 [Web 架构优化方案](docs/WEB_ARCHITECTURE_REFACTOR.md)。[旧后端调查](docs/BACKEND_ARCHITECTURE.md) 是 10 月 15 日快照，不代表目前邮箱与身份规则。
+</div>
