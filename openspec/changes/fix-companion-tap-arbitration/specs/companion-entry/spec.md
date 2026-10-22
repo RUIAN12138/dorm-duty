@@ -22,3 +22,9 @@
 #### Scenario: New and historical replies
 - **WHEN** 新回复出现或历史重开
 - **THEN** 仅新增回复渐清、长文本动画有界；历史直接显示，保留原有消息和业务动效。
+
+### Requirement: Moving target touch tolerance
+共享球 SHALL 在第二击仍处于280ms窗口时，对当前可见球体边界提供36px触摸容差，允许坐标采样到输入送达间的运动偏移，且不扩大到整个聊天区域。
+#### Scenario: Sampled point falls just behind the moving ball
+- **WHEN** 第二击在有效窗口内到达，坐标比当前球体边缘略偏后但仍在36px内
+- **THEN** 仍逆向回程并只播放表情，不读取聊天；超出窗口或容差不拦截普通聊天操作。

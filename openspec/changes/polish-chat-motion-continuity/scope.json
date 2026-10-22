@@ -28,15 +28,15 @@
   "prAuthorization": {
     "action": "create-for-review",
     "userStatement": "这次做完直接提交 pr 部署网站",
-    "authorizedDigest": "c9f15c809a5fe5042eb814dee99bb5b1542089cf3ed446eda542f5a0a77bb129",
+    "authorizedDigest": "6ebc004dc69f8cd508d37fd259007f893bbe5caa47ab1db47cfdf060a3044088",
     "recordedOn": "2026-10-22",
-    "limits": "仅v74当前批次开发分支推送/PR及备份后的代码部署；不合并main，不代表产品或实体验收，不覆盖数据库/私密配置。"
+    "limits": "仅本批次v74及v75移动边缘修复的分支推送/PR与备份后代码部署，不合并main，不追认实体验收，不覆盖数据库或私密配置。"
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
     "userStatement": "这次做完直接提交 pr 部署网站",
-    "authorizedDigest": "925c9f11a42cbb8764d026fdd4eb2993ff145449c43c2615aea5217595f757b1",
+    "authorizedDigest": "6ebc004dc69f8cd508d37fd259007f893bbe5caa47ab1db47cfdf060a3044088",
     "recordedOn": "2026-10-22",
-    "limits": "仅v74当前批次开发分支推送/PR及备份后的代码部署；不合并main，不代表产品或实体验收，不覆盖数据库/私密配置。"
+    "limits": "仅本批次v74及v75移动边缘修复的分支推送/PR与备份后代码部署，不合并main，不追认实体验收，不覆盖数据库或私密配置。"
   }
 }

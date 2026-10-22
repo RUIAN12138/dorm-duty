@@ -19,6 +19,7 @@ const browser = await (engine === "webkit" ? webkit : chromium).launch({
       }
     : {}),
 });
+let activePage;
 const checks = [],
   results = [],
   errors = [];
@@ -34,6 +35,23 @@ async function fixture(deferClicks = false) {
     isMobile: true,
   });
   const page = await context.newPage();
+  activePage = page;
+  await page.addInitScript(() => {
+    window.tapTrace = [];
+    for (const type of ["pointerdown", "pointerup", "pointercancel", "click"])
+      document.addEventListener(
+        type,
+        (e) =>
+          window.tapTrace.push({
+            type,
+            x: e.clientX,
+            y: e.clientY,
+            at: performance.now(),
+            target: e.target instanceof Element ? e.target.className : "",
+          }),
+        true,
+      );
+  });
   page.setDefaultTimeout(10000);
   const calls = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -88,6 +106,9 @@ try {
         target === "moving"
           ? await f.pos(f.page.locator(".chat-ball .dorm-companion"))
           : { x: start.x + 7, y: start.y + 5 };
+      // A moving visual may advance between a touch device's coordinate
+      // sample and dispatch. Exercise that bounded latency, not just a still hit.
+      if (target === "moving") await f.page.waitForTimeout(65);
       await f.tap(second, kind);
       await f.page.locator(".companion-chat").waitFor({ state: "detached" });
       await f.page.waitForTimeout(350);
@@ -263,6 +284,16 @@ try {
       2,
     ),
   );
+} catch (error) {
+  let events;
+  try {
+    events = await activePage?.evaluate(() => window.tapTrace);
+  } catch {}
+  await fs.writeFile(
+    new URL(engine + "-gesture-failure.json", out),
+    JSON.stringify({ message: String(error), checks, events }, null, 2),
+  );
+  throw error;
 } finally {
   await browser.close();
   await preview.close();

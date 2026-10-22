@@ -106,7 +106,26 @@ function predictiveDown(event: PointerEvent) {
   if (!predictingChat || !event.isPrimary || event.button !== 0 || !tapOrigin)
     return;
   const target = event.target instanceof Element ? event.target : null;
-  const sharedBall = !!target?.closest(".chat-ball .dorm-companion");
+  let sharedBall = !!target?.closest(".chat-ball .dorm-companion");
+  if (
+    !sharedBall &&
+    Math.hypot(event.clientX - tapPoint.x, event.clientY - tapPoint.y) >
+      COMPANION_TAP_RADIUS
+  ) {
+    // The ball keeps travelling between a finger's position sample and the
+    // delivered press. Apply the same touch tolerance to its current bounds,
+    // not only to the original point or the exact DOM hit target. One layout
+    // read on this second press; never a per-frame hit-test loop.
+    const rect = document
+      .querySelector(".chat-ball .dorm-companion")
+      ?.getBoundingClientRect();
+    sharedBall =
+      !!rect &&
+      event.clientX >= rect.left - COMPANION_TAP_RADIUS &&
+      event.clientX <= rect.right + COMPANION_TAP_RADIUS &&
+      event.clientY >= rect.top - COMPANION_TAP_RADIUS &&
+      event.clientY <= rect.bottom + COMPANION_TAP_RADIUS;
+  }
   const engaged = tapGesture.press(
     event.clientX,
     event.clientY,
