@@ -33,7 +33,7 @@ try {
   await fs.mkdir(evidence, { recursive: true });
   await fs.writeFile(
     html,
-    `<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div>${["rings", "emotions", "ball", "engine"].map((n) => `<script src="/vendor/emotion-ball/${n}.js"></script>`).join("")}<script>window.qaEngines=[];const create=EmotionBall.create;EmotionBall.create=function(el,opts){const e=create(el,opts);const gaze=e.setGaze;e.setGaze=function(x,y){e.qaGaze={x,y};return gaze.call(e,x,y)};window.qaEngines.push(e);return e}</script><script type="module">import{createApp}from'vue';import{createPinia}from'pinia';import{createRouter,createWebHistory}from'vue-router';import{Icon,Switch}from'vant';import Root from './${name}.vue';import'vant/lib/index.css';import'./src/style.css';const router=createRouter({history:createWebHistory(),routes:[{path:'/:pathMatch(.*)*',component:{template:'<div/>'}}]});createApp(Root).use(createPinia()).use(router).use(Icon).use(Switch).mount('#app')</script>`,
+    `<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div>${["rings", "emotions", "ball", "engine"].map((n) => `<script src="/vendor/emotion-ball/${n}.js"></script>`).join("")}<script>window.qaEngines=[];const create=EmotionBall.create;EmotionBall.create=function(el,opts){const e=create(el,opts);e.qaHost=el;const gaze=e.setGaze;e.setGaze=function(x,y){e.qaGaze={x,y};return gaze.call(e,x,y)};window.qaEngines.push(e);return e}</script><script type="module">import{createApp}from'vue';import{createPinia}from'pinia';import{createRouter,createWebHistory}from'vue-router';import{Icon,Switch}from'vant';import Root from './${name}.vue';import'vant/lib/index.css';import'./src/style.css';const router=createRouter({history:createWebHistory(),routes:[{path:'/:pathMatch(.*)*',component:{template:'<div/>'}}]});createApp(Root).use(createPinia()).use(router).use(Icon).use(Switch).mount('#app')</script>`,
   );
   await fs.writeFile(
     vue,
@@ -195,13 +195,22 @@ try {
     "double click no longer opens a play dialogue",
   );
   const playMoods = [
-    await page.evaluate(() => window.qaEngines.at(-1).emotionId),
+    await page.evaluate(
+      () =>
+        window.qaEngines.find((e) => e.qaHost.closest(".board-identity"))
+          .emotionId,
+    ),
   ];
   for (let n = 0; n < 12; n++) {
     await ball.dblclick({ delay: 75 });
     await page.waitForTimeout(220);
+    await page.locator(".companion-chat").waitFor({ state: "detached" });
     playMoods.push(
-      await page.evaluate(() => window.qaEngines.at(-1).emotionId),
+      await page.evaluate(
+        () =>
+          window.qaEngines.find((e) => e.qaHost.closest(".board-identity"))
+            .emotionId,
+      ),
     );
   }
   check(
@@ -219,15 +228,16 @@ try {
     "repeated interactions keep play dialogue absent while functional tips remain available",
   );
   await ball.click();
-  await page
-    .getByRole("heading", { name: "给室友留句话", exact: true })
-    .waitFor();
+  await page.locator(".companion-chat").waitFor();
   check(
-    (await page.locator("#companion-note-text").count()) === 1,
-    "single click opens the roommate note composer",
+    (await page.locator("#companion-note-text").count()) === 0 &&
+      (await page
+        .getByRole("button", { name: "我要留言", exact: true })
+        .isVisible()),
+    "single click opens unified chat with the note quick action, not a duplicate composer",
   );
-  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
-  await page.locator(".sheet-layer").waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
+  await page.locator(".companion-chat").waitFor({ state: "hidden" });
   for (const width of [320, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await page.getByTestId("open-tools").click();

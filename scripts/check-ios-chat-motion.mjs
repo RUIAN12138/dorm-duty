@@ -1,6 +1,7 @@
 // Browser-level acceptance in an isolated dorm, not physical iPhone validation.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { build } from "../frontend/node_modules/esbuild/lib/main.js";
 import {
   chromium,
   webkit,
@@ -216,12 +217,13 @@ try {
       f.at < metrics.travel.mark.reopen + 160,
   );
   const reverseMinimum = Math.min(...reverseFrames.map((f) => f.x));
-  check(
+  // A 30Hz runner can miss the brief turning point between frames. Preserve
+  // the visual samples as evidence; verify actual position and velocity in a
+  // same-turn controller probe below instead of inferring them from cadence.
+  metrics.travel.turningPointObserved =
     reverseFrames.length >= 4 &&
-      reverseMinimum < reverseFrames[0].x - 2 &&
-      reverseFrames.at(-1).x > reverseMinimum + 8,
-    "reverse preserves return velocity before the spring changes direction",
-  );
+    reverseMinimum < reverseFrames[0].x - 2 &&
+    reverseFrames.at(-1).x > reverseMinimum + 8;
   await page.screenshot({ path: new URL(engine + "-open.png", dir).pathname });
   const editor = page.getByLabel("和球球说句话", { exact: true });
   await editor.click();
@@ -398,6 +400,84 @@ try {
     await mainBall.isVisible(),
     "keyboard viewport recovery returns the shared ball to the source",
   );
+  // Exercise the real controller, real MotionValues and real browser clock.
+  // No fake integrator or production-only test hook is involved. Read both
+  // sides of a reversal in the same JS turn so slow screenshot cadence cannot
+  // accidentally skip the velocity being verified.
+  const controllerBundle = await build({
+    entryPoints: ["frontend/src/interaction/chatTravel.ts"],
+    bundle: true,
+    write: false,
+    format: "iife",
+    globalName: "TravelProbe",
+    platform: "browser",
+    define: { "process.env.NODE_ENV": '"production"' },
+  });
+  const probe = await context.newPage();
+  probe.setDefaultTimeout(10000);
+  try {
+    await probe.setContent(
+      '<div id="ball" style="position:absolute;left:151px;top:48px;width:88px;height:88px;transform-origin:center"><div id="visual" style="width:88px;height:88px"></div></div>',
+    );
+    await probe.addScriptTag({ content: controllerBundle.outputFiles[0].text });
+    await probe.evaluate(() => {
+      window.travelProbe = TravelProbe.createChatTravel({
+        ball: () => document.getElementById("ball"),
+        visual: () => document.getElementById("visual"),
+      });
+      void window.travelProbe.open(
+        { left: 20, top: 20, width: 52, height: 52 },
+        { fromClosed: true },
+      );
+    });
+    await probe.waitForFunction(() => {
+      const state = window.travelProbe.state();
+      return state.x > -110 && state.velocity.x > 50;
+    });
+    const closingProbe = await probe.evaluate(() => {
+      const before = window.travelProbe.state();
+      void window.travelProbe.close(() => ({
+        left: 20,
+        top: 20,
+        width: 52,
+        height: 52,
+      }));
+      return { before, after: window.travelProbe.state() };
+    });
+    await probe.waitForFunction(
+      () => window.travelProbe.state().velocity.x < -150,
+    );
+    const openingProbe = await probe.evaluate(() => {
+      const before = window.travelProbe.state();
+      void window.travelProbe.open(null);
+      return { before, after: window.travelProbe.state() };
+    });
+    metrics.velocityProbe = { closing: closingProbe, opening: openingProbe };
+    check(
+      [closingProbe, openingProbe].every(({ before, after }) =>
+        ["x", "y", "scale"].every(
+          (key) =>
+            // Motion.stop can flush the old spring to the current timestamp;
+            // allow that bounded sub-frame advance, but never a reset in
+            // position, direction or incoming velocity.
+            Math.abs(before[key] - after[key]) <
+              Math.abs(before.velocity[key]) / 30 +
+                (key === "scale" ? 0.01 : 1) &&
+            Math.sign(before.velocity[key]) ===
+              Math.sign(after.velocity[key]) &&
+            Math.abs(after.velocity[key]) >
+              Math.abs(before.velocity[key]) * 0.25 &&
+            Math.abs(after.velocity[key]) <
+              Math.abs(before.velocity[key]) * 3 + 0.01,
+        ),
+      ),
+      "reverse retains incoming motion in both directions without a position or velocity reset",
+    );
+    await probe.evaluate(() => window.travelProbe.destroy());
+  } finally {
+    await probe.close();
+    await page.bringToFront();
+  }
   // Separate timing-only pass: no per-frame geometry sampler during perf recording.
   await page.evaluate(() => {
     window.qaMotion.readCount = false;
