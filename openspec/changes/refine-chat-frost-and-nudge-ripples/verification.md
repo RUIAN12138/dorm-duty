@@ -20,3 +20,12 @@
 
 ## v72发布准备
 用户明确要求“部署到网站看看”，只记录部署供查看授权，非全平台验收。正式Node链路web:verify全项通过；新版提示弹窗Chromium12项通过。发布前在线备份dorm-20261022T025230Z.sqlite成功，67条既有完成记录摘要已留在服务器，安装后逐条核对。预期版本20261022-conversation-glass-v72；实际安装结果记录到忽略目录，不能仅凭发布包生成声称上线。
+
+## v72实际安装完成（2026-10-22 北京时间10:56）
+
+- 正式版本20261022-conversation-glass-v72，代码commit fddb122241e5009d6a4526f31a5b2811c3e48da9；发布包SHA256 f8983c5163bbbc80277d1832114c7b3d699463d29b8f75d1b2af9b4ee1b32e6c。
+- 服务器安装成功，健康status=ok / runtime=node-server / storage=sqlite，数据库标识不变。前版/opt/dorm-duty/releases/20261022-mobile-gestures-chat-v71保留。
+- 备份dorm-20261022T025230Z.sqlite已完成完整性与外键检查；67条旧完成记录逐条摘要一致，当前仍67条。无数据库覆盖或业务迁移。
+- 公网142个静态资源与包内字节SHA256一致；根/抬水/日历页面均是本轮首页。新Chromium会话显示v72与当前变更说明，运行时错误0。未在正式站点进行打卡、留言发送或真实AI请求。
+- 证据在忽略目录data/conversation-preview/release-v72-{deployment.log,public-verification.json,public-browser.json,public-page.png}。只有发布供查看已完成，用户产品验收和原生Safari/iPhone光学仍未完成。
+- 没有推送、创建PR或合并main。当前文档提交只记发布结果，不重新打包或部署；内容摘要变化后旧发布授权不会自动授权下一份包。
