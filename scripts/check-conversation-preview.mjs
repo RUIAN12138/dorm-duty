@@ -196,7 +196,9 @@ try {
       }),
     { times: 1 },
   );
-  await page.getByTestId("note-confirm").click();
+  if (native)
+    await page.getByTestId("note-confirm").evaluate((el) => el.click());
+  else await page.getByTestId("note-confirm").click();
   await page
     .locator('[data-testid="conversation-note"][data-phase="failed"]')
     .waitFor();
@@ -208,7 +210,9 @@ try {
   preview.h.db.sqlite.exec(
     "UPDATE chore_reminders SET created_at='2000-01-01T00:00:00Z' WHERE source='note'",
   );
-  await page.getByTestId("note-confirm").click();
+  if (native)
+    await page.getByTestId("note-confirm").evaluate((el) => el.click());
+  else await page.getByTestId("note-confirm").click();
   await page.waitForFunction(
     () => !document.querySelector('[data-testid="conversation-note"]'),
   );
@@ -304,11 +308,20 @@ try {
   );
   // Real repeated clicks retain the existing 60s device limiter and server guard.
   const nudgeBefore = preview.counts.get("POST /chores/remind") || 0;
+  let nativeFeedback;
   if (native) {
     // Locator RPC/auto-wait latency on a software emulator is not tap cadence.
     // Schedule only this burst in its browser; the same Vue click handlers,
     // animation frames, API calls and limiter still execute normally.
-    await name.evaluate(async (el) => {
+    nativeFeedback = await name.evaluate(async (el) => {
+      const frames = [];
+      let sampling = true;
+      const sample = () => {
+        if (!sampling) return;
+        frames.push(getComputedStyle(el).transform);
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
       const r = el.getBoundingClientRect();
       for (let i = 0; i < 12; i++) {
         el.dispatchEvent(
@@ -321,6 +334,16 @@ try {
         );
         await new Promise((resolve) => setTimeout(resolve, 32));
       }
+      const high = Number(el.getAttribute("data-intensity"));
+      // Embedded compositors may start a WAAPI animation after their first
+      // paint. Sample through actual settlement, not a fixed host deadline.
+      await Promise.race([
+        Promise.allSettled(el.getAnimations().map((a) => a.finished)),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+      await new Promise(requestAnimationFrame);
+      sampling = false;
+      return { high, frames };
     });
   } else {
     for (let i = 0; i < 12; i++) {
@@ -328,19 +351,22 @@ try {
       await page.waitForTimeout(32);
     }
   }
-  const high = Number(await name.getAttribute("data-intensity"));
+  const high =
+    nativeFeedback?.high ?? Number(await name.getAttribute("data-intensity"));
   check(
     high > 0.4 && high <= 1,
     "dense taps produce a bounded stronger local feedback level",
   );
-  const poseFrames = await name.evaluate(async (el) => {
-    const r = [];
-    for (let i = 0; i < 12; i++) {
-      await new Promise(requestAnimationFrame);
-      r.push(getComputedStyle(el).transform);
-    }
-    return r;
-  });
+  const poseFrames =
+    nativeFeedback?.frames ??
+    (await name.evaluate(async (el) => {
+      const r = [];
+      for (let i = 0; i < 12; i++) {
+        await new Promise(requestAnimationFrame);
+        r.push(getComputedStyle(el).transform);
+      }
+      return r;
+    }));
   check(
     new Set(poseFrames).size > 3,
     "nudge deformation settles through actual intermediate transforms",

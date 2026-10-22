@@ -63,4 +63,4 @@ npm run build --prefix frontend -- --outDir ../data/conversation-preview/build -
 5. 快速催促只有局部增强，没有新增通知轰炸；开启系统减动效后保持功能可用。
 6. 在自己的 iOS/Android/HarmonyOS 实体设备复核键盘、系统边缘返回、触控手感。这些不能由桌面 WebKit 或模拟器替代。
 
-模拟器说明：Android 自动化使用独立调试壳 `cn.lundao.preview` 中的 Android 15 WebView 124，只加载隔离页面；不替换正式 App，不接原生推送。高频点击专用项在该浏览器内按 32ms 定时派发点击，避开模拟器逐次 RPC 的延迟；切页仍走浏览器触摸事件。鸿蒙使用系统浏览器的实际 ArkWeb 引擎进行 UI 冒烟，不等于正式 ArkWeb 壳、原生桥或实体设备验收。
+模拟器说明：Android 自动化使用独立调试壳 `cn.lundao.preview` 中的 Android 15 WebView 124，只加载隔离页面；不替换正式 App，不接原生推送。同步连点、失败重试通过 DOM 明确触发确认处理；高频点击专用项在该浏览器内按 32ms 定时派发点击，避开模拟器逐次 RPC 的延迟；切页仍走浏览器触摸事件。鸿蒙使用系统浏览器的实际 ArkWeb 引擎进行 UI 冒烟，不等于正式 ArkWeb 壳、原生桥或实体设备验收。
