@@ -62,6 +62,14 @@ async function checkInputGlass(label) {
         r.bottom - parseFloat(f.bottom) - root.getBoundingClientRect().bottom,
       ),
       contrast,
+      layers: [...footer.querySelectorAll(".chat-footer-glass i")].map(
+        (el) => ({
+          blur:
+            getComputedStyle(el).backdropFilter ||
+            getComputedStyle(el).webkitBackdropFilter,
+          mask: getComputedStyle(el).maskImage,
+        }),
+      ),
     };
   });
   check(
@@ -70,7 +78,11 @@ async function checkInputGlass(label) {
       result.veilAlpha < 0.5 &&
       result.blur.includes("blur") &&
       result.safeBottom < 2 &&
-      result.contrast >= 4.5,
+      result.contrast >= 4.5 &&
+      result.layers.length === 4 &&
+      result.layers.every((el) => el.mask.includes("gradient")) &&
+      result.layers.map((el) => el.blur).join(",") ===
+        "blur(10px),blur(18px),blur(14px),blur(26px)",
     label,
   );
 }

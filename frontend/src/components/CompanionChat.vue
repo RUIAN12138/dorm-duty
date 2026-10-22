@@ -157,6 +157,10 @@ watch(footer, (element) => {
       "--chat-footer-height",
       `${element.offsetHeight}px`,
     );
+    surface.value?.style.setProperty(
+      "--chat-input-height",
+      `${element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58}px`,
+    );
     if (wasAtBottom) bottom();
     else refreshEdge();
   });
@@ -190,13 +194,6 @@ function refreshEdge() {
   historyFrame.value?.style.setProperty(
     "--chat-edge",
     String(Math.min(1, Math.max(0, distance / 36))),
-  );
-  const remaining = scroll.value
-    ? scroll.value.scrollHeight - scroll.value.clientHeight - distance
-    : 0;
-  historyFrame.value?.style.setProperty(
-    "--chat-bottom-edge",
-    String(Math.min(1, Math.max(0, remaining / 36))),
   );
 }
 function bottom() {
@@ -1043,15 +1040,16 @@ function time(value: string) {
             >
               <i /><i /><i /><i /><i />
             </div>
+          </div>
+          <footer ref="footer" class="chat-footer">
             <div
-              class="chat-top-frost chat-bottom-frost"
+              class="chat-footer-glass"
               aria-hidden="true"
               data-testid="chat-bottom-frost"
             >
-              <i /><i /><i /><i /><i />
+              <i class="glass-top-soft" /><i class="glass-top-edge" />
+              <i class="glass-bottom-soft" /><i class="glass-bottom-edge" />
             </div>
-          </div>
-          <footer ref="footer" class="chat-footer">
             <button
               v-if="!notes.active.value && !keyboardOpen"
               class="chat-note-shortcut"
@@ -1199,6 +1197,7 @@ function time(value: string) {
 }
 .chat-surface {
   --chat-footer-height: 102px;
+  --chat-input-height: 58px;
   --chat-footer-gap: max(58px, calc(env(safe-area-inset-bottom) + 34px));
   height: 100%;
   display: flex;
@@ -1260,7 +1259,6 @@ function time(value: string) {
 .chat-history-frame {
   opacity: 0;
   --chat-edge: 0;
-  --chat-bottom-edge: 0;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -1315,12 +1313,6 @@ function time(value: string) {
   -webkit-backdrop-filter: blur(20px);
   mask-image: linear-gradient(#000 0%, transparent 24%);
   -webkit-mask-image: linear-gradient(#000 0%, transparent 24%);
-}
-.chat-bottom-frost {
-  top: auto;
-  bottom: calc(var(--chat-footer-height) + var(--chat-footer-gap) - 24px);
-  transform: rotate(180deg);
-  opacity: var(--chat-bottom-edge);
 }
 .chat-history {
   touch-action: pan-y pinch-zoom;
@@ -1439,17 +1431,75 @@ function time(value: string) {
   content: "";
   position: absolute;
   z-index: 0;
-  inset: -20px -20px calc(-1 * var(--chat-footer-gap));
+  inset: -48px -20px calc(-1 * var(--chat-footer-gap));
   pointer-events: none;
-  background: color-mix(in srgb, var(--ui-surface) 28%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  mask-image: linear-gradient(transparent, #000 36px);
-  -webkit-mask-image: linear-gradient(transparent, #000 36px);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--ui-surface) 10%, transparent) 48px,
+    color-mix(in srgb, var(--ui-surface) 12%, transparent) 70%,
+    color-mix(in srgb, var(--ui-surface) 18%, transparent)
+  );
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(transparent, #000 48px);
+  -webkit-mask-image: linear-gradient(transparent, #000 48px);
 }
 .chat-footer > * {
   position: relative;
   z-index: 1;
+}
+.chat-footer > .chat-footer-glass {
+  position: absolute;
+  z-index: 0;
+  inset: -48px -20px calc(-1 * var(--chat-footer-gap));
+  pointer-events: none;
+}
+.chat-footer-glass i {
+  position: absolute;
+  inset-inline: 0;
+  display: block;
+  pointer-events: none;
+}
+.glass-top-soft,
+.glass-top-edge {
+  top: 0;
+  height: calc(
+    48px + var(--chat-footer-height) - var(--chat-input-height) + 24px
+  );
+}
+.glass-top-soft {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(transparent, #000 48%, #000 62%, transparent);
+  -webkit-mask-image: linear-gradient(
+    transparent,
+    #000 48%,
+    #000 62%,
+    transparent
+  );
+}
+.glass-top-edge {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  mask-image: linear-gradient(transparent 12%, #000 60%, transparent);
+  -webkit-mask-image: linear-gradient(transparent 12%, #000 60%, transparent);
+}
+.glass-bottom-soft {
+  bottom: 0;
+  height: calc(var(--chat-footer-gap) + var(--chat-input-height) * 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(transparent, #000 70%);
+  -webkit-mask-image: linear-gradient(transparent, #000 70%);
+}
+.glass-bottom-edge {
+  bottom: 0;
+  height: calc(var(--chat-footer-gap) + var(--chat-input-height) * 0.15);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  mask-image: linear-gradient(transparent 5%, #000);
+  -webkit-mask-image: linear-gradient(transparent 5%, #000);
 }
 .chat-error {
   position: absolute;
@@ -1636,7 +1686,8 @@ function time(value: string) {
   :global(html[data-companion-chat="true"] .chore-bottom-nav) {
     filter: none;
   }
-  .chat-top-frost {
+  .chat-top-frost,
+  .chat-footer-glass {
     display: none;
   }
   .chat-footer::before {

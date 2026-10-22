@@ -6,9 +6,12 @@ import {
   webkit,
 } from "../frontend/node_modules/@playwright/test/index.mjs";
 import { createConversationPreview } from "./lib/conversation-preview.mjs";
+import utilsBundle from "../frontend/node_modules/playwright-core/lib/utilsBundle.js";
+const { PNG } = utilsBundle;
 const safari = process.env.DORM_BROWSER === "webkit",
   native = process.env.DORM_ANDROID_WEBVIEW === "1",
   checks = [],
+  limitations = [],
   errors = [];
 const engine = native ? "android-webview" : safari ? "webkit" : "chromium";
 const preview = await createConversationPreview();
@@ -103,12 +106,44 @@ try {
     };
   });
   check(
-    edgeGlass.top.blur === edgeGlass.bottom.blur &&
+    edgeGlass.top.blur.includes("2px") &&
       edgeGlass.bottom.blur.includes("blur") &&
       edgeGlass.bottom.pointer === "none" &&
-      edgeGlass.footer.blur.includes("20px"),
-    "bottom edge mirrors top progressive frost and composer glass does not intercept input",
+      edgeGlass.footer.blur.includes("6px"),
+    "top history frost is preserved while bottom uses a lighter base and non-interactive progressive layers",
   );
+  if (!native && !safari) {
+    const protocol = await page.context().newCDPSession(page);
+    try {
+      await protocol.send("Emulation.setEmulatedMedia", {
+        features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+      });
+      check(
+        await page.evaluate(() => {
+          const layers = getComputedStyle(
+            document.querySelector(".chat-footer-glass"),
+          );
+          const input = getComputedStyle(
+            document.querySelector(".composer-text"),
+          );
+          const base = getComputedStyle(
+            document.querySelector(".chat-footer"),
+            "::before",
+          );
+          return (
+            matchMedia("(prefers-reduced-transparency: reduce)").matches &&
+            layers.display === "none" &&
+            input.backdropFilter === "none" &&
+            base.backdropFilter === "none"
+          );
+        }),
+        "reduced transparency disables every added optical layer while keeping the input available",
+      );
+    } finally {
+      await protocol.send("Emulation.setEmulatedMedia", { features: [] });
+      await protocol.detach();
+    }
+  }
   check(
     (await page.locator(".companion-note-form").count()) === 0,
     "single tap opens the unified chat and no separate note composer",
@@ -164,21 +199,139 @@ try {
       const bottom = document.querySelector(
         '[data-testid="chat-bottom-frost"]',
       );
-      const atTop = Number(getComputedStyle(bottom).opacity);
+      const atTop = getComputedStyle(
+        bottom.querySelector(".glass-bottom-edge"),
+      ).backdropFilter;
       const overflow = el.scrollHeight - el.clientHeight;
       el.scrollTop = el.scrollHeight;
       el.dispatchEvent(new Event("scroll"));
-      const atBottom = Number(getComputedStyle(bottom).opacity);
+      const atBottom = getComputedStyle(
+        bottom.querySelector(".glass-bottom-edge"),
+      ).backdropFilter;
       el.scrollTop = initial;
       el.dispatchEvent(new Event("scroll"));
       return { overflow, atTop, atBottom };
     });
   check(
     frostScroll.overflow > 36 &&
-      frostScroll.atTop > 0.95 &&
-      frostScroll.atBottom < 0.05,
-    "bottom frost follows remaining history and clears at latest message instead of hiding the final controls",
+      frostScroll.atTop.includes("26px") &&
+      frostScroll.atBottom === frostScroll.atTop,
+    "edge weighted glass remains continuous while history scrolls to either boundary",
   );
+  if (!native) {
+    const zones = await page.evaluate(() => {
+      const root = document.querySelector(".companion-chat");
+      const fixture = document.createElement("div");
+      fixture.id = "glass-optical-fixture";
+      fixture.style.cssText =
+        "position:absolute;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(90deg,#000 0 32px,#fff 32px 64px)";
+      root.querySelector(".chat-history-frame").appendChild(fixture);
+      const style = document.createElement("style");
+      style.id = "glass-optical-style";
+      style.textContent =
+        ".chat-footer textarea,.chat-footer .composer-send,.chat-note-shortcut{visibility:hidden!important}";
+      document.head.appendChild(style);
+      const composer = root
+        .querySelector(".composer-text")
+        .getBoundingClientRect();
+      const top = root.querySelector(".glass-top-edge").getBoundingClientRect();
+      return {
+        core: composer.top + composer.height / 2,
+        top: top.top + top.height * 0.6,
+        bottom: root.getBoundingClientRect().bottom - 6,
+      };
+    });
+    const optical = PNG.sync.read(await page.screenshot());
+    const contrast = (y) => {
+      const values = [];
+      for (let x = 64; x < 320; x++) {
+        const i = (Math.round(y) * optical.width + x) * 4;
+        values.push(
+          (optical.data[i] + optical.data[i + 1] + optical.data[i + 2]) / 3,
+        );
+      }
+      const average = values.reduce((a, v) => a + v, 0) / values.length;
+      return Math.sqrt(
+        values.reduce((a, v) => a + (v - average) ** 2, 0) / values.length,
+      );
+    };
+    const profile = Object.fromEntries(
+      Object.entries(zones).map(([key, y]) => [key, contrast(y)]),
+    );
+    await fs.writeFile(
+      new URL(`${engine}-blur-profile.json`, evidence),
+      JSON.stringify(
+        {
+          fixture: "temporary 64px black/white stripes behind actual glass",
+          zones,
+          contrast: profile,
+        },
+        null,
+        2,
+      ),
+    );
+    await page.screenshot({
+      path: new URL(`${engine}-blur-optical-fixture.png`, evidence).pathname,
+    });
+    await page.evaluate(() => {
+      document.getElementById("glass-optical-fixture").remove();
+      document.getElementById("glass-optical-style").remove();
+    });
+    let opticalAvailable = true;
+    if (safari) {
+      // Calibrate this runner independently: some WebKit screenshot builds
+      // omit backdrop filtering even for a plain, non-animated HTML control.
+      // Only that reproducible runner limitation can qualify the optical test;
+      // an application-only failure must still fail the suite.
+      const calibrationContext = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+      });
+      const calibration = await calibrationContext.newPage();
+      try {
+        await calibration.setContent(
+          "<style>body{margin:0;background:repeating-linear-gradient(90deg,#000 0 32px,#fff 32px 64px)}div{position:absolute;inset:0;background:#ffffff10;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}</style><div></div>",
+        );
+        await calibration.waitForTimeout(160);
+        const image = PNG.sync.read(await calibration.screenshot());
+        const values = [];
+        for (let x = 64; x < 320; x++)
+          values.push(image.data[(600 * image.width + x) * 4]);
+        const mean = values.reduce((a, v) => a + v, 0) / values.length;
+        const controlContrast = Math.sqrt(
+          values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length,
+        );
+        opticalAvailable = controlContrast < 40;
+        await fs.writeFile(
+          new URL(`${engine}-blur-calibration.json`, evidence),
+          JSON.stringify(
+            {
+              control:
+                "plain HTML, no masks, no app, no animations; 24px backdrop blur",
+              controlContrast,
+              opticalAvailable,
+            },
+            null,
+            2,
+          ),
+        );
+      } finally {
+        await calibrationContext.close();
+      }
+    }
+    if (opticalAvailable) {
+      check(
+        profile.core > 2 &&
+          profile.core > profile.top * 1.12 &&
+          profile.core > profile.bottom * 1.2,
+        "rendered optical fixture has clearer input core and progressively softer upper and screen-bottom edges",
+      );
+    } else {
+      const limitation =
+        "WebKit screenshot runner does not render backdrop blur even in an independent minimal HTML control; optical result is unverified, not passed";
+      limitations.push(limitation);
+      console.log("LIMIT " + limitation);
+    }
+  }
   const glassLayers = await page
     .locator(".chat-history")
     .evaluate((history) => {
@@ -623,7 +776,7 @@ try {
   }
   check(errors.length === 0, "no Vue or browser runtime errors");
   const result = {
-    status: "passed",
+    status: limitations.length ? "passed-with-limitations" : "passed",
     browser: native
       ? "Android 15 WebView 124 (isolated debug shell)"
       : safari
@@ -632,6 +785,7 @@ try {
     touch: safari ? "pointer fallback" : "native browser touch",
     checks,
     errors,
+    limitations,
     scope: "isolated data and simulated AI; no physical WebView/ArkWeb claim",
   };
   await fs.writeFile(

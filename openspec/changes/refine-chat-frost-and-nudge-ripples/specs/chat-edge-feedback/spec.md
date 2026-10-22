@@ -14,6 +14,18 @@
 - **WHEN** 切换浅深主题、聊天滚动或者键盘压缩视口
 - **THEN** 输入层和安全区保持同一半透明毛玻璃，文字与发送图标清晰，不能切为纯色遮罩
 
+### Requirement: Edge weighted input glass
+输入区 SHALL 保持内容真实透出并形成连续的上方过渡、核心输入与底部安全区玻璃；核心相对清晰，上方柔边与屏幕底边逐步加强模糊，不出现实色色块或硬边。
+#### Scenario: Scroll behind all three zones
+- **WHEN** 聊天记录从输入区上方滚动至输入框和安全区后方
+- **THEN** 背景轮廓持续透出，边缘模糊强于核心，输入文字及发送按钮不受滤镜影响
+#### Scenario: Keyboard and theme transition
+- **WHEN** 键盘视口变化或深浅主题切换
+- **THEN** 玻璃分布跟随实际输入高度与安全区保持连续，原位置与按压/入场反馈不变
+#### Scenario: Transparency disabled
+- **WHEN** 系统启用减少透明效果
+- **THEN** 所有新增玻璃滤镜关闭，以可读实色兜底，不丢失输入与发送功能
+
 ### Requirement: Frequency driven ripple size
 催促涟漪 SHALL 随点击密度由小到大、有上限地扩散；停顿后平滑衰减，实际通知继续遵守已有频控。
 #### Scenario: Rapid burst and pause
