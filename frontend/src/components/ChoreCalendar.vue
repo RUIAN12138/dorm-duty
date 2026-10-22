@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick } from "vue";
 import { revealPage, cancelPageReveal } from "../interaction/pageReveal";
+import { animate } from "motion-v";
 import { motionTiming, motionAllowed } from "../interaction/motion";
 import {
   computed,
@@ -76,6 +77,7 @@ watch(
   },
   { flush: "sync" },
 );
+const modeStage = ref<HTMLElement>();
 const calendarRoot = ref<HTMLElement>(),
   roomHeight = ref(600);
 function fitViewport() {
@@ -99,8 +101,10 @@ function fitViewport() {
 let layoutObserver: ResizeObserver | undefined;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 function finishUnavailableMotion() {
-  if (!motionAllowed() && calendarRoot.value)
+  if (!motionAllowed() && calendarRoot.value) {
     cancelPageReveal(calendarRoot.value);
+    settleModes();
+  }
 }
 onMounted(() => {
   fitViewport();
@@ -125,6 +129,7 @@ onMounted(() => {
     layoutObserver.observe(calendarRoot.value.parentElement);
 });
 onBeforeUnmount(() => {
+  settleModes();
   if (calendarRoot.value) cancelPageReveal(calendarRoot.value);
   layoutObserver?.disconnect();
   window.removeEventListener("resize", fitViewport);
@@ -185,29 +190,94 @@ watch(
   },
 );
 const view = ref<"calendar" | "list" | "stats">(memory.view);
-watch(
-  view,
-  () =>
-    void nextTick(() =>
-      revealPage(
-        calendarRoot.value || null,
-        ".calendar-mode,.compact-records",
-        48,
+// Each visited panel stays mounted. One local driver owns its transform;
+// interrupting a scrub resumes from its current visual pose, never a queued page.
+const visited = reactive(new Set<string>([view.value]));
+let modeEpoch = 0;
+let modeControls: ReturnType<typeof animate>[] = [];
+function settleModes() {
+  modeEpoch++;
+  modeControls.forEach((control) => control.stop());
+  modeControls = [];
+  for (const panel of modeStage.value?.querySelectorAll<HTMLElement>(
+    "[data-calendar-panel]",
+  ) || []) {
+    const active = panel.dataset.calendarPanel === view.value;
+    panel.style.opacity = active ? "1" : "0";
+    panel.style.transform = "none";
+    panel.style.visibility = active ? "visible" : "hidden";
+  }
+}
+watch(view, async (value) => {
+  visited.add(value);
+  const epoch = ++modeEpoch;
+  const before = new Map(
+    [
+      ...(modeStage.value?.querySelectorAll<HTMLElement>(
+        "[data-calendar-panel]",
+      ) || []),
+    ].map((panel) => {
+      const css = getComputedStyle(panel);
+      return [
+        panel.dataset.calendarPanel,
         {
-          duration: view.value === "stats" ? 520 : 460,
-          distance: 14,
-          scale: 0.985,
+          opacity: Number(css.opacity),
+          transform: css.transform,
+          visible: css.visibility !== "hidden",
         },
+      ] as const;
+    }),
+  );
+  modeControls.forEach((control) => control.stop());
+  modeControls = [];
+  await nextTick();
+  if (epoch !== modeEpoch) return;
+  const panels = [
+    ...(modeStage.value?.querySelectorAll<HTMLElement>(
+      "[data-calendar-panel]",
+    ) || []),
+  ];
+  if (!motionAllowed()) {
+    settleModes();
+    return;
+  }
+  for (const panel of panels) {
+    const active = panel.dataset.calendarPanel === value;
+    const snapshot = before.get(panel.dataset.calendarPanel);
+    const visible = snapshot?.visible ?? false;
+    const fromOpacity = visible ? snapshot!.opacity : 0;
+    const fromTransform = visible
+      ? snapshot!.transform
+      : "translate3d(0,8px,0) scale(.98)";
+    if (!active && !visible) continue;
+    panel.style.visibility = "visible";
+    modeControls.push(
+      animate(
+        panel,
+        {
+          opacity: [fromOpacity, active ? 1 : 0],
+          transform: [
+            fromTransform,
+            active
+              ? "translate3d(0,0,0) scale(1)"
+              : "translate3d(0,-6px,0) scale(.99)",
+          ],
+        },
+        active
+          ? { type: "spring", duration: 0.3, bounce: 0.08 }
+          : { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
       ),
-    ),
-);
+    );
+  }
+  await Promise.all(modeControls.map((control) => control.then(() => {})));
+  if (epoch === modeEpoch) settleModes();
+});
 const viewOptions = [
   { value: "calendar", label: "日历", testId: "calendar-view-grid" },
   { value: "list", label: "列表", testId: "calendar-view-list" },
-  { value: "stats", label: "统计", testId: "calendar-view-stats" },
+  { value: "stats", label: "卡片", testId: "calendar-view-stats" },
 ];
 watch(view, (value) => {
-  selected.value = "";
   memory.view = value;
 });
 const {
@@ -221,7 +291,7 @@ const {
     token: props.token || "",
     version: props.version || 0,
     today: props.today,
-    active: view.value === "stats",
+    active: visited.has("stats"),
   }),
   memory.activity,
 );
@@ -364,130 +434,163 @@ watch(
         v-model="view"
         :options="viewOptions"
         group-label="完成记录显示方式"
+        scrub
       />
-      <TabsContent value="calendar" as-child>
-        <div class="calendar-mode">
+      <div ref="modeStage" class="calendar-mode-stack">
+        <TabsContent
+          v-if="visited.has('calendar')"
+          value="calendar"
+          as-child
+          force-mount
+        >
           <div
-            class="calendar-surface"
-            @pointerdown="carousel.down"
-            @pointermove="carousel.move"
-            @pointerup="carousel.up"
-            @pointercancel="carousel.cancel"
-            @lostpointercapture="carousel.lost"
-            @click.capture="carousel.click"
-            @dragstart.prevent
+            class="calendar-mode"
+            data-calendar-panel="calendar"
+            :inert="view !== 'calendar' || undefined"
+            :aria-hidden="view !== 'calendar'"
           >
-            <div ref="monthViewport" class="month-viewport">
-              <div
-                ref="monthTrack"
-                class="month-stage"
-                :style="{
-                  transform: `translate3d(calc(-100% + ${carousel.offset.value}px),0,0)`,
-                }"
-              >
+            <div
+              class="calendar-surface"
+              @pointerdown="carousel.down"
+              @pointermove="carousel.move"
+              @pointerup="carousel.up"
+              @pointercancel="carousel.cancel"
+              @lostpointercapture="carousel.lost"
+              @click.capture="carousel.click"
+              @dragstart.prevent
+            >
+              <div ref="monthViewport" class="month-viewport">
                 <div
-                  v-for="page in months"
-                  :key="page.key"
-                  class="month-page"
-                  :class="{
-                    'month-page-even': Number(page.key.slice(5)) % 2 === 0,
+                  ref="monthTrack"
+                  class="month-stage"
+                  :style="{
+                    transform: `translate3d(calc(-100% + ${carousel.offset.value}px),0,0)`,
                   }"
-                  :data-month="page.key"
-                  :aria-hidden="page.delta !== 0 ? true : undefined"
-                  :inert="page.delta !== 0 ? true : undefined"
-                  :aria-busy="loading"
                 >
-                  <div class="month-page-heading" aria-hidden="true">
-                    <strong>{{ Number(page.key.slice(5)) }}月</strong
-                    ><span>{{ page.key.slice(0, 4) }}</span>
-                  </div>
-                  <div class="chore-weekdays" aria-hidden="true">
-                    <span v-for="name in weekNames" :key="name">{{
-                      name
-                    }}</span>
-                  </div>
                   <div
-                    class="chore-calendar-grid"
+                    v-for="page in months"
+                    :key="page.key"
+                    class="month-page"
+                    :class="{
+                      'month-page-even': Number(page.key.slice(5)) % 2 === 0,
+                    }"
                     :data-month="page.key"
+                    :aria-hidden="page.delta !== 0 ? true : undefined"
                     :inert="page.delta !== 0 ? true : undefined"
+                    :aria-busy="loading"
                   >
-                    <template
-                      v-for="(cell, index) in page.cells"
-                      :key="cell?.date || `blank-${index}`"
+                    <div class="month-page-heading" aria-hidden="true">
+                      <strong>{{ Number(page.key.slice(5)) }}月</strong
+                      ><span>{{ page.key.slice(0, 4) }}</span>
+                    </div>
+                    <div class="chore-weekdays" aria-hidden="true">
+                      <span v-for="name in weekNames" :key="name">{{
+                        name
+                      }}</span>
+                    </div>
+                    <div
+                      class="chore-calendar-grid"
+                      :data-month="page.key"
+                      :inert="page.delta !== 0 ? true : undefined"
                     >
-                      <button
-                        v-if="cell"
-                        :class="{
-                          'is-today': cell.date === today,
-                          'has-records': !!cell.records.length,
-                          'is-selected':
-                            cell.date === (selected || memory.focusedDate),
-                        }"
-                        :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
-                        :data-heat="Math.min(4, cell.records.length)"
-                        :aria-pressed="
-                          cell.date === (selected || memory.focusedDate)
-                        "
-                        :data-testid="
-                          page.delta === 0
-                            ? `calendar-day-${cell.date}`
-                            : undefined
-                        "
-                        @click="
-                          selected = selected === cell.date ? '' : cell.date
-                        "
+                      <template
+                        v-for="(cell, index) in page.cells"
+                        :key="cell?.date || `blank-${index}`"
                       >
-                        <span class="calendar-day-number">{{
-                          cell.day
-                        }}</span></button
-                      ><span
-                        v-else
-                        class="calendar-blank"
-                        aria-hidden="true"
-                      ></span>
-                    </template>
+                        <button
+                          v-if="cell"
+                          :class="{
+                            'is-today': cell.date === today,
+                            'has-records': !!cell.records.length,
+                            'is-selected':
+                              cell.date === (selected || memory.focusedDate),
+                          }"
+                          :aria-label="`${cell.date}，${cell.records.length ? `${cell.records.length}项完成记录，${cell.marks.map((mark) => `${mark.assignee_name}${mark.type === 'water' ? '抬水' : '值日'}`).join('，')}` : '无完成记录'}`"
+                          :data-heat="Math.min(4, cell.records.length)"
+                          :aria-pressed="
+                            cell.date === (selected || memory.focusedDate)
+                          "
+                          :data-testid="
+                            page.delta === 0
+                              ? `calendar-day-${cell.date}`
+                              : undefined
+                          "
+                          @click="
+                            selected = selected === cell.date ? '' : cell.date
+                          "
+                        >
+                          <span class="calendar-day-number">{{
+                            cell.day
+                          }}</span></button
+                        ><span
+                          v-else
+                          class="calendar-blank"
+                          aria-hidden="true"
+                        ></span>
+                      </template>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+            <div class="calendar-type-legend" aria-label="任务标记图例">
+              <span class="calendar-heat-key"
+                >少<i
+                  v-for="level in 4"
+                  :key="level"
+                  :data-heat="level"
+                />多</span
+              >
+            </div>
           </div>
-          <div class="calendar-type-legend" aria-label="任务标记图例">
-            <span class="calendar-heat-key"
-              >少<i
-                v-for="level in 4"
-                :key="level"
-                :data-heat="level"
-              />多</span
-            >
-          </div>
-        </div>
-      </TabsContent>
-      <TabsContent value="list" as-child
-        ><CompactRecordList
-          :memory="memory.list"
-          :records="listRecords"
-          :today="today"
-          :month="month"
-          :member-id="memberId"
-          :busy="busy"
-          :editable="!!token"
-          :creator="creator"
-          :undo-ids="undoIds"
-          @undo="emit('undo', $event)"
-          @edit="editHistory"
-          @select="showDay"
-      /></TabsContent>
-      <TabsContent value="stats" class="stats-mode"
-        ><ActivitySummary
-          v-if="activity"
-          :activity="activity"
-          :memory="memory.stats"
-          :rounds="rounds || []"
-          :categories="categories"
-          :creator="creator"
-          @settings="emit('settings', $event)" />
-        <LoadingSkeleton v-if="activityLoading && !activity" variant="stats"
-      /></TabsContent>
+        </TabsContent>
+        <TabsContent
+          v-if="visited.has('list')"
+          value="list"
+          as-child
+          force-mount
+        >
+          <div
+            class="calendar-list-mode"
+            data-calendar-panel="list"
+            :inert="view !== 'list' || undefined"
+            :aria-hidden="view !== 'list'"
+          >
+            <CompactRecordList
+              :memory="memory.list"
+              :records="listRecords"
+              :today="today"
+              :month="month"
+              :member-id="memberId"
+              :busy="busy"
+              :editable="!!token"
+              :creator="creator"
+              :undo-ids="undoIds"
+              @undo="emit('undo', $event)"
+              @edit="editHistory"
+              @select="showDay"
+            /></div
+        ></TabsContent>
+        <TabsContent
+          v-if="visited.has('stats')"
+          value="stats"
+          force-mount
+          class="stats-mode"
+          data-calendar-panel="stats"
+          :inert="view !== 'stats' || undefined"
+          :aria-hidden="view !== 'stats'"
+          ><ActivitySummary
+            v-if="activity"
+            :activity="activity"
+            :active="view === 'stats'"
+            :memory="memory.stats"
+            :rounds="rounds || []"
+            :categories="categories"
+            :creator="creator"
+            @settings="emit('settings', $event)" />
+          <LoadingSkeleton v-if="activityLoading && !activity" variant="stats"
+        /></TabsContent>
+      </div>
       <p
         v-if="activityError && view === 'stats'"
         role="alert"
@@ -1022,11 +1125,25 @@ h1 small {
   min-height: 38px;
   font-size: 14px;
 }
-.compact-calendar > .calendar-mode,
-.compact-calendar > .compact-records,
-.compact-calendar > .stats-mode {
+.calendar-mode-stack {
+  position: relative;
+  isolation: isolate;
   flex: 1;
   min-height: 0;
+}
+/* Persistent panels share the original content slot; no height interpolation. */
+.calendar-mode-stack > [data-calendar-panel] {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  visibility: hidden;
+  opacity: 0;
+  transform-origin: center top;
+}
+.calendar-mode-stack > [data-state="active"] {
+  visibility: visible;
+  opacity: 1;
+  z-index: 1;
 }
 .calendar-mode {
   display: flex;

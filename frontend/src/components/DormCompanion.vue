@@ -54,7 +54,11 @@ const props = withDefaults(
     scene: "general",
   },
 );
-const emit = defineEmits<{ message: []; chat: [origin: DOMRect] }>();
+const emit = defineEmits<{
+  message: [];
+  chat: [origin: DOMRect];
+  chatCancel: [];
+}>();
 let holdTimer: ReturnType<typeof setTimeout> | undefined;
 let holdPoint: {
   id: number;
@@ -64,6 +68,57 @@ let holdPoint: {
 } | null = null;
 let suppressTapUntil = 0;
 let tapOrigin: DOMRect | null = null;
+let tapPoint = { x: 0, y: 0 };
+let predictingChat = false,
+  queuedDouble = false;
+let secondPointer: { id: number; x: number; y: number } | null = null;
+let suppressSecondClick = 0;
+// The first tap moves the ball immediately. Its old hit area remains a short
+// arbitration target even after the dialog covers it; the second tap reverses
+// that same flight instead of accidentally clicking the new back button.
+function predictiveDown(event: PointerEvent) {
+  if (!predictingChat || !event.isPrimary || event.button !== 0 || !tapOrigin)
+    return;
+  if (Math.hypot(event.clientX - tapPoint.x, event.clientY - tapPoint.y) > 36)
+    return;
+  secondPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  tapGesture.press(event.clientX, event.clientY);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+function predictiveMove(event: PointerEvent) {
+  if (secondPointer?.id !== event.pointerId) return;
+  if (
+    Math.hypot(
+      event.clientX - secondPointer.x,
+      event.clientY - secondPointer.y,
+    ) > 18
+  ) {
+    secondPointer = null;
+    tapGesture.cancel();
+  }
+}
+function predictiveUp(event: PointerEvent) {
+  if (secondPointer?.id !== event.pointerId) return;
+  secondPointer = null;
+  suppressSecondClick = performance.now() + 350;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (event.type === "pointercancel") tapGesture.cancel();
+  else tapGesture.tap(event.clientX, event.clientY);
+}
+function predictiveClick(event: MouseEvent) {
+  if (performance.now() >= suppressSecondClick || !tapOrigin) return;
+  if (
+    Math.hypot(
+      event.clientX - (tapOrigin.left + tapOrigin.width / 2),
+      event.clientY - (tapOrigin.top + tapOrigin.height / 2),
+    ) < 52
+  ) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}
 function cancelHold() {
   clearTimeout(holdTimer);
   const active = holdPoint;
@@ -145,23 +200,50 @@ function keyboardChat(event: KeyboardEvent) {
 }
 const play = createCompanionPlay();
 const tapGesture = createCompanionTapGesture({
+  preview: () => {
+    if (
+      props.intent !== "chat" ||
+      !props.chatEnabled ||
+      !tapOrigin ||
+      props.muted
+    )
+      return;
+    predictingChat = true;
+    emit("chat", tapOrigin);
+  },
+  rollback: () => {
+    if (!predictingChat) return;
+    predictingChat = false;
+    emit("chatCancel");
+  },
   single: () => {
+    if (predictingChat) {
+      predictingChat = false;
+      return;
+    }
     if (document.hidden || props.muted || flying) return;
     if (props.intent === "chat" && props.chatEnabled && tapOrigin)
       emit("chat", tapOrigin);
     else emit("message");
   },
-  double: tap,
+  double: () => {
+    if (props.muted) queuedDouble = true;
+    else tap();
+  },
 });
 watch(
   () => props.muted,
   (muted) => {
     if (muted) {
       cancelHold();
-      tapGesture.cancel();
+      if (!predictingChat) tapGesture.cancel();
       if (props.continuous && engine) releaseCompanion(engine);
     } else if (props.continuous && engine) {
       acquireCompanion(engine);
+    }
+    if (!muted && queuedDouble) {
+      queuedDouble = false;
+      tap();
     }
     syncMotion();
   },
@@ -267,6 +349,7 @@ function clicked(event: MouseEvent) {
     return;
   }
   tapOrigin = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  tapPoint = { x: event.clientX, y: event.clientY };
   tapGesture.tap(
     event.clientX,
     event.clientY,
@@ -297,7 +380,9 @@ function gaze(event: PointerEvent) {
 }
 function syncMotion() {
   if (!motionAllowed()) {
-    tapGesture.cancel();
+    // Reduced motion disables rendering, not single/double activation. A mute
+    // handoff during a predictive launch must not cancel the user intent.
+    if (document.hidden) tapGesture.cancel();
     clearReaction();
     finishFlight();
   }
@@ -332,6 +417,11 @@ watch(
   },
 );
 onMounted(() => {
+  document.addEventListener("pointerdown", predictiveDown, true);
+  document.addEventListener("pointermove", predictiveMove, true);
+  document.addEventListener("pointerup", predictiveUp, true);
+  document.addEventListener("pointercancel", predictiveUp, true);
+  document.addEventListener("click", predictiveClick, true);
   if (!host.value || !window.EmotionBall) {
     if (props.track) finishCompanionHandoff();
     return;
@@ -374,6 +464,11 @@ onMounted(() => {
   media.addEventListener("change", syncMotion);
 });
 onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", predictiveDown, true);
+  document.removeEventListener("pointermove", predictiveMove, true);
+  document.removeEventListener("pointerup", predictiveUp, true);
+  document.removeEventListener("pointercancel", predictiveUp, true);
+  document.removeEventListener("click", predictiveClick, true);
   cancelHold();
   tapGesture.cancel();
   finishFlight();

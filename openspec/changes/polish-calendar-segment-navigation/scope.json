@@ -1,0 +1,17 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "4b91529",
+  "allowed": [
+    "frontend/src/components/ChoreCalendar.vue",
+    "frontend/src/components/ElasticSegments.vue",
+    "frontend/src/components/ActivitySummary.vue",
+    "scripts/check-calendar-segment-navigation.mjs",
+    "docs/CHAT_MOTION_CONTINUITY_PREVIEW.md",
+    "openspec/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

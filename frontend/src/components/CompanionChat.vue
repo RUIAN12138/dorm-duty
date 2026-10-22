@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "reka-ui";
-import { animate, motion } from "motion-v";
+import { animate, motion, AnimatePresence } from "motion-v";
 import DormCompanion from "./DormCompanion.vue";
 import CompanionChatComposer from "./CompanionChatComposer.vue";
 import ConversationNoteFlow from "./ConversationNoteFlow.vue";
@@ -20,6 +20,8 @@ import {
   type ChatReminder,
 } from "../api/companionChat";
 import { motionAllowed, motionTokens } from "../interaction/motion";
+import { chatTransition, bubbleOrigin } from "../interaction/chatMotion";
+import { createChatScroll } from "../interaction/chatScroll";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
 const props = defineProps<{
@@ -51,6 +53,8 @@ const present = ref(false),
   scroll = ref<HTMLElement>(),
   historyFrame = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
+const draft = ref("");
+let loaded = false;
 const available = ref(false),
   loading = ref(false),
   busy = ref(false),
@@ -121,9 +125,7 @@ watch(notes.sending, (sending) => {
       ? "39"
       : "12";
 });
-const motionTransition = computed(() =>
-  motionAllowed() ? motionTokens.drawer : { duration: 0 },
-);
+const motionTransition = computed(() => chatTransition("bubble"));
 function fit() {
   if (closing) return;
   const el = scroll.value;
@@ -138,7 +140,7 @@ function fit() {
     document.activeElement?.tagName === "TEXTAREA";
   if (!focused) restingHeight = Math.max(restingHeight, viewport.value.height);
   keyboardOpen.value = !!focused && restingHeight - viewport.value.height > 110;
-  if (present.value && atBottom) bottom();
+  if (present.value && atBottom) bottom(true);
 }
 function scheduleFit() {
   cancelAnimationFrame(viewportFrame);
@@ -161,7 +163,7 @@ watch(footer, (element) => {
       "--chat-input-height",
       `${element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58}px`,
     );
-    if (wasAtBottom) bottom();
+    if (wasAtBottom) bottom(true);
     else refreshEdge();
   });
   footerObserver.observe(element);
@@ -196,12 +198,14 @@ function refreshEdge() {
     String(Math.min(1, Math.max(0, distance / 36))),
   );
 }
-function bottom() {
+const historyScroll = createChatScroll(() => scroll.value, refreshEdge);
+function bottom(immediate = false) {
   void nextTick(() => {
-    if (scroll.value && !closing)
-      scroll.value.scrollTop = scroll.value.scrollHeight;
-    refreshEdge();
+    if (!closing) historyScroll.request(immediate);
   });
+}
+function historyScrolled() {
+  historyScroll.scroll();
 }
 function close() {
   if (!closing) emit("update:modelValue", false);
@@ -219,6 +223,10 @@ function stopMotion() {
   controls.forEach((c) => c.stop());
   controls = [];
 }
+const glassParts = () =>
+  [backdrop.value, ...(masthead.value?.children || [])].filter(
+    Boolean,
+  ) as HTMLElement[];
 const entryParts = () =>
   [toolbar.value, nameplate.value, historyFrame.value, footer.value].filter(
     Boolean,
@@ -251,7 +259,8 @@ async function show() {
   endPull(true);
   closing = false;
   phase.value = "opening";
-  loading.value = true;
+  loading.value = !loaded;
+  historyScroll.pin();
   restingHeight = Math.max(
     window.innerHeight,
     window.visualViewport?.height || 0,
@@ -279,9 +288,7 @@ async function show() {
         { transform: [initial, "translate3d(0,0,0) scale(1)"] },
         ballTravel,
       ),
-      ...(
-        [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
-      ).map((el) =>
+      ...glassParts().map((el) =>
         animate(
           el,
           {
@@ -304,15 +311,15 @@ async function show() {
           },
           {
             ...motionTokens.enter,
-            duration: 0.42,
-            delay: 0.06 + index * 0.065,
+            duration: 0.3,
+            delay: 0.015 + index * 0.025,
           },
         ),
       ),
     ];
   }
   if (!motionAllowed()) {
-    for (const el of [backdrop.value, masthead.value, ...entryParts()]) {
+    for (const el of [...glassParts(), ...entryParts()]) {
       if (el) {
         el.style.opacity = "1";
         el.style.transform = "none";
@@ -396,6 +403,7 @@ async function hide() {
   const started = performance.now();
   closing = true;
   cancel();
+  historyScroll.stop();
   endPull(true);
   phase.value = "closing";
   stopMotion();
@@ -411,9 +419,7 @@ async function hide() {
   if (motionAllowed() && ball.value && paintReturn) {
     controls = [
       animate(0, 1, { ...ballTravel, duration: 0.38, onUpdate: paintReturn }),
-      ...(
-        [backdrop.value, masthead.value].filter(Boolean) as HTMLElement[]
-      ).map((el) =>
+      ...glassParts().map((el) =>
         animate(
           el,
           { opacity: [Number(getComputedStyle(el).opacity), 0] },
@@ -455,6 +461,7 @@ let pull: {
 } | null = null;
 let pullControl: ReturnType<typeof animate> | undefined;
 function startPull(event: TouchEvent | PointerEvent) {
+  historyScroll.interrupt();
   if ("pointerType" in event && event.pointerType === "touch") return;
   if ((event.target as HTMLElement).closest("button,textarea,input,a")) return;
   const point = "touches" in event ? event.touches[0] : event;
@@ -612,7 +619,7 @@ async function load() {
   controller?.abort();
   const c = new AbortController();
   controller = c;
-  loading.value = true;
+  loading.value = !loaded;
   error.value = "";
   retry = null;
   try {
@@ -631,9 +638,11 @@ async function load() {
       ...localNotes,
     ];
     reminders.value = state.reminders;
+    const initialHistory = !loaded;
+    loaded = true;
     emotion.value = "39";
     if (!available.value) error.value = "球球还未接通AI服务";
-    bottom();
+    bottom(initialHistory);
     if (!items.value.length && available.value) await welcome(generation);
   } catch (e) {
     if (generation === epoch && !c.signal.aborted)
@@ -644,6 +653,7 @@ async function load() {
 }
 async function send(text: string, isRetry = false) {
   if (busy.value || actionBusy.value || notes.sending.value) return;
+  historyScroll.pin();
   if (!isRetry && notes.input(text)) return;
   if (loading.value || !available.value) return;
   const request = isRetry && retry ? retry : { text, id: chatRequestId() };
@@ -769,7 +779,7 @@ function quiet() {
     stopMotion();
     endPull(true);
     if (ball.value) ball.value.style.transform = "none";
-    for (const el of [backdrop.value, masthead.value, ...entryParts()]) {
+    for (const el of [...glassParts(), ...entryParts()]) {
       if (el) {
         el.style.opacity = "1";
         el.style.transform = "none";
@@ -790,6 +800,9 @@ watch(
 watch(scope, () => {
   cancel();
   items.value = [];
+  draft.value = "";
+  loaded = false;
+  historyScroll.stop();
   notes.reset();
   reminders.value = [];
   retry = null;
@@ -804,6 +817,7 @@ document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
   footerObserver?.disconnect();
+  historyScroll.stop();
   delete document.documentElement.dataset.companionChat;
   cancel();
   motionEpoch++;
@@ -868,7 +882,6 @@ function time(value: string) {
         ><DialogDescription class="chat-sr-only"
           >输入文字与球球聊天。提醒安排需要确认后才保存。</DialogDescription
         >
-        <div ref="masthead" class="chat-masthead" aria-hidden="true" />
         <div ref="ball" class="chat-ball" data-testid="chat-ball">
           <div class="chat-ball-visual">
             <DormCompanion
@@ -899,7 +912,8 @@ function time(value: string) {
             <div
               ref="scroll"
               class="chat-history"
-              @scroll.passive="refreshEdge"
+              @scroll.passive="historyScrolled"
+              @wheel.passive="historyScroll.interrupt"
               @touchstart.passive="startPull"
               @touchmove="movePull"
               @touchend="endPull()"
@@ -935,10 +949,8 @@ function time(value: string) {
                   :key="item.id"
                   class="chat-bubble"
                   :class="item.role"
-                  :initial="
-                    motionAllowed() ? { opacity: 0, y: 10, scale: 0.94 } : false
-                  "
-                  :animate="{ opacity: 1, y: 0, scale: 1 }"
+                  :initial="bubbleOrigin(item.role)"
+                  :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
                   :transition="motionTransition"
                   >{{ item.text }}</motion.div
                 >
@@ -1003,10 +1015,19 @@ function time(value: string) {
                     {{ prompt }}
                   </button>
                 </div>
-                <Transition name="note-flow" mode="out-in"
-                  ><div
+                <AnimatePresence :initial="false"
+                  ><motion.div
                     v-if="notes.active.value"
-                    :key="notes.state.value.phase"
+                    :initial="
+                      motionAllowed()
+                        ? { opacity: 0, y: 10, scale: 0.97 }
+                        : false
+                    "
+                    :animate="{ opacity: 1, y: 0, scale: 1 }"
+                    :exit="{ opacity: 0, y: 5, scale: 0.97 }"
+                    :transition="chatTransition('layout')"
+                    style="width: 100%"
+                    key="note-flow"
                   >
                     <ConversationNoteFlow
                       :state="notes.state.value"
@@ -1017,9 +1038,10 @@ function time(value: string) {
                       "
                       @edit="notes.dispatch({ type: 'edit', field: $event })"
                       @cancel="notes.dispatch({ type: 'cancel' })"
-                      @confirm="notes.dispatch({ type: 'submit' })"
-                    /></div
-                ></Transition>
+                      @confirm="
+                        notes.dispatch({ type: 'submit' })
+                      " /></motion.div
+                ></AnimatePresence>
                 <button
                   v-if="hasConversation"
                   class="chat-clear"
@@ -1033,13 +1055,14 @@ function time(value: string) {
                 </button>
               </div>
             </div>
-            <div
-              class="chat-top-frost"
-              aria-hidden="true"
-              data-testid="chat-top-frost"
-            >
-              <i /><i /><i /><i /><i />
-            </div>
+          </div>
+          <div
+            ref="masthead"
+            class="chat-masthead chat-top-frost"
+            aria-hidden="true"
+            data-testid="chat-top-frost"
+          >
+            <i /><i /><i /><i />
           </div>
           <footer ref="footer" class="chat-footer">
             <div
@@ -1060,6 +1083,7 @@ function time(value: string) {
             </button>
             <CompanionChatComposer
               ref="composer"
+              v-model:draft="draft"
               :busy="
                 busy ||
                 (loading && !notes.active.value) ||
@@ -1100,26 +1124,6 @@ function time(value: string) {
   >
 </template>
 <style scoped>
-.note-flow-enter-active,
-.note-flow-leave-active {
-  transition:
-    transform var(--ui-page-time) var(--ui-ease-out),
-    opacity var(--ui-page-time) var(--ui-ease-out);
-}
-.note-flow-enter-from,
-.note-flow-leave-to {
-  opacity: 0;
-  transform: translate3d(0, 8px, 0) scale(0.98);
-}
-.note-flow-leave-active {
-  pointer-events: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .note-flow-enter-active,
-  .note-flow-leave-active {
-    transition: none;
-  }
-}
 .chat-note-shortcut {
   width: max-content;
   min-height: 36px;
@@ -1175,15 +1179,10 @@ function time(value: string) {
   visibility: hidden;
 }
 .chat-masthead {
-  opacity: 0;
   position: absolute;
+  z-index: 2;
   inset: 0 0 auto;
-  height: calc(var(--chat-ball-top) + 160px);
-  background: color-mix(in srgb, var(--ui-surface) 74%, transparent);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  mask-image: linear-gradient(#000 35%, #0009 65%, transparent);
-  -webkit-mask-image: linear-gradient(#000 35%, #0009 65%, transparent);
+  height: calc(var(--chat-ball-top) + 144px);
   pointer-events: none;
 }
 .chat-ball {
@@ -1208,6 +1207,9 @@ function time(value: string) {
   box-sizing: border-box;
 }
 .chat-toolbar {
+  position: relative;
+  z-index: 4;
+  pointer-events: none;
   opacity: 0;
   display: flex;
   justify-content: flex-start;
@@ -1217,6 +1219,7 @@ function time(value: string) {
   box-sizing: border-box;
 }
 .chat-toolbar button {
+  pointer-events: auto;
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -1259,86 +1262,55 @@ function time(value: string) {
 .chat-history-frame {
   opacity: 0;
   --chat-edge: 0;
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  margin: 0 -4px;
-}
-.chat-top-frost {
   position: absolute;
-  z-index: 2;
-  inset: -32px -16px auto;
-  height: calc(clamp(40px, 9dvh, 72px) + 32px);
-  mask-image: linear-gradient(transparent, #000 24px, #000 50%, transparent);
-  -webkit-mask-image: linear-gradient(
-    transparent,
-    #000 24px,
-    #000 50%,
-    transparent
-  );
-  pointer-events: none;
-  opacity: var(--chat-edge);
+  inset: 0 16px;
+  min-height: 0;
 }
 .chat-top-frost i {
+  opacity: 0;
   position: absolute;
   inset: 0;
   display: block;
+  background: color-mix(in srgb, var(--ui-surface) 9%, transparent);
 }
 .chat-top-frost i:nth-child(1) {
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  mask-image: linear-gradient(#000 0%, #000 50%, transparent);
-  -webkit-mask-image: linear-gradient(#000 0%, #000 50%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(#000 48%, transparent);
+  -webkit-mask-image: linear-gradient(#000 48%, transparent);
 }
 .chat-top-frost i:nth-child(2) {
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  mask-image: linear-gradient(#000 0%, #000 28%, transparent 85%);
-  -webkit-mask-image: linear-gradient(#000 0%, #000 28%, transparent 85%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(#000 24%, transparent 86%);
+  -webkit-mask-image: linear-gradient(#000 24%, transparent 86%);
 }
 .chat-top-frost i:nth-child(3) {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  mask-image: linear-gradient(#000 0%, transparent 65%);
-  -webkit-mask-image: linear-gradient(#000 0%, transparent 65%);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  mask-image: linear-gradient(#000, transparent 60%);
+  -webkit-mask-image: linear-gradient(#000, transparent 60%);
 }
 .chat-top-frost i:nth-child(4) {
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  mask-image: linear-gradient(#000 0%, transparent 42%);
-  -webkit-mask-image: linear-gradient(#000 0%, transparent 42%);
-}
-.chat-top-frost i:nth-child(5) {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  mask-image: linear-gradient(#000 0%, transparent 24%);
-  -webkit-mask-image: linear-gradient(#000 0%, transparent 24%);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  mask-image: linear-gradient(#000, transparent 34%);
+  -webkit-mask-image: linear-gradient(#000, transparent 34%);
 }
 .chat-history {
   touch-action: pan-y pinch-zoom;
   height: 100%;
   box-sizing: border-box;
-  mask-image: linear-gradient(
-    to bottom,
-    rgb(0 0 0 / calc(1 - var(--chat-edge))) 0px,
-    #000 48px
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    rgb(0 0 0 / calc(1 - var(--chat-edge))) 0px,
-    #000 48px
-  );
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
   display: block;
-  padding: 16px 4px
+  padding: calc(var(--chat-ball-top) + 144px) 4px
     calc(var(--chat-footer-height) + var(--chat-footer-gap) + 22px);
   margin: 0;
 }
 .chat-history-content {
-  min-height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -1658,13 +1630,13 @@ function time(value: string) {
   --chat-footer-gap: max(12px, env(safe-area-inset-bottom));
 }
 .is-compact .chat-history {
-  padding-top: 8px;
+  padding-top: 116px;
   padding-bottom: calc(
     var(--chat-footer-height) + var(--chat-footer-gap) + 12px
   );
 }
 .is-compact .chat-top-frost {
-  height: 64px;
+  height: 125px;
 }
 .is-compact .chat-error {
   bottom: 94px;

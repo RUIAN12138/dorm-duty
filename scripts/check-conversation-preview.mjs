@@ -106,11 +106,11 @@ try {
     };
   });
   check(
-    edgeGlass.top.blur.includes("2px") &&
+    edgeGlass.top.blur.includes("6px") &&
       edgeGlass.bottom.blur.includes("blur") &&
       edgeGlass.bottom.pointer === "none" &&
       edgeGlass.footer.blur.includes("6px"),
-    "top history frost is preserved while bottom uses a lighter base and non-interactive progressive layers",
+    "top progressive glass and bottom lighter base both keep non-interactive optical layers",
   );
   if (!native && !safari) {
     const protocol = await page.context().newCDPSession(page);
@@ -229,7 +229,7 @@ try {
       const style = document.createElement("style");
       style.id = "glass-optical-style";
       style.textContent =
-        ".chat-footer textarea,.chat-footer .composer-send,.chat-note-shortcut{visibility:hidden!important}";
+        ".chat-footer textarea,.chat-footer .composer-send,.chat-note-shortcut,.chat-ball,.chat-nameplate,.chat-toolbar{visibility:hidden!important}";
       document.head.appendChild(style);
       const composer = root
         .querySelector(".composer-text")
@@ -239,6 +239,9 @@ try {
         core: composer.top + composer.height / 2,
         top: top.top + top.height * 0.6,
         bottom: root.getBoundingClientRect().bottom - 6,
+        headerEdge: root.getBoundingClientRect().top + 6,
+        headerInner: root.getBoundingClientRect().top + 150,
+        clearMiddle: root.getBoundingClientRect().top + 260,
       };
     });
     const optical = PNG.sync.read(await page.screenshot());
@@ -319,6 +322,11 @@ try {
       }
     }
     if (opticalAvailable) {
+      check(
+        profile.headerEdge < profile.headerInner &&
+          profile.headerInner < profile.clearMiddle,
+        "rendered top glass progressively softens actual underlay toward the screen edge, without a solid header slab",
+      );
       check(
         profile.core > 2 &&
           profile.core > profile.top * 1.12 &&

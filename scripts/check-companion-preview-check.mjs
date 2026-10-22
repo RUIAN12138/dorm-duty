@@ -5,10 +5,10 @@ async function load(entry) {
  return import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
 }
 const {createCompanionTapGesture,naturalGaze}=await load('frontend/src/interaction/companionTap.ts');
-function fixture() {
+function fixture(predictive = false) {
  let now=0,id=0; const jobs=new Map(),events=[];
  const clock={now:()=>now,later:(callback,delay)=>{const key=++id;jobs.set(key,{callback,at:now+delay});return()=>jobs.delete(key);}};
- const gesture=createCompanionTapGesture({single:()=>events.push('note'),double:()=>events.push('play')},clock);
+ const gesture=createCompanionTapGesture({single:()=>events.push('note'),double:()=>events.push('play'),...(predictive ? {preview:()=>events.push('preview'),rollback:()=>events.push('rollback')} : {})},clock);
  return {gesture,events,advance(ms){const end=now+ms;while(true){const next=[...jobs].filter(([,job])=>job.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;now=next[1].at;jobs.delete(next[0]);next[1].callback();}now=end;},get pending(){return jobs.size;}};
 }
 let f=fixture();f.gesture.tap(50,50);f.advance(479);assert.deepEqual(f.events,[]);f.advance(1);assert.deepEqual(f.events,['note']);
@@ -21,6 +21,31 @@ f=fixture();f.gesture.tap(0,0,true);assert.deepEqual(f.events,['note']);assert.e
 // A slow WebView release still belongs to the second finger-down.
 f=fixture();f.gesture.tap(50,50);f.advance(280);f.gesture.press(50,50);f.advance(350);assert.deepEqual(f.events,[]);f.gesture.tap(50,50);f.advance(500);assert.deepEqual(f.events,['play']);
 f=fixture();f.gesture.tap(50,50);f.advance(280);f.gesture.press(50,50);f.gesture.cancel();f.advance(500);assert.deepEqual(f.events,[]);
+// Predictive chat starts immediately, commits once, and reverses a reserved double.
+f = fixture(true);
+f.gesture.tap(50, 50);
+assert.deepEqual(f.events, ["preview"]);
+f.advance(480);
+assert.deepEqual(f.events, ["preview", "note"]);
+f = fixture(true);
+f.gesture.tap(50, 50);
+f.advance(100);
+f.gesture.press(50, 50);
+f.advance(500);
+f.gesture.tap(50, 50);
+f.advance(500);
+assert.deepEqual(f.events, ["preview", "rollback", "play"]);
+f = fixture(true);
+f.gesture.tap(50, 50);
+f.gesture.cancel();
+f.advance(500);
+assert.deepEqual(f.events, ["preview", "rollback"]);
+f = fixture(true);
+f.gesture.tap(0, 0, true);
+assert.deepEqual(f.events, ["note"]);
+console.log(
+  "PASS: immediate predictive launch, one commit, reserved double rollback, cancel rollback and immediate keyboard activation.",
+);
 const box={left:100,top:100,width:176,height:176},viewport={width:390,height:844};
 assert.deepEqual(naturalGaze(188,188,box,viewport),{x:0,y:0});
 let previous=-1;

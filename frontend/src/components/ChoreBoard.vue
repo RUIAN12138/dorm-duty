@@ -1443,6 +1443,7 @@ onUnmounted(() => {
             :chat-enabled="!demo"
             :style="{ visibility: chatPresent ? 'hidden' : undefined }"
             @chat="openChat"
+            @chat-cancel="chatOpen = false"
             intent="chat"
             :tips="true"
             :scene="section"

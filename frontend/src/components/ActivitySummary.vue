@@ -85,6 +85,7 @@ function warningStyle(task: string, shade: number | null) {
   return { background, color: statsInk(background) };
 }
 const props = defineProps<{
+  active?: boolean;
   activity: ChoreActivity;
   rounds: ChoreBoardData["rounds"];
   categories?: ChoreCategory[];
@@ -200,7 +201,7 @@ const cards = computed(() =>
       v-model="current"
       :labels="cards.map((c) => c.name)"
       label="分类统计卡片"
-      :autoplay="!colorsOpen"
+      :autoplay="active !== false && !colorsOpen"
       :autoplay-memory="memory"
       ><template #default="{ index }">
         <div

@@ -1,12 +1,28 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onBeforeUnmount } from "vue";
+import {
+  ref,
+  nextTick,
+  watch,
+  onBeforeUnmount,
+  onMounted,
+  computed,
+} from "vue";
 const props = defineProps<{
   busy: boolean;
   enabled: boolean;
   placeholder?: string;
+  draft?: string;
 }>();
-const emit = defineEmits<{ send: [text: string]; focus: []; resize: [] }>();
-const text = ref(""),
+const emit = defineEmits<{
+  send: [text: string];
+  focus: [];
+  resize: [];
+  "update:draft": [value: string];
+}>();
+const text = computed({
+    get: () => props.draft || "",
+    set: (value: string) => emit("update:draft", value),
+  }),
   editing = ref(false),
   pressed = ref(false),
   input = ref<HTMLTextAreaElement>(),
@@ -69,6 +85,9 @@ function send() {
 function cancel() {
   release();
 }
+onMounted(() => {
+  void nextTick(resize);
+});
 window.addEventListener("pointerup", release);
 window.addEventListener("pointercancel", release);
 onBeforeUnmount(() => {

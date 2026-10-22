@@ -990,8 +990,10 @@ try {
         .locator(".chat-masthead")
         .evaluate(
           (el) =>
-            getComputedStyle(el).backdropFilter.includes("blur") &&
-            getComputedStyle(el).backgroundColor !== "rgba(0, 0, 0, 0)",
+            el.children.length === 4 &&
+            [...el.children].every((layer) =>
+              getComputedStyle(layer).backdropFilter.includes("blur"),
+            ),
         ),
       "top has a translucent frosted surface",
     );
@@ -1349,9 +1351,13 @@ try {
       el.dispatchEvent(new Event("scroll"));
     });
     check(
-      await page
-        .getByTestId("chat-top-frost")
-        .evaluate((el) => Number(getComputedStyle(el).opacity) === 0),
+      await page.getByTestId("chat-top-frost").evaluate((el) => {
+        const first = document.querySelector(".chat-bubble");
+        return (
+          first.getBoundingClientRect().top >=
+          el.getBoundingClientRect().bottom - 1
+        );
+      }),
       "top frost does not obscure the first message at the start of history",
     );
     await page.getByTestId("chat-history").evaluate((el) => {
@@ -1364,12 +1370,12 @@ try {
         .evaluate(
           (el) =>
             getComputedStyle(el).opacity === "1" &&
-            el.children.length === 5 &&
+            el.children.length === 4 &&
             [...el.children].every((i) =>
               getComputedStyle(i).maskImage.includes("gradient"),
             ),
         ),
-      "scrolled messages pass through five graded frost layers instead of a hard upper cut",
+      "scrolled messages pass through four graded frost layers instead of a hard upper cut",
     );
     await page.screenshot({
       path: path.join(evidence, `${safari ? "webkit" : "chromium"}-chat.png`),
