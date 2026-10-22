@@ -66,8 +66,10 @@ try {
   await page.waitForTimeout(650);
   await page.evaluate(() => {
     window.motionFrames = [];
+    // The arbiter now consumes the delayed synthetic click. Time the actual
+    // accepted pointer release, before Vue opens the predictive surface.
     document.addEventListener(
-      "click",
+      "pointerup",
       function observe(e) {
         if (!e.target.closest(".companion-identity .dorm-companion")) return;
         window.motionStart = performance.now();

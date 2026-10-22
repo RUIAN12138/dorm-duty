@@ -132,14 +132,23 @@ try {
     await page.locator(".companion-chat").waitFor({ state: "detached" });
     await page.waitForTimeout(100);
   }
+  let failedRefreshes = 0;
+  const rejectState = async (route) => {
+    failedRefreshes++;
+    await route.abort("internetdisconnected");
+  };
+  // A route.fulfill can succeed even in an offline context. Abort explicitly
+  // so this assertion exercises the failed-refresh path rather than a mock.
+  await page.route("**/chores/companion/state?*", rejectState);
   await context.setOffline(true);
   await ball.click();
   await page.waitForTimeout(900);
   check(
-    (await page.locator(".chat-bubble").count()) === 120,
+    failedRefreshes > 0 && (await page.locator(".chat-bubble").count()) === 120,
     "cached history remains usable when reopen refresh fails",
   );
   await context.setOffline(false);
+  await page.unroute("**/chores/companion/state?*", rejectState);
   await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
   await page.locator(".companion-chat").waitFor({ state: "detached" });
   await ball.click();

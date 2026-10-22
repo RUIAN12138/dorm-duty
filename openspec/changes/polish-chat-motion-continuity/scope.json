@@ -28,7 +28,7 @@
   "prAuthorization": {
     "action": "create-for-review",
     "userStatement": "这次做完直接提交 pr 部署网站",
-    "authorizedDigest": "b66e1e6fa5785b6a29a11961d25f0a45a0e4e86747c3cf072c24f82387026b4f",
+    "authorizedDigest": "c9f15c809a5fe5042eb814dee99bb5b1542089cf3ed446eda542f5a0a77bb129",
     "recordedOn": "2026-10-22",
     "limits": "仅v74当前批次开发分支推送/PR及备份后的代码部署；不合并main，不代表产品或实体验收，不覆盖数据库/私密配置。"
   },
