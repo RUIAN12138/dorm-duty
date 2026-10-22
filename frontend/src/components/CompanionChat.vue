@@ -19,9 +19,14 @@ import {
   chatRequestId,
   type ChatReminder,
 } from "../api/companionChat";
-import { motionAllowed, motionTokens } from "../interaction/motion";
-import { chatTransition, bubbleOrigin } from "../interaction/chatMotion";
+import { motionAllowed } from "../interaction/motion";
+import {
+  chatMotion,
+  chatTransition,
+  bubbleOrigin,
+} from "../interaction/chatMotion";
 import { createChatScroll } from "../interaction/chatScroll";
+import { createChatTravel } from "../interaction/chatTravel";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
 const props = defineProps<{
@@ -61,7 +66,14 @@ const available = ref(false),
   awaiting = ref(false),
   error = ref(""),
   emotion = ref("02"),
-  items = ref<{ id: string; role: "user" | "assistant"; text: string }[]>([]),
+  items = ref<
+    {
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      fresh?: boolean;
+    }[]
+  >([]),
   reminders = ref<ChatReminder[]>([]),
   actionBusy = ref("");
 const viewport = ref({ top: 0, height: window.innerHeight }),
@@ -76,14 +88,12 @@ let api = companionClient(props.invite, props.memberId, props.token),
   removeBack: (() => void) | undefined,
   closing = false,
   motionEpoch = 0,
-  originTransform = "none",
   restingHeight = window.innerHeight,
   viewportFrame = 0,
   errorTimer: ReturnType<typeof setTimeout> | undefined,
   lastFocus: HTMLElement | null = null,
   delayTimer: ReturnType<typeof setTimeout> | undefined,
   delayResolve: (() => void) | undefined;
-let controls: ReturnType<typeof animate>[] = [];
 let retry: { text: string; id: string } | null = null;
 let entryPointerPending = true;
 function chatPointerStarted() {
@@ -106,7 +116,12 @@ const notes = useConversationNotes(
     members: props.members || [],
   }),
   (role, text) => {
-    items.value.push({ id: `note:${chatRequestId()}`, role, text });
+    items.value.push({
+      id: `note:${chatRequestId()}`,
+      role,
+      text,
+      fresh: true,
+    });
     bottom();
   },
   () => emit("noteSent"),
@@ -131,16 +146,28 @@ function fit() {
   const el = scroll.value;
   const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   const v = window.visualViewport;
-  viewport.value = {
-    top: v?.offsetTop || 0,
-    height: v?.height || window.innerHeight,
-  };
+  const nextTop = v?.offsetTop || 0;
+  const nextHeight = v?.height || window.innerHeight;
   const focused =
     surface.value?.contains(document.activeElement) &&
     document.activeElement?.tagName === "TEXTAREA";
-  if (!focused) restingHeight = Math.max(restingHeight, viewport.value.height);
-  keyboardOpen.value = !!focused && restingHeight - viewport.value.height > 110;
-  if (present.value && atBottom) bottom(true);
+  if (!focused) restingHeight = Math.max(restingHeight, nextHeight);
+  const nextKeyboard = !!focused && restingHeight - nextHeight > 110;
+  const nextCompact = nextKeyboard || nextHeight < 560;
+  // The compact class changes the history's padding, which moves the content
+  // under the reader. Capture before Vue applies the class and restore after
+  // the layout has been committed.
+  const compactChanged = nextCompact !== compactViewport.value;
+  if (compactChanged && !atBottom) historyScroll.capture();
+  viewport.value = { top: nextTop, height: nextHeight };
+  keyboardOpen.value = nextKeyboard;
+  if (present.value) {
+    // Viewport changes can move the source ball or the compact visual; one
+    // cached measurement here keeps the travel render free of layout reads.
+    chatTravel.measure();
+    if (atBottom) bottom(true);
+    else if (compactChanged) void nextTick(() => historyScroll.restore());
+  }
 }
 function scheduleFit() {
   cancelAnimationFrame(viewportFrame);
@@ -164,7 +191,12 @@ watch(footer, (element) => {
       `${element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58}px`,
     );
     if (wasAtBottom) bottom(true);
-    else refreshEdge();
+    else {
+      // Footer/keyboard padding changes can shrink the scrollable range even
+      // when the content box itself did not resize.
+      historyScroll.restore();
+      refreshEdge();
+    }
   });
   footerObserver.observe(element);
 });
@@ -198,7 +230,11 @@ function refreshEdge() {
     String(Math.min(1, Math.max(0, distance / 36))),
   );
 }
-const historyScroll = createChatScroll(() => scroll.value, refreshEdge);
+const historyScroll = createChatScroll(
+  () => scroll.value,
+  refreshEdge,
+  () => historyContent.value,
+);
 function bottom(immediate = false) {
   void nextTick(() => {
     if (!closing) historyScroll.request(immediate);
@@ -210,19 +246,6 @@ function historyScrolled() {
 function close() {
   if (!closing) emit("update:modelValue", false);
 }
-function openedBall() {
-  const el = ball.value;
-  if (!el || !props.origin) return "translate3d(0,0,0) scale(1)";
-  const target = (
-      el.querySelector(".chat-ball-visual") || el
-    ).getBoundingClientRect(),
-    r = props.origin;
-  return `translate3d(${r.left - target.left + (r.width - target.width) / 2}px,${r.top - target.top + (r.height - target.height) / 2}px,0) scale(${r.width / target.width})`;
-}
-function stopMotion() {
-  controls.forEach((c) => c.stop());
-  controls = [];
-}
 const glassParts = () =>
   [backdrop.value, ...(masthead.value?.children || [])].filter(
     Boolean,
@@ -231,16 +254,69 @@ const entryParts = () =>
   [toolbar.value, nameplate.value, historyFrame.value, footer.value].filter(
     Boolean,
   ) as HTMLElement[];
-const ballTravel = { type: "spring" as const, duration: 0.42, bounce: 0.08 };
-const travel = {
-  type: "spring" as const,
-  stiffness: 260,
-  damping: 29,
-  mass: 1,
-  restDelta: 0.001,
-  restSpeed: 0.01,
-};
+const ENTRY_STAGGER = 0.06;
+// One opacity stage drives the backdrop, all four frost layers and the short
+// overlapping content entry. It is interruptible because it is a persistent
+// MotionValue, not a one-shot keyframe list.
+function paintReveal(value: number) {
+  const progress = Math.max(0, Math.min(1, value));
+  for (const el of glassParts()) el.style.opacity = String(progress);
+  entryParts().forEach((el, index) => {
+    const offset = index * ENTRY_STAGGER;
+    const local = Math.max(0, Math.min(1, (progress - offset) / (1 - offset)));
+    el.style.opacity = String(local);
+    el.style.transform =
+      local >= 1
+        ? "none"
+        : `translate3d(0,${((1 - local) * 12).toFixed(2)}px,0) scale(${(
+            1 -
+            (1 - local) * 0.015
+          ).toFixed(4)})`;
+  });
+}
+const chatTravel = createChatTravel({
+  ball: () => ball.value,
+  visual: () =>
+    ball.value?.querySelector<HTMLElement>(".chat-ball-visual") || undefined,
+  onReveal: paintReveal,
+});
+const settleSpring = chatMotion.layout;
+let stopReturnTracking: (() => void) | undefined;
+// During a close, only visualViewport events refresh the source endpoint and
+// cached base; no rAF loop measures or paints the return path.
+function trackReturnOnViewport() {
+  stopReturnTracking?.();
+  const view = window.visualViewport;
+  if (!view || !motionAllowed()) return;
+  const update = () => {
+    if (!closing || phase.value !== "closing") return;
+    chatTravel.refreshDestination();
+  };
+  view.addEventListener("resize", update);
+  view.addEventListener("scroll", update);
+  stopReturnTracking = () => {
+    view.removeEventListener("resize", update);
+    view.removeEventListener("scroll", update);
+    stopReturnTracking = undefined;
+  };
+}
+function reopenFromBall(event: PointerEvent) {
+  // Only the still-visible ball during closing is intercepted; in the open
+  // state every pointer interaction belongs to DormCompanion.
+  if (phase.value !== "closing") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closing = false;
+  phase.value = "opening";
+  emit("update:modelValue", true);
+}
+function reopenClick(event: MouseEvent) {
+  if (phase.value !== "closing") return;
+  event.preventDefault();
+  event.stopPropagation();
+}
 function finishClose() {
+  stopReturnTracking?.();
   present.value = false;
   delete document.documentElement.dataset.companionChat;
   emit("present", false);
@@ -253,8 +329,11 @@ async function show() {
   entryPointerPending = true;
   const generation = ++motionEpoch;
   const wasPresent = present.value;
-  if (!wasPresent) prepared.value = false;
-  stopMotion();
+  if (!wasPresent) {
+    prepared.value = false;
+    for (const item of items.value) item.fresh = false;
+  }
+  stopReturnTracking?.();
   cancel();
   endPull(true);
   closing = false;
@@ -275,179 +354,83 @@ async function show() {
   await nextTick();
   removeBack?.();
   removeBack = registerNativeBack(close);
-  if (!wasPresent) originTransform = openedBall();
-  if (motionAllowed() && ball.value) {
-    const initial = wasPresent
-      ? getComputedStyle(ball.value).transform
-      : originTransform;
-    ball.value.style.transform = initial;
-    prepared.value = true;
-    controls = [
-      animate(
-        ball.value,
-        { transform: [initial, "translate3d(0,0,0) scale(1)"] },
-        ballTravel,
-      ),
-      ...glassParts().map((el) =>
-        animate(
-          el,
-          {
-            opacity: [wasPresent ? Number(getComputedStyle(el).opacity) : 0, 1],
-          },
-          { duration: 0.32 },
-        ),
-      ),
-      ...entryParts().map((el, index) =>
-        animate(
-          el,
-          {
-            opacity: [wasPresent ? Number(getComputedStyle(el).opacity) : 0, 1],
-            transform: [
-              wasPresent
-                ? getComputedStyle(el).transform
-                : "translate3d(0,12px,0) scale(.985)",
-              "translate3d(0,0,0) scale(1)",
-            ],
-          },
-          {
-            ...motionTokens.enter,
-            duration: 0.3,
-            delay: 0.015 + index * 0.025,
-          },
-        ),
-      ),
-    ];
-  }
-  if (!motionAllowed()) {
-    for (const el of [...glassParts(), ...entryParts()]) {
-      if (el) {
-        el.style.opacity = "1";
-        el.style.transform = "none";
-      }
-    }
-  }
+  // Cold open jumps to the source ball synchronously and springs from there;
+  // reopening during closing continues at the current pose and velocity.
+  const flight = chatTravel.open(props.origin, { fromClosed: !wasPresent });
   prepared.value = true;
   void load();
-  await Promise.all(controls.map((c) => c.then(() => {})));
+  const outcome = await flight;
+  if (outcome !== "done") return;
   if (generation !== motionEpoch || !present.value || closing) return;
   phase.value = "open";
 }
-function returnFlight(start: DOMRect) {
-  return (progress: number) => {
-    const el = ball.value;
-    const visual = el?.querySelector<HTMLElement>(".chat-ball-visual");
-    const destination = props.returnRect?.() || props.origin;
-    if (!el || !visual || !destination) return;
-    const matrix = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-    const scale = Math.hypot(matrix.a, matrix.b) || 1;
-    const parent = el.getBoundingClientRect(),
-      current = visual.getBoundingClientRect();
-    const centerX = parent.left + parent.width / 2,
-      centerY = parent.top + parent.height / 2;
-    const desiredScale =
-      (start.width + (destination.width - start.width) * progress) /
-      (current.width / scale);
-    const desiredX =
-      start.left +
-      start.width / 2 +
-      (destination.left +
-        destination.width / 2 -
-        start.left -
-        start.width / 2) *
-        progress;
-    const desiredY =
-      start.top +
-      start.height / 2 +
-      (destination.top +
-        destination.height / 2 -
-        start.top -
-        start.height / 2) *
-        progress;
-    const x =
-      desiredX -
-      (centerX - matrix.e) -
-      (desiredScale * (current.left + current.width / 2 - centerX)) / scale;
-    const y =
-      desiredY -
-      (centerY - matrix.f) -
-      (desiredScale * (current.top + current.height / 2 - centerY)) / scale;
-    el.style.transform = `translate3d(${x}px,${y}px,0) scale(${desiredScale})`;
-  };
-}
-async function awaitKeyboardReturn(
-  generation: number,
-  started: number,
-  paint: (progress: number) => void,
-) {
-  let stable = 0;
-  while (
-    generation === motionEpoch &&
-    closing &&
-    performance.now() - started < 900
-  ) {
-    paint(1);
-    const v = window.visualViewport;
-    if (!v || (v.height >= restingHeight - 8 && v.offsetTop < 1)) stable++;
-    else stable = 0;
-    if (stable >= 3 || document.hidden) return;
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
-  }
+function awaitKeyboardReturn(generation: number) {
+  const view = window.visualViewport;
+  if (!view) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let stable = 0;
+    let timer = 0;
+    const finish = () => {
+      view.removeEventListener("resize", update);
+      view.removeEventListener("scroll", update);
+      clearTimeout(timer);
+      resolve();
+    };
+    const update = () => {
+      if (
+        generation !== motionEpoch ||
+        !closing ||
+        !present.value ||
+        document.hidden
+      )
+        return finish();
+      // The base and return endpoint follow the real source position while
+      // the keyboard retreats; no frame loop paints or measures.
+      chatTravel.refreshDestination();
+      if (view.height >= restingHeight - 8 && view.offsetTop < 1) stable++;
+      else stable = 0;
+      if (stable >= 2) finish();
+    };
+    view.addEventListener("resize", update);
+    view.addEventListener("scroll", update);
+    timer = window.setTimeout(finish, 1000);
+    update();
+  });
 }
 async function hide() {
   if (!present.value || closing) return;
   const generation = ++motionEpoch;
   const keyboardReturning =
     keyboardOpen.value || restingHeight - viewport.value.height > 110;
-  const started = performance.now();
   closing = true;
   cancel();
   historyScroll.stop();
   endPull(true);
   phase.value = "closing";
-  stopMotion();
   edgeControl?.stop();
   // Release the extra WebKit fallback under an opaque frosted backdrop, so
   // the page sharpens as that backdrop fades rather than snapping at unmount.
   document.documentElement.dataset.companionChat = "closing";
-  const start = ball.value
-    ?.querySelector(".chat-ball-visual")
-    ?.getBoundingClientRect();
-  const paintReturn = start ? returnFlight(start) : undefined;
   composer.value?.dismiss();
-  if (motionAllowed() && ball.value && paintReturn) {
-    controls = [
-      animate(0, 1, { ...ballTravel, duration: 0.38, onUpdate: paintReturn }),
-      ...glassParts().map((el) =>
-        animate(
-          el,
-          { opacity: [Number(getComputedStyle(el).opacity), 0] },
-          { duration: 0.34, delay: 0.02 },
-        ),
-      ),
-      ...entryParts()
-        .reverse()
-        .map((el, index) =>
-          animate(
-            el,
-            {
-              opacity: [Number(getComputedStyle(el).opacity), 0],
-              transform: [
-                getComputedStyle(el).transform,
-                "translate3d(0,10px,0) scale(.985)",
-              ],
-            },
-            { ...motionTokens.exit, duration: 0.22, delay: index * 0.035 },
-          ),
-        ),
-    ];
-    await Promise.all(controls.map((c) => c.then(() => {})));
-  }
-  if (keyboardReturning && paintReturn && motionAllowed())
-    await awaitKeyboardReturn(generation, started, paintReturn);
-  if (generation !== motionEpoch || !closing) return;
-  paintReturn?.(1);
+  trackReturnOnViewport();
+  const destination = () => props.returnRect?.() || props.origin;
+  const outcome = await chatTravel.close(destination, {
+    instant: !motionAllowed(),
+  });
+  if (
+    outcome !== "done" ||
+    generation !== motionEpoch ||
+    !closing ||
+    !present.value
+  )
+    return;
+  stopReturnTracking?.();
+  if (keyboardReturning && motionAllowed())
+    await awaitKeyboardReturn(generation);
+  if (generation !== motionEpoch || !closing || !present.value) return;
+  // Hand the ball back only after the keyboard has settled, at the source's
+  // latest layout position.
+  chatTravel.snapClosed(props.returnRect?.() || props.origin);
   finishClose();
 }
 // Only boundary pulls are intercepted. Normal scrolling, text selection and
@@ -461,7 +444,12 @@ let pull: {
 } | null = null;
 let pullControl: ReturnType<typeof animate> | undefined;
 function startPull(event: TouchEvent | PointerEvent) {
-  historyScroll.interrupt();
+  // Touch interrupts programmatic follow. A mouse press alone is not a scroll
+  // intent; wheel already interrupts separately.
+  const isTouch =
+    "touches" in event ||
+    ("pointerType" in event && event.pointerType === "touch");
+  if (isTouch) historyScroll.interrupt();
   if ("pointerType" in event && event.pointerType === "touch") return;
   if ((event.target as HTMLElement).closest("button,textarea,input,a")) return;
   const point = "touches" in event ? event.touches[0] : event;
@@ -516,7 +504,7 @@ function endPull(immediate = false) {
           "translate3d(0,0,0) scaleX(1)",
         ],
       },
-      travel,
+      settleSpring,
     );
 }
 let edge: {
@@ -586,7 +574,7 @@ function edgeUp(event: PointerEvent) {
   edgeControl = animate(
     g.el,
     { transform: [getComputedStyle(g.el).transform, "translate3d(0,0,0)"] },
-    motionAllowed() ? { ...ballTravel, duration: 0.3 } : { duration: 0 },
+    motionAllowed() ? settleSpring : { duration: 0 },
   );
 }
 const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提醒"];
@@ -601,7 +589,12 @@ async function welcome(generation: number) {
   ];
   for (const [index, text] of messages.entries()) {
     if (generation !== epoch || !props.modelValue) return;
-    items.value.push({ id: "welcome:" + index, role: "assistant", text });
+    items.value.push({
+      id: "welcome:" + index,
+      role: "assistant",
+      text,
+      fresh: true,
+    });
     bottom();
     if (motionAllowed()) await pause(160);
   }
@@ -633,6 +626,7 @@ async function load() {
           id: `${m.request_id}:${m.role}:${i}`,
           role: m.role,
           text,
+          fresh: false,
         })),
       ),
       ...localNotes,
@@ -653,7 +647,7 @@ async function load() {
 }
 async function send(text: string, isRetry = false) {
   if (busy.value || actionBusy.value || notes.sending.value) return;
-  historyScroll.pin();
+  // Sending must not pull a reader who has deliberately scrolled history.
   if (!isRetry && notes.input(text)) return;
   if (loading.value || !available.value) return;
   const request = isRetry && retry ? retry : { text, id: chatRequestId() };
@@ -667,7 +661,12 @@ async function send(text: string, isRetry = false) {
   emotion.value = "30";
   awaiting.value = true;
   if (!isRetry)
-    items.value.push({ id: request.id + ":user:0", role: "user", text });
+    items.value.push({
+      id: request.id + ":user:0",
+      role: "user",
+      text,
+      fresh: true,
+    });
   bottom();
   try {
     const reply = await api.send(request.text, request.id, c.signal);
@@ -680,6 +679,7 @@ async function send(text: string, isRetry = false) {
         id: `${request.id}:assistant:${i}`,
         role: "assistant",
         text: reply.messages[i]!,
+        fresh: true,
       });
       bottom();
       if (motionAllowed()) await pause(140);
@@ -713,6 +713,7 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
     items.value.push({
       id: chatRequestId(),
       role: "assistant",
+      fresh: true,
       text:
         result.status === "sent"
           ? "这条提醒已经发出"
@@ -775,17 +776,11 @@ function inactive() {
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function quiet() {
   if (!motionAllowed()) {
+    const closingNow = phase.value === "closing";
     motionEpoch++;
-    stopMotion();
+    chatTravel.complete(closingNow ? "close" : "open");
     endPull(true);
-    if (ball.value) ball.value.style.transform = "none";
-    for (const el of [...glassParts(), ...entryParts()]) {
-      if (el) {
-        el.style.opacity = "1";
-        el.style.transform = "none";
-      }
-    }
-    if (phase.value === "closing") finishClose();
+    if (closingNow) finishClose();
     else if (present.value) phase.value = "open";
   }
 }
@@ -817,11 +812,12 @@ document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
   footerObserver?.disconnect();
-  historyScroll.stop();
+  historyScroll.destroy();
   delete document.documentElement.dataset.companionChat;
   cancel();
   motionEpoch++;
-  stopMotion();
+  stopReturnTracking?.();
+  chatTravel.destroy();
   edgeControl?.stop();
   endPull(true);
   clearTimeout(errorTimer);
@@ -862,6 +858,7 @@ function time(value: string) {
       ><DialogContent
         class="companion-chat"
         :data-ready="prepared"
+        :data-phase="phase"
         :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
         :style="{ top: viewport.top + 'px', height: viewport.height + 'px' }"
         @pointerdown.capture="chatPointerStarted"
@@ -882,7 +879,13 @@ function time(value: string) {
         ><DialogDescription class="chat-sr-only"
           >输入文字与球球聊天。提醒安排需要确认后才保存。</DialogDescription
         >
-        <div ref="ball" class="chat-ball" data-testid="chat-ball">
+        <div
+          ref="ball"
+          class="chat-ball"
+          data-testid="chat-ball"
+          @pointerdown.capture="reopenFromBall"
+          @click.capture="reopenClick"
+        >
           <div class="chat-ball-visual">
             <DormCompanion
               :size="88"
@@ -949,7 +952,7 @@ function time(value: string) {
                   :key="item.id"
                   class="chat-bubble"
                   :class="item.role"
-                  :initial="bubbleOrigin(item.role)"
+                  :initial="item.fresh ? bubbleOrigin(item.role) : false"
                   :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
                   :transition="motionTransition"
                   >{{ item.text }}</motion.div
@@ -1304,6 +1307,7 @@ function time(value: string) {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
   display: block;
   padding: calc(var(--chat-ball-top) + 144px) 4px

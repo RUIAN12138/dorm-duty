@@ -7,6 +7,9 @@ import {
   onMounted,
   computed,
 } from "vue";
+import { animate } from "motion-v";
+import { motionAllowed } from "../interaction/motion";
+import { chatMotion } from "../interaction/chatMotion";
 const props = defineProps<{
   busy: boolean;
   enabled: boolean;
@@ -26,12 +29,31 @@ const text = computed({
   editing = ref(false),
   pressed = ref(false),
   input = ref<HTMLTextAreaElement>(),
+  composerText = ref<HTMLElement>(),
   inputHeight = ref(26);
 const composing = ref(false);
 let imeSubmitBlockedUntil = 0;
+let textControl: ReturnType<typeof animate> | undefined;
+function press(
+  el: HTMLElement | undefined,
+  control: ReturnType<typeof animate> | undefined,
+  down: boolean,
+) {
+  if (!el) return control;
+  control?.stop();
+  const target = down
+    ? { scaleX: 1.012, scaleY: 0.955 }
+    : { scaleX: 1, scaleY: 1 };
+  if (!motionAllowed()) {
+    el.style.transform = "none";
+    return undefined;
+  }
+  return animate(el, target, chatMotion.press);
+}
 function prepare(event: PointerEvent) {
   if (!props.enabled) return;
   pressed.value = true;
+  textControl = press(composerText.value, textControl, true);
   if (!editing.value) {
     // First touch opens editing without invoking the mobile keyboard. A later
     // deliberate touch in the textarea performs native focus and selection.
@@ -54,7 +76,9 @@ function dismiss() {
   release();
 }
 function release() {
+  if (!pressed.value) return;
   pressed.value = false;
+  textControl = press(composerText.value, textControl, false);
 }
 function enter(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229 || composing.value) {
@@ -93,6 +117,7 @@ window.addEventListener("pointercancel", release);
 onBeforeUnmount(() => {
   window.removeEventListener("pointerup", release);
   window.removeEventListener("pointercancel", release);
+  textControl?.stop();
 });
 defineExpose({ cancel, dismiss });
 </script>
@@ -103,6 +128,7 @@ defineExpose({ cancel, dismiss });
     data-testid="chat-composer"
   >
     <div
+      ref="composerText"
       class="composer-text"
       :class="{ 'is-pressed': pressed }"
       @pointerdown="prepare"
@@ -156,13 +182,7 @@ defineExpose({ cancel, dismiss });
   background: color-mix(in srgb, var(--ui-surface) 42%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  transform: scale(1);
   transform-origin: center;
-  transition: transform 480ms cubic-bezier(0.22, 1.35, 0.36, 1);
-}
-.composer-text.is-pressed {
-  transform: scaleX(1.012) scaleY(0.955);
-  transition-duration: 100ms;
 }
 .composer-text:focus-within {
   outline: 1px solid var(--ui-border);
@@ -200,13 +220,7 @@ defineExpose({ cancel, dismiss });
   border-radius: 50%;
   padding: 0;
   cursor: pointer;
-  transition:
-    transform 420ms cubic-bezier(0.22, 1.35, 0.36, 1),
-    opacity 180ms ease;
-}
-.composer-send:active:not(:disabled) {
-  transform: scale(0.95);
-  transition-duration: 90ms;
+  transition: opacity 180ms ease;
 }
 .composer-send:disabled {
   cursor: default;
@@ -222,7 +236,6 @@ defineExpose({ cancel, dismiss });
   stroke-linejoin: round;
 }
 @media (prefers-reduced-motion: reduce) {
-  .composer-text,
   .composer-send {
     transition: none;
   }

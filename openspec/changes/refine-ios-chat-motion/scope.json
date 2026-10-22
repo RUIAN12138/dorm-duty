@@ -1,0 +1,26 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "44d41de",
+  "allowed": [
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/CompanionChatComposer.vue",
+    "frontend/src/components/ConversationNoteFlow.vue",
+    "frontend/src/components/DormCompanion.vue",
+    "frontend/src/components/ChatMessageBubble.vue",
+    "frontend/src/interaction/chatMotion.ts",
+    "frontend/src/interaction/chatScroll.ts",
+    "frontend/src/interaction/chatTravel.ts",
+    "scripts/check-ios-chat-motion.mjs",
+    "scripts/check-chat-motion-continuity.mjs",
+    "scripts/check-companion-chat-browser.mjs",
+    "scripts/check-companion-preview-check.mjs",
+    "docs/IOS_CHAT_MOTION_PREVIEW.md",
+    "docs/FRONTEND_MOTION_CONTRACT.md",
+    "openspec/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}
