@@ -83,6 +83,32 @@ try {
   await ball.click();
   await chat.waitFor();
   await page.waitForTimeout(1100);
+  const edgeGlass = await page.evaluate(() => {
+    const top = document.querySelector(".chat-top-frost i");
+    const bottom = document.querySelector(
+      '[data-testid="chat-bottom-frost"] i',
+    );
+    const footer = document.querySelector(".chat-footer");
+    const read = (el, pseudo) => {
+      const s = getComputedStyle(el, pseudo);
+      return {
+        blur: s.backdropFilter || s.webkitBackdropFilter,
+        pointer: s.pointerEvents,
+      };
+    };
+    return {
+      top: read(top),
+      bottom: read(bottom),
+      footer: read(footer, "::before"),
+    };
+  });
+  check(
+    edgeGlass.top.blur === edgeGlass.bottom.blur &&
+      edgeGlass.bottom.blur.includes("blur") &&
+      edgeGlass.bottom.pointer === "none" &&
+      edgeGlass.footer.blur.includes("20px"),
+    "bottom edge mirrors top progressive frost and composer glass does not intercept input",
+  );
   check(
     (await page.locator(".companion-note-form").count()) === 0,
     "single tap opens the unified chat and no separate note composer",
@@ -129,6 +155,102 @@ try {
     calls() === 0 && aiCalls() === 0,
     "draft and confirmation do not send notes or invoke an AI provider",
   );
+  const frostScroll = await page
+    .locator(".chat-history")
+    .evaluate(async (el) => {
+      const initial = el.scrollTop;
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event("scroll"));
+      const bottom = document.querySelector(
+        '[data-testid="chat-bottom-frost"]',
+      );
+      const atTop = Number(getComputedStyle(bottom).opacity);
+      const overflow = el.scrollHeight - el.clientHeight;
+      el.scrollTop = el.scrollHeight;
+      el.dispatchEvent(new Event("scroll"));
+      const atBottom = Number(getComputedStyle(bottom).opacity);
+      el.scrollTop = initial;
+      el.dispatchEvent(new Event("scroll"));
+      return { overflow, atTop, atBottom };
+    });
+  check(
+    frostScroll.overflow > 36 &&
+      frostScroll.atTop > 0.95 &&
+      frostScroll.atBottom < 0.05,
+    "bottom frost follows remaining history and clears at latest message instead of hiding the final controls",
+  );
+  const glassLayers = await page
+    .locator(".chat-history")
+    .evaluate((history) => {
+      const footer = document.querySelector(".chat-footer");
+      const panel = document.querySelector(".composer-text");
+      const alpha = (s) => {
+        const c =
+          s.match(/\/\s*([\d.]+)\s*\)/) ||
+          s.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+        return c ? Number(c[1]) : 1;
+      };
+      history.scrollTop = Math.max(
+        0,
+        history.scrollHeight - history.clientHeight - 110,
+      );
+      history.dispatchEvent(new Event("scroll"));
+      const rect = footer.getBoundingClientRect();
+      const underlay = [
+        ...history.querySelectorAll(
+          '.chat-bubble, [data-testid="conversation-note"]',
+        ),
+      ].some((el) => {
+        const b = el.getBoundingClientRect();
+        return b.bottom > rect.top && b.top < rect.bottom;
+      });
+      const css = getComputedStyle(panel),
+        back = getComputedStyle(footer, "::before");
+      const inputRect = panel.getBoundingClientRect();
+      const editor = document.querySelector(".composer-text textarea");
+      const centerTarget = document.elementFromPoint(
+        inputRect.left + 40,
+        inputRect.top + inputRect.height / 2,
+      );
+      history.scrollTop = history.scrollHeight;
+      history.dispatchEvent(new Event("scroll"));
+      const confirm = document
+        .querySelector('[data-testid="note-confirm"]')
+        .getBoundingClientRect();
+      return {
+        underlay,
+        panelAlpha: alpha(css.backgroundColor),
+        backAlpha: alpha(back.backgroundColor),
+        blur: css.backdropFilter || css.webkitBackdropFilter,
+        inputReceives: centerTarget === editor,
+        clearAtEnd: confirm.bottom <= rect.top + 1,
+        edgeBottom: history.getBoundingClientRect().bottom,
+      };
+    });
+  check(
+    glassLayers.underlay &&
+      glassLayers.panelAlpha >= 0.2 &&
+      glassLayers.panelAlpha <= 0.6 &&
+      glassLayers.backAlpha < 0.5 &&
+      glassLayers.blur.includes("blur") &&
+      glassLayers.inputReceives &&
+      glassLayers.clearAtEnd,
+    "real messages scroll behind translucent input glass while final confirmation remains reachable above it",
+  );
+  await page.screenshot({
+    path: new URL(`${engine}-glass-latest.png`, evidence).pathname,
+  });
+  await page.locator(".chat-history").evaluate((el) => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 110);
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await page.screenshot({
+    path: new URL(`${engine}-glass-underlay.png`, evidence).pathname,
+  });
+  await page.locator(".chat-history").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    el.dispatchEvent(new Event("scroll"));
+  });
   await flow.getByRole("button", { name: "修改内容", exact: true }).click();
   await input("十点回来，帮我留门");
   await flow.getByRole("button", { name: "修改对象", exact: true }).click();
@@ -307,6 +429,42 @@ try {
     "dragging on the water name never becomes global page navigation",
   );
   // Real repeated clicks retain the existing 60s device limiter and server guard.
+  const ringFrames = await name.evaluate(async (el) => {
+    const samples = [];
+    const r = el.getBoundingClientRect();
+    for (let i = 0; i < 6; i++) {
+      el.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          detail: 1,
+          clientX: r.x + r.width / 2,
+          clientY: r.y + r.height / 2,
+        }),
+      );
+      await new Promise(requestAnimationFrame);
+      const ring = el.querySelector(".nudge-hit:last-child .nudge-ring");
+      const animation = ring.getAnimations()[0];
+      animation.pause();
+      animation.currentTime = 180;
+      await new Promise(requestAnimationFrame);
+      samples.push({
+        spread: Number(
+          getComputedStyle(ring).getPropertyValue("--nudge-spread"),
+        ),
+        transform: getComputedStyle(ring).transform,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 32));
+    }
+    return samples;
+  });
+  check(
+    ringFrames.every(
+      (f, i) => i === 0 || f.spread > ringFrames[i - 1].spread,
+    ) &&
+      ringFrames.at(-1).spread > ringFrames[0].spread * 1.8 &&
+      new Set(ringFrames.map((f) => f.transform)).size > 3,
+    "successive rapid taps visibly grow actual ripple intermediate transforms from small to large",
+  );
   const nudgeBefore = preview.counts.get("POST /chores/remind") || 0;
   let nativeFeedback;
   if (native) {

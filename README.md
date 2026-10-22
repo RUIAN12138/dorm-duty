@@ -1,5 +1,8 @@
 # 轮到 · 宿舍值日管理系统
 
+开发前阅读 [OpenSpec 工作流程](docs/OPENSPEC_WORKFLOW.md) 和 AGENTS.md。执行 `npm ci`、`npm run spec:check` 检查规范与范围；当前隔离预览未获用户验收，不得自动创建 PR 或发布。
+
+
 宿舍值日、抬水轮换、完成日历与提醒。Vue 手机网页、Node SQLite 后台、Android / HarmonyOS 安装版工程。
 
 **正式公网入口：** [打开轮到](https://8.148.190.114/dorm-duty/)。先验证邮箱，再创建宿舍或凭邀请码与完整名字绑定身份；游客体验只访问演示数据。

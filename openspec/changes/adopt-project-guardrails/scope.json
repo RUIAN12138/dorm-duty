@@ -1,0 +1,27 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "allowed": [
+    "AGENTS.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    ".gitignore",
+    "package.json",
+    "package-lock.json",
+    ".github/workflows/checks.yml",
+    "scripts/setup.sh",
+    "scripts/openspec.mjs",
+    "scripts/check-change-scope.mjs",
+    "scripts/test-change-scope.mjs",
+    "docs/OPENSPEC_WORKFLOW.md",
+    "openspec/",
+    ".agents/skills/openspec-",
+    ".claude/skills/openspec-",
+    ".claude/commands/opsx/",
+    ".agents/skills/.openspec-target"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

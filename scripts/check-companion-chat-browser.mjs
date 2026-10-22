@@ -27,6 +27,53 @@ const check = (condition, label) => {
   assert(condition, label);
   checks.push(label);
 };
+async function checkInputGlass(label) {
+  const result = await page.locator(".companion-chat").evaluate((root) => {
+    const panel = root.querySelector(".composer-text");
+    const footer = root.querySelector(".chat-footer");
+    const input = panel.querySelector("textarea");
+    const p = getComputedStyle(panel),
+      f = getComputedStyle(footer, "::before");
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    const rgba = (color) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1, 1);
+      return [...ctx.getImageData(0, 0, 1, 1).data];
+    };
+    const lum = (c) =>
+      c
+        .slice(0, 3)
+        .map((v) => v / 255)
+        .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+        .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ink = lum(rgba(getComputedStyle(input).color)),
+      surface = lum(rgba(p.getPropertyValue("--ui-surface")));
+    const contrast =
+      (Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05);
+    const r = footer.getBoundingClientRect();
+    return {
+      alpha: rgba(p.backgroundColor)[3] / 255,
+      veilAlpha: rgba(f.backgroundColor)[3] / 255,
+      blur: p.backdropFilter || p.webkitBackdropFilter,
+      safeBottom: Math.abs(
+        r.bottom - parseFloat(f.bottom) - root.getBoundingClientRect().bottom,
+      ),
+      contrast,
+    };
+  });
+  check(
+    result.alpha > 0.2 &&
+      result.alpha < 0.6 &&
+      result.veilAlpha < 0.5 &&
+      result.blur.includes("blur") &&
+      result.safeBottom < 2 &&
+      result.contrast >= 4.5,
+    label,
+  );
+}
 try {
   const room = await (
     await h.request("/guest/create", {
@@ -1136,6 +1183,9 @@ try {
       }),
       "visual keyboard resize compacts the header and keeps composer just above keyboard",
     );
+    await checkInputGlass(
+      "keyboard viewport retains translucent input glass and continuous safe-area veil",
+    );
     await editor.fill("第一行\n第二行\n第三行");
     await page.waitForTimeout(80);
     check(
@@ -1278,6 +1328,9 @@ try {
       );
     }
     await page.setViewportSize({ width: 390, height: 844 });
+    await checkInputGlass(
+      "light input glass stays translucent with readable foreground and safe-area continuity",
+    );
     await page.getByTestId("chat-history").evaluate((el) => {
       window.savedChatScroll = el.scrollTop;
       el.scrollTop = 0;
@@ -1311,6 +1364,9 @@ try {
     });
     await page.evaluate(() => window.qa.theme("dark"));
     await page.waitForTimeout(500);
+    await checkInputGlass(
+      "dark input glass preserves transparency, foreground contrast and continuous safe area",
+    );
     await page.screenshot({
       path: path.join(evidence, `${safari ? "webkit" : "chromium"}-dark.png`),
     });

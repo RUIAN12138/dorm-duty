@@ -2,12 +2,22 @@
   "name": "dorm-duty-workspace",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "web:dev": "node scripts/web-command.mjs dev",
     "web:build": "node scripts/web-command.mjs build",
     "web:test-state": "node scripts/web-command.mjs test-state",
     "web:verify": "node scripts/web-command.mjs verify",
-    "web:release": "node scripts/web-command.mjs release"
+    "web:release": "node scripts/web-command.mjs release",
+    "spec": "node scripts/openspec.mjs",
+    "spec:validate": "node scripts/openspec.mjs validate --all --strict",
+    "spec:scope": "node scripts/check-change-scope.mjs",
+    "spec:gate": "node scripts/check-change-scope.mjs",
+    "spec:check": "npm run spec:validate && npm run spec:scope && node scripts/test-change-scope.mjs"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "1.14.3"
   }
 }

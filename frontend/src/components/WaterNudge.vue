@@ -98,7 +98,9 @@ onUnmounted(() => {
         left: `${hit.x}px`,
         top: `${hit.y}px`,
         '--drift': `${hit.drift}px`,
-        '--nudge-spread': 3.1 + hit.strength * 1.1,
+        '--nudge-start': 0.55 + hit.strength * 0.35,
+        '--nudge-spread': 1.7 + hit.strength * 3.1,
+        '--nudge-opacity': 0.3 + hit.strength * 0.25,
       }"
       @animationend="taps = taps.filter((item) => item.id !== hit.id)"
     >
@@ -163,11 +165,11 @@ onUnmounted(() => {
 }
 @keyframes ring-expand {
   from {
-    transform: scale(0.9);
-    opacity: 0.5;
+    transform: scale(var(--nudge-start, 0.55));
+    opacity: var(--nudge-opacity, 0.3);
   }
   to {
-    transform: scale(var(--nudge-spread, 3.1));
+    transform: scale(var(--nudge-spread, 1.7));
     opacity: 0;
   }
 }

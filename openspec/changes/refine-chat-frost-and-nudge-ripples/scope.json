@@ -1,0 +1,17 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "allowed": [
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/WaterNudge.vue",
+    "scripts/check-conversation-preview.mjs",
+    "docs/CONVERSATION_INTERACTION_PREVIEW.md",
+    "docs/FRONTEND_MOTION_CONTRACT.md",
+    "frontend/src/components/CompanionChatComposer.vue",
+    "scripts/check-companion-chat-browser.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

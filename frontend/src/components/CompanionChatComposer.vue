@@ -134,7 +134,7 @@ defineExpose({ cancel, dismiss });
   padding: 6px 7px 6px 20px;
   border: 1px solid #ffffff65;
   border-radius: 30px;
-  background: var(--chat-glass);
+  background: color-mix(in srgb, var(--ui-surface) 42%, transparent);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   transform: scale(1);

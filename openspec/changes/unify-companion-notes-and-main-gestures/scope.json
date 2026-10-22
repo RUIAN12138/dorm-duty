@@ -1,0 +1,33 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "allowed": [
+    "docs/CONVERSATION_INTERACTION_PREVIEW.md",
+    "docs/FRONTEND_MOTION_CONTRACT.md",
+    "frontend/src/api/companionChat.ts",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/CompanionChatComposer.vue",
+    "frontend/src/components/ConversationNoteFlow.vue",
+    "frontend/src/components/DormCompanion.vue",
+    "frontend/src/components/WaterNudge.vue",
+    "frontend/src/composables/useConversationNotes.ts",
+    "frontend/src/interaction/companionSpeech.ts",
+    "frontend/src/interaction/companionTap.ts",
+    "frontend/src/interaction/conversationNotes.ts",
+    "frontend/src/interaction/tapEnergy.ts",
+    "frontend/src/screen.css",
+    "scripts/check-companion-chat-browser.mjs",
+    "scripts/check-companion-preview-check.mjs",
+    "scripts/check-conversation-preview.mjs",
+    "scripts/check-conversation-state.mjs",
+    "scripts/check-sheet-banner-polish.mjs",
+    "scripts/companion-ai.mjs",
+    "scripts/lib/conversation-preview.mjs",
+    "scripts/preview-conversation.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

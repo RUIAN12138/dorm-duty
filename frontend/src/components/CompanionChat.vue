@@ -144,6 +144,24 @@ function scheduleFit() {
   cancelAnimationFrame(viewportFrame);
   viewportFrame = requestAnimationFrame(fit);
 }
+let footerObserver: ResizeObserver | undefined;
+watch(footer, (element) => {
+  footerObserver?.disconnect();
+  if (!element) return;
+  footerObserver = new ResizeObserver(() => {
+    const history = scroll.value;
+    const wasAtBottom =
+      !history ||
+      history.scrollHeight - history.scrollTop - history.clientHeight < 60;
+    surface.value?.style.setProperty(
+      "--chat-footer-height",
+      `${element.offsetHeight}px`,
+    );
+    if (wasAtBottom) bottom();
+    else refreshEdge();
+  });
+  footerObserver.observe(element);
+});
 
 function cancel() {
   epoch++;
@@ -172,6 +190,13 @@ function refreshEdge() {
   historyFrame.value?.style.setProperty(
     "--chat-edge",
     String(Math.min(1, Math.max(0, distance / 36))),
+  );
+  const remaining = scroll.value
+    ? scroll.value.scrollHeight - scroll.value.clientHeight - distance
+    : 0;
+  historyFrame.value?.style.setProperty(
+    "--chat-bottom-edge",
+    String(Math.min(1, Math.max(0, remaining / 36))),
   );
 }
 function bottom() {
@@ -781,6 +806,7 @@ window.visualViewport?.addEventListener("scroll", scheduleFit);
 document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
+  footerObserver?.disconnect();
   delete document.documentElement.dataset.companionChat;
   cancel();
   motionEpoch++;
@@ -1017,6 +1043,13 @@ function time(value: string) {
             >
               <i /><i /><i /><i /><i />
             </div>
+            <div
+              class="chat-top-frost chat-bottom-frost"
+              aria-hidden="true"
+              data-testid="chat-bottom-frost"
+            >
+              <i /><i /><i /><i /><i />
+            </div>
           </div>
           <footer ref="footer" class="chat-footer">
             <button
@@ -1165,10 +1198,12 @@ function time(value: string) {
   transform-origin: center;
 }
 .chat-surface {
+  --chat-footer-height: 102px;
+  --chat-footer-gap: max(58px, calc(env(safe-area-inset-bottom) + 34px));
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0 20px max(58px, calc(env(safe-area-inset-bottom) + 34px));
+  padding: 0 20px;
   position: relative;
   z-index: 1;
   box-sizing: border-box;
@@ -1225,6 +1260,7 @@ function time(value: string) {
 .chat-history-frame {
   opacity: 0;
   --chat-edge: 0;
+  --chat-bottom-edge: 0;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -1280,6 +1316,12 @@ function time(value: string) {
   mask-image: linear-gradient(#000 0%, transparent 24%);
   -webkit-mask-image: linear-gradient(#000 0%, transparent 24%);
 }
+.chat-bottom-frost {
+  top: auto;
+  bottom: calc(var(--chat-footer-height) + var(--chat-footer-gap) - 24px);
+  transform: rotate(180deg);
+  opacity: var(--chat-bottom-edge);
+}
 .chat-history {
   touch-action: pan-y pinch-zoom;
   height: 100%;
@@ -1299,7 +1341,8 @@ function time(value: string) {
   overscroll-behavior: contain;
   scrollbar-width: none;
   display: block;
-  padding: 16px 4px 22px;
+  padding: 16px 4px
+    calc(var(--chat-footer-height) + var(--chat-footer-gap) + 22px);
   margin: 0;
 }
 .chat-history-content {
@@ -1384,9 +1427,29 @@ function time(value: string) {
   }
 }
 .chat-footer {
+  position: absolute;
+  z-index: 3;
+  inset-inline: 20px;
+  bottom: var(--chat-footer-gap);
   opacity: 0;
   flex: none;
   padding-top: 8px;
+}
+.chat-footer::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -20px -20px calc(-1 * var(--chat-footer-gap));
+  pointer-events: none;
+  background: color-mix(in srgb, var(--ui-surface) 28%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  mask-image: linear-gradient(transparent, #000 36px);
+  -webkit-mask-image: linear-gradient(transparent, #000 36px);
+}
+.chat-footer > * {
+  position: relative;
+  z-index: 1;
 }
 .chat-error {
   position: absolute;
@@ -1542,11 +1605,13 @@ function time(value: string) {
   height: 125px;
 }
 .is-compact .chat-surface {
-  padding-bottom: 12px;
+  --chat-footer-gap: max(12px, env(safe-area-inset-bottom));
 }
 .is-compact .chat-history {
   padding-top: 8px;
-  padding-bottom: 12px;
+  padding-bottom: calc(
+    var(--chat-footer-height) + var(--chat-footer-gap) + 12px
+  );
 }
 .is-compact .chat-top-frost {
   height: 64px;
@@ -1573,6 +1638,11 @@ function time(value: string) {
   }
   .chat-top-frost {
     display: none;
+  }
+  .chat-footer::before {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--ui-surface);
   }
   .companion-chat-backdrop {
     backdrop-filter: none;
