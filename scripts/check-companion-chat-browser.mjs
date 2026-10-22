@@ -332,35 +332,58 @@ try {
         touchPoints: [],
       });
     }
+    async function blankSwipe(direction) {
+      const point = await page.evaluate((direction) => {
+        for (let y = 190; y < innerHeight - 150; y += 18)
+          for (const x of direction < 0
+            ? [innerWidth - 36, innerWidth - 70]
+            : [36, 70]) {
+            const el = document.elementFromPoint(x, y);
+            if (
+              el?.matches("div,section,header,main,article") &&
+              el.closest(".app-stage.is-signed-in") &&
+              !el.closest(
+                "button,a,[role=button],.calendar-surface,.task-title-stage,.water-title-stage,.task-selector,.round-progress,.completion-surface,.companion-frame,[data-page-gesture],[data-native-scroll]",
+              )
+            )
+              return { x, y };
+          }
+        throw new Error("No blank navigation region");
+      }, direction);
+      await swipe(point.x, point.x + direction * 110, point.y);
+      await page.waitForTimeout(650);
+    }
     const beforeSwipe = (await board()).today_tasks.map((t) => [
       t.id,
       t.status,
     ]);
     await touchSwipe(page.locator(".completion-surface").first(), -1);
-    await page.getByTestId("pane-water").waitFor();
     await page.waitForTimeout(650);
     check(
-      JSON.stringify(
-        (await board()).today_tasks.map((t) => [t.id, t.status]),
-      ) === JSON.stringify(beforeSwipe),
-      "swiping over the completion button changes page without completing a task",
+      (await page.getByTestId("pane-duty").isVisible()) &&
+        JSON.stringify(
+          (await board()).today_tasks.map((t) => [t.id, t.status]),
+        ) === JSON.stringify(beforeSwipe),
+      "completion control swipe neither changes page nor completes a task",
     );
+    await blankSwipe(-1);
+    await page.getByTestId("pane-water").waitFor();
     await touchSwipe(page.getByTestId("water-nudge"), -1);
-    await page.getByTestId("pane-calendar").waitFor();
     await page.waitForTimeout(650);
     check(
-      (await board()).reminders.length === 0,
-      "swiping over the water name never sends an accidental nudge",
+      (await page.getByTestId("pane-water").isVisible()) &&
+        (await board()).reminders.length === 0,
+      "water name swipe retains ownership and never sends a nudge",
     );
-    await touchSwipe(page.locator(".compact-calendar > header"), 1);
+    await blankSwipe(-1);
+    await page.getByTestId("pane-calendar").waitFor();
+    await blankSwipe(1);
     await page.getByTestId("pane-water").waitFor();
-    await page.waitForTimeout(650);
-    await touchSwipe(page.getByTestId("water-nudge"), 1);
+    await blankSwipe(1);
     await page.getByTestId("pane-duty").waitFor();
-    await page.waitForTimeout(650);
     check(
       true,
-      `${safari ? "pointer" : "native touch"} swipe navigates all three pages in both directions`,
+      "blank-only swipes navigate all three pages in both directions",
     );
     const holdBox = await ball.boundingBox();
     const hx = holdBox.x + holdBox.width / 2,
@@ -420,11 +443,11 @@ try {
       (await page.locator(".sheet-layer").count()) === 0,
       "successful touch hold never leaks a delayed note action",
     );
-    await swipe(320, 65, 610);
+    await blankSwipe(-1);
     await page.getByTestId("pane-water").waitFor();
     await page.waitForTimeout(650);
     check(true, "left swipe navigates duty to water");
-    await swipe(320, 65, 610);
+    await blankSwipe(-1);
     await page.getByTestId("pane-calendar").waitFor();
     await page.waitForTimeout(750);
     check(true, "left swipe navigates water to calendar");

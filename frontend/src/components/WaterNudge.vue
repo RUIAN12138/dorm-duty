@@ -1,17 +1,28 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from "vue";
 import { motionAllowed } from "../interaction/motion";
+import { createTapEnergy } from "../interaction/tapEnergy";
 defineProps<{ name: string }>();
 const emit = defineEmits<{ tap: [] }>();
 const button = ref<HTMLButtonElement | null>(null);
-const taps = ref<{ id: number; x: number; y: number; drift: number }[]>([]);
+const taps = ref<
+  { id: number; x: number; y: number; drift: number; strength: number }[]
+>([]);
+const strength = ref(0),
+  energy = createTapEnergy();
 let sequence = 0,
   bounce: Animation | null = null;
 function tap(event: MouseEvent) {
   const target = button.value;
   if (!target) return;
   emit("tap");
-  if (!event.detail || !motionAllowed()) return;
+  if (
+    (!event.detail && event.clientX === 0 && event.clientY === 0) ||
+    !motionAllowed()
+  )
+    return;
+  strength.value = energy.tap(performance.now());
+  const intensity = strength.value;
   const bounds = target.getBoundingClientRect();
   const x = event.detail
     ? Math.min(bounds.width - 12, Math.max(12, event.clientX - bounds.left))
@@ -20,23 +31,52 @@ function tap(event: MouseEvent) {
     ? Math.min(bounds.height, Math.max(0, event.clientY - bounds.top))
     : bounds.height / 2;
   taps.value = [
-    ...taps.value.slice(-7),
-    { id: ++sequence, x, y, drift: ((sequence % 3) - 1) * 12 },
+    ...taps.value.slice(-5),
+    {
+      id: ++sequence,
+      x,
+      y,
+      drift: ((sequence % 3) - 1) * (12 + intensity * 8),
+      strength: intensity,
+    },
   ];
   const current = getComputedStyle(target).transform;
   bounce?.cancel();
   bounce = target.animate(
     [
       { transform: current === "none" ? "scale(1)" : current },
-      { transform: "scaleX(1.09) scaleY(.84)", offset: 0.18 },
-      { transform: "scaleX(.96) scaleY(1.075)", offset: 0.58 },
+      {
+        transform: `scaleX(${1.09 + intensity * 0.07}) scaleY(${0.84 - intensity * 0.06})`,
+        offset: 0.18,
+      },
+      {
+        transform: `scaleX(${0.96 - intensity * 0.025}) scaleY(${1.075 + intensity * 0.025})`,
+        offset: 0.58,
+      },
       { transform: "scaleX(1.025) scaleY(.98)", offset: 0.8 },
       { transform: "scale(1)" },
     ],
     { duration: 380, easing: "cubic-bezier(.22,1,.36,1)" },
   );
 }
-onUnmounted(() => bounce?.cancel());
+function quiet() {
+  if (!motionAllowed()) {
+    bounce?.cancel();
+    taps.value = [];
+    energy.reset();
+    strength.value = 0;
+  }
+}
+window.addEventListener("ui-motion-change", quiet);
+document.addEventListener("visibilitychange", quiet);
+const preference = matchMedia("(prefers-reduced-motion: reduce)");
+preference.addEventListener("change", quiet);
+onUnmounted(() => {
+  bounce?.cancel();
+  window.removeEventListener("ui-motion-change", quiet);
+  document.removeEventListener("visibilitychange", quiet);
+  preference.removeEventListener("change", quiet);
+});
 </script>
 <template>
   <button
@@ -44,6 +84,7 @@ onUnmounted(() => bounce?.cancel());
     type="button"
     class="nudge-name"
     data-testid="water-nudge"
+    :data-intensity="strength.toFixed(3)"
     :aria-label="`敲一敲${name}，催促抬水`"
     @click="tap"
   >
@@ -57,6 +98,7 @@ onUnmounted(() => bounce?.cancel());
         left: `${hit.x}px`,
         top: `${hit.y}px`,
         '--drift': `${hit.drift}px`,
+        '--nudge-spread': 3.1 + hit.strength * 1.1,
       }"
       @animationend="taps = taps.filter((item) => item.id !== hit.id)"
     >
@@ -125,7 +167,7 @@ onUnmounted(() => bounce?.cancel());
     opacity: 0.5;
   }
   to {
-    transform: scale(3.1);
+    transform: scale(var(--nudge-spread, 3.1));
     opacity: 0;
   }
 }

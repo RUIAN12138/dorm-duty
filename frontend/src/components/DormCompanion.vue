@@ -33,7 +33,7 @@ const props = withDefaults(
     size?: number;
     automatic?: boolean;
     track?: boolean;
-    intent?: "play" | "message";
+    intent?: "play" | "message" | "chat";
     gazePoint?: { x: number; y: number };
     tips?: boolean;
     muted?: boolean;
@@ -63,6 +63,7 @@ let holdPoint: {
   surface: HTMLElement;
 } | null = null;
 let suppressTapUntil = 0;
+let tapOrigin: DOMRect | null = null;
 function cancelHold() {
   clearTimeout(holdTimer);
   const active = holdPoint;
@@ -71,6 +72,14 @@ function cancelHold() {
     active.surface.releasePointerCapture(active.id);
 }
 function hold(event: PointerEvent) {
+  if (
+    props.intent !== "play" &&
+    event.isPrimary &&
+    event.button === 0 &&
+    !props.muted &&
+    !flying
+  )
+    tapGesture.press(event.clientX, event.clientY);
   if (
     !props.chatEnabled ||
     !event.isPrimary ||
@@ -118,6 +127,10 @@ function leaveHold(event: PointerEvent) {
   if (holdPoint?.surface.hasPointerCapture(event.pointerId)) return;
   cancelHold();
 }
+function abortHold() {
+  cancelHold();
+  tapGesture.cancel();
+}
 function keyboardChat(event: KeyboardEvent) {
   if (
     props.chatEnabled &&
@@ -133,7 +146,10 @@ function keyboardChat(event: KeyboardEvent) {
 const play = createCompanionPlay();
 const tapGesture = createCompanionTapGesture({
   single: () => {
-    if (!document.hidden && !props.muted && !flying) emit("message");
+    if (document.hidden || props.muted || flying) return;
+    if (props.intent === "chat" && props.chatEnabled && tapOrigin)
+      emit("chat", tapOrigin);
+    else emit("message");
   },
   double: tap,
 });
@@ -250,6 +266,7 @@ function clicked(event: MouseEvent) {
     tap();
     return;
   }
+  tapOrigin = (event.currentTarget as HTMLElement).getBoundingClientRect();
   tapGesture.tap(
     event.clientX,
     event.clientY,
@@ -386,7 +403,7 @@ onBeforeUnmount(() => {
       :style="{ width: `${size}px`, height: `${size}px` }"
       :aria-label="
         interactive
-          ? `球球，${label}，${intent === 'message' ? '单击给室友留言，双击互动' : '点击逗逗它'}${chatEnabled ? '，长按聊天，键盘Shift加回车聊天' : ''}`
+          ? `球球，${label}，${intent === 'chat' ? '单击聊天，双击互动' : intent === 'message' ? '单击给室友留言，双击互动' : '点击逗逗它'}${chatEnabled ? '，长按聊天，键盘Shift加回车聊天' : ''}`
           : undefined
       "
       :aria-hidden="interactive ? undefined : true"
@@ -395,7 +412,7 @@ onBeforeUnmount(() => {
       @pointerdown="hold"
       @pointermove="moveHold"
       @pointerup="cancelHold"
-      @pointercancel="cancelHold"
+      @pointercancel="abortHold"
       @pointerleave="leaveHold"
       @lostpointercapture="leaveHold"
       @selectstart.prevent

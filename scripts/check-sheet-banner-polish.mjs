@@ -303,19 +303,22 @@ try {
   await page.mouse.down();
   await page.waitForTimeout(650);
   await page.mouse.up();
-  await page.locator(".companion-note-form").waitFor();
+  await page.locator(".companion-chat").waitFor();
+  await page
+    .locator('[data-testid="conversation-note"][data-phase="content"]')
+    .waitFor();
   check(
-    (await page
-      .getByRole("button", { name: people[2].nickname, exact: true })
-      .getAttribute("aria-pressed")) === "true",
-    "long press opens reply with the actual sender selected",
+    (await page.getByTestId("conversation-note").innerText()).includes(
+      people[2].nickname,
+    ),
+    "long press routes reply into unified chat with the actual sender selected",
   );
   check(
     (await board(people[2])).reminders.every((n) => n.body !== "长按回复测试"),
     "long press does not send a reply without confirmation",
   );
-  await page.getByRole("button", { name: "关闭详情", exact: true }).click();
-  await page.locator(".sheet-layer").waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
+  await page.locator(".companion-chat").waitFor({ state: "detached" });
   await banner.filter({ hasText: "手动已读测试" }).waitFor();
   await page.waitForTimeout(750);
   const c = await page.locator(".reminder-banner-card").boundingBox();

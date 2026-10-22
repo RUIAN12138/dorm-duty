@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, onBeforeUnmount } from "vue";
-const props = defineProps<{ busy: boolean; enabled: boolean }>();
+const props = defineProps<{
+  busy: boolean;
+  enabled: boolean;
+  placeholder?: string;
+}>();
 const emit = defineEmits<{ send: [text: string]; focus: []; resize: [] }>();
 const text = ref(""),
   editing = ref(false),
@@ -91,7 +95,7 @@ defineExpose({ cancel, dismiss });
         rows="1"
         maxlength="1000"
         aria-label="和球球说句话"
-        placeholder="和球球说句话…"
+        :placeholder="placeholder || '和球球说句话…'"
         :disabled="!enabled"
         @focus="emit('focus')"
         @blur="emit('focus')"

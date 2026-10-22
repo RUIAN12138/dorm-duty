@@ -18,6 +18,9 @@ f=fixture();f.gesture.tap(50,50);f.advance(120);f.gesture.cancel();f.advance(100
 f=fixture();f.gesture.tap(50,50);f.advance(500);f.gesture.tap(50,50);f.advance(500);assert.deepEqual(f.events,['note','note']);
 f=fixture();f.gesture.tap(50,50);f.advance(120);f.gesture.tap(150,50);f.advance(500);assert.deepEqual(f.events,['note','note']);
 f=fixture();f.gesture.tap(0,0,true);assert.deepEqual(f.events,['note']);assert.equal(f.pending,0);
+// A slow WebView release still belongs to the second finger-down.
+f=fixture();f.gesture.tap(50,50);f.advance(280);f.gesture.press(50,50);f.advance(350);assert.deepEqual(f.events,[]);f.gesture.tap(50,50);f.advance(500);assert.deepEqual(f.events,['play']);
+f=fixture();f.gesture.tap(50,50);f.advance(280);f.gesture.press(50,50);f.gesture.cancel();f.advance(500);assert.deepEqual(f.events,[]);
 const box={left:100,top:100,width:176,height:176},viewport={width:390,height:844};
 assert.deepEqual(naturalGaze(188,188,box,viewport),{x:0,y:0});
 let previous=-1;

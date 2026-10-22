@@ -11,7 +11,14 @@ import {
 import { animate, motion } from "motion-v";
 import DormCompanion from "./DormCompanion.vue";
 import CompanionChatComposer from "./CompanionChatComposer.vue";
-import { companionClient, type ChatReminder } from "../api/companionChat";
+import ConversationNoteFlow from "./ConversationNoteFlow.vue";
+import { useConversationNotes } from "../composables/useConversationNotes";
+import type { ChoreMember } from "../api/chores";
+import {
+  companionClient,
+  chatRequestId,
+  type ChatReminder,
+} from "../api/companionChat";
 import { motionAllowed, motionTokens } from "../interaction/motion";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
@@ -19,6 +26,8 @@ const props = defineProps<{
   modelValue: boolean;
   origin: DOMRect | null;
   returnRect?: () => DOMRect | null;
+  members?: ChoreMember[];
+  noteRequest?: { key: number; target: number };
   invite: string;
   memberId: number;
   token: string;
@@ -26,6 +35,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
   present: [value: boolean];
+  noteSent: [];
 }>();
 const present = ref(false),
   prepared = ref(false),
@@ -55,7 +65,7 @@ const viewport = ref({ top: 0, height: window.innerHeight }),
   compactViewport = computed(
     () => keyboardOpen.value || viewport.value.height < 560,
   ),
-  thinking = computed(() => awaiting.value);
+  thinking = computed(() => awaiting.value || notes.sending.value);
 let api = companionClient(props.invite, props.memberId, props.token),
   epoch = 0,
   controller: AbortController | undefined,
@@ -84,6 +94,33 @@ function chatEntryClick(event: MouseEvent) {
   }
 }
 const scope = () => `${props.invite}:${props.memberId}:${props.token}`;
+const notes = useConversationNotes(
+  () => ({
+    token: props.token,
+    invite: props.invite,
+    memberId: props.memberId,
+    members: props.members || [],
+  }),
+  (role, text) => {
+    items.value.push({ id: `note:${chatRequestId()}`, role, text });
+    bottom();
+  },
+  () => emit("noteSent"),
+);
+watch(
+  () => props.noteRequest?.key,
+  () => {
+    if (props.noteRequest)
+      void notes.dispatch({ type: "start", target: props.noteRequest.target });
+  },
+);
+watch(notes.sending, (sending) => {
+  emotion.value = sending
+    ? "30"
+    : notes.state.value.phase === "sent"
+      ? "39"
+      : "12";
+});
 const motionTransition = computed(() =>
   motionAllowed() ? motionTokens.drawer : { duration: 0 },
 );
@@ -560,13 +597,17 @@ async function load() {
     const state = await api.state(c.signal);
     if (generation !== epoch || !props.modelValue) return;
     available.value = state.available;
-    items.value = state.messages.flatMap((m) =>
-      m.messages.map((text, i) => ({
-        id: `${m.request_id}:${m.role}:${i}`,
-        role: m.role,
-        text,
-      })),
-    );
+    const localNotes = items.value.filter((m) => m.id.startsWith("note:"));
+    items.value = [
+      ...state.messages.flatMap((m) =>
+        m.messages.map((text, i) => ({
+          id: `${m.request_id}:${m.role}:${i}`,
+          role: m.role,
+          text,
+        })),
+      ),
+      ...localNotes,
+    ];
     reminders.value = state.reminders;
     emotion.value = "39";
     if (!available.value) error.value = "球球还未接通AI服务";
@@ -580,9 +621,10 @@ async function load() {
   }
 }
 async function send(text: string, isRetry = false) {
-  if (busy.value || loading.value || actionBusy.value || !available.value)
-    return;
-  const request = isRetry && retry ? retry : { text, id: crypto.randomUUID() };
+  if (busy.value || actionBusy.value || notes.sending.value) return;
+  if (!isRetry && notes.input(text)) return;
+  if (loading.value || !available.value) return;
+  const request = isRetry && retry ? retry : { text, id: chatRequestId() };
   retry = request;
   const generation = ++epoch,
     c = new AbortController();
@@ -637,7 +679,7 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
     if (generation !== epoch) return;
     a.status = result.status;
     items.value.push({
-      id: crypto.randomUUID(),
+      id: chatRequestId(),
       role: "assistant",
       text:
         result.status === "sent"
@@ -659,6 +701,7 @@ async function act(a: ChatReminder, action: "confirm" | "cancel") {
 }
 const clearConfirm = ref(false);
 function requestClear() {
+  if (notes.active.value) return;
   clearConfirm.value = !clearConfirm.value;
   if (clearConfirm.value)
     void nextTick(() => {
@@ -666,7 +709,8 @@ function requestClear() {
     });
 }
 async function clear() {
-  if (busy.value || loading.value || actionBusy.value) return;
+  if (busy.value || loading.value || actionBusy.value || notes.active.value)
+    return;
   busy.value = true;
   error.value = "";
   const generation = epoch,
@@ -676,6 +720,7 @@ async function clear() {
     await api.clear(c.signal);
     if (generation === epoch) {
       items.value = [];
+      notes.reset();
       reminders.value = reminders.value.filter((a) => a.status === "pending");
       retry = null;
       clearConfirm.value = false;
@@ -723,6 +768,7 @@ watch(
 watch(scope, () => {
   cancel();
   items.value = [];
+  notes.reset();
   reminders.value = [];
   retry = null;
   available.value = false;
@@ -934,11 +980,30 @@ function time(value: string) {
                     {{ prompt }}
                   </button>
                 </div>
+                <Transition name="note-flow" mode="out-in"
+                  ><div
+                    v-if="notes.active.value"
+                    :key="notes.state.value.phase"
+                  >
+                    <ConversationNoteFlow
+                      :state="notes.state.value"
+                      :members="members || []"
+                      :member-id="memberId"
+                      @choose="
+                        notes.dispatch({ type: 'choose', target: $event })
+                      "
+                      @edit="notes.dispatch({ type: 'edit', field: $event })"
+                      @cancel="notes.dispatch({ type: 'cancel' })"
+                      @confirm="notes.dispatch({ type: 'submit' })"
+                    /></div
+                ></Transition>
                 <button
                   v-if="hasConversation"
                   class="chat-clear"
                   aria-label="清空聊天记录"
-                  :disabled="busy || loading || !!actionBusy"
+                  :disabled="
+                    busy || loading || !!actionBusy || notes.active.value
+                  "
                   @click="requestClear"
                 >
                   清空聊天
@@ -954,10 +1019,34 @@ function time(value: string) {
             </div>
           </div>
           <footer ref="footer" class="chat-footer">
+            <button
+              v-if="!notes.active.value && !keyboardOpen"
+              class="chat-note-shortcut"
+              :disabled="busy || !!actionBusy || phase !== 'open'"
+              @click="notes.dispatch({ type: 'start' })"
+            >
+              我要留言
+            </button>
             <CompanionChatComposer
               ref="composer"
-              :busy="busy || loading || !!actionBusy"
-              :enabled="available && !loading && phase === 'open'"
+              :busy="
+                busy ||
+                (loading && !notes.active.value) ||
+                !!actionBusy ||
+                notes.sending.value
+              "
+              :enabled="
+                (available || notes.active.value) &&
+                !notes.sending.value &&
+                phase === 'open'
+              "
+              :placeholder="
+                notes.state.value.phase === 'content'
+                  ? '写下留言内容…'
+                  : notes.state.value.phase === 'recipient'
+                    ? '输入完整姓名，或点选室友…'
+                    : '和球球说句话…'
+              "
               @focus="scheduleFit"
               @resize="bottom"
               @send="send"
@@ -980,6 +1069,44 @@ function time(value: string) {
   >
 </template>
 <style scoped>
+.note-flow-enter-active,
+.note-flow-leave-active {
+  transition:
+    transform var(--ui-page-time) var(--ui-ease-out),
+    opacity var(--ui-page-time) var(--ui-ease-out);
+}
+.note-flow-enter-from,
+.note-flow-leave-to {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0) scale(0.98);
+}
+.note-flow-leave-active {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-flow-enter-active,
+  .note-flow-leave-active {
+    transition: none;
+  }
+}
+.chat-note-shortcut {
+  width: max-content;
+  min-height: 36px;
+  padding: 6px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
+  background: var(--chat-glass);
+  color: var(--ui-ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform var(--ui-release-time) var(--ui-ease-out);
+}
+.chat-note-shortcut:not(:disabled):active {
+  transform: var(--ui-press-small);
+  transition-duration: var(--ui-press-time);
+}
 /* Static page frost also covers WebKit compositors that drop backdrop blur
    across fixed/contained siblings. Only the chat presence owns this state. */
 :global(html[data-companion-chat="true"] .app-stage),
