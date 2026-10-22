@@ -37,7 +37,7 @@
   "prAuthorization": {
     "action": "create-for-review",
     "userStatement": "这次做完直接提交 pr 部署网站",
-    "authorizedDigest": "6ebc004dc69f8cd508d37fd259007f893bbe5caa47ab1db47cfdf060a3044088",
+    "authorizedDigest": "2a87f5a35da6e55dff77960b5af8d87e88f251a1745591cc63610e2f9dc43c0f",
     "recordedOn": "2026-10-22",
     "limits": "仅本批次v74及v75移动边缘修复的分支推送/PR与备份后代码部署，不合并main，不追认实体验收，不覆盖数据库或私密配置。"
   },
