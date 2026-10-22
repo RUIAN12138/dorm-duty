@@ -29,3 +29,11 @@ AI仍用原有接口返回短句，本轮没有改为服务端SSE/token流。渐
 Android APK含单元测试/lint构建通过，Harmony unsigned HAP编译通过。Android 15 WebView和HarmonyOS6.1.1 ArkWeb模拟器各5项隔离聊天检查通过（双击零请求、120条历史首帧、重开定位等），各3条系统浏览器外链转交并返回原页通过。Harmony仅在data中的独立测试副本启用调试，正式Index.ets未加入调试开关；测试后恢复普通HAP并停止本次启动的模拟器。iPhone实体输入法/触感未测；桌面WebKit不等于实体Safari，WebKit光学blur不作实机承诺。
 
 隔离预览：http://127.0.0.1:8092/?start=1 ，演示AI、内存宿舍、无真实邮件或推送。PR与发布证据随后记录。
+
+## v74 正式发布（北京时间2026-10-22 16:16）
+
+PR #81：https://github.com/RUIAN12138/dorm-duty/pull/81 ，基线为#80开发分支，未合并main。运行版本20261022-companion-entry-v74，代码提交36f72c85c248a04d6fe2fa5535229d708679d947。线上入口https://8.148.190.114/dorm-duty/ 。
+
+在线备份/opt/dorm-duty/backups/dorm-20261022T081233Z.sqlite；67条完成记录发布前后逐条哈希一致，数据库标识未变。公网142个静态资源与发布包逐字节一致，值日/抬水/日历路由和v74一次性版本提示通过，未发送正式聊天、打卡或留言。旧release20261022-chat-motion-v73保留，可只回退代码。证据data/release-chat-v74/（部署、健康、公开资源、无登录浏览器与历史核对）。
+
+当前补充提交仅文档/授权记录，不改变已部署的运行代码；publish授权和门禁证据保留部署时摘要，pr授权更新为含本记录的最终摘要。GitHub CI仍在执行，完成后更新PR说明。
