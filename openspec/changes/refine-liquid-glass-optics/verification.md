@@ -38,3 +38,21 @@
 
 ## 构建与范围检查
 最终typecheck/build、限定10个源/测试路径Prettier、OpenSpec strict及18个范围门禁单测、git diff --check通过。前端预缓存1310.10KiB；没有新增运行时依赖。隔离预览已重启到最终源码。下一步PR/部署仍须分别运行摘要门禁。
+
+## 正式发布与记录保全（北京时间2026-10-23 08:07）
+
+PR #82： https://github.com/RUIAN12138/dorm-duty/pull/82 ，base为 `codex/fix-companion-tap-arbitration`，未合并main。运行源码提交 `de7b20c9e7c95814c384c3f2910a8de87041d125`，版本 `20261023-liquid-glass-v76`。后续测试/文档提交不改变运行代码。
+
+- 在线备份 `/opt/dorm-duty/backups/dorm-20261023T000700Z.sqlite` 通过完整性及外键检查；私有历史快照留在服务器。67条原完成记录发布后逐条哈希一致，数据库标识不变，没有覆盖数据库。
+- 52项代码发布包无数据库、配置密钥或环境文件；SHA256 `5c2af1b2672c18629c042d6542fea3cbe19fa21b321c21e2ba9d25b8f8c2f2bf` 本地/远端一致，MIT公有文件已嵌入。
+- 原子切换 `/opt/dorm-duty/current` 后Node服务健康；143个公网资源与本地包逐字节一致，值日/抬水/日历三个路由、Manifest/SW与许可证资源正常。
+- 新无登录浏览器通过v76一次性版本提示、确认后刷新不重复、无运行异常/5xx且无生产写请求。没有发送正式聊天、打卡或留言。证据 `data/liquid-glass/{deployment.json,history-after.json,public-verification.json,public-browser.json,public-page.png}`。
+- 旧release `/opt/dorm-duty/releases/20261022-companion-entry-v75` 保留；如回退只原子切代码并重启，禁止用旧数据库覆盖新记录。
+
+## GitHub CI时序修正
+
+首次CI的moving double测试实际first pointerup1065.4ms、second pointerdown1359.8ms，间隔294.4ms，超出既有280ms窗口；失败证据 `data/liquid-glass/ci-motion-evidence/tap-arbitration/`。未延长产品窗口或改变球球。只把该测试的首段等待85→25ms，保留移动坐标采样后65ms延迟，并新增真实触摸时间间隔<=280ms断言。精确脚本路径已列入范围；不将超时输入包装成有效双击。这是CI验收修正，不需要重新部署运行代码。最终本地两引擎与CI状态另在PR记录，不沿用首次失败结论。
+
+另一项CI旧断言要求键盘出现把球球缩到60px以下，已与先前用户明确要求“顶部稳定、不因键盘缩放”冲突。实际记录ball88px、可视root410/top44、composer距视口底10px正常。仅更新check-companion-chat-browser.mjs验收：测量键盘前球体宽/相对顶边，键盘后保持0.75px容差，确认10px外缘间距与410px真实可视高度；不改产品代码，原IME/草稿/消息/回程检查保留。原始失败日志ci-web-failure.log保留。双击时窗修正后本地两引擎各52项通过。
+
+更新旧键盘断言后，完整原聊天浏览器回归通过（chromium: 60, webkit: 58项），包含输入法确认不误发、消息/草稿、键盘回程、多行输入与减动效。新双击回归两引擎各52项通过。仅验证文件和记录变化，生产仍为已核对的de7b20c运行代码。

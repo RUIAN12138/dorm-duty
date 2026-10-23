@@ -1167,6 +1167,13 @@ try {
     );
     // iOS keeps its layout viewport tall while the visual viewport shrinks for
     // the keyboard. Mock only that browser signal, never the component's state.
+    const keyboardHeaderBefore = await page
+      .locator(".chat-ball-visual")
+      .evaluate((el) => {
+        const ball = el.getBoundingClientRect();
+        const root = el.closest(".companion-chat").getBoundingClientRect();
+        return { width: ball.width, top: ball.top - root.top };
+      });
     await page.evaluate(() => {
       const v = window.visualViewport;
       const height = v.height,
@@ -1185,7 +1192,7 @@ try {
     await editor.focus();
     await page.waitForTimeout(350);
     check(
-      await page.locator(".companion-chat").evaluate((el) => {
+      await page.locator(".companion-chat").evaluate((el, before) => {
         const root = el.getBoundingClientRect(),
           frame = el
             .querySelector(".chat-history-frame")
@@ -1196,12 +1203,14 @@ try {
           el.classList.contains("is-keyboard") &&
           frame.height > 180 &&
           input.bottom <= 454 &&
-          454 - input.bottom <= 18 &&
-          ball.width < 60 &&
+          Math.abs(454 - input.bottom - 10) < 1.5 &&
+          Math.abs(ball.width - before.width) < 0.75 &&
+          Math.abs(ball.top - root.top - before.top) < 0.75 &&
+          Math.abs(root.height - 410) < 0.75 &&
           root.top === 44
         );
-      }),
-      "visual keyboard resize compacts the header and keeps composer just above keyboard",
+      }, keyboardHeaderBefore),
+      "visual keyboard resize preserves the header and attaches composer 10px above keyboard",
     );
     await checkInputGlass(
       "keyboard viewport retains translucent input glass and continuous safe-area veil",

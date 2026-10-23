@@ -101,7 +101,10 @@ try {
       const start = await f.pos(f.ball);
       const initial = await f.ball.getAttribute("title");
       await f.tap(start, kind);
-      await f.page.waitForTimeout(85);
+      // Leave room for real touch dispatch and the explicit 65ms moving-target
+      // latency below. CI transport adds time too; an expired >280ms pair is
+      // not a valid double-tap test and must not force a wider product window.
+      await f.page.waitForTimeout(target === "moving" ? 25 : 85);
       const second =
         target === "moving"
           ? await f.pos(f.page.locator(".chat-ball .dorm-companion"))
@@ -110,6 +113,20 @@ try {
       // sample and dispatch. Exercise that bounded latency, not just a still hit.
       if (target === "moving") await f.page.waitForTimeout(65);
       await f.tap(second, kind);
+      const gap = await f.page.evaluate(() => {
+        const firstUp = window.tapTrace.find((e) => e.type === "pointerup");
+        const secondDown = window.tapTrace.filter(
+          (e) => e.type === "pointerdown",
+        )[1];
+        return secondDown.at - firstUp.at;
+      });
+      check(
+        gap <= 280,
+        kind +
+          " double at " +
+          target +
+          " is delivered within the real tap window",
+      );
       await f.page.locator(".companion-chat").waitFor({ state: "detached" });
       await f.page.waitForTimeout(350);
       check(

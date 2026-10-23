@@ -20,3 +20,7 @@ Safari/ArkWeb背景SVG折射能力不一致，降级不能冒称完整支持。�
 ## 发布关联修改与审查
 仅补充既有ReleaseNotice的v76文案，避免上线提示沿用旧批次说明；不修改提示的布局、时序或交互，精确路径已列入scope。
 Codex审查后将动态高光由径向渐变坐标重绘改为已栅格化局部层的transform，消息跟随高光也合帧且受减动效/后台约束；暗色内侧亮边降强度。没有对前景文本加滤镜。高级SVG背景折射没有得到跨引擎像素证据，不启用；真实折射与色散限于已有局部WebGL采样，CSS表面不冒称扭曲整页DOM。参考仓库快照ac48eab18d1f7f444ae30002d240cae29c863a21（仅学习原理）。
+
+CI暴露验证脚本在慢runner中构造了294.4ms的超时二击。必要关联修改仅check-companion-tap-arbitration.mjs：减少moving案例的无谓等待并断言真实事件时窗；保留65ms移动目标延迟、所有业务断言及产品280ms窗口。
+
+check-companion-chat-browser.mjs必要验收更新：旧compact header断言与用户新键盘需求相反，替换为真实前后球体几何稳定+10px输入间距，不移除其它IME、草稿、回程检查。

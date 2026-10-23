@@ -10,6 +10,6 @@
 - [x] 3.2 Relevant browser regressions, build and spec gates.
 - [ ] 3.3 Real iPhone and low-performance Android physical acceptance.
 ## 4. Delivery
-- [ ] 4.1 Create review PR using final digest authorization.
-- [ ] 4.2 Backup and code-only deployment, health/version and data digest check.
+- [x] 4.1 Create review PR using final digest authorization.
+- [x] 4.2 Backup and code-only deployment, health/version and data digest check.
 - [ ] 4.3 Product acceptance; no main merge.

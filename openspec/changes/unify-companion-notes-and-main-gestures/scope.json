@@ -35,11 +35,11 @@
   "publishAuthorization": {
     "action": "deploy-for-review",
     "userStatement": "完成后提交 pr   更新网站",
-    "authorizedDigest": "960321ee6c5d87be35cc9bfcd75d4c64f97d3486475a8e03256aa17656d9ca27"
+    "authorizedDigest": "85acc9250aad28f86f773ee40487cb0e519b26ac5e26cacaa279223688c72bfa"
   },
   "prAuthorization": {
     "action": "create-for-review",
     "userStatement": "完成后提交 pr   更新网站",
-    "authorizedDigest": "960321ee6c5d87be35cc9bfcd75d4c64f97d3486475a8e03256aa17656d9ca27"
+    "authorizedDigest": "85acc9250aad28f86f773ee40487cb0e519b26ac5e26cacaa279223688c72bfa"
   }
 }
