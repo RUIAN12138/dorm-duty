@@ -4,6 +4,7 @@ import { motion } from "motion-v";
 import { TabsList, TabsTrigger } from "reka-ui";
 import { useSelectionMotion } from "../interaction/motion";
 import { horizontalIntent } from "../interaction/gestures";
+import LiquidGlassSurface from "./LiquidGlassSurface.vue";
 
 type SegmentOption = {
   value: string;
@@ -190,9 +191,17 @@ onUnmounted(() => {
     >
       <motion.span
         class="segment-indicator"
+        :class="{ 'is-scrub-glass': scrub }"
         aria-hidden="true"
         :style="{ transform: selection.transform }"
-      />
+      >
+        <LiquidGlassSurface
+          v-if="scrub"
+          class="segment-optics"
+          :track="false"
+          :active="dragging"
+        />
+      </motion.span>
       <TabsTrigger
         v-for="option in options"
         :key="option.value"
@@ -237,6 +246,19 @@ onUnmounted(() => {
   border: var(--ui-card-border);
   pointer-events: none;
 }
+/* Calendar scrub only. The indicator stays behind labels (z-index -1); the
+   optical layer is decorative and never intercepts the drag. */
+.segment-indicator.is-scrub-glass {
+  background: color-mix(in srgb, var(--ui-surface) 34%, transparent);
+  border-color: color-mix(in srgb, var(--ui-border) 64%, transparent);
+  box-shadow:
+    inset 0 1px 0 #ffffff73,
+    inset 0 -1px 0 #6570801f,
+    0 2px 8px #24334c10;
+}
+.segment-optics {
+  border-radius: inherit;
+}
 .calendar-view-selector button {
   position: relative;
   z-index: 1;
@@ -271,6 +293,16 @@ onUnmounted(() => {
   }
   .calendar-view-selector button {
     min-height: 36px;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .segment-indicator.is-scrub-glass {
+    background: var(--ui-surface);
+    border-color: var(--ui-border);
+    box-shadow: 0 1px 3px #00000008;
+  }
+  .segment-optics {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

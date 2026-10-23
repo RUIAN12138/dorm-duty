@@ -217,6 +217,7 @@ function click(event: MouseEvent) {
       :dragging="dragging"
       :moving="selection.moving.value"
       :active="currentIndex"
+      optical
       @ready="opticalGlass = $event"
     />
     <motion.span

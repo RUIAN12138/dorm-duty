@@ -106,9 +106,18 @@ function predictiveDown(event: PointerEvent) {
   if (!predictingChat || !event.isPrimary || event.button !== 0 || !tapOrigin)
     return;
   const target = event.target instanceof Element ? event.target : null;
+  // The whole original ball remains a target, not only the 36px around the
+  // first tap: two presses on opposite edges are still one double tap even
+  // though the visual ball has travelled away from the first point.
+  const sourceBall =
+    event.clientX >= tapOrigin.left &&
+    event.clientX <= tapOrigin.right &&
+    event.clientY >= tapOrigin.top &&
+    event.clientY <= tapOrigin.bottom;
   let sharedBall = !!target?.closest(".chat-ball .dorm-companion");
   if (
     !sharedBall &&
+    !sourceBall &&
     Math.hypot(event.clientX - tapPoint.x, event.clientY - tapPoint.y) >
       COMPANION_TAP_RADIUS
   ) {
@@ -129,7 +138,7 @@ function predictiveDown(event: PointerEvent) {
   const engaged = tapGesture.press(
     event.clientX,
     event.clientY,
-    sharedBall ? tapPoint : undefined,
+    sharedBall || sourceBall ? tapPoint : undefined,
   );
   if (!engaged) return;
   secondPointer = {

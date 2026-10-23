@@ -1,0 +1,26 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "039b73ab42c19277d739185c9666f6a0831515ae",
+  "allowed": [
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/interaction/chatScroll.ts",
+    "frontend/src/interaction/chatViewport.ts",
+    "scripts/check-chat-keyboard-viewport.mjs",
+    "openspec/changes/attach-chat-composer-to-keyboard/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "完成后更新 pr 和网站",
+    "authorizedDigest": "9578dc51d015a7b45c4e0fe3c5c42d830ef298745a4016726c6feb28851b053c"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "完成后更新 pr 和网站",
+    "authorizedDigest": "9578dc51d015a7b45c4e0fe3c5c42d830ef298745a4016726c6feb28851b053c"
+  }
+}

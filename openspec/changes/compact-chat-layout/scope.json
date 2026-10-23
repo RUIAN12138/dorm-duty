@@ -1,0 +1,32 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "be34b73dc32577cc447ff428c67e8f4dab56a5c0",
+  "allowed": [
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/CompanionChatComposer.vue",
+    "frontend/src/components/ConversationNoteFlow.vue",
+    "frontend/src/interaction/chatLayout.ts",
+    "frontend/src/interaction/chatScroll.ts",
+    "frontend/src/interaction/chatViewport.ts",
+    "scripts/check-chat-compact-layout.mjs",
+    "scripts/check-chat-keyboard-viewport.mjs",
+    "scripts/check-companion-chat-browser.mjs",
+    "openspec/changes/compact-chat-layout/",
+    "frontend/src/components/ReleaseNotice.vue"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "完成后更新 pr 和网站",
+    "authorizedDigest": "9578dc51d015a7b45c4e0fe3c5c42d830ef298745a4016726c6feb28851b053c"
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "完成后更新 pr 和网站",
+    "authorizedDigest": "9578dc51d015a7b45c4e0fe3c5c42d830ef298745a4016726c6feb28851b053c"
+  }
+}

@@ -10,6 +10,7 @@ import {
 import { animate } from "motion-v";
 import { motionAllowed } from "../interaction/motion";
 import { chatMotion } from "../interaction/chatMotion";
+import LiquidGlassSurface from "./LiquidGlassSurface.vue";
 const props = defineProps<{
   busy: boolean;
   enabled: boolean;
@@ -29,6 +30,7 @@ const text = computed({
   editing = ref(false),
   pressed = ref(false),
   input = ref<HTMLTextAreaElement>(),
+  mirror = ref<HTMLElement>(),
   composerText = ref<HTMLElement>(),
   inputHeight = ref(26);
 const composing = ref(false);
@@ -62,10 +64,11 @@ function prepare(event: PointerEvent) {
   }
 }
 function resize() {
-  if (!input.value) return;
-  input.value.style.height = "26px";
-  inputHeight.value = Math.min(78, Math.max(26, input.value.scrollHeight));
-  input.value.style.height = inputHeight.value + "px";
+  // Measure a hidden mirror instead of collapsing the visible textarea to one
+  // line and restoring it. The visible box never visits an intermediate size.
+  if (!input.value || !mirror.value) return;
+  const next = Math.min(78, Math.max(26, mirror.value.scrollHeight));
+  if (next !== inputHeight.value) inputHeight.value = next;
   emit("resize");
 }
 watch(text, () => {
@@ -133,6 +136,13 @@ defineExpose({ cancel, dismiss });
       :class="{ 'is-pressed': pressed }"
       @pointerdown="prepare"
     >
+      <LiquidGlassSurface class="composer-optics" :active="pressed" />
+      <div
+        ref="mirror"
+        class="composer-mirror"
+        aria-hidden="true"
+        v-text="text + '\u200b'"
+      />
       <textarea
         ref="input"
         :style="{ height: inputHeight + 'px' }"
@@ -170,6 +180,8 @@ defineExpose({ cancel, dismiss });
   min-height: 58px;
 }
 .composer-text {
+  position: relative;
+  isolation: isolate;
   width: 100%;
   min-height: 58px;
   box-sizing: border-box;
@@ -179,19 +191,46 @@ defineExpose({ cancel, dismiss });
   padding: 6px 7px 6px 20px;
   border: 1px solid #ffffff65;
   border-radius: 30px;
-  background: color-mix(in srgb, var(--ui-surface) 42%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ui-surface) 27%, transparent);
+  backdrop-filter: blur(7px) saturate(120%);
+  -webkit-backdrop-filter: blur(7px) saturate(120%);
+  box-shadow:
+    inset 0 1px 0 #ffffff59,
+    inset 0 -1px 0 #b8c0ce1f,
+    0 4px 14px #24334c0f;
   transform-origin: center;
+  transition: box-shadow 180ms var(--ui-ease-out);
+}
+.composer-text > textarea,
+.composer-text > .composer-send {
+  position: relative;
+  z-index: 1;
+}
+/* Hidden natural-height copy of the draft. It matches the textarea's text
+   column (container minus 20px left padding, 12px gap and the 44px button). */
+.composer-mirror {
+  position: absolute;
+  top: 6px;
+  left: 20px;
+  right: 63px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 16px;
+  line-height: 26px;
+  min-height: 26px;
 }
 .composer-text:focus-within {
-  /* Two local layers: a crisp edge and a soft outer glow, both scoped to the
+  /* Two local layers: a crisp edge and a soft outer shadow, both scoped to the
      input glass. Keyboard focus still gets its visible outline below. */
   outline: none;
   box-shadow:
+    inset 0 1px 0 #ffffff7a,
+    inset 0 -1px 0 #b8c0ce24,
     0 0 0 1px var(--ui-focus-ring),
-    0 10px 26px var(--ui-focus-glow);
-  transition: box-shadow 180ms var(--ui-ease-out);
+    0 6px 18px color-mix(in srgb, var(--ui-focus-glow) 72%, transparent);
 }
 .composer-text:has(textarea:focus-visible) {
   outline: 1px solid var(--ui-border);
@@ -251,11 +290,22 @@ defineExpose({ cancel, dismiss });
     transition: none;
   }
 }
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  /* No backdrop filter: keep a readable, still slightly clear surface. */
+  .composer-text {
+    background: color-mix(in srgb, var(--ui-surface) 86%, transparent);
+  }
+}
 @media (prefers-reduced-transparency: reduce) {
   .composer-text {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: var(--ui-surface);
+  }
+  .composer-optics {
+    display: none;
   }
 }
 </style>

@@ -67,10 +67,11 @@ const notes = [
   { id: 2, read_at: null },
 ];
 let pending = inbox.read(1);
-await inbox.read(1);
+const duplicate = inbox.read(1);
 assert.equal(requests.length, 1, "duplicate read blocked");
 requests[0].reject(Error("offline"));
 await pending;
+assert.equal(await duplicate, false);
 assert.equal(inbox.error.value, "offline");
 assert.equal(
   inbox.reconcile(notes)[0].read_at,
@@ -115,7 +116,7 @@ assert.equal(
 );
 pending = inbox.read(2);
 source.open = false;
-requests[3].resolve({});
+requests[3].resolve({ read_at: "2026-10-20T03:00:00Z" });
 await pending;
 assert.equal(
   confirmed.length,
@@ -151,7 +152,7 @@ assert.equal(
 );
 requests[5].reject(Error("banner offline"));
 assert.equal(await pending, false);
-assert.equal(inbox.error.value, "banner offline");
+assert.equal(inbox.error.value, "已读状态稍后同步");
 assert.equal(
   inbox.reconcile([{ id: 10, read_at: null }])[0].read_at,
   null,

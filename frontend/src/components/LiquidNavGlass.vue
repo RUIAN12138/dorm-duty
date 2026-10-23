@@ -4,7 +4,7 @@ import { motionAllowed } from "../interaction/motion";
 import {
   glassGeometry,
   glassVertex,
-  glassFragment,
+  glassFragmentSource,
   nativeGlassClip,
   type NativeLabelBox,
   GLASS_OVERFLOW,
@@ -15,6 +15,8 @@ const props = defineProps<{
   dragging: boolean;
   moving: boolean;
   active: number;
+  /** Opt-in refined rim optics. Shared callers keep the original material. */
+  optical?: boolean;
 }>();
 const emit = defineEmits<{ ready: [value: boolean] }>();
 const canvas = ref<HTMLCanvasElement>(),
@@ -355,7 +357,10 @@ function initialize() {
     });
     if (!gl) return;
     vertex = shader(gl.VERTEX_SHADER, glassVertex);
-    fragment = shader(gl.FRAGMENT_SHADER, glassFragment);
+    fragment = shader(
+      gl.FRAGMENT_SHADER,
+      glassFragmentSource(props.optical === true),
+    );
     program = gl.createProgram();
     if (!program) throw Error("program unavailable");
     gl.attachShader(program, vertex);

@@ -303,22 +303,39 @@ try {
   await page.mouse.down();
   await page.waitForTimeout(650);
   await page.mouse.up();
-  await page.locator(".companion-chat").waitFor();
-  await page
-    .locator('[data-testid="conversation-note"][data-phase="content"]')
-    .waitFor();
+  const inlineEditor = page.locator(".reminder-banner-card textarea");
+  await inlineEditor.waitFor();
   check(
-    (await page.getByTestId("conversation-note").innerText()).includes(
-      people[2].nickname,
-    ),
-    "long press routes reply into unified chat with the actual sender selected",
+    (await page.locator(".companion-chat").count()) === 0 &&
+      (await banner.innerText()).includes(people[2].nickname),
+    "long press expands inline reply for the actual sender without navigating to chat",
+  );
+  check(
+    !(await board()).reminders.find((n) => n.body === "长按回复测试").read_at,
+    "long press alone does not mark the incoming message read",
   );
   check(
     (await board(people[2])).reminders.every((n) => n.body !== "长按回复测试"),
-    "long press does not send a reply without confirmation",
+    "long press does not send a reply before the explicit send action",
   );
-  await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
-  await page.locator(".companion-chat").waitFor({ state: "detached" });
+  await page.keyboard.press("Escape");
+  await inlineEditor.waitFor({ state: "hidden" });
+  check(
+    !(await board()).reminders.find((n) => n.body === "长按回复测试").read_at,
+    "cancelling inline reply keeps the message unread",
+  );
+  // If cancelling restores the small banner, explicitly swipe it away before
+  // testing the next item; cancellation itself never implies a read receipt.
+  if (await banner.filter({ hasText: "长按回复测试" }).isVisible()) {
+    await page.waitForTimeout(350);
+    const previous = await page.locator(".reminder-banner-card").boundingBox();
+    await page.mouse.move(previous.x + previous.width / 2, previous.y + 42);
+    await page.mouse.down();
+    await page.mouse.move(previous.x + previous.width / 2, previous.y - 50, {
+      steps: 8,
+    });
+    await page.mouse.up();
+  }
   await banner.filter({ hasText: "手动已读测试" }).waitFor();
   await page.waitForTimeout(750);
   const c = await page.locator(".reminder-banner-card").boundingBox();
