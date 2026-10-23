@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { motionAllowed } from "../interaction/motion";
+import { graphemes } from "../interaction/chatReplyText";
 const props = defineProps<{
   text: string;
   animated?: boolean;
@@ -10,7 +11,7 @@ const chunkSize = 2;
 // last chunk starts within ~240ms. Each chunk fades/blurs in over 200ms, so
 // the whole reveal stays under ~440ms without replaying the bubble itself.
 const chunks = computed(() => {
-  const characters = Array.from(props.text);
+  const characters = graphemes(props.text);
   if (!characters.length) return [];
   const size = Math.max(chunkSize, Math.ceil(characters.length / 20));
   const groups: string[] = [];

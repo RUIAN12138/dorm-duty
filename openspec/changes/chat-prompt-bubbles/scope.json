@@ -1,0 +1,33 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "b3456527c3e11ef1adad178b392c47cd7aa8431f",
+  "allowed": [
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/ChatReplyText.vue",
+    "frontend/src/components/ReleaseNotice.vue",
+    "frontend/src/interaction/chatQuickPrompts.ts",
+    "frontend/src/interaction/chatReplyText.ts",
+    "frontend/src/composables/useChatReplyPresentation.ts",
+    "scripts/check-chat-prompt-bubbles.mjs",
+    "scripts/check-chat-prompt-bubbles-browser.mjs",
+    "scripts/check-chat-compact-layout.mjs",
+    "scripts/check-companion-chat-browser.mjs",
+    "scripts/check-chat-entry-polish.mjs",
+    "openspec/changes/chat-prompt-bubbles/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "推送 PR 更新网站",
+    "authorizedDigest": "c0b0c3254e674a2a3596ceab56206079411e5f7a02a9dd4867f38ce0d81dd032"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "推送 PR 更新网站",
+    "authorizedDigest": "c0b0c3254e674a2a3596ceab56206079411e5f7a02a9dd4867f38ce0d81dd032"
+  }
+}

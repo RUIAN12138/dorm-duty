@@ -111,7 +111,11 @@ try {
         " history initialization never requests smooth scrolling",
     );
     check(
-      (await page.locator(".chat-bubble").count()) === 120,
+      (await page
+        .locator(".chat-bubble")
+        .evaluateAll(
+          (els) => new Set(els.map((el) => el.dataset.messageGroup)).size,
+        )) === 120,
       "all history survives open " + open,
     );
     await page.locator(".chat-history").evaluate((el) => {
@@ -144,7 +148,12 @@ try {
   await ball.click();
   await page.waitForTimeout(900);
   check(
-    failedRefreshes > 0 && (await page.locator(".chat-bubble").count()) === 120,
+    failedRefreshes > 0 &&
+      (await page
+        .locator(".chat-bubble")
+        .evaluateAll(
+          (els) => new Set(els.map((el) => el.dataset.messageGroup)).size,
+        )) === 120,
     "cached history remains usable when reopen refresh fails",
   );
   await context.setOffline(false);

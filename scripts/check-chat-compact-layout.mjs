@@ -179,9 +179,14 @@ try {
     path: new URL(engine + "-entry.png", output).pathname,
   });
   check(
-    initial.prompts.join("|") ===
-      "我要留言|今天做什么？|怎么改轮序？|帮我设提醒",
-    "every entry exposes note first and preserves existing prompt order with cached history",
+    initial.prompts[0] === "我要留言" &&
+      initial.prompts.length === 3 &&
+      initial.prompts
+        .slice(1)
+        .every((p) =>
+          ["今天做什么？", "怎么改轮序？", "帮我设提醒"].includes(p),
+        ),
+    "every entry exposes note first and samples two existing questions with cached history",
   );
   check(initial.gap < 2, "cached history opens directly at latest message");
   check(
@@ -265,7 +270,8 @@ try {
     "keyboard recovery restores normal header and back",
   );
   check(
-    restored.prompts.length === 4 && restored.promptBox.height > 20,
+    restored.prompts.join("|") === initial.prompts.join("|") &&
+      restored.promptBox.height === 44,
     "per-entry suggestions recover after keyboard without note workflow",
   );
   const scroller = page.getByTestId("chat-history");
@@ -458,7 +464,7 @@ try {
     });
     const s = await read();
     check(
-      s.composer.width > 300 && s.prompts.length === 4,
+      s.composer.width > 300 && s.prompts.length === 3,
       theme + " theme keeps dock and shortcuts usable",
     );
   }

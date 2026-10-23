@@ -14,6 +14,9 @@ import ChatReplyText from "./ChatReplyText.vue";
 import CompanionChatComposer from "./CompanionChatComposer.vue";
 import ConversationNoteFlow from "./ConversationNoteFlow.vue";
 import { useConversationNotes } from "../composables/useConversationNotes";
+import { useChatReplyPresentation } from "../composables/useChatReplyPresentation";
+import { pickQuickPrompts } from "../interaction/chatQuickPrompts";
+import type { ChatSourceItem } from "../interaction/chatReplyText";
 import type { NoteState } from "../interaction/conversationNotes";
 import type { ChoreMember } from "../api/chores";
 import {
@@ -78,6 +81,7 @@ const present = ref(false),
   historyFrame = ref<HTMLElement>(),
   dockPanel = ref<HTMLElement>(),
   dockInner = ref<HTMLElement>(),
+  quickRow = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
 const draft = ref("");
 const historyReady = ref(false);
@@ -94,16 +98,11 @@ const available = ref(false),
   awaiting = ref(false),
   error = ref(""),
   emotion = ref("02"),
-  items = ref<
-    {
-      id: string;
-      role: "user" | "assistant";
-      text: string;
-      fresh?: boolean;
-    }[]
-  >([]),
+  items = ref<ChatSourceItem[]>([]),
   reminders = ref<ChatReminder[]>([]),
   actionBusy = ref("");
+const replyPresentation = useChatReplyPresentation(() => items.value);
+watch(replyPresentation.displayedItems, () => bottom());
 const viewport = ref({ top: 0, height: window.innerHeight, inset: 0 }),
   keyboardOpen = ref(false),
   // The short-screen baseline is still decided once on entry. Keyboard
@@ -355,6 +354,7 @@ watch(footer, (element) => {
 });
 
 function cancel() {
+  replyPresentation.flush();
   epoch++;
   controller?.abort();
   controller = undefined;
@@ -543,6 +543,12 @@ async function show() {
   // Every entry offers the existing quick prompts again, with the note action
   // first. A pending reverse transition from the previous entry is discarded.
   suggestionsAllowed.value = true;
+  if (!wasPresent)
+    quickPrompts.value = pickQuickPrompts(
+      window.innerWidth,
+      quickPrompts.value,
+    );
+  if (quickRow.value) quickRow.value.scrollLeft = 0;
   leavingNote.value = null;
   panelHeight.value = 0;
   cancel();
@@ -818,7 +824,7 @@ function edgeUp(event: PointerEvent) {
     motionAllowed() ? settleSpring : { duration: 0 },
   );
 }
-const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提醒"];
+const quickPrompts = ref<string[]>([]);
 function useQuickPrompt(prompt: string) {
   // Choosing an AI prompt collapses this entry's suggestions; new messages do
   // not reopen them.
@@ -836,7 +842,9 @@ const hasConversation = computed(() =>
 // Until the first history frame has been measured and pinned, only the
 // existing skeleton exists in the history area. The ball, input and glass have
 // already expanded around it.
-const visibleItems = computed(() => (historyReady.value ? items.value : []));
+const visibleItems = computed(() =>
+  historyReady.value ? replyPresentation.displayedItems.value : [],
+);
 const visibleReminders = computed(() =>
   historyReady.value
     ? reminders.value.filter(
@@ -890,12 +898,22 @@ async function load() {
     const localNotes = items.value.filter((m) => m.id.startsWith("note:"));
     items.value = [
       ...state.messages.flatMap((m) =>
-        m.messages.map((text, i) => ({
-          id: `${m.request_id}:${m.role}:${i}`,
-          role: m.role,
-          text,
-          fresh: false,
-        })),
+        m.role === "assistant"
+          ? [
+              {
+                id: `${m.request_id}:assistant:0`,
+                role: m.role,
+                text: m.messages.join(""),
+                parts: [...m.messages],
+                fresh: false,
+              },
+            ]
+          : m.messages.map((text, i) => ({
+              id: `${m.request_id}:${m.role}:${i}`,
+              role: m.role,
+              text,
+              fresh: false,
+            })),
       ),
       ...localNotes,
     ];
@@ -969,17 +987,13 @@ async function send(text: string, isRetry = false) {
     if (generation !== epoch) return;
     awaiting.value = false;
     emotion.value = reply.emotion;
-    for (let i = 0; i < reply.messages.length; i++) {
-      if (generation !== epoch) return;
-      items.value.push({
-        id: `${request.id}:assistant:${i}`,
-        role: "assistant",
-        text: reply.messages[i]!,
-        fresh: true,
-      });
-      bottom();
-      if (motionAllowed()) await pause(140);
-    }
+    items.value.push({
+      id: `${request.id}:assistant:0`,
+      role: "assistant",
+      text: reply.messages.join(""),
+      parts: [...reply.messages],
+      fresh: true,
+    });
     if (generation === epoch && reply.reminder)
       reminders.value = [...reminders.value, reply.reminder];
     retry = null;
@@ -1075,6 +1089,7 @@ function inactive() {
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 function quiet() {
   if (!motionAllowed()) {
+    replyPresentation.flush();
     const closingNow = phase.value === "closing";
     motionEpoch++;
     chatTravel.complete(closingNow ? "close" : "open");
@@ -1272,7 +1287,9 @@ function time(value: string) {
                   v-for="item in visibleItems"
                   :key="item.id"
                   class="chat-bubble"
-                  :class="item.role"
+                  :class="[item.role, { 'is-followup': item.followup }]"
+                  :data-message-id="item.id"
+                  :data-message-group="item.group"
                   :initial="item.fresh ? bubbleOrigin(item.role) : false"
                   :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
                   :transition="motionTransition"
@@ -1395,6 +1412,7 @@ function time(value: string) {
                     </div>
                     <div
                       v-else
+                      ref="quickRow"
                       class="chat-quick-prompts"
                       :class="{ 'is-hidden': !suggestionsVisible }"
                       :inert="!suggestionsVisible ? true : undefined"
@@ -1680,12 +1698,23 @@ function time(value: string) {
 }
 .chat-quick-prompts {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
   gap: 8px;
   margin: 0;
   transition:
     opacity 180ms var(--ui-ease-out),
     transform 240ms var(--ui-ease-out);
+}
+.chat-quick-prompts::-webkit-scrollbar {
+  display: none;
 }
 .chat-quick-prompts.is-hidden {
   opacity: 0;
@@ -1693,6 +1722,9 @@ function time(value: string) {
   pointer-events: none;
 }
 .chat-quick-prompts button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  max-height: 42px;
   border: 1px solid #ffffff55;
   border-radius: 20px;
   padding: 10px 12px;
@@ -1772,6 +1804,9 @@ function time(value: string) {
   line-break: loose;
   text-wrap: pretty;
   transform-origin: bottom left;
+}
+.chat-bubble.is-followup {
+  margin-top: -6px;
 }
 .chat-bubble.user {
   align-self: flex-end;
