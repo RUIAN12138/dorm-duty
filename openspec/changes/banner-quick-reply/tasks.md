@@ -8,8 +8,9 @@
 - [x] Existing banner/inbox/chat/keyboard/gesture regressions.
 - [x] Isolated visual preview and screenshots.
 - [ ] iPhone Safari actual keyboard acceptance.
-- [ ] Android WebView/HarmonyOS ArkWeb native verification (or explicit limits).
+- [x] Record Android WebView/HarmonyOS ArkWeb limits: no available native device.
+- [ ] Android WebView/HarmonyOS ArkWeb actual keyboard acceptance.
 ## Delivery
-- [ ] Record fresh PR/publish authorizations after final scope digest.
-- [ ] Update/attach existing review PR #82; do not merge main.
-- [ ] Backup, deploy code-only, exact public assets/health/history checks.
+- [x] Record fresh PR/publish authorizations after final scope digest.
+- [x] Update/attach existing review PR #82; do not merge main.
+- [x] Backup, deploy code-only, exact public assets/health/history checks.

@@ -28,11 +28,11 @@
   "prAuthorization": {
     "action": "create-for-review",
     "userStatement": "完成后更新 pr 和网站",
-    "authorizedDigest": "aa9f925ab12dc1fb72ce03aa0a010268a9f8045678f256e69dcc10f8db586c83"
+    "authorizedDigest": "9578dc51d015a7b45c4e0fe3c5c42d830ef298745a4016726c6feb28851b053c"
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
     "userStatement": "完成后更新 pr 和网站",
-    "authorizedDigest": "aa9f925ab12dc1fb72ce03aa0a010268a9f8045678f256e69dcc10f8db586c83"
+    "authorizedDigest": "9578dc51d015a7b45c4e0fe3c5c42d830ef298745a4016726c6feb28851b053c"
   }
 }

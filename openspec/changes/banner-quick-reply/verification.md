@@ -26,4 +26,13 @@
 - 无真实室友消息/邮件/推送发送，跨设备验证为服务端重新请求获得read_at，不声称实体双设备验收。
 
 ## Delivery
-本地回归和v78构建通过，隔离预览http://127.0.0.1:8092/?start=1 已启动（合成宿舍，模拟AI，不发邮件/推送）。接下来执行绑定当前内容的门禁、更新PR #82、代码包备份发布及只读线上核对。生产数据库禁止替换；备份/回滚/旧打卡逐条摘要校验必须保留。
+- 用户原话「完成后更新 pr 和网站」分别绑定PR与publish内容摘要；acceptance保持pending，不合并main。实现提交a4d78c0bb5334e388642ee46484269869f12012c；随后仅补充本交付记录和授权摘要，不改变线上代码。
+- 已更新并附加PR #82：https://github.com/RUIAN12138/dorm-duty/pull/82 。沿用codex/liquid-glass-optics开发分支快进推送，未force push。
+- 隔离预览http://127.0.0.1:8092/?start=1 ，合成宿舍，模拟AI，不发邮件/推送。data/banner-reply/preview-check.json通过，已检查preview-reply.png。
+- 已部署https://8.148.190.114/dorm-duty/ ，正式版本20261023-banner-reply-v78，运行提交a4d78c0bb5334e388642ee46484269869f12012c。
+- 代码包SHA256 c2fbecbc0ace1dee63939155181a2c70652d12436e2c5d9fbe24bce92483f402；仅scripts/site，52个归档条目，无数据库/凭据。
+- 发布前备份/opt/dorm-duty/backups/dorm-20261023T021916Z.sqlite；历史摘要/opt/dorm-duty/backups/banner-v78-history.json。发布后67条旧完成记录逐条摘要一致，当前67条，database_id保持不变。没有恢复、替换或覆写生产数据库。
+- 发布目录/opt/dorm-duty/releases/20261023-banner-reply-v78；上一版/opt/dorm-duty/releases/20261023-compact-chat-v77保留。安装器健康检查失败自动切回原symlink；人工回滚也只应原子恢复current指向v77后重启服务，禁止回滚数据库以覆盖新记录。
+- 公网只读核对143份静态资源与发布包逐字节相同，/、/water、/calendar均为正确入口，健康检查版本/提交一致。
+- 全新未登录浏览器通过：真实HTTPS/JS、v78更新提示文案、确认后刷新不重复提示、无运行错误/5xx、无非GET生产请求。未在正式宿舍发测试留言或替用户打卡。
+- 真实发布证据位于data/banner-reply/publish/{archive-check.json,deployment.json,backup-before.log,history-after.json,public-verification.json,public-browser.json,public-page.png}。GitHub CI状态以PR当前提交检查为准，未用本地测试冒充CI结果。
