@@ -128,7 +128,9 @@ async function installViewportHandle(page) {
         nameplate: rel(root.querySelector(".chat-nameplate")),
         toolbar: rel(root.querySelector(".chat-toolbar button")),
         frost: rel(root.querySelector(".chat-top-frost")),
-        noteShortcut: !!root.querySelector(".chat-note-shortcut"),
+        noteShortcut: !![
+          ...root.querySelectorAll(".chat-quick-prompts button"),
+        ].find((el) => el.textContent.trim() === "我要留言"),
         historyGap:
           scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
         historyTop: scroller.scrollTop,
@@ -144,18 +146,37 @@ const setStage = async (page, stage) => {
 const idleGap = (height) => Math.max(10, 58 - Math.max(0, 844 - height));
 const near = (a, b, tolerance = 1.5) => Math.abs(a - b) <= tolerance;
 function assertStable(label, before, after) {
-  for (const key of ["ball", "nameplate", "toolbar"]) {
+  if (after.inset > 0) {
     check(
-      near(after[key].top, before[key].top, 0.75) &&
-        near(after[key].width, before[key].width, 0.75),
-      label + ": " + key + " stays fixed against the visual top",
+      after.ball.width <= before.ball.width + 0.75 &&
+        after.ball.width >= before.ball.width * 0.64,
+      label + ": compact ball stays within the intended size range",
+    );
+    check(
+      after.ball.top <= before.ball.top + 0.75,
+      label + ": compact header releases space upward",
+    );
+    check(
+      after.nameplate.top <= before.nameplate.top + 0.75,
+      label + ": nameplate follows the same compression",
+    );
+    check(
+      after.frost.height <= before.frost.height + 0.75,
+      label + ": frost releases the same message space",
+    );
+  } else {
+    for (const key of ["ball", "nameplate", "toolbar"]) {
+      check(
+        near(after[key].top, before[key].top, 0.75) &&
+          near(after[key].width, before[key].width, 0.75),
+        label + ": " + key + " restores its idle geometry",
+      );
+    }
+    check(
+      near(after.frost.height, before.frost.height, 0.75),
+      label + ": frost restores its idle height",
     );
   }
-  check(
-    near(after.frost.height, before.frost.height, 0.75) &&
-      near(after.frost.top, before.frost.top, 0.75),
-    label + ": top frost keeps its visual position and size",
-  );
 }
 let page, context;
 try {
@@ -228,8 +249,9 @@ try {
     "fully open keyboard leaves exactly 10px to the composer",
   );
   check(
-    !finalStage.compact && finalStage.ball.width === initial.ball.width,
-    "keyboard does not trigger the compact header or resize the ball",
+    finalStage.ball.width / initial.ball.width >= 0.65 &&
+      finalStage.ball.width / initial.ball.width <= 0.75,
+    "keyboard compacts the header to 65–75 percent per latest requirement",
   );
 
   // Candidate bar grows and shrinks while the keyboard stays attached.
@@ -451,7 +473,7 @@ try {
     "keyboard open/close retains the unsent draft",
   );
   await setStage(page, { height: 500, top: 0 });
-  await page.getByRole("button", { name: "返回宿舍", exact: true }).click();
+  await page.keyboard.press("Escape");
   await setStage(page, { height: 844, top: 0 });
   await page.locator(".companion-chat").waitFor({ state: "hidden" });
   await page.waitForTimeout(250);
@@ -473,7 +495,7 @@ try {
   await page.locator(".companion-chat").waitFor({ state: "hidden" });
   await page.waitForTimeout(250);
 
-  // Short screen: compact is an entry decision, not a keyboard reaction.
+  // Short-screen baseline is already compact; the keyboard must not enlarge it.
   await page.evaluate(() => window.qaRestoreViewport());
   await page.waitForTimeout(80);
   await page.setViewportSize({ width: 390, height: 520 });
@@ -560,8 +582,8 @@ try {
     "resize-only WebView attaches the composer without VisualViewport",
   );
   check(
-    near(fallbackKeyboard.ball - fallbackIdle.ball, 0, 0.75),
-    "resize-only WebView keeps the ball fixed against the visual top",
+    fallbackKeyboard.ball < fallbackIdle.ball - 10,
+    "resize-only WebView releases header space with the same compact state",
   );
   await fallback.setViewportSize({ width: 390, height: 844 });
   await fallback.waitForTimeout(220);

@@ -1,0 +1,21 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "be34b73dc32577cc447ff428c67e8f4dab56a5c0",
+  "allowed": [
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/CompanionChatComposer.vue",
+    "frontend/src/components/ConversationNoteFlow.vue",
+    "frontend/src/interaction/chatLayout.ts",
+    "frontend/src/interaction/chatScroll.ts",
+    "frontend/src/interaction/chatViewport.ts",
+    "scripts/check-chat-compact-layout.mjs",
+    "scripts/check-chat-keyboard-viewport.mjs",
+    "scripts/check-companion-chat-browser.mjs",
+    "openspec/changes/compact-chat-layout/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

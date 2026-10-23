@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { motion, AnimatePresence } from "motion-v";
+import { motion } from "motion-v";
 import { motionAllowed } from "../interaction/motion";
 import { chatTransition } from "../interaction/chatMotion";
 import type { ChoreMember } from "../api/chores";
@@ -23,65 +23,61 @@ const others = computed(() =>
 const sending = computed(() => props.state.phase === "sending");
 </script>
 <template>
-  <motion.section
-    layout
-    :transition="chatTransition('layout')"
+  <section
     class="conversation-note"
     data-testid="conversation-note"
     :data-phase="state.phase"
     aria-label="对话留言"
     :aria-busy="sending"
   >
-    <AnimatePresence mode="popLayout" :initial="false" as="div">
-      <motion.div
-        :key="
-          state.phase === 'sending' || state.phase === 'failed'
-            ? 'confirm'
-            : state.phase
-        "
-        layout="position"
-        :initial="motionAllowed() ? { opacity: 0, y: 5, scale: 0.985 } : false"
-        :animate="{ opacity: 1, y: 0, scale: 1 }"
-        :exit="{ opacity: 0, y: -3, scale: 0.985, pointerEvents: 'none' }"
-        :transition="chatTransition('layout')"
+    <!-- The shared dock owns the reversible outer height. This content only
+         crossfades when the workflow step changes; it never animates layout. -->
+    <motion.div
+      :key="
+        state.phase === 'sending' || state.phase === 'failed'
+          ? 'confirm'
+          : state.phase
+      "
+      :initial="motionAllowed() ? { opacity: 0, y: 5 } : false"
+      :animate="{ opacity: 1, y: 0 }"
+      :transition="chatTransition('layout')"
+    >
+      <div
+        v-if="state.phase === 'recipient'"
+        class="conversation-recipients"
+        role="group"
+        aria-label="留言给谁"
       >
-        <div
-          v-if="state.phase === 'recipient'"
-          class="conversation-recipients"
-          role="group"
-          aria-label="留言给谁"
+        <button
+          v-if="others.length"
+          type="button"
+          @click="emit('choose', 'all')"
         >
-          <button
-            v-if="others.length"
-            type="button"
-            @click="emit('choose', 'all')"
-          >
-            所有人
-          </button>
-          <button
-            v-for="member in others"
-            :key="member.user_id"
-            type="button"
-            @click="emit('choose', member.user_id)"
-          >
-            {{ member.nickname }}
-          </button>
-        </div>
-        <template v-else>
-          <span class="note-label">{{
-            sending
-              ? "正在发送"
-              : state.phase === "content"
-                ? "留言给"
-                : "确认留言"
-          }}</span>
-          <strong>{{ noteTargetName(state.target, members) }}</strong>
-          <p v-if="state.text" class="conversation-note-text">
-            {{ state.text }}
-          </p>
-        </template>
-      </motion.div>
-    </AnimatePresence>
+          所有人
+        </button>
+        <button
+          v-for="member in others"
+          :key="member.user_id"
+          type="button"
+          @click="emit('choose', member.user_id)"
+        >
+          {{ member.nickname }}
+        </button>
+      </div>
+      <template v-else>
+        <span class="note-label">{{
+          sending
+            ? "正在发送"
+            : state.phase === "content"
+              ? "留言给"
+              : "确认留言"
+        }}</span>
+        <strong>{{ noteTargetName(state.target, members) }}</strong>
+        <p v-if="state.text" class="conversation-note-text">
+          {{ state.text }}
+        </p>
+      </template>
+    </motion.div>
     <p v-if="state.error" class="conversation-note-error" role="alert">
       {{ state.error }}
     </p>
@@ -122,7 +118,7 @@ const sending = computed(() => props.state.phase === "sending");
         }}
       </button>
     </div>
-  </motion.section>
+  </section>
 </template>
 <style scoped>
 .conversation-note {

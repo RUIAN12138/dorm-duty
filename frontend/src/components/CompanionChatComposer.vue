@@ -30,6 +30,7 @@ const text = computed({
   editing = ref(false),
   pressed = ref(false),
   input = ref<HTMLTextAreaElement>(),
+  mirror = ref<HTMLElement>(),
   composerText = ref<HTMLElement>(),
   inputHeight = ref(26);
 const composing = ref(false);
@@ -63,10 +64,11 @@ function prepare(event: PointerEvent) {
   }
 }
 function resize() {
-  if (!input.value) return;
-  input.value.style.height = "26px";
-  inputHeight.value = Math.min(78, Math.max(26, input.value.scrollHeight));
-  input.value.style.height = inputHeight.value + "px";
+  // Measure a hidden mirror instead of collapsing the visible textarea to one
+  // line and restoring it. The visible box never visits an intermediate size.
+  if (!input.value || !mirror.value) return;
+  const next = Math.min(78, Math.max(26, mirror.value.scrollHeight));
+  if (next !== inputHeight.value) inputHeight.value = next;
   emit("resize");
 }
 watch(text, () => {
@@ -135,6 +137,12 @@ defineExpose({ cancel, dismiss });
       @pointerdown="prepare"
     >
       <LiquidGlassSurface class="composer-optics" :active="pressed" />
+      <div
+        ref="mirror"
+        class="composer-mirror"
+        aria-hidden="true"
+        v-text="text + '\u200b'"
+      />
       <textarea
         ref="input"
         :style="{ height: inputHeight + 'px' }"
@@ -197,6 +205,22 @@ defineExpose({ cancel, dismiss });
 .composer-text > .composer-send {
   position: relative;
   z-index: 1;
+}
+/* Hidden natural-height copy of the draft. It matches the textarea's text
+   column (container minus 20px left padding, 12px gap and the 44px button). */
+.composer-mirror {
+  position: absolute;
+  top: 6px;
+  left: 20px;
+  right: 63px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 16px;
+  line-height: 26px;
+  min-height: 26px;
 }
 .composer-text:focus-within {
   /* Two local layers: a crisp edge and a soft outer shadow, both scoped to the

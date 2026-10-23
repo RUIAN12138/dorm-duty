@@ -1204,13 +1204,14 @@ try {
           frame.height > 180 &&
           input.bottom <= 454 &&
           Math.abs(454 - input.bottom - 10) < 1.5 &&
-          Math.abs(ball.width - before.width) < 0.75 &&
-          Math.abs(ball.top - root.top - before.top) < 0.75 &&
+          ball.width / before.width >= 0.65 &&
+          ball.width / before.width <= 0.75 &&
+          ball.top - root.top < before.top &&
           Math.abs(root.height - 410) < 0.75 &&
           root.top === 44
         );
       }, keyboardHeaderBefore),
-      "visual keyboard resize preserves the header and attaches composer 10px above keyboard",
+      "visual keyboard resize compacts the header and attaches composer 10px above keyboard",
     );
     await checkInputGlass(
       "keyboard viewport retains translucent input glass and continuous safe-area veil",

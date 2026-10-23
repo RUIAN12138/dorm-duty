@@ -8,12 +8,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "reka-ui";
-import { animate, motion, AnimatePresence } from "motion-v";
+import { animate, motion } from "motion-v";
 import DormCompanion from "./DormCompanion.vue";
 import ChatReplyText from "./ChatReplyText.vue";
 import CompanionChatComposer from "./CompanionChatComposer.vue";
 import ConversationNoteFlow from "./ConversationNoteFlow.vue";
 import { useConversationNotes } from "../composables/useConversationNotes";
+import type { NoteState } from "../interaction/conversationNotes";
 import type { ChoreMember } from "../api/chores";
 import {
   companionClient,
@@ -33,6 +34,11 @@ import {
   isCompactViewportHeight,
   type ChatViewportState,
 } from "../interaction/chatViewport";
+import {
+  createChatLayoutCoordinator,
+  deriveChatHeaderLayout,
+  deriveChatPanelMax,
+} from "../interaction/chatLayout";
 import { registerNativeBack } from "../interactions/nativeBack";
 import { horizontalIntent, rubberBand } from "../interaction/gestures";
 // `committed` separates the optimistic visual preview from the irreversible
@@ -70,6 +76,8 @@ const present = ref(false),
   backdrop = ref<HTMLElement>(),
   scroll = ref<HTMLElement>(),
   historyFrame = ref<HTMLElement>(),
+  dockPanel = ref<HTMLElement>(),
+  dockInner = ref<HTMLElement>(),
   composer = ref<InstanceType<typeof CompanionChatComposer>>();
 const draft = ref("");
 const historyReady = ref(false);
@@ -98,8 +106,8 @@ const available = ref(false),
   actionBusy = ref("");
 const viewport = ref({ top: 0, height: window.innerHeight, inset: 0 }),
   keyboardOpen = ref(false),
-  // Compact is decided once when the conversation enters. The keyboard may
-  // never move or resize the ball, nameplate, toolbar or top frost.
+  // The short-screen baseline is still decided once on entry. Keyboard
+  // occlusion then compresses it progressively from the same viewport state.
   compactViewport = ref(false),
   thinking = computed(() => awaiting.value || notes.sending.value);
 let api = companionClient(props.invite, props.memberId, props.token),
@@ -164,6 +172,117 @@ watch(notes.sending, (sending) => {
       : "12";
 });
 const motionTransition = computed(() => chatTransition("bubble"));
+// Header values are pure derivations of the one viewport state. No separate
+// keyboard flag, timer or media query drives the compact pose.
+const headerLayout = computed(() =>
+  deriveChatHeaderLayout({
+    compact: compactViewport.value,
+    inset: viewport.value.inset,
+  }),
+);
+const chatStyle = computed<Record<string, string>>(() => {
+  const header = headerLayout.value;
+  return {
+    top: viewport.value.top + "px",
+    height: viewport.value.height + "px",
+    "--chat-keyboard-inset": viewport.value.inset + "px",
+    "--chat-progress": String(header.progress),
+    "--chat-ball-scale": String(header.ballScale),
+    "--chat-ball-top-base": header.ballTopBase + "px",
+    "--chat-ball-safe-gap": header.ballSafeGap + "px",
+    "--chat-toolbar-extra": header.toolbarExtra + "px",
+    "--chat-toolbar-pad-offset": header.toolbarPadOffset + "px",
+    "--chat-history-extra": header.historyExtra + "px",
+    "--chat-frost-extra": header.frostExtra + "px",
+    "--chat-nameplate-offset": header.nameplateOffset + "px",
+    "--chat-nameplate-font": header.nameplateFont + "px",
+    "--chat-nameplate-pad-y": header.nameplatePadY + "px",
+    "--chat-nameplate-pad-x": header.nameplatePadX + "px",
+    "--chat-back-opacity": String(header.backOpacity),
+  };
+});
+const panelMaxHeight = computed(() =>
+  deriveChatPanelMax(viewport.value.height),
+);
+// Suggestions are allowed once per entry. The keyboard hides them without
+// consuming that permission; choosing an AI prompt collapses them for the
+// entry, while the note workflow simply occupies the dock until it ends.
+const suggestionsAllowed = ref(true),
+  leavingNote = ref<NoteState | null>(null),
+  panelHeight = ref(0);
+const suggestionsVisible = computed(
+  () =>
+    historyReady.value &&
+    phase.value === "open" &&
+    suggestionsAllowed.value &&
+    !keyboardOpen.value &&
+    !notes.active.value &&
+    !leavingNote.value,
+);
+const displayedNote = computed(() =>
+  notes.active.value ? notes.state.value : leavingNote.value,
+);
+// The panel target closes while a cancelled note is still visible; the frozen
+// copy is removed after the reverse height animation has played.
+const panelTargetOpen = computed(
+  () => notes.active.value || suggestionsVisible.value,
+);
+// Keep the last live workflow state for the reverse transition. The state
+// machine itself is not duplicated or replayed.
+const liveNote = ref<NoteState>(notes.state.value);
+watch(
+  notes.state,
+  (state) => {
+    if (notes.active.value) liveNote.value = state;
+  },
+  { deep: true, immediate: true },
+);
+watch(notes.active, (active, was) => {
+  if (active) {
+    leavingNote.value = null;
+    layout.invalidate();
+    return;
+  }
+  if (!was) return;
+  // Reduced motion has no reverse height animation to cover, so release the
+  // frozen content immediately instead of delaying the final state.
+  if (!motionAllowed()) {
+    leavingNote.value = null;
+    layout.invalidate();
+    return;
+  }
+  leavingNote.value = liveNote.value;
+  layout.invalidate();
+  // Release only after the actual panel transition settles, including a
+  // reversal. A fixed timer would release the content mid-flight.
+  void nextTick(() => {
+    if (
+      panelHeight.value === 0 &&
+      (!dockPanel.value || dockPanel.value.offsetHeight < 0.5)
+    )
+      finishPanelClose();
+  });
+});
+watch([panelTargetOpen, () => notes.state.value.phase], () =>
+  layout.invalidate(),
+);
+watch(dockInner, (element) => {
+  dockObserver?.disconnect();
+  if (!element) return;
+  dockObserver = new ResizeObserver(() => layout.invalidate());
+  dockObserver.observe(element);
+});
+function finishPanelClose(event?: TransitionEvent) {
+  if (
+    event &&
+    (event.target !== dockPanel.value || event.propertyName !== "height")
+  )
+    return;
+  if (leavingNote.value && !notes.active.value && panelHeight.value === 0) {
+    leavingNote.value = null;
+    layout.invalidate();
+  }
+}
 function composerFocused() {
   const active = document.activeElement;
   return !!surface.value?.contains(active) && active?.tagName === "TEXTAREA";
@@ -198,11 +317,9 @@ function applyViewport(next: ChatViewportState) {
   // Only an opening/closing ball has a moving source endpoint. A normal
   // keyboard change must not measure layout on every frame.
   if (phase.value !== "open") chatTravel.measure();
-  void nextTick(() => {
-    if (!present.value || closing) return;
-    historyScroll.settleLayout();
-    refreshEdge();
-  });
+  // Header CSS, the dock cap and scroll anchoring settle once after this
+  // commit instead of each listener running its own follow.
+  layout.invalidate();
 }
 function scheduleFit() {
   viewportController.schedule();
@@ -213,11 +330,14 @@ watch(footer, (element) => {
   footerObserver?.disconnect();
   if (!element) return;
   footerObserver = new ResizeObserver(() => {
-    // Read both sizes before writing; skip writes that would not change the
-    // layout so the observer cannot restyle itself in a loop.
+    // Read both sizes (and preserve a reading anchor) before writing; skip
+    // writes that would not change the layout so the observer cannot restyle
+    // itself in a loop.
     const footerHeight = element.offsetHeight;
     const inputHeight =
       element.querySelector<HTMLElement>(".chat-composer")?.offsetHeight || 58;
+    const pinned = historyScroll.isPinned();
+    if (present.value && !pinned) historyScroll.capture();
     const host = surface.value;
     if (host) {
       const footerValue = `${footerHeight}px`;
@@ -229,8 +349,7 @@ watch(footer, (element) => {
     }
     // The same pinned state as viewport and message updates decides whether
     // this footer/keyboard padding change follows the latest message.
-    historyScroll.settleLayout();
-    refreshEdge();
+    layout.invalidate();
   });
   footerObserver.observe(element);
 });
@@ -269,10 +388,39 @@ const historyScroll = createChatScroll(
   refreshEdge,
   () => historyContent.value,
 );
+// One post-update pass measures the dock and settles the reader. Viewport,
+// footer, note and suggestion changes all invalidate this single coordinator.
+const layout = createChatLayoutCoordinator(() => {
+  measureDock();
+  // Reduced-motion/input-mode changes can cancel CSS transitions without an
+  // end event. The same layout owner releases the exit snapshot immediately.
+  if (!motionAllowed()) finishPanelClose();
+  historyScroll.settleLayout();
+  refreshEdge();
+});
+let dockObserver: ResizeObserver | undefined;
+function measureDock() {
+  const inner = dockInner.value;
+  if (!inner || !panelTargetOpen.value) {
+    if (panelHeight.value !== 0) panelHeight.value = 0;
+    return;
+  }
+  const target = Math.max(
+    0,
+    Math.min(inner.offsetHeight, panelMaxHeight.value),
+  );
+  if (Math.abs(panelHeight.value - target) >= 0.5)
+    panelHeight.value = Math.round(target);
+}
 function bottom(immediate = false) {
   void nextTick(() => {
     if (!closing) historyScroll.request(immediate);
   });
+}
+// A composer measurement changes the dock height; it is a layout event, not a
+// new-message follow, so it settles rather than starting a smooth scroll.
+function queueLayout() {
+  layout.invalidate();
 }
 function historyScrolled() {
   historyScroll.scroll();
@@ -392,6 +540,11 @@ async function show() {
   // Reopened history never replays the reply reveal.
   for (const item of items.value) item.fresh = false;
   initialStatePending = true;
+  // Every entry offers the existing quick prompts again, with the note action
+  // first. A pending reverse transition from the previous entry is discarded.
+  suggestionsAllowed.value = true;
+  leavingNote.value = null;
+  panelHeight.value = 0;
   cancel();
   endPull(true);
   closing = false;
@@ -666,6 +819,17 @@ function edgeUp(event: PointerEvent) {
   );
 }
 const quickPrompts = ["今天做什么？", "怎么改轮序？", "帮我设提醒"];
+function useQuickPrompt(prompt: string) {
+  // Choosing an AI prompt collapses this entry's suggestions; new messages do
+  // not reopen them.
+  suggestionsAllowed.value = false;
+  void send(prompt);
+}
+function startQuickNote() {
+  // The existing note state machine starts without an AI request. The dock is
+  // occupied by the workflow and returns to suggestions when it ends.
+  void notes.dispatch({ type: "start" });
+}
 const hasConversation = computed(() =>
   items.value.some((item) => !item.id.startsWith("welcome:")),
 );
@@ -915,6 +1079,7 @@ function quiet() {
     motionEpoch++;
     chatTravel.complete(closingNow ? "close" : "open");
     endPull(true);
+    finishPanelClose();
     if (closingNow) finishClose();
     else if (present.value) phase.value = "open";
   }
@@ -937,6 +1102,8 @@ watch(
 );
 watch(scope, () => {
   cancel();
+  leavingNote.value = null;
+  panelHeight.value = 0;
   items.value = [];
   draft.value = "";
   loaded = false;
@@ -960,6 +1127,8 @@ document.addEventListener("visibilitychange", inactive);
 media.addEventListener("change", quiet);
 onBeforeUnmount(() => {
   footerObserver?.disconnect();
+  dockObserver?.disconnect();
+  layout.stop();
   historyScroll.destroy();
   delete document.documentElement.dataset.companionChat;
   cancel();
@@ -1004,11 +1173,7 @@ function time(value: string) {
         :data-ready="prepared"
         :data-phase="phase"
         :class="{ 'is-compact': compactViewport, 'is-keyboard': keyboardOpen }"
-        :style="{
-          top: viewport.top + 'px',
-          height: viewport.height + 'px',
-          '--chat-keyboard-inset': viewport.inset + 'px',
-        }"
+        :style="chatStyle"
         @pointerdown.capture="chatPointerStarted"
         @click.capture="chatEntryClick"
         :aria-describedby="undefined"
@@ -1055,7 +1220,14 @@ function time(value: string) {
           :inert="phase === 'closing' ? true : undefined"
         >
           <header ref="toolbar" class="chat-toolbar">
-            <button type="button" aria-label="返回宿舍" @click="close">
+            <button
+              type="button"
+              aria-label="返回宿舍"
+              :style="{ opacity: headerLayout.backOpacity }"
+              :tabindex="headerLayout.backOpacity > 0.05 ? undefined : -1"
+              :inert="headerLayout.backOpacity > 0.05 ? undefined : true"
+              @click="close"
+            >
               <van-icon name="arrow-left" />
             </button>
           </header>
@@ -1154,46 +1326,6 @@ function time(value: string) {
                     </button>
                   </div></motion.div
                 >
-                <div
-                  v-if="historyReady && !loading && !hasConversation"
-                  class="chat-quick-prompts"
-                >
-                  <button
-                    v-for="prompt in quickPrompts"
-                    :key="prompt"
-                    :disabled="busy || !available"
-                    @click="send(prompt)"
-                  >
-                    {{ prompt }}
-                  </button>
-                </div>
-                <AnimatePresence :initial="false"
-                  ><motion.div
-                    v-if="notes.active.value && historyReady"
-                    :initial="
-                      motionAllowed()
-                        ? { opacity: 0, y: 10, scale: 0.97 }
-                        : false
-                    "
-                    :animate="{ opacity: 1, y: 0, scale: 1 }"
-                    :exit="{ opacity: 0, y: 5, scale: 0.97 }"
-                    :transition="chatTransition('layout')"
-                    style="width: 100%"
-                    key="note-flow"
-                  >
-                    <ConversationNoteFlow
-                      :state="notes.state.value"
-                      :members="members || []"
-                      :member-id="memberId"
-                      @choose="
-                        notes.dispatch({ type: 'choose', target: $event })
-                      "
-                      @edit="notes.dispatch({ type: 'edit', field: $event })"
-                      @cancel="notes.dispatch({ type: 'cancel' })"
-                      @confirm="
-                        notes.dispatch({ type: 'submit' })
-                      " /></motion.div
-                ></AnimatePresence>
                 <button
                   v-if="historyReady && hasConversation"
                   class="chat-clear"
@@ -1225,39 +1357,96 @@ function time(value: string) {
               <i class="glass-top-soft" /><i class="glass-top-edge" />
               <i class="glass-bottom-soft" /><i class="glass-bottom-edge" />
             </div>
-            <button
-              v-if="!notes.active.value && !keyboardOpen"
-              class="chat-note-shortcut"
-              :disabled="busy || !!actionBusy || phase !== 'open'"
-              @click="notes.dispatch({ type: 'start' })"
-            >
-              我要留言
-            </button>
-            <CompanionChatComposer
-              ref="composer"
-              v-model:draft="draft"
-              :busy="
-                busy ||
-                (loading && !notes.active.value) ||
-                !!actionBusy ||
-                notes.sending.value
-              "
-              :enabled="
-                (available || notes.active.value) &&
-                !notes.sending.value &&
-                phase === 'open'
-              "
-              :placeholder="
-                notes.state.value.phase === 'content'
-                  ? '写下留言内容…'
-                  : notes.state.value.phase === 'recipient'
-                    ? '输入完整姓名，或点选室友…'
-                    : '和球球说句话…'
-              "
-              @focus="scheduleFit"
-              @resize="bottom"
-              @send="send"
-            />
+            <div class="chat-dock">
+              <!-- The panel wrapper is the only owner of reversible size. Its
+                   content may scroll locally but never overlays the composer. -->
+              <div
+                ref="dockPanel"
+                class="chat-dock-panel"
+                :style="{ height: panelHeight + 'px' }"
+                @transitionend="finishPanelClose"
+              >
+                <div
+                  ref="dockContent"
+                  class="chat-dock-content"
+                  :style="{ maxHeight: panelMaxHeight + 'px' }"
+                >
+                  <div ref="dockInner" class="chat-dock-inner">
+                    <div
+                      v-if="displayedNote"
+                      class="chat-dock-note"
+                      :class="{ 'is-leaving': !notes.active.value }"
+                      :inert="notes.active.value ? undefined : true"
+                    >
+                      <ConversationNoteFlow
+                        :state="displayedNote"
+                        :style="{
+                          maxHeight: Math.max(36, panelMaxHeight - 8) + 'px',
+                        }"
+                        :members="members || []"
+                        :member-id="memberId"
+                        @choose="
+                          notes.dispatch({ type: 'choose', target: $event })
+                        "
+                        @edit="notes.dispatch({ type: 'edit', field: $event })"
+                        @cancel="notes.dispatch({ type: 'cancel' })"
+                        @confirm="notes.dispatch({ type: 'submit' })"
+                      />
+                    </div>
+                    <div
+                      v-else
+                      class="chat-quick-prompts"
+                      :class="{ 'is-hidden': !suggestionsVisible }"
+                      :inert="!suggestionsVisible ? true : undefined"
+                      :aria-hidden="!suggestionsVisible"
+                      data-testid="chat-quick-prompts"
+                    >
+                      <button
+                        type="button"
+                        :disabled="busy || !!actionBusy || phase !== 'open'"
+                        @click="startQuickNote"
+                      >
+                        我要留言
+                      </button>
+                      <button
+                        v-for="prompt in quickPrompts"
+                        :key="prompt"
+                        type="button"
+                        :disabled="busy || !available"
+                        @click="useQuickPrompt(prompt)"
+                      >
+                        {{ prompt }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <CompanionChatComposer
+                ref="composer"
+                v-model:draft="draft"
+                :busy="
+                  busy ||
+                  (loading && !notes.active.value) ||
+                  !!actionBusy ||
+                  notes.sending.value
+                "
+                :enabled="
+                  (available || notes.active.value) &&
+                  !notes.sending.value &&
+                  phase === 'open'
+                "
+                :placeholder="
+                  notes.state.value.phase === 'content'
+                    ? '写下留言内容…'
+                    : notes.state.value.phase === 'recipient'
+                      ? '输入完整姓名，或点选室友…'
+                      : '和球球说句话…'
+                "
+                @focus="scheduleFit"
+                @resize="queueLayout"
+                @send="send"
+              />
+            </div>
           </footer>
           <Transition name="chat-error">
             <div v-if="error" class="chat-error" role="alert">
@@ -1276,24 +1465,6 @@ function time(value: string) {
   >
 </template>
 <style scoped>
-.chat-note-shortcut {
-  width: max-content;
-  min-height: 36px;
-  padding: 6px 14px;
-  margin-bottom: 8px;
-  border: 1px solid var(--ui-border);
-  border-radius: 18px;
-  background: var(--chat-glass);
-  color: var(--ui-ink);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-  transition: transform var(--ui-release-time) var(--ui-ease-out);
-}
-.chat-note-shortcut:not(:disabled):active {
-  transform: var(--ui-press-small);
-  transition-duration: var(--ui-press-time);
-}
 /* Static page frost also covers WebKit compositors that drop backdrop blur
    across fixed/contained siblings. Only the chat presence owns this state. */
 :global(html[data-companion-chat="true"] .app-stage),
@@ -1327,7 +1498,23 @@ function time(value: string) {
   z-index: 2101;
   outline: 0;
   color: var(--ui-ink);
-  --chat-ball-top: max(48px, calc(env(safe-area-inset-top) + 28px));
+  /* The ball top keeps the real safe area while its base and gap interpolate
+     from the keyboard progress. Every header metric below derives from the
+     same progress value. */
+  --chat-ball-top: max(
+    var(--chat-ball-top-base, 48px),
+    calc(env(safe-area-inset-top) + var(--chat-ball-safe-gap, 28px))
+  );
+  --chat-toolbar-extra: 128px;
+  --chat-toolbar-pad-offset: 12px;
+  --chat-history-extra: 144px;
+  --chat-frost-extra: 144px;
+  --chat-nameplate-offset: 96px;
+  --chat-nameplate-font: 14px;
+  --chat-nameplate-pad-y: 5px;
+  --chat-nameplate-pad-x: 18px;
+  --chat-ball-scale: 1;
+  --chat-history-bottom-extra: 22px;
   touch-action: pan-y pinch-zoom;
 }
 .companion-chat[data-ready="false"] {
@@ -1337,7 +1524,7 @@ function time(value: string) {
   position: absolute;
   z-index: 2;
   inset: 0 0 auto;
-  height: calc(var(--chat-ball-top) + 144px);
+  height: calc(var(--chat-ball-top) + var(--chat-frost-extra));
   pointer-events: none;
 }
 .chat-ball {
@@ -1377,12 +1564,18 @@ function time(value: string) {
   display: flex;
   justify-content: flex-start;
   flex: none;
-  padding-top: max(24px, calc(var(--chat-ball-top) - 12px));
-  height: calc(var(--chat-ball-top) + 128px);
+  padding-top: max(
+    8px,
+    calc(var(--chat-ball-top) - var(--chat-toolbar-pad-offset))
+  );
+  height: calc(var(--chat-ball-top) + var(--chat-toolbar-extra));
   box-sizing: border-box;
 }
 .chat-toolbar button {
   pointer-events: auto;
+  /* paintReveal owns the toolbar opacity; the back control fades separately so
+     the two never write the same property. */
+  opacity: var(--chat-back-opacity, 1);
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -1401,16 +1594,16 @@ function time(value: string) {
 .chat-nameplate {
   opacity: 0;
   position: absolute;
-  top: calc(var(--chat-ball-top) + 96px);
+  top: calc(var(--chat-ball-top) + var(--chat-nameplate-offset));
   left: 50%;
   translate: -50% 0;
-  padding: 5px 18px;
+  padding: var(--chat-nameplate-pad-y) var(--chat-nameplate-pad-x);
   border-radius: 16px;
   border: 1px solid #ffffff50;
   background: var(--chat-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  font-size: 14px;
+  font-size: var(--chat-nameplate-font);
   z-index: 3;
 }
 .chat-ball :deep(.companion-bubble) {
@@ -1470,8 +1663,11 @@ function time(value: string) {
   overflow-anchor: none;
   scrollbar-width: none;
   display: block;
-  padding: calc(var(--chat-ball-top) + 144px) 4px
-    calc(var(--chat-footer-height) + var(--chat-footer-gap) + 22px);
+  padding: calc(var(--chat-ball-top) + var(--chat-history-extra)) 4px
+    calc(
+      var(--chat-footer-height) + var(--chat-footer-gap) +
+        var(--chat-history-bottom-extra)
+    );
   margin: 0;
 }
 .chat-history-content {
@@ -1486,7 +1682,15 @@ function time(value: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 6px;
+  margin: 0;
+  transition:
+    opacity 180ms var(--ui-ease-out),
+    transform 240ms var(--ui-ease-out);
+}
+.chat-quick-prompts.is-hidden {
+  opacity: 0;
+  transform: translateY(4px) scale(0.985);
+  pointer-events: none;
 }
 .chat-quick-prompts button {
   border: 1px solid #ffffff55;
@@ -1496,6 +1700,52 @@ function time(value: string) {
   font-size: 14px;
   color: var(--ui-ink);
   background: var(--chat-glass);
+}
+/* Note, suggestions and composer share this dock. The panel is the one
+   interruptible size owner; its content scrolls locally when space is short. */
+.chat-dock {
+  position: relative;
+  width: 100%;
+}
+.chat-dock-panel {
+  height: 0;
+  overflow: hidden;
+  transition: height 260ms var(--ui-ease-out);
+}
+.chat-dock-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.chat-dock-content::-webkit-scrollbar {
+  display: none;
+}
+.chat-dock-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.chat-dock-note {
+  width: 100%;
+  opacity: 1;
+  transform-origin: center bottom;
+  transition:
+    opacity 200ms var(--ui-ease-out),
+    transform 260ms var(--ui-ease-out);
+}
+.chat-dock-note :deep(.conversation-note) {
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.chat-dock-note :deep(.conversation-note)::-webkit-scrollbar {
+  display: none;
+}
+.chat-dock-note.is-leaving {
+  opacity: 0;
+  transform: translateY(5px) scale(0.985);
 }
 .chat-clear {
   align-self: center;
@@ -1785,37 +2035,27 @@ function time(value: string) {
   width: 88px;
   height: 88px;
   transform-origin: center top;
-  transition: transform 220ms var(--ui-ease-out);
+  /* chatTravel owns the outer .chat-ball transform; this inner scale is the
+     only compact-scale driver. No transition: viewport samples are the frames. */
+  transform: scale(var(--chat-ball-scale, 1));
 }
+/* Fallbacks for the first paint before the derived inline values arrive. The
+   inline values use the same idle numbers, so a keyboard-free view is exact. */
 .is-compact {
-  --chat-ball-top: 18px;
-}
-.is-compact .chat-ball-visual {
-  transform: scale(0.64);
-}
-.is-compact .chat-toolbar {
-  height: 108px;
-  padding-top: 12px;
-}
-.is-compact .chat-nameplate {
-  top: 79px;
-  padding: 3px 12px;
-  font-size: 12px;
-}
-.is-compact .chat-masthead {
-  height: 125px;
+  --chat-ball-top-base: 18px;
+  --chat-ball-safe-gap: 8px;
+  --chat-toolbar-extra: 90px;
+  --chat-toolbar-pad-offset: 6px;
+  --chat-history-extra: 98px;
+  --chat-frost-extra: 107px;
+  --chat-nameplate-offset: 61px;
+  --chat-nameplate-font: 12px;
+  --chat-nameplate-pad-y: 3px;
+  --chat-nameplate-pad-x: 12px;
+  --chat-history-bottom-extra: 12px;
 }
 .is-compact .chat-surface {
   --chat-footer-gap-idle: max(12px, var(--chat-safe-bottom));
-}
-.is-compact .chat-history {
-  padding-top: 116px;
-  padding-bottom: calc(
-    var(--chat-footer-height) + var(--chat-footer-gap) + 12px
-  );
-}
-.is-compact .chat-top-frost {
-  height: 125px;
 }
 .is-compact .chat-error {
   bottom: 94px;
@@ -1828,6 +2068,9 @@ function time(value: string) {
     animation: none;
   }
   .chat-ball-visual,
+  .chat-dock-panel,
+  .chat-dock-note,
+  .chat-quick-prompts,
   .companion-chat button {
     transition: none;
   }
