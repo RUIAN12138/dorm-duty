@@ -1,0 +1,36 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "382bcf8115953d8a0f31e577c15263bc549c5070",
+  "allowed": [
+    "frontend/src/components/ReminderBanner.vue",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/ReleaseNotice.vue",
+    "frontend/src/composables/useReminderBanner.ts",
+    "frontend/src/composables/useReminderInbox.ts",
+    "frontend/src/composables/useBannerQuickReply.ts",
+    "frontend/src/interaction/bannerReplyLayout.ts",
+    "scripts/check-banner-quick-reply.mjs",
+    "scripts/check-banner-reply-browser.mjs",
+    "scripts/check-reminder-banner.mjs",
+    "scripts/check-reminder-inbox.mjs",
+    "scripts/check-sheet-banner-polish.mjs",
+    "openspec/changes/banner-quick-reply/",
+    "scripts/check-screen-gesture-check.mjs",
+    "scripts/check-navigation-components.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "完成后更新 pr 和网站",
+    "authorizedDigest": "aa9f925ab12dc1fb72ce03aa0a010268a9f8045678f256e69dcc10f8db586c83"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "完成后更新 pr 和网站",
+    "authorizedDigest": "aa9f925ab12dc1fb72ce03aa0a010268a9f8045678f256e69dcc10f8db586c83"
+  }
+}

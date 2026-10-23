@@ -17,6 +17,7 @@ export function useReminderBanner(
     disposed = false,
     account = source().identity;
   let leavingId: number | null = null;
+  let heldId: number | null = null;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
   function seen() {
     const key = `dorm-reminder-banner-v1:${account}`;
@@ -40,14 +41,15 @@ export function useReminderBanner(
       /* This visit remains usable. */
     }
   }
-  function dismiss() {
+  function dismiss(id?: number) {
     if (!active.value) return;
+    if (id !== undefined && active.value.id !== id) return;
     leaving = true;
     leavingId = active.value.id;
     clearTimeout(leaveTimer);
     // A notice superseded before its DOM mounts has no Transition leave event.
-    const id = leavingId;
-    leaveTimer = setTimeout(() => settled(id), 350);
+    const leavingNote = leavingId;
+    leaveTimer = setTimeout(() => settled(leavingNote), 350);
     active.value = null;
   }
   function refresh() {
@@ -57,20 +59,28 @@ export function useReminderBanner(
       account = s.identity;
       clearTimeout(leaveTimer);
       leavingId = null;
+      heldId = null;
       active.value = null;
       leaving = false;
     }
     if (!s.visible) return;
+    // While a reply is open the visible note is pinned: neither a newer note
+    // nor another device reading it may swap the target under the draft.
+    const held = heldId !== null && active.value?.id === heldId;
     if (s.inboxOpen) {
       record(s.notes);
       dismiss();
       return;
     }
-    if (s.blocked) {
+    if (s.blocked && !held) {
       dismiss();
       return;
     }
-    if (active.value && !s.notes.some((note) => note.id === active.value?.id))
+    if (
+      active.value &&
+      !held &&
+      !s.notes.some((note) => note.id === active.value?.id)
+    )
       dismiss();
     if (active.value || leaving) return;
     const { ids } = seen();
@@ -92,6 +102,14 @@ export function useReminderBanner(
     leaving = false;
     refresh();
   }
+  function hold(id: number) {
+    if (active.value?.id === id) heldId = id;
+  }
+  function release(id?: number) {
+    if (id !== undefined && heldId !== id) return;
+    heldId = null;
+    refresh();
+  }
   watch(
     () => [
       source().identity,
@@ -105,8 +123,9 @@ export function useReminderBanner(
   );
   onScopeDispose(() => {
     disposed = true;
+    heldId = null;
     clearTimeout(leaveTimer);
     active.value = null;
   });
-  return { active, dismiss, settled, refresh };
+  return { active, dismiss, settled, refresh, hold, release };
 }

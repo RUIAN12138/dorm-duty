@@ -47,11 +47,12 @@ const result = await build({
           source = source
             .replace('<Teleport to="body">', "<div>")
             .replace("</Teleport>", "</div>")
-            .replace(
-              /<Transition\b[^>]*>/,
-              '<div @fixture-enter="cancelGesture" @fixture-leave="afterLeave">',
+            .replace(/<Transition\b([^>]*)>/g, (_, attrs) =>
+              attrs.includes(':css="false"')
+                ? '<div @fixture-enter="cancelGesture" @fixture-leave="afterLeave">'
+                : "<div>",
             )
-            .replace("</Transition>", "</div>");
+            .replace(/<\/Transition>/g, "</div>");
           return {
             contents: compileScript(parse(source).descriptor, {
               id: args.path,
@@ -64,12 +65,19 @@ const result = await build({
         b.onLoad({ filter: /.*/, namespace: "child" }, () => ({
           contents: `import{h}from'vue';export default{setup(){return()=>h('div')}}`,
         }));
+        b.onResolve({ filter: /interaction\/bannerReplyLayout$/ }, () => ({
+          path: "reply-layout",
+          namespace: "fixture",
+        }));
         b.onResolve({ filter: /interaction\/motion$/ }, () => ({
           path: "motion",
           namespace: "fixture",
         }));
-        b.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
-          contents: `export const motionAllowed=()=>globalThis.allowed;`,
+        b.onLoad({ filter: /.*/, namespace: "fixture" }, (args) => ({
+          contents:
+            args.path === "reply-layout"
+              ? `export const createBannerReplyLayout=()=>({start(){},stop(){},sync(){}});export const lockBackgroundScroll=()=>()=>{};`
+              : `export const motionAllowed=()=>globalThis.allowed;`,
         }));
       },
     },

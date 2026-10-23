@@ -55,6 +55,7 @@ import ChoreMessages from "./ChoreMessages.vue";
 import ReminderBanner from "./ReminderBanner.vue";
 import RefreshNotice from "./RefreshNotice.vue";
 import { useReminderBanner } from "../composables/useReminderBanner";
+import { useBannerQuickReply } from "../composables/useBannerQuickReply";
 import ChoreReminderSheet from "./ChoreReminderSheet.vue";
 const settingsNavigation = provideSheetNavigation();
 
@@ -836,6 +837,18 @@ const reminderBanner = useReminderBanner(() => ({
     !!detailTask.value ||
     !!document.querySelector(".sheet-layer"),
 }));
+const bannerReply = useBannerQuickReply(
+  () => ({
+    token: props.token,
+    invite: props.invite,
+    memberId: props.memberId,
+    members: board.value?.members || [],
+  }),
+  {
+    sent: (id) => finishBannerReply(id),
+    notice: (message) => showToast(message),
+  },
+);
 function presentNewReminders() {
   reminderBanner.refresh();
   if (messagesOpen.value)
@@ -885,32 +898,62 @@ watch(
   },
   { flush: "post" },
 );
-async function dismissBannerMessage() {
-  const id = reminderBanner.active.value?.id;
-  reminderBanner.dismiss();
-  if (id) {
-    const confirmed = await markRead(id, true);
-    if (alive && !confirmed) showToast("未能标为已读，请稍后重试");
-  }
+async function dismissBannerMessage(id: number, reason: "swipe" | "escape") {
+  const active = reminderBanner.active.value;
+  if (!active || active.id !== id || bannerReply.sending.value) return;
+  bannerReply.cancel(id);
+  reminderBanner.release(id);
+  reminderBanner.dismiss(id);
+  // Only a deliberate threshold swipe acknowledges a read. Auto timeout,
+  // escape and closing the whole banner never create a read request.
+  if (reason !== "swipe") return;
+  const confirmed = await markRead(id, true);
+  if (alive && !confirmed) showToast("已读状态稍后同步");
 }
-function replyBannerMessage() {
+function finishBannerReply(id: number) {
+  reminderBanner.release(id);
+  if (reminderBanner.active.value?.id === id) reminderBanner.dismiss(id);
+  void markRead(id, true).then((confirmed) => {
+    if (alive && !confirmed) showToast("已读状态稍后同步");
+  });
+}
+function replyBannerMessage(id: number) {
   const note = reminderBanner.active.value;
-  if (!note) return;
-  const sender = board.value?.members.find(
-    (m) => m.user_id === note.sender_id && m.user_id !== props.memberId,
-  );
-  if (!sender) {
-    openBannerMessages();
-    return;
-  }
-  chatNoteRequest.value = { key: ++chatNoteSequence, target: sender.user_id };
-  reminderBanner.dismiss();
-  openChat(companionReturnRect() || new DOMRect(20, 20, 52, 52));
+  if (!note || note.id !== id) return;
+  if (!bannerReply.open(note)) return;
+  // Pin the exact note while the draft is open; newer messages wait.
+  reminderBanner.hold(id);
 }
-function openBannerMessages() {
+function sendBannerReply(id: number) {
+  void bannerReply.send(id);
+}
+function cancelBannerReply(id: number) {
+  if (!bannerReply.cancel(id)) return;
+  reminderBanner.release(id);
+}
+function expireBannerMessage(id: number) {
+  if (bannerReply.editing.value) return;
+  const active = reminderBanner.active.value;
+  if (!active || active.id !== id) return;
+  reminderBanner.release(id);
+  reminderBanner.dismiss(id);
+}
+function openBannerMessages(id: number) {
+  if (bannerReply.editing.value) return;
+  const active = reminderBanner.active.value;
+  if (!active || active.id !== id) return;
   messagesOpen.value = true;
-  reminderBanner.dismiss();
+  reminderBanner.dismiss(id);
 }
+// A sheet opened from another entry point must not leave a draft pinned under
+// a vanished banner. Cancelling only closes the editor and never reads.
+watch(messagesOpen, (open) => {
+  if (!open || !bannerReply.editing.value) return;
+  const id = bannerReply.noteId.value;
+  if (id === null) return;
+  bannerReply.cancel(id);
+  reminderBanner.release(id);
+});
 
 watch(
   [
@@ -1012,6 +1055,9 @@ async function load(): Promise<boolean> {
     if (board.value && result.version < board.value.version) return false;
     result.reminders = reconcileMessages(result.reminders);
     board.value = result;
+    // A confirmed poll (or foreground/online refresh) is a safe moment to
+    // replay read intents that failed while the device was offline.
+    void retryPendingReads();
     backgroundRefresh.markSuccessful();
     error.value = "";
     if (
@@ -1275,6 +1321,7 @@ const {
   error: messageError,
   read: markRead,
   reconcile: reconcileMessages,
+  retryPending: retryPendingReads,
 } = useReminderInbox(
   () => ({
     open: messagesOpen.value,
@@ -1345,6 +1392,8 @@ function visibleRefresh(event?: Event) {
     }
     return;
   }
+  if (document.visibilityState === "visible" && navigator.onLine)
+    void retryPendingReads();
   if (
     document.visibilityState === "visible" &&
     navigator.onLine &&
@@ -1420,9 +1469,16 @@ onUnmounted(() => {
   >
     <ReminderBanner
       :note="reminderBanner.active.value"
+      :reply-state="bannerReply.phase.value"
+      :reply-draft="bannerReply.draft.value"
+      :reply-error="bannerReply.error.value"
+      :reply-sender="bannerReply.senderName.value"
+      @update:reply-draft="bannerReply.setDraft"
       @dismiss="dismissBannerMessage"
-      @expire="reminderBanner.dismiss"
+      @expire="expireBannerMessage"
       @reply="replyBannerMessage"
+      @send="sendBannerReply"
+      @cancel="cancelBannerReply"
       @open="openBannerMessages"
       @settled="reminderBanner.settled"
       @presented="messagePresented"

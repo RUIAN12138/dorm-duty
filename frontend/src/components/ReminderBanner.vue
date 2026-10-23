@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { companionEnabled } from "../interaction/companion";
 import DormCompanion from "./DormCompanion.vue";
-import { onMounted, onBeforeUnmount, ref, computed } from "vue";
+import {
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  computed,
+  nextTick,
+  watch,
+} from "vue";
 import type { ChoreReminder } from "../api/chores";
 import { createVelocityTracker } from "../interaction/gestures";
 import { motionAllowed } from "../interaction/motion";
@@ -10,18 +17,56 @@ import {
   bannerLeaveFrames,
   bannerFlightTiming,
 } from "../interaction/bannerFlight";
+import {
+  createBannerReplyLayout,
+  lockBackgroundScroll,
+} from "../interaction/bannerReplyLayout";
 import { pressStep } from "../interaction/pressDynamics";
 import { bannerSwipe, dismissBanner } from "../interaction/bannerMotion";
 import LiquidGlassSurface from "./LiquidGlassSurface.vue";
-const props = defineProps<{ note: ChoreReminder | null }>();
+
+type ReplyPhase = "idle" | "editing" | "sending" | "failed";
+const REPLY_LIMIT = 120;
+const LONG_HOLD_MS = 400;
+
+const props = defineProps<{
+  note: ChoreReminder | null;
+  replyState?: ReplyPhase;
+  replyDraft?: string;
+  replyError?: string;
+  replySender?: string;
+}>();
 const emit = defineEmits<{
-  dismiss: [];
-  expire: [];
-  reply: [];
-  open: [];
+  dismiss: [id: number, reason: "swipe" | "escape"];
+  expire: [id: number];
+  reply: [id: number];
+  open: [id: number];
   settled: [id?: number];
   presented: [id: number];
+  "update:replyDraft": [text: string];
+  send: [id: number];
+  cancel: [id: number];
 }>();
+
+const phase = computed<ReplyPhase>(() => props.replyState || "idle");
+const replying = computed(() => phase.value !== "idle");
+const sending = computed(() => phase.value === "sending");
+const draft = computed(() => props.replyDraft || "");
+const replyLength = computed(() => Array.from(draft.value.trim()).length);
+const canSend = computed(
+  () =>
+    !sending.value &&
+    replyLength.value >= 1 &&
+    replyLength.value <= REPLY_LIMIT,
+);
+const positionEl = ref<HTMLElement>();
+const cardEl = ref<HTMLElement>();
+const editor = ref<HTMLTextAreaElement>();
+const composing = ref(false);
+let returnFocus: HTMLElement | null = null;
+let layout: ReturnType<typeof createBannerReplyLayout> | null = null;
+let releaseLock: (() => void) | null = null;
+
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 let longTimer: ReturnType<typeof setTimeout> | undefined;
 function clearTimers() {
@@ -31,9 +76,17 @@ function clearTimers() {
 function scheduleExpiry() {
   clearTimeout(autoTimer);
   const id = props.note?.id;
-  if (id && !document.hidden)
+  // Editing, sending and failed drafts keep the note; only an idle banner
+  // returns to the original 6.5s presentation timeout.
+  if (id && !document.hidden && !replying.value)
     autoTimer = setTimeout(() => {
-      if (props.note?.id === id && !gesture && !document.hidden) emit("expire");
+      if (
+        props.note?.id === id &&
+        !gesture &&
+        !document.hidden &&
+        !replying.value
+      )
+        emit("expire", id);
     }, 6500);
 }
 const offsetX = ref(0);
@@ -237,15 +290,22 @@ function leave(element: Element, done: () => void) {
 
 let gesture: {
   id: number;
+  noteId: number | undefined;
   x: number;
   y: number;
   element: HTMLElement;
   velocityX: ReturnType<typeof createVelocityTracker>;
   velocity: ReturnType<typeof createVelocityTracker>;
+  longPress: boolean;
 } | null = null;
 let suppressUntil = 0;
 function down(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || gesture) return;
+  const target = event.target as Element | null;
+  // The editor owns its own pointer gestures (caret, selection, button taps).
+  if (target?.closest(".banner-reply-panel")) return;
+  // Delivery is already in flight: the card stays put until confirmation.
+  if (sending.value) return;
   const element = event.currentTarget as HTMLElement;
   if (element.parentElement?.classList.contains("is-leaving")) return;
   if (element.parentElement) freezeMotion(element.parentElement);
@@ -253,21 +313,29 @@ function down(event: PointerEvent) {
   exitDirection = 0;
   gesture = {
     id: event.pointerId,
+    noteId: props.note?.id,
     x: event.clientX - offsetX.value,
     y: event.clientY - offset.value,
     element,
     velocityX: createVelocityTracker(event.clientX, performance.now()),
     velocity: createVelocityTracker(event.clientY, performance.now()),
+    longPress: false,
   };
   clearTimers();
   const id = props.note?.id;
-  longTimer = setTimeout(() => {
-    if (gesture && !dragging.value && props.note?.id === id) {
+  if (id && !replying.value)
+    longTimer = setTimeout(() => {
+      // Keep the gesture alive so the real pointerup still arrives and can
+      // focus the mounted editor without a synthetic click.
+      if (!gesture || dragging.value || props.note?.id !== id || sending.value)
+        return;
+      gesture.longPress = true;
       suppressUntil = performance.now() + 800;
-      cancelGesture();
-      emit("reply");
-    }
-  }, 550);
+      emit("reply", id);
+      void nextTick(() => {
+        if (replying.value) focusEditor();
+      });
+    }, LONG_HOLD_MS);
   holdTo(0.94);
   element.setPointerCapture(event.pointerId);
 }
@@ -296,6 +364,10 @@ function finish(event: PointerEvent, cancelled = false) {
     return;
   clearTimeout(longTimer);
   const current = gesture;
+  if (current.noteId !== props.note?.id) {
+    cancelGesture();
+    return;
+  }
   const close =
     !cancelled &&
     dragging.value &&
@@ -306,6 +378,7 @@ function finish(event: PointerEvent, cancelled = false) {
   if (current.element.hasPointerCapture(event.pointerId))
     current.element.releasePointerCapture(event.pointerId);
   if (close) {
+    const id = current.noteId;
     const vx = current.velocityX.read(performance.now()),
       vy = current.velocity.read(performance.now());
     exitDirection = Math.max(
@@ -318,7 +391,7 @@ function finish(event: PointerEvent, cancelled = false) {
       ),
     );
     stopHold();
-    emit("dismiss");
+    if (id) emit("dismiss", id, "swipe");
   } else {
     holdTo(1);
     returnHome();
@@ -334,10 +407,24 @@ function finish(event: PointerEvent, cancelled = false) {
         160,
         () => {},
       );
+    // iOS ignores focus requested while the finger is still down. The real
+    // pointerup is the gesture the system accepts, so focus synchronously and
+    // repeat after Vue's update as a fallback.
+    if (current.longPress && !cancelled && replying.value) {
+      focusEditor();
+      void nextTick(focusEditor);
+    }
   }
 }
-function open() {
-  if (performance.now() >= suppressUntil) emit("open");
+function open(event?: MouseEvent) {
+  if (replying.value || performance.now() < suppressUntil) {
+    // The held gesture's synthetic click must not reach the detail entry or
+    // steal focus back from the freshly mounted editor.
+    event?.preventDefault();
+    return;
+  }
+  const id = props.note?.id;
+  if (id) emit("open", id);
 }
 function afterLeave(element?: Element) {
   if (!props.note) cancelGesture();
@@ -363,6 +450,7 @@ function cancelGesture() {
 function inactive() {
   if (!motionAllowed()) {
     cancelGesture();
+    layout?.sync();
     for (const el of [...flights.keys()]) {
       stopMotion(el);
       el.style.transform = "";
@@ -377,8 +465,143 @@ function inactive() {
     scheduleExpiry();
   }
 }
+
+function focusEditor() {
+  const el = editor.value;
+  if (!el || !replying.value) return;
+  try {
+    el.focus({ preventScroll: true });
+  } catch {
+    el.focus();
+  }
+  const end = el.value.length;
+  try {
+    el.setSelectionRange(end, end);
+  } catch {
+    /* Selection is optional. */
+  }
+}
+function restoreFocus() {
+  const fallback = cardEl.value?.querySelector<HTMLElement>(
+    ".reminder-banner-main",
+  );
+  const target =
+    returnFocus && returnFocus.isConnected && returnFocus !== document.body
+      ? returnFocus
+      : fallback;
+  returnFocus = null;
+  if (!target || !target.isConnected) return;
+  try {
+    target.focus({ preventScroll: true });
+  } catch {
+    target.focus();
+  }
+}
+function sectionKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    event.stopPropagation();
+    escape();
+    return;
+  }
+  if (event.key === "Enter" && event.shiftKey) {
+    const target = event.target as Element | null;
+    if (target?.closest(".banner-reply-panel") || replying.value) return;
+    event.preventDefault();
+    shortcutReply();
+    return;
+  }
+  if (event.key === "Tab") trapFocus(event);
+}
+function trapFocus(event: KeyboardEvent) {
+  if (!replying.value) return;
+  const panel = cardEl.value?.querySelector(".banner-reply-panel");
+  if (!panel) return;
+  const items = [
+    ...panel.querySelectorAll<HTMLElement>("textarea, button:not([disabled])"),
+  ].filter((item) => item.offsetParent !== null);
+  if (!items.length) return;
+  const first = items[0]!,
+    last = items[items.length - 1]!,
+    current = document.activeElement;
+  if (event.shiftKey && (current === first || !panel.contains(current))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && current === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+function escape() {
+  const id = props.note?.id;
+  if (!id) return;
+  if (replying.value) {
+    if (!sending.value) emit("cancel", id);
+    return;
+  }
+  emit("dismiss", id, "escape");
+}
+function shortcutReply() {
+  const id = props.note?.id;
+  if (id && !replying.value) emit("reply", id);
+}
+function input(event: Event) {
+  emit("update:replyDraft", (event.target as HTMLTextAreaElement).value);
+}
+function editorKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || event.shiftKey) return;
+  // Leave the Enter key to the input method while it is composing.
+  if (event.isComposing || composing.value || event.keyCode === 229) return;
+  event.preventDefault();
+  submit();
+}
+function submit() {
+  const id = props.note?.id;
+  if (!id || !canSend.value) return;
+  emit("send", id);
+}
+function cancelReply() {
+  const id = props.note?.id;
+  if (!id || sending.value) return;
+  emit("cancel", id);
+}
+function backdropPointer() {
+  if (sending.value) return;
+  cancelReply();
+}
+
+watch(replying, async (active) => {
+  if (active) {
+    clearTimeout(autoTimer);
+    returnFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    releaseLock?.();
+    releaseLock = lockBackgroundScroll();
+    await nextTick();
+    layout?.sync();
+    focusEditor();
+  } else {
+    releaseLock?.();
+    releaseLock = null;
+    // The same position owner reverses to the parked position while the
+    // persistent reply slot collapses; do not reset the wrapper mid-motion.
+    layout?.sync();
+    await nextTick();
+    restoreFocus();
+    scheduleExpiry();
+  }
+});
+
 const media = matchMedia("(prefers-reduced-motion: reduce)");
 onMounted(() => {
+  layout = createBannerReplyLayout({
+    position: () => positionEl.value || null,
+    card: () => cardEl.value || null,
+    editing: () => replying.value,
+    focused: () => replying.value && document.activeElement === editor.value,
+  });
+  layout.start();
   window.addEventListener("blur", cancelGesture);
   window.addEventListener("focus", inactive);
   window.addEventListener("ui-motion-change", inactive);
@@ -387,6 +610,10 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   cancelGesture();
+  layout?.stop();
+  layout = null;
+  releaseLock?.();
+  releaseLock = null;
   for (const el of [...flights.keys()]) stopMotion(el);
   window.removeEventListener("blur", cancelGesture);
   window.removeEventListener("focus", inactive);
@@ -397,7 +624,21 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <Teleport to="body">
-    <div class="reminder-banner-position">
+    <Transition name="banner-backdrop">
+      <div
+        v-if="note && replying"
+        class="banner-reply-backdrop"
+        aria-hidden="true"
+        @pointerdown.prevent="backdropPointer"
+        @wheel.prevent
+        @touchmove.prevent
+      />
+    </Transition>
+    <div
+      ref="positionEl"
+      class="reminder-banner-position"
+      :class="{ 'is-reply': replying }"
+    >
       <Transition
         :css="false"
         @before-enter="beforeEnter"
@@ -411,17 +652,27 @@ onBeforeUnmount(() => {
           v-if="note"
           :key="note.id"
           class="reminder-banner-motion"
-          role="status"
-          aria-live="polite"
+          :role="replying ? 'dialog' : 'status'"
+          :aria-modal="replying ? 'true' : undefined"
+          :aria-live="replying ? undefined : 'polite'"
+          :aria-label="
+            replying
+              ? `回复${replySender || note.sender_name || '室友'}`
+              : undefined
+          "
           aria-atomic="true"
           data-testid="reminder-banner"
           :data-reminder-id="note.id"
-          @keydown.esc.stop="emit('dismiss')"
-          @keydown.shift.enter.prevent="emit('reply')"
+          @keydown="sectionKeydown"
         >
           <div
+            ref="cardEl"
             class="reminder-banner-card"
-            :class="{ 'is-dragging': dragging, 'is-held': holdActive }"
+            :class="{
+              'is-dragging': dragging,
+              'is-held': holdActive,
+              'is-reply': replying,
+            }"
             :style="swipePose"
             @pointerdown="down"
             @pointermove="move"
@@ -447,6 +698,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="reminder-banner-main"
+              :tabindex="replying ? -1 : undefined"
               :aria-label="`${note.sender_name || '室友'}${note.source === 'note' ? '给你留言' : '提醒你'}，${note.task_name || '完成宿舍任务'}，查看消息`"
             >
               <span class="reminder-banner-caption"
@@ -457,6 +709,82 @@ onBeforeUnmount(() => {
                 note.body || note.task_name || "完成宿舍任务"
               }}</strong>
             </button>
+            <div
+              class="banner-reply-slot"
+              :class="{ 'is-open': replying }"
+              :inert="!replying"
+              :aria-hidden="replying ? undefined : 'true'"
+            >
+              <div class="banner-reply-inner">
+                <form
+                  class="banner-reply-panel"
+                  @submit.prevent="submit"
+                  @click.stop
+                >
+                  <label
+                    class="banner-reply-hint"
+                    :for="`banner-reply-${note.id}`"
+                    >回复{{ replySender || note.sender_name || "室友" }}</label
+                  >
+                  <textarea
+                    :id="`banner-reply-${note.id}`"
+                    ref="editor"
+                    class="banner-reply-input"
+                    rows="1"
+                    enterkeyhint="send"
+                    :value="draft"
+                    :disabled="sending"
+                    placeholder="写一句回复…"
+                    @input="input"
+                    @keydown="editorKeydown"
+                    @compositionstart="composing = true"
+                    @compositionend="composing = false"
+                  />
+                  <div class="banner-reply-meta">
+                    <span
+                      class="banner-reply-count"
+                      :class="{ 'is-over': replyLength > REPLY_LIMIT }"
+                      >{{ replyLength }}/{{ REPLY_LIMIT }}</span
+                    >
+                    <span
+                      v-if="sending"
+                      class="banner-reply-status"
+                      role="status"
+                      >发送中…</span
+                    >
+                    <span
+                      v-else-if="replyError"
+                      class="banner-reply-status is-error"
+                      role="alert"
+                      >{{ replyError }}</span
+                    >
+                  </div>
+                  <div class="banner-reply-actions">
+                    <button
+                      type="button"
+                      class="banner-reply-cancel"
+                      :disabled="sending"
+                      @click="cancelReply"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      class="banner-reply-send"
+                      :disabled="!canSend"
+                    >
+                      {{
+                        sending
+                          ? "发送中"
+                          : phase === "failed"
+                            ? "重试"
+                            : "发送"
+                      }}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         </section>
       </Transition>
@@ -472,14 +800,37 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   z-index: 2900;
   pointer-events: none;
+  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reminder-banner-position.is-reply {
+  width: min(396px, calc(100% - 18px));
+}
+.banner-reply-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2899;
+  background: #2525254d;
+  backdrop-filter: blur(6px) saturate(112%);
+  -webkit-backdrop-filter: blur(6px) saturate(112%);
+  touch-action: none;
+}
+.banner-backdrop-enter-active,
+.banner-backdrop-leave-active {
+  transition: opacity 220ms ease;
+}
+.banner-backdrop-enter-from,
+.banner-backdrop-leave-to {
+  opacity: 0;
 }
 .reminder-banner-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 42px auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
   padding: 8px 14px 8px 10px;
   box-sizing: border-box;
-  height: 60px;
+  min-height: 60px;
   position: relative;
   isolation: isolate;
   /* Local clear glass: a low-alpha backing plus a fixed moderate blur keeps
@@ -494,8 +845,11 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   touch-action: none;
   transform-origin: 50% 0;
-  transition: none;
+  transition: border-radius 280ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
+}
+.reminder-banner-card.is-reply {
+  border-radius: 24px;
 }
 .reminder-banner-card::after {
   content: "";
@@ -545,6 +899,132 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
+.banner-reply-slot {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    visibility 0s linear 280ms;
+}
+.banner-reply-slot.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    visibility 0s;
+}
+.banner-reply-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.banner-reply-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  max-height: max(100px, calc(var(--banner-visible-height, 100dvh) - 84px));
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 200ms ease,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.banner-reply-slot.is-open .banner-reply-panel {
+  opacity: 1;
+  transform: none;
+}
+.banner-reply-hint {
+  font-size: 11px;
+  color: var(--app-tone-h666, #666);
+  line-height: 1.2;
+}
+.banner-reply-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  max-height: 120px;
+  resize: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--app-tone-h111, #111);
+  background: color-mix(in srgb, var(--ui-surface) 82%, transparent);
+  field-sizing: content;
+  overflow: auto;
+}
+.banner-reply-input:focus-visible {
+  /* An inward ring remains complete inside the animated clipping slot. */
+  outline: 2px solid var(--app-tone-h7c7c7c, #7c7c7c);
+  outline-offset: -2px;
+}
+.banner-reply-input::placeholder {
+  color: var(--app-tone-h888, #888);
+}
+.banner-reply-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 16px;
+  font-size: 11px;
+  color: var(--app-tone-h777, #777);
+}
+.banner-reply-count.is-over,
+.banner-reply-status.is-error {
+  color: var(--app-tone-h111, #111);
+}
+.banner-reply-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.banner-reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.banner-reply-actions button {
+  min-height: 40px;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 13px;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+.banner-reply-actions button:active {
+  transform: scale(0.97);
+}
+.banner-reply-cancel {
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--app-tone-h555, #555);
+}
+.banner-reply-send {
+  border: 0;
+  background: var(--app-tone-h111, #111);
+  color: var(--app-tone-hfff, #fff);
+}
+.banner-reply-actions button:disabled {
+  opacity: 0.45;
+}
+
 .reminder-banner-motion {
   transform-origin: 50% 0;
   isolation: isolate;
@@ -553,7 +1033,12 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .reminder-banner-card {
+  .reminder-banner-position,
+  .reminder-banner-card,
+  .banner-reply-slot,
+  .banner-reply-panel,
+  .banner-backdrop-enter-active,
+  .banner-backdrop-leave-active {
     transition: none;
     animation: none;
   }
@@ -578,6 +1063,14 @@ onBeforeUnmount(() => {
   .reminder-banner-card::after,
   .banner-optics {
     display: none;
+  }
+  .banner-reply-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #252525d9;
+  }
+  .banner-reply-input {
+    background: var(--app-tone-hfff, #fff);
   }
 }
 </style>
