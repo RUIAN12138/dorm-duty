@@ -45,3 +45,14 @@ Chromium在快速全页夹具导航时有1条Vite开发HMR `WebSocket closed wit
 本次发布仅追加ReleaseNotice的v80三条更新说明，不改弹窗尺寸、布局、交互；版本名 `20261023-card-feedback-v80`。PR以 `codex/chat-prompt-bubbles`（#83）为base，只展示本轮差异，不合并任何分支。
 复核发现新浏览器测试依赖本机data中的修改前基线，新clone会缺少这些未提交证据；已只修正测试可复现性：可通过DORM_CARD_BASELINE_DIR提供基线，没有原始文件时仅检查视口边界并明确记录originalGeometryCompared=false，不能冒充前后对比。DORM_CARD_EVIDENCE_DIR可单独保存复现证据。运行卡片实现未再改动。
 部署前确认服务器仍是v79、健康active；先SQLite在线备份并保存完成记录摘要，再校验上传包、原子安装与只读公网冒烟。结果完成后补充真实路径与记录数。
+
+## v80 actual delivery
+- PR #84：https://github.com/RUIAN12138/dorm-duty/pull/84 ，分支 `codex/refine-card-feedback` 已推送，base `codex/chat-prompt-bubbles`，main未合并。实现提交 `c6b6be865569f5220963fcc3745c79021f74719b`；后续提交仅记录发布事实和授权摘要，不改变运行代码。
+- 已发布 https://8.148.190.114/dorm-duty/ ，版本 `20261023-card-feedback-v80`，运行提交为上述实现提交。北京时间2026-10-23 13:45:58健康通过。
+- 包SHA256 `2035ce4f2c5c21398bf008fc232631deca39f1727bcab8400bf0c8e32b8201d4`，52条归档内容均为scripts/site，无数据库或凭据。与v79运行包比较，仅内嵌前端资源site/worker/index.js和site/release.json不同，其余服务端、运行模块、迁移逐字节一致。
+- 发布前在线备份 `/opt/dorm-duty/backups/dorm-20261023T054557Z.sqlite`，完成记录摘要 `/opt/dorm-duty/backups/card-feedback-v80-history.json`。发布后67条旧完成记录逐条摘要一致，当前67条，数据库标识保持；未覆盖、恢复或替换数据库。
+- 新代码目录 `/opt/dorm-duty/releases/20261023-card-feedback-v80`，旧v79目录保留。安装器健康失败自动回退代码；人工回退也仅恢复current旧symlink并重启，不回滚数据库覆盖新写入。
+- 公网143个静态资源与本地包逐字节相同；值日/抬水/日历入口、健康版本和运行提交一致。全新未登录浏览器确认v80提示文案、确认后刷新不重复、JS无错误/无5xx、无非GET生产请求；截图已实际检查。未替用户登录、打卡、留言或调用真实AI。
+- 正式构建前纯测试13项、v80通知两个引擎各13项；最新Chromium专项47项且原版基线对比通过，WebKit无基线独立复现47项且如实记录originalGeometryCompared=false。上一阶段WebKit原版几何对比报告仍保留，不能用独立复现的冒烟代替原版对比结论。
+- 证据位于 `data/card-feedback/publish/`：archive-check.json、deployment.json、backup-before.log、history-after.json、public-verification.json、public-browser.json、public-page.png及浏览器日志。
+- 实现提交的GitHub CI run 39907044210：spec-contract、android通过；web-and-business失败于check-companion-browser.mjs:232的单击后快捷语可见性断言；conversation-motion失败于check-ios-chat-motion.mjs:398的关闭等待超时。核对上一轮PR #83 run 39904662918也有相同两项失败，v78失败日志位置亦相同；本轮两个脚本及CompanionChat.vue相对base无差异。仅记录遗留问题，不擅自改聊天逻辑，不将本地通过宣称远程CI全绿。后续文档提交的最新CI以PR状态为准。

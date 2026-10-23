@@ -9,8 +9,8 @@
 - [x] Regress completion, swipe actions, order and calendar; typecheck/build/format and scope.
 - [x] Show isolated preview, before/after evidence and actual platform limits.
 ## Delivery
-- [x] Review exact diff and confirm no dependency, business, layout, PR, main or production changes.
-- [ ] Bind new explicit PR/publish authorization, create review PR, back up and publish v80; retain main and device acceptance boundaries.
+- [x] Initial preview: review exact diff and confirm no dependency, business, layout or formal operation before authorization.
+- [x] Bind new explicit PR/publish authorization, create review PR #84, back up and publish v80; retain main and device acceptance boundaries.
 
 ## Platform limits
 - [ ] Physical iPhone Safari / Android WebView / HarmonyOS ArkWeb acceptance: no connected devices; desktop engine and isolated Pointer Events results only.
