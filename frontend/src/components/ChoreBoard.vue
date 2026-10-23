@@ -898,15 +898,15 @@ watch(
   },
   { flush: "post" },
 );
-async function dismissBannerMessage(id: number, reason: "swipe" | "escape") {
+async function dismissBannerMessage(id: number, reason: "swipe" | "escape" | "close") {
   const active = reminderBanner.active.value;
   if (!active || active.id !== id || bannerReply.sending.value) return;
   bannerReply.cancel(id);
   reminderBanner.release(id);
   reminderBanner.dismiss(id);
   // Only a deliberate threshold swipe acknowledges a read. Auto timeout,
-  // escape and closing the whole banner never create a read request.
-  if (reason !== "swipe") return;
+  // escape/cancelling reply create no read; explicit close is acknowledged.
+  if (reason !== "swipe" && reason !== "close") return;
   const confirmed = await markRead(id, true);
   if (alive && !confirmed) showToast("已读状态稍后同步");
 }

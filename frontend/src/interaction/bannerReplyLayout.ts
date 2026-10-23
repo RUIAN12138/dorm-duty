@@ -64,6 +64,7 @@ export function createBannerReplyLayout(options: {
   let flight: ReturnType<typeof animate> | null = null;
   let currentState: ChatViewportState | null = null;
   let observer: ResizeObserver | null = null;
+  let lastHeight = 0;
 
   const clear = () => {
     const el = options.position();
@@ -100,7 +101,10 @@ export function createBannerReplyLayout(options: {
     currentState = state;
     if (visualOffset === null) visualOffset = measureOffset(el);
     const parked = visualOffset;
-    const height = options.card()?.getBoundingClientRect().height || 0;
+    // Swipe/press transforms must never feed back into keyboard layout.
+    const height = options.card()?.offsetHeight || 0;
+    const resizingContent = lastHeight > 0 && height !== lastHeight;
+    lastHeight = height;
     el.style.setProperty("--banner-visible-height", `${state.height}px`);
     const top = options.editing()
       ? bannerReplyTop({
@@ -148,6 +152,7 @@ export function createBannerReplyLayout(options: {
     // initial relocation and explicit collapse use the reversible spring.
     if (
       trackingKeyboard ||
+      (resizingContent && options.editing()) ||
       !motionAllowed() ||
       Math.abs(top - appliedTop) < 0.5
     ) {

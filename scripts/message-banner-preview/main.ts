@@ -1,0 +1,12 @@
+import { createApp } from "vue";
+import App from "./Preview.vue";
+import "../../frontend/src/theme.css";
+import "../../frontend/src/style.css";
+import "../../frontend/src/focus.css";
+import { installMotionTokens } from "../../frontend/src/interaction/motion";
+import { installTheme } from "../../frontend/src/interaction/theme";
+import { installPressFeedback } from "../../frontend/src/interaction/pressFeedback";
+installMotionTokens();
+installTheme();
+installPressFeedback();
+createApp(App).mount("#app");

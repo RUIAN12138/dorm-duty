@@ -20,7 +20,7 @@
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "更新到网站 提交 pr",
-    "authorizedDigest": "6ce4d2e37cd3a56abba1a4737299cc99343b9fd1f083ca4b944c7f3aa6aa9fb0"
+    "userStatement": "更新到网站吧（2026-10-23；仅发布本轮消息浮窗修复及现有v80正常应用基线，不授权PR、main合并或其他分支）",
+    "authorizedDigest": "611689cbc89acf4cf47db4d6d9dcd20bc866f2e8f5bc42ac0188840177ea47f3"
   }
 }

@@ -1,0 +1,24 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "c12043ab103ed17ead0c08d2e11c746dc4075847",
+  "allowed": [
+    "frontend/src/components/ReminderBanner.vue",
+    "frontend/src/interaction/bannerReplyLayout.ts",
+    "frontend/src/components/ChoreBoard.vue",
+    "scripts/check-banner-reply-browser.mjs",
+    "scripts/check-banner-quick-reply.mjs",
+    "scripts/check-message-banner-polish.mjs",
+    "scripts/message-banner-preview/",
+    "openspec/changes/polish-message-banner-reply/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站吧（2026-10-23；仅发布本轮消息浮窗修复及现有v80正常应用基线，不授权PR、main合并或其他分支）",
+    "authorizedDigest": "611689cbc89acf4cf47db4d6d9dcd20bc866f2e8f5bc42ac0188840177ea47f3"
+  }
+}
