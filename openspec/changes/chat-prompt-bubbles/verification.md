@@ -1,5 +1,5 @@
 ## Status
-2026-10-23，本地实现与隔离浏览器回归完成；用户产品/实体设备验收仍 pending。初始预览阶段未执行正式操作；随后用户新原话「推送 PR 更新网站」授权当前内容创建审查 PR、推送开发分支及部署正式网站，不授权合并 main。分支 `codex/chat-prompt-bubbles`，实现基线 `b3456527c3e11ef1adad178b392c47cd7aa8431f`。正式部署不替换或恢复数据库。
+2026-10-23，本地实现与隔离浏览器回归完成，用户随后明确授权 PR 与部署，已完成 PR #83 和正式 v79 发布；用户产品/实体设备验收仍 pending。初始预览阶段未执行正式操作；新原话「推送 PR 更新网站」授权当前内容创建审查 PR、推送开发分支及部署正式网站，不授权合并 main。分支 `codex/chat-prompt-bubbles`，实现基线 `b3456527c3e11ef1adad178b392c47cd7aa8431f`。正式部署未替换或恢复数据库。
 
 已先提供八节 Claude 任务书并调用本地 CLI；CLI 返回 402 Insufficient Balance、未写代码。已向用户说明后在该精确范围内实现，记录在 `data/chat-prompt-bubbles/claude.log`。
 
@@ -46,3 +46,14 @@
 - v79 更新提示使用独立夹具在 Chromium / WebKit 各通过 13 项检查：版本及文案、可见中间帧、只确认当前版本、不重复弹出、更新失败重试、延后不立即重开、保护聚焦表单、窄屏与减少动态效果。证据 `data/chat-prompt-bubbles/publish/release-notice-*.log`。
 - 服务器预检确认旧版 `20261023-banner-reply-v78`、服务 active、健康正常。先在线备份和保存完成记录摘要，再安装纯代码包；部署结果与公网核验完成后另记实测值。
 - PR 基础分支为 `codex/liquid-glass-optics`（PR #82），仅展示本轮新增差异；不更新或合并既有 PR。
+
+## v79 actual delivery
+- PR #83：https://github.com/RUIAN12138/dorm-duty/pull/83 ，开发分支 `codex/chat-prompt-bubbles` 已推送并附加到当前任务。main 未合并。实现提交 `82b5b2bfe1b532b55e439730ee67cbee17deb511`；后续交付记录提交只更新文档与绑定摘要，不改变运行代码。
+- 正式入口 https://8.148.190.114/dorm-duty/ ，版本 `20261023-chat-prompt-bubbles-v79`，运行提交为上述实现提交，2026-10-23 05:13:12 UTC 健康检查通过。
+- 发布包 SHA256 `00d978360ccb5872d2f4e9f6143db59e7e69230c222dc73559651904e08a7956`；52 个归档条目仅 scripts/site，无数据库或凭据。与 v78 比较，运行包只有内嵌前端资源 `site/worker/index.js` 与 `site/release.json` 不同，其他服务端代码、运行模块和 SQL 迁移逐字节一致。
+- 发布前 SQLite 在线备份 `/opt/dorm-duty/backups/dorm-20261023T051311Z.sqlite`；完成记录私密摘要 `/opt/dorm-duty/backups/chat-prompt-v79-history.json`。发布后 67 条既有完成记录逐条摘要一致，当前仍为 67 条，database_id 未变。未覆写、恢复或替换数据库。
+- 新代码目录 `/opt/dorm-duty/releases/20261023-chat-prompt-bubbles-v79`，原子切换 current 后重启健康正常。旧目录 `/opt/dorm-duty/releases/20261023-banner-reply-v78` 保留；代码回滚只切回旧 symlink 并重启，禁止还原数据库覆盖新写入。
+- 正式构建前最终 Chromium / WebKit 展示回归再次各通过 44 项，日志 `publish/browser-*.log`。OpenSpec 两个动作门禁通过，产品验收仍 pending。
+- 公网 143 个静态资源与本地发布包逐字节一致；`/`、`/water`、`/calendar` 返回正确页面；/health 的版本、运行提交和数据库标识一致。
+- 全新未登录 Chromium 浏览器通过实际 HTTPS/JS、新版 v79 文案、确认后刷新不重复提示、无 JS 错误/5xx，未发起非 GET 生产请求。截图已实际查看。未在正式宿舍替用户发消息、打卡或请求真实 AI。
+- 发布证据 `data/chat-prompt-bubbles/publish/`：`archive-check.json`、`deployment.json`、`backup-before.log`、`history-after.json`、`public-verification.json`、`public-browser.json`、`public-page.png`。GitHub 最终 CI 以 PR 最新提交检查为准，不以本地通过冒充远程 CI 通过。

@@ -12,4 +12,4 @@
 ## Delivery
 - [x] Record real evidence and pending platform boundaries.
 - [x] Initial preview kept PR/publish gates closed; no formal operation before user authorization.
-- [ ] Bind the user's new instruction 「推送 PR 更新网站」 to current digest; create review PR and deploy v79 after backup. No main merge or claimed physical acceptance.
+- [x] Bind the user's new instruction 「推送 PR 更新网站」 to current digest; create review PR #83 and deploy v79 after backup. No main merge or claimed physical acceptance.
