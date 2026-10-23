@@ -973,14 +973,18 @@ try {
     // and suggestions are API-driven and may finish after the local shell;
     // wait for their own ready state, not an accidentally slow entry motion.
     await page
-      .getByRole("button", { name: "今天做什么？", exact: true })
+      .getByTestId("chat-quick-prompts")
+      .locator("button")
+      .nth(1)
       .waitFor();
     check(
       (await page.locator(".chat-bubble.assistant").count()) === 3 &&
         (await page
-          .getByRole("button", { name: "今天做什么？", exact: true })
+          .getByTestId("chat-quick-prompts")
+          .locator("button")
+          .nth(1)
           .isVisible()),
-      "entry offers three short greetings and ready-to-send questions",
+      "entry offers three short greetings and sampled ready-to-send questions",
     );
     check(
       await page.evaluate(() =>
@@ -1583,14 +1587,17 @@ try {
         .n === 0,
       "clear history requires confirmation and clears persisted messages",
     );
-    await page
-      .getByRole("button", { name: "今天做什么？", exact: true })
-      .click();
+    const sampledQuestion = page
+      .getByTestId("chat-quick-prompts")
+      .locator("button")
+      .filter({ hasText: /今天做什么|怎么改轮序/ })
+      .first();
+    const chosenQuick = (await sampledQuestion.innerText()).trim();
+    await sampledQuestion.click();
     await page.getByText("有事就问我吧。", { exact: true }).waitFor();
     check(
       (await page.locator(".chat-bubble.user").count()) === 1 &&
-        (await page.locator(".chat-bubble.user").innerText()) ===
-          "今天做什么？",
+        (await page.locator(".chat-bubble.user").innerText()) === chosenQuick,
       "preset question sends a real chat only after user taps it",
     );
     check(errors.length === 0, "no browser runtime errors");
