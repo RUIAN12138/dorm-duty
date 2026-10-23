@@ -451,6 +451,7 @@ watch(
           >
             <div
               class="calendar-surface"
+              v-tilt
               @pointerdown="carousel.down"
               @pointermove="carousel.move"
               @pointerup="carousel.up"

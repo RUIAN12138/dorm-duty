@@ -170,7 +170,11 @@ onBeforeUnmount(() => {
     @contextmenu.prevent
     @click.capture="suppress"
   >
-    <div class="sort-card" :style="{ '--entry-index': index }">
+    <div
+      class="sort-card"
+      v-tilt="{ liftOnly: true, lifted: held, disabled: disabled || !active }"
+      :style="{ '--entry-index': index }"
+    >
       <span class="sort-position">{{ index + 1 }}</span>
       <div
         class="sort-person"
@@ -421,5 +425,27 @@ strong small {
 <style scoped>
 .intro-finished .sort-card {
   animation: none;
+}
+</style>
+
+<style scoped>
+.sort-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 9px 20px -9px #0004;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms var(--ui-ease-out);
+}
+.lifted .sort-card::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sort-card::after {
+    display: none;
+    transition: none;
+  }
 }
 </style>

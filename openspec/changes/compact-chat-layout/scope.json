@@ -21,12 +21,12 @@
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "推送 PR 更新网站",
-    "authorizedDigest": "c0b0c3254e674a2a3596ceab56206079411e5f7a02a9dd4867f38ce0d81dd032"
+    "userStatement": "更新到网站 提交 pr",
+    "authorizedDigest": "6ce4d2e37cd3a56abba1a4737299cc99343b9fd1f083ca4b944c7f3aa6aa9fb0"
   },
   "prAuthorization": {
     "action": "create-for-review",
-    "userStatement": "推送 PR 更新网站",
-    "authorizedDigest": "c0b0c3254e674a2a3596ceab56206079411e5f7a02a9dd4867f38ce0d81dd032"
+    "userStatement": "更新到网站 提交 pr",
+    "authorizedDigest": "6ce4d2e37cd3a56abba1a4737299cc99343b9fd1f083ca4b944c7f3aa6aa9fb0"
   }
 }

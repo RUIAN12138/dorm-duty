@@ -75,6 +75,7 @@ const time = (value: string) =>
     <div
       v-bind="attrs"
       class="record-row"
+      v-tilt
       :data-record-id="record.id"
       :class="{ 'own-record': own }"
       :data-testid="

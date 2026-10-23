@@ -1693,6 +1693,7 @@ onUnmounted(() => {
                   >
                     <button
                       class="task-title-button"
+                      v-tilt
                       :aria-label="`查看${activeDutyTask.name}详情`"
                       @click="openTask(activeDutyTask, $event)"
                     >
@@ -1823,6 +1824,7 @@ onUnmounted(() => {
                         <button
                           v-else
                           class="task-title-button"
+                          v-tilt
                           :aria-label="`查看${water.name}详情`"
                           @click="openTask(water, $event)"
                         >

@@ -108,6 +108,7 @@ function entering(el: Element) {
     <button
       v-if="list"
       class="records-heading"
+      v-tilt
       :aria-expanded="expanded"
       :aria-controls="`records-${date}`"
       :data-testid="`record-group-${date}`"
