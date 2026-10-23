@@ -56,3 +56,7 @@ PR #82： https://github.com/RUIAN12138/dorm-duty/pull/82 ，base为 `codex/fix-
 另一项CI旧断言要求键盘出现把球球缩到60px以下，已与先前用户明确要求“顶部稳定、不因键盘缩放”冲突。实际记录ball88px、可视root410/top44、composer距视口底10px正常。仅更新check-companion-chat-browser.mjs验收：测量键盘前球体宽/相对顶边，键盘后保持0.75px容差，确认10px外缘间距与410px真实可视高度；不改产品代码，原IME/草稿/消息/回程检查保留。原始失败日志ci-web-failure.log保留。双击时窗修正后本地两引擎各52项通过。
 
 更新旧键盘断言后，完整原聊天浏览器回归通过（chromium: 60, webkit: 58项），包含输入法确认不误发、消息/草稿、键盘回程、多行输入与减动效。新双击回归两引擎各52项通过。仅验证文件和记录变化，生产仍为已核对的de7b20c运行代码。
+
+第二轮CI网页业务检查完成大量原交互后，check-theme-stats-polish.mjs仍断言消息必须完全不透明且无blur，恰与本轮消息玻璃目标相反。替换该单一材质断言为真实CSS颜色经Canvas采样的alpha 0.5–0.75、固定7px背景blur及前景filter=none；不删除消息宽度、收取回执、已读/邮箱抑制、统计/主题等其它断言，不改运行代码。原失败ci-web-second-failure.log保留。全脚本检索未发现其它要求该消息实底的旧断言。
+
+消息材质断言更新后的整套主题/统计回归：Chromium53项、WebKit54项通过。首次本地执行在原主题动画的中间帧采样断言失败，未修改其断言或运行代码；单独复跑通过，失败日志theme-stats-first-attempt.log保留。第二轮GitHub聊天检查曾长时间停在依赖/浏览器安装，00:22:02 UTC才进入测试，不将安装耗时当成产品动效失败；最新提交仍需独立CI结果。

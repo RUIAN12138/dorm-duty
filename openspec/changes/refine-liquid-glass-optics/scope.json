@@ -15,7 +15,8 @@
     "scripts/check-liquid-glass-optics.mjs",
     "openspec/changes/refine-liquid-glass-optics/",
     "scripts/check-companion-tap-arbitration.mjs",
-    "scripts/check-companion-chat-browser.mjs"
+    "scripts/check-companion-chat-browser.mjs",
+    "scripts/check-theme-stats-polish.mjs"
   ],
   "acceptance": {
     "status": "pending",
@@ -25,11 +26,11 @@
   "prAuthorization": {
     "action": "create-for-review",
     "userStatement": "完成后提交 pr   更新网站",
-    "authorizedDigest": "85acc9250aad28f86f773ee40487cb0e519b26ac5e26cacaa279223688c72bfa"
+    "authorizedDigest": "3a24c4e01d11767302dfb55d1838cba67169462030655683d2b6edcecddce544"
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
     "userStatement": "完成后提交 pr   更新网站",
-    "authorizedDigest": "85acc9250aad28f86f773ee40487cb0e519b26ac5e26cacaa279223688c72bfa"
+    "authorizedDigest": "3a24c4e01d11767302dfb55d1838cba67169462030655683d2b6edcecddce544"
   }
 }

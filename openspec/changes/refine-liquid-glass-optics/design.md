@@ -24,3 +24,5 @@ Codex审查后将动态高光由径向渐变坐标重绘改为已栅格化局部
 CI暴露验证脚本在慢runner中构造了294.4ms的超时二击。必要关联修改仅check-companion-tap-arbitration.mjs：减少moving案例的无谓等待并断言真实事件时窗；保留65ms移动目标延迟、所有业务断言及产品280ms窗口。
 
 check-companion-chat-browser.mjs必要验收更新：旧compact header断言与用户新键盘需求相反，替换为真实前后球体几何稳定+10px输入间距，不移除其它IME、草稿、回程检查。
+
+check-theme-stats-polish.mjs必要验收更新：将本轮已经覆盖的“消息完全实底”改为真实alpha采样、局部背景blur和清晰前景，不放宽其它行为检查。

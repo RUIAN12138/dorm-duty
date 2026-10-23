@@ -623,13 +623,29 @@ try {
   await page.getByTestId("reminder-banner").waitFor();
   const bannerStyle = await page
     .locator(".reminder-banner-card")
-    .evaluate((el) => ({
-      background: getComputedStyle(el).backgroundColor,
-      filter: getComputedStyle(el).backdropFilter,
-    }));
+    .evaluate((el) => {
+      const style = getComputedStyle(el);
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = style.backgroundColor;
+      ctx.fillRect(0, 0, 1, 1);
+      return {
+        alpha: ctx.getImageData(0, 0, 1, 1).data[3] / 255,
+        filter: style.backdropFilter || style.webkitBackdropFilter,
+        foregroundFilter: getComputedStyle(
+          el.querySelector(".reminder-banner-main"),
+        ).filter,
+      };
+    });
+  // The Liquid Glass request replaces the former opaque backing. Keep a
+  // bounded tint and fixed local blur rather than weakening readability.
   check(
-    !bannerStyle.background.startsWith("rgba") && bannerStyle.filter === "none",
-    "moving message has an opaque backing and never composites underlying text",
+    bannerStyle.alpha >= 0.5 &&
+      bannerStyle.alpha <= 0.75 &&
+      /blur\(7px\)/.test(bannerStyle.filter) &&
+      bannerStyle.foregroundFilter === "none",
+    "moving message uses bounded translucent frost with a sharp foreground",
   );
   const bannerBox = await page
     .locator(".reminder-banner-position")
