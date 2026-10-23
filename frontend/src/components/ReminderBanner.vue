@@ -12,6 +12,7 @@ import {
 } from "../interaction/bannerFlight";
 import { pressStep } from "../interaction/pressDynamics";
 import { bannerSwipe, dismissBanner } from "../interaction/bannerMotion";
+import LiquidGlassSurface from "./LiquidGlassSurface.vue";
 const props = defineProps<{ note: ChoreReminder | null }>();
 const emit = defineEmits<{
   dismiss: [];
@@ -430,6 +431,13 @@ onBeforeUnmount(() => {
             @click="open"
             @contextmenu.prevent
           >
+            <LiquidGlassSurface
+              class="banner-optics"
+              :track="false"
+              :shift-x="offsetX"
+              :shift-y="offset"
+              :active="dragging || holdActive"
+            />
             <DormCompanion
               v-if="companionEnabled"
               mood="13"
@@ -474,11 +482,12 @@ onBeforeUnmount(() => {
   height: 60px;
   position: relative;
   isolation: isolate;
-  /* A stable opaque backing prevents underlying text bleeding through while
-     WebKit composites the moving layer. Keep the existing glass rim/flight. */
-  background: var(--ui-surface);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  /* Local clear glass: a low-alpha backing plus a fixed moderate blur keeps
+     underlying text from competing while the layer flies and swipes. The
+     existing glass rim and flight stay untouched. */
+  background: color-mix(in srgb, var(--ui-surface) 62%, transparent);
+  backdrop-filter: blur(7px) saturate(118%);
+  -webkit-backdrop-filter: blur(7px) saturate(118%);
   border: 1px solid var(--glass-border);
   border-radius: 32px;
   box-shadow: var(--glass-shadow);
@@ -566,7 +575,8 @@ onBeforeUnmount(() => {
     background: var(--app-tone-hfff, #fff);
     border-color: var(--app-tone-heee, #eee);
   }
-  .reminder-banner-card::after {
+  .reminder-banner-card::after,
+  .banner-optics {
     display: none;
   }
 }

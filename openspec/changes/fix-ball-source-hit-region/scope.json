@@ -10,5 +10,15 @@
     "status": "pending",
     "userStatement": null,
     "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "完成后提交 pr   更新网站",
+    "authorizedDigest": "960321ee6c5d87be35cc9bfcd75d4c64f97d3486475a8e03256aa17656d9ca27"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "完成后提交 pr   更新网站",
+    "authorizedDigest": "960321ee6c5d87be35cc9bfcd75d4c64f97d3486475a8e03256aa17656d9ca27"
   }
 }
