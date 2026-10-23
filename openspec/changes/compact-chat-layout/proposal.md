@@ -9,3 +9,6 @@
 
 ## Scope and Authorization
 仅聊天及直接布局依赖。最新要求覆盖 attach-chat-composer-to-keyboard 中“键盘不缩头部”的旧规则，其余行为保留。用户要求隔离回归及 iPhone 真机验收后提交审查 PR；当前未验收，禁止推送/正式PR/main合并/生产发布，不复用v76授权。不涉及服务端、真实数据或原生配置。
+
+## 2026-10-23 Deployment override
+用户新原话「更新到网站」授权本轮紧凑聊天布局部署供查看，acceptance仍pending、实体iPhone未验收；该授权不创建PR、不合并main。随后新增快捷回复功能另行分支，不混入此发布包。必要版本提示仅追加v77文案，不改变其他UI。

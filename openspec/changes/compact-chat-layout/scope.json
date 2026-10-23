@@ -11,11 +11,17 @@
     "scripts/check-chat-compact-layout.mjs",
     "scripts/check-chat-keyboard-viewport.mjs",
     "scripts/check-companion-chat-browser.mjs",
-    "openspec/changes/compact-chat-layout/"
+    "openspec/changes/compact-chat-layout/",
+    "frontend/src/components/ReleaseNotice.vue"
   ],
   "acceptance": {
     "status": "pending",
     "userStatement": null,
     "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站",
+    "authorizedDigest": "f7f40dadacaef10ad6e71b52a75e502aa7794a020384ec2e4cfa2e93470aff90"
   }
 }

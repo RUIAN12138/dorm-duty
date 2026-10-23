@@ -48,3 +48,6 @@
 MDN VisualViewport：https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport
 MDN scrollIntoView：https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView
 不调用scrollIntoView或自动聚焦来修复键盘；继承既有首次点击不唤键盘、IME保护和瞬时入场定位。
+
+## Publication preparation
+用户在完成隔离预览后明确「更新到网站」，本轮仅上线既有聊天紧凑布局和对应v77版本说明。发布前数据库在线备份、历史行哈希、安装失败自动回退；快捷回复新功能不包含在v77中。
