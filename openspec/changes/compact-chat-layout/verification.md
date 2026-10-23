@@ -51,3 +51,6 @@ MDN scrollIntoView：https://developer.mozilla.org/en-US/docs/Web/API/Element/sc
 
 ## Publication preparation
 用户在完成隔离预览后明确「更新到网站」，本轮仅上线既有聊天紧凑布局和对应v77版本说明。发布前数据库在线备份、历史行哈希、安装失败自动回退；快捷回复新功能不包含在v77中。
+
+## v77 deployed for review
+2026-10-23，用户原话「更新到网站」。版本20261023-compact-chat-v77，运行源码8aec74e。在线SQLite备份/opt/dorm-duty/backups/dorm-20261023T013903Z.sqlite；之前67条completed行哈希逐条一致、DB identity保持。143个公开资源逐字节匹配，三个页面及v77提示一次性显示检查通过，无生产写请求。证据data/compact-chat/publish/{deployment.json,history-after.json,public-verification.json,public-browser.json,public-page.png}。上一版v76保留可回滚；未合并main、未创建本轮PR、真机验收仍pending。
