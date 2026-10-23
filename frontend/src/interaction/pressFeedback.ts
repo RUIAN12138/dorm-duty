@@ -28,6 +28,7 @@ export function installPressFeedback() {
     return !el ||
       el.closest("[inert]") ||
       el.matches(':disabled,[aria-disabled="true"]') ||
+      el.matches("[data-card-feedback]") ||
       el.closest(".chore-bottom-nav,.reminder-banner-card")
       ? null
       : el;

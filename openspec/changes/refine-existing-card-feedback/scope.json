@@ -1,0 +1,34 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "e71f61d2cfaec1e67dd758e80f10363e196a6ac6",
+  "allowed": [
+    "frontend/src/interactions/tilt.ts",
+    "frontend/src/interaction/cardFeedback.ts",
+    "frontend/src/interaction/pressFeedback.ts",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/ChoreCalendar.vue",
+    "frontend/src/components/ChoreRecordRow.vue",
+    "frontend/src/components/RecordTimeline.vue",
+    "frontend/src/components/JoinedDorms.vue",
+    "frontend/src/components/SortableMemberRow.vue",
+    "frontend/src/components/ReleaseNotice.vue",
+    "scripts/check-card-feedback.mjs",
+    "scripts/check-card-feedback-browser.mjs",
+    "openspec/changes/refine-existing-card-feedback/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "更新到网站 提交 pr",
+    "authorizedDigest": "fdfc931d29bdced167c39e03e13d7ca1a7fed38bfad37ff2f975371e94be71ed"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站 提交 pr",
+    "authorizedDigest": "fdfc931d29bdced167c39e03e13d7ca1a7fed38bfad37ff2f975371e94be71ed"
+  }
+}

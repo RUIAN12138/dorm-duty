@@ -9,6 +9,7 @@ defineEmits<{ select: [room: JoinedDorm] }>();
     <h2>我的宿舍</h2>
     <button
       v-for="room in rooms"
+      v-tilt
       :key="room.code"
       :data-testid="`saved-dorm-${room.code}`"
       :disabled="disabled"
@@ -69,7 +70,6 @@ button > span > span {
   color: var(--app-tone-h777, #777);
 }
 button:active {
-  transform: scale(0.98);
   background: var(--app-tone-hf0f0f0, #f0f0f0);
 }
 button:disabled {
