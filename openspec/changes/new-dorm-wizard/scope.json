@@ -4,6 +4,7 @@
   "allowed": [
     "frontend/src/components/onboarding/",
     "frontend/src/interaction/dormDraft.ts",
+    "frontend/src/interaction/companion.ts",
     "frontend/src/interaction/localPreview.ts",
     "frontend/src/interaction/memberNames.css",
     "frontend/src/components/ChoreBoard.vue",
