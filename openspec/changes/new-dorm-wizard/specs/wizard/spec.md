@@ -164,3 +164,14 @@ Each welcome-guide page MUST use its body to add useful context or an action wit
 - **THEN** the first page tells the user that today's tasks and assignee appear on Home without repeating an “open Home” instruction
 - **AND** the calendar page keeps its completion-record topic in the title and uses the body only to add that tasks can be adjusted in Settings
 - **AND** the tutorial page count, order, navigation, and behavior remain unchanged
+
+### Requirement: Version-2 notification permission preflight is concise
+The version-2 room notification settings MUST explain the notification purpose before requesting system permission, and the request MUST remain a direct result of an explicit user action. The explanation and action MUST not require opening a second duplicate settings sheet. Existing permission, subscription, and error-retry behavior MUST remain unchanged.
+#### Scenario: User opens version-2 notification settings
+- **WHEN** a user opens system-notification settings in a version-2 room
+- **THEN** the notification purpose and enable action are visible in the same settings sheet
+- **AND** opening the sheet alone does not request system permission
+- **AND** clicking the enable action requests permission once
+#### Scenario: User denies permission
+- **WHEN** the user denies or the permission request fails
+- **THEN** the existing error remains visible and the user can retry or leave without a false success state

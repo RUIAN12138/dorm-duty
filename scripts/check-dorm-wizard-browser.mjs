@@ -24,6 +24,33 @@ const p = await b.newPage({
   recordVideo:{dir:`data/startup-review/${engine}-wizard-videos`,size:{width:390,height:844}},
 });
 p.setDefaultTimeout(20000);
+await p.addInitScript(() => {
+  window.__systemPermissionPromptCount = 0;
+  const NotificationApi = window.Notification || class Notification {};
+  Object.defineProperty(NotificationApi, "requestPermission", {
+    configurable: true,
+    value: async () => {
+      window.__systemPermissionPromptCount++;
+      return "denied";
+    },
+  });
+  if (!("Notification" in window)) {
+    Object.defineProperty(window, "Notification", {
+      configurable: true,
+      value: NotificationApi,
+    });
+  }
+  if (!("PushManager" in window))
+    Object.defineProperty(window, "PushManager", {
+      configurable: true,
+      value: class PushManager {},
+    });
+  if (!("serviceWorker" in navigator))
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { ready: Promise.resolve({}) },
+    });
+});
 const h = await createHarness();
 const initial = await (
   await h.request("/guest/create", {
@@ -57,6 +84,10 @@ await p.route(/\/(email|chores|auth|dorms|guest)\//, async (route) => {
             : url.pathname === "/email/enter"
               ? { ...emailRoom, access_token: emailToken }
               : {},
+    });
+  if (url.pathname === "/chores/push/config")
+    return route.fulfill({
+      json: { available: true, public_key: "test-public-key" },
     });
   const response = await h.request(url.pathname + url.search, {
     method: req.method(),
@@ -574,6 +605,58 @@ try {
   await p.getByRole('button',{name:'跳过',exact:true}).click();
   await p.waitForFunction(()=>location.pathname!=='/guide');
   check(new URL(p.url()).pathname!=='/guide'&&!new URL(p.url()).searchParams.has('tour'),'manual guide skip returns to the caller without starting the feature tour');
+  await p.getByTestId("open-tools").click();
+  await p.getByTestId("open-preferences").click();
+  await p.getByTestId("open-system-notifications").click();
+  const notificationSettings = p.getByTestId("push-settings");
+  await notificationSettings.waitFor();
+  const notificationEnable = p.getByTestId("push-enable");
+  await notificationSettings.locator(".push-description").waitFor({
+    state: "visible",
+  });
+  await notificationEnable.waitFor({ state: "visible" });
+  await p.waitForFunction(() => {
+    const settings = document.querySelector('[data-testid="push-settings"]');
+    return settings?.closest(".sheet-layer")?.getAttribute("data-phase") === "open";
+  });
+  await p.evaluate(async () => {
+    const settings = document.querySelector('[data-testid="push-settings"]');
+    const layer = settings?.closest(".sheet-layer");
+    if (!layer) return;
+    await Promise.all(
+      layer
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+  await p.screenshot({
+    path: `data/startup-review/${engine}-notification-settings-explanation.png`,
+  });
+  check(
+    await p.locator(".permission-primer").count() === 0 &&
+      (await notificationSettings.locator(".push-description").textContent())?.includes("值日和室友留言") === true &&
+      await notificationEnable.isVisible(),
+    "version-2 notification settings explain system reminders in the same sheet as the enable action",
+  );
+  check(
+    await p.evaluate(() => window.__systemPermissionPromptCount) === 0,
+    "opening notification settings does not request system permission",
+  );
+  await notificationEnable.click();
+  await p.waitForFunction(() => window.__systemPermissionPromptCount === 1);
+  check(
+    await p.getByRole("alert").filter({ hasText: "请在系统设置中允许「轮到」的通知" }).count() === 1 &&
+      await notificationEnable.isEnabled(),
+    "denied system permission remains an explicit error with an enabled retry action",
+  );
+  await notificationEnable.click();
+  await p.waitForFunction(() => window.__systemPermissionPromptCount === 2);
+  check(
+    await p.getByRole("alert").filter({ hasText: "请在系统设置中允许「轮到」的通知" }).count() === 1,
+    "a second permission request occurs only after a second explicit user action",
+  );
+  await p.getByRole("button", { name: "关闭详情" }).last().click();
+  await notificationSettings.waitFor({ state: "detached" });
   await p.getByTestId('nav-duty').waitFor();
   await p.getByTestId("nav-duty").click();
   await p.locator(".chore-personal .task-selector").waitFor();

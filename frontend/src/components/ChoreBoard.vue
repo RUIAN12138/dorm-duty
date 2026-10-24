@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import "../interaction/memberNames.css";
 import NewTaskPane from "./onboarding/NewTaskPane.vue";
-import PermissionPrimer from "./onboarding/PermissionPrimer.vue";
 import TaskWorkspace from "./onboarding/TaskWorkspace.vue";
 import SpotlightTour from "./onboarding/SpotlightTour.vue";
 import {
@@ -158,7 +157,6 @@ onMounted(() =>
     },
   ),
 );
-const pushPrimerAccepted = ref(false);
 const pushSync = createPushSyncGate(syncMemberPush);
 const emit = defineEmits<{
   expired: [];
@@ -2226,13 +2224,8 @@ onUnmounted(() => {
         @read="markRead"
         @closed="presentNewReminders"
       />
-      <PermissionPrimer
-        v-if="!preview && board.configuration && pushOpen && !pushPrimerAccepted"
-        @continue="pushPrimerAccepted = true"
-        @cancel="pushOpen = false"
-      />
       <ChorePushSettings
-        v-if="!preview && (!board.configuration || pushPrimerAccepted)"
+        v-if="!preview && (!board.configuration || pushOpen)"
         v-model="pushOpen"
         :token="token"
         :nickname="board.member.nickname"

@@ -7,6 +7,7 @@
     "frontend/src/interaction/localPreview.ts",
     "frontend/src/interaction/memberNames.css",
     "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/ChorePushSettings.vue",
     "frontend/src/components/ChoreCalendar.vue",
     "frontend/src/components/ChoreMenu.vue",
     "frontend/src/router/index.ts",

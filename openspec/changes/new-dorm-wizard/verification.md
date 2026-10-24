@@ -202,3 +202,9 @@
 - 首屏说明改为“首页会显示今天的任务和负责人。”，日历页说明收敛为“设置里可以调整任务。”；教程页数、标题、顺序、导航、球球及行为不变。
 - `scripts/check-dorm-wizard-browser.mjs` 精确断言四页说明文案，保持滑动同步、跳转、短屏与横屏可达性回归；修改前后截图为 `data/startup-review/webkit-welcome-guide-copy-before.png` 与 `data/startup-review/webkit-welcome-guide-copy-after.png`。
 - 自动化为 macOS WebKit/Chromium 的移动视口模拟，非实体手机验收；未接触正式宿舍数据。
+
+## 2026-10-24 新版通知权限说明收敛
+- 新版宿舍通知设置抽屉现在同时提供用途说明和开启操作；删去额外的 `PermissionPrimer` 二次抽屉。调用系统授权仍只发生在用户明确点击开启后，拒绝状态继续显示原错误及重试入口。未改旧宿舍通知入口、订阅接口或权限业务语义。
+- `scripts/check-dorm-wizard-browser.mjs` 在隔离环境替身 `Notification.requestPermission()`；WebKit 缺少部分 Web Push API 时仅补最小测试桩以覆盖支持分支，不会弹出真实系统权限框。检查打开设置请求数为 0；点击开启请求一次；模拟拒绝后错误和重试按钮仍可见，再次点击才发起第二次请求。两种浏览器引擎运行完整脚本，各 118 项断言均通过，结果文件 `data/startup-review/chromium-wizard-result.json`、`data/startup-review/webkit-wizard-result.json` 的 `errors` 均为空；当前抽屉截图分别保存在 `data/startup-review/chromium-notification-settings-explanation.png`、`data/startup-review/webkit-notification-settings-explanation.png`。
+- `npm run web:build`（`vue-tsc`、Vite、PWA）通过；`npm run spec:validate` 18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check` 通过。构建有既有大 chunk 提示。全量 `npm run spec:check` 在范围扫描阶段被工作树里既有的未授权文件 `site/runtime/email-runtime.cjs` 阻止；该文件未编辑、未暂存、未提交，本轮其余 OpenSpec scope 将在干净提交树中复核。Impeccable detector 对既有 `ChoreBoard.vue:2869` 弹性曲线报 warning，与本次改动无关，未改其动画。
+- Chromium/WebKit 是 macOS 桌面浏览器的隔离移动视口模拟，不代表实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 已验收。未使用真实通知订阅、未访问正式数据；未创建 PR、未合并、未部署。

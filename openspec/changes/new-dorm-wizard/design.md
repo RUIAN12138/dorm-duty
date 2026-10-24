@@ -48,6 +48,9 @@
 ## Rule-stage tip copy
 仅将新建向导规则步骤的球球提示从重复当前选择动作的句子收紧为“之后可调整”。保留“这一选择可以修改”的事实；不改规则标题、三种节奏释义、任务级覆盖、布局、动效、验证逻辑或既有宿舍工作台。验证规则主态提示及三个节奏选择仍正常。
 
+## Version-2 notification permission preflight
+新版宿舍从 ChoreBoard 打开 ChorePushSettings 时，通知设置抽屉本身就是权限说明层：用途文案与开启按钮同屏，`enableMemberPush` 仍只在明确点击后调用 `Notification.requestPermission()`。移除 ChoreBoard 前置的第二个 PermissionPrimer 抽屉，不更改推送配置、订阅、错误恢复或旧宿舍入口。回滚时可恢复前置抽屉与 `pushPrimerAccepted` 状态；不需要数据迁移。
+
 ## Creation progress resize fallback
 `CreationProgress.vue` 通过本地 `observeElementSize.mjs` 选择 `ResizeObserver` 或窗口 `resize` 回退，并保留返回的清理函数，在组件卸载时调用。浏览器回归直接使用无 `ResizeObserver` 的隔离环境验证回退监听的触发与清理；主页面继续覆盖真实创建进度控件的取消、丢失指针捕获和反向拖动。
 
