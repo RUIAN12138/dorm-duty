@@ -1,39 +1,33 @@
 # Codex → ChatGPT · 最近一次开发交接
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `8f8467615c5d8eb161a3e772e51a8822c9b1eb4a`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/8f8467615c5d8eb161a3e772e51a8822c9b1eb4a
-- related_pr: 无（仅推送原隔离开发分支，未创建正式 PR）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮读取的 `CHATGPT_REVIEW.md` 针对 `251e950dca1421f34b7e3aa4bb6af1a461bc2791`，处理 P1-A 提前抬水额度撤回回执与 P1-C 单项任务策略覆盖；同时完成 OpenSpec 中创建入口直达首个可编辑问题。未修改 ChatGPT 独占维护的评审文件。
+- code_sha: `c137dbe1e6205e28ee140648afb1497ac47c945d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/c137dbe1e6205e28ee140648afb1497ac47c945d
+- related_pr: 无（用户要求先验收；只推送隔离开发分支）
+- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮按新版宿舍创建向导的简洁高效目标继续精简教程与任务节奏文案。最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=251e950dca1421f34b7e3aa4bb6af1a461bc2791`，不匹配先前交接的 `8f8467615c5d8eb161a3e772e51a8822c9b1eb4a` 或当前代码 SHA；本轮未重复执行过期建议，未修改评审文件。
 - changed_files:
-  - `frontend/src/components/onboarding/CreationProgress.vue`：保留并验证最终 pointer-up 坐标处理。
-  - `frontend/src/components/onboarding/DormWizard.vue`：创建入口直接进入宿舍名称；移除隐藏的普通 `<template>` 包装；全局节奏切换不再清空单项任务显式策略。
-  - `frontend/src/components/onboarding/WelcomeSlides.vue`：删除仅用于创建前置介绍的三页重复引导。
-  - `frontend/src/views/WelcomeGuide.vue`：保留独立欢迎教程的滚动目标与页码状态同步。
-  - `openspec/changes/new-dorm-wizard/{design.md,proposal.md,specs/wizard/spec.md,tasks.md,verification.md}`：记录创建首问、策略覆盖与验证证据；acceptance 仍为 pending。
-  - `scripts/check-dorm-wizard-browser.mjs`：回归创建直达、进度拖动、任务策略覆盖、全屏预览隔离与教程路径。
-  - `scripts/check-dorm-wizard.mjs`：补提前抬水额度撤回回执、权限、重复请求及数据库一致性检查。
-  - `site/worker/chores.mjs`：提前抬水额度撤回后 API 与 SQLite 均使用 cancelled 状态，并清除 `completed_at` / `completed_by`；同一已取消额度重复撤回返回 409。
+  - `frontend/src/views/WelcomeGuide.vue`
+  - `frontend/src/components/onboarding/DormWizard.vue`
+  - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/{design.md,proposal.md,specs/wizard/spec.md,tasks.md,verification.md}`
 - implemented:
-  - 创建者首次进入新建流程直接看到宿舍名称问题，不再先浏览重复的三页创建介绍。独立 `/guide`、新版宿舍首次进入引导、工作台手动讲解均保留。删除介绍页时暴露出的隐藏 DOM 模板节点已移除；截图显示输入、五步进度和底部操作正常。
-  - 修复评审 P1-A：未抵扣的提前抬水额度撤回后，credit 与 task 行状态均为 cancelled；API 任务回执的 ID、状态、完成时间及完成人与同 ID SQLite 行一致。其他成员不能撤回，重复撤回返回 409，计划抬水队列和通知副作用不变。
-  - 修复评审 P1-C 中单项策略被覆盖的问题：变更全局节奏仍同步更新全局默认及轮换类型，但保留用户明确设定的单项“按时间完成”/“只作提示”策略。Chromium/WebKit 用例先在原实现失败，修复后通过。
+  - 将欢迎教程四页的辅助文案改为明确的实际操作；留言页写明“点球球留话，回首页点消息看回复”，对应真实首页 `/messages` 入口。
+  - 新建宿舍规则主态及单项节奏设置，为三种节奏增加一行简短结果说明，使用同一数据定义，保留现有规则 ID、配置和运行语义；紧凑排布不改变页面数与步骤。
+  - 将文案要求与覆盖路径登记到 OpenSpec；没有修改旧宿舍配置、业务数据或正式 App 页面。
 - tests:
-  - `node scripts/check-dorm-wizard.mjs`：94 项隔离 SQLite/API 检查通过；未使用真实成员或生产数据。
-  - `node site/scripts/check-undo.mjs`：73 项；`node site/scripts/check-water-flex.mjs`：74 项；`node site/scripts/check-water-reassign.mjs`：45 项，均通过。
-  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）及 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导回归通过，包含 320/390/430px 布局、创建入口、策略覆盖、预览 API 隔离和减少动态效果；页面错误列表均为空。
-  - `npm run web:build`：`vue-tsc`、Vite、PWA 构建通过；保留既有约 556KB 的 GuestHome chunk 警告。
-  - `npm run spec:check`：18/18 OpenSpec 项目校验及 18 项范围门禁通过；范围输出 17 个 active changes、362 个登记文件，摘要 `ccb20746660b0f24f0240d9e06887840e2384869b854f6587963a4ccc2ae7ff0`。
-  - `node --check site/worker/chores.mjs`、`node --check scripts/check-dorm-wizard.mjs`、`git diff --check` 均通过；Impeccable 自动检测为 `[]`。
-  - 本轮没有重跑完整 `npm run web:verify`；先前评审记录的四项 Web 回归失败仍为发布阻塞：手势 opacity 断言、两个测试夹具导入 `memberNames.css`、旧迁移 `/guest/create` 返回 500。不得据本轮定向检查声称全套回归全绿。
-- CI: GitHub Commit Status 为 `state=pending`、`total_count=0`、`statuses=[]`；该 SHA 查询时没有关联 workflow run，暂无可确认 CI 通过证据。
+  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离创建向导、教程、预览和工作台流程通过；教程与节奏文案断言通过，覆盖 320/390/430px、规则页 390×844 单屏、预览无业务 API 请求与减少动态效果；页面错误列表均为空。
+  - `npm run web:build`：`vue-tsc`、Vite 和 PWA 构建通过；保留既有约 555 KB `GuestHome` chunk 提示。
+  - `npm run spec:check`：OpenSpec 18/18，17 个 active changes/362 个登记文件范围检查通过，18 项范围门禁通过；最终摘要 `46f030dd4fa7156d0e9d5cb0a9b165919b319a8b22ab351fc7f39224e1b07c52`。
+  - Impeccable 自动检测 `[]`；`git diff --check` 通过。
+  - 此前已在父提交 `8f84676` 记录的隔离 SQLite/API 修复与针对性测试仍包含在当前历史中；本轮没有重跑它们或完整 `npm run web:verify`。
+- CI: GitHub Actions 查询无该 SHA 的 workflow run；Commit Status `state=pending`、`total_count=0`、`statuses=[]`，不能报告 CI 通过。
 - platform_status:
-  - Chromium 和 WebKit 是本地浏览器移动视口模拟，覆盖创建步骤、屏幕尺寸及预览无业务写请求；不是实体 iPhone Safari 测试。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 均未真机验证。
-  - 构建与测试均使用本地合成身份/临时 SQLite；没有连接生产服务、读取或修改正式宿舍数据。
+  - Chromium 与 WebKit 为 macOS 浏览器的移动视口隔离模拟，不是实体 iPhone Safari/PWA 测试。
+  - Android WebView、HarmonyOS ArkWeb 未真机验证。
+  - 只使用本地合成草稿；没有访问或写入正式数据库。
 - remaining:
-  - 请 ChatGPT 对新的完整业务 SHA `8f8467615c5d8eb161a3e772e51a8822c9b1eb4a` 独立评审；现有针对 `251e950` 的评审已过期。
-  - 上述四项 `web:verify` 失败仍须在明确范围内单独定位，未删除断言或做范围外改动。
-  - 实体设备验收、与该 SHA 绑定的手势/教程录屏人工复核仍待完成；OpenSpec acceptance 保持 pending。
-  - 未创建正式 PR、未合并 main、未部署、未接触正式数据库。
+  - 请对 `c137dbe1e6205e28ee140648afb1497ac47c945d` 独立评审；当前评审 SHA 已过期。
+  - 四项既存 `npm run web:verify` 失败仍为阻塞：手势 opacity 断言、两个测试夹具导入 `memberNames.css`、旧迁移 `/guest/create` 返回 500；本轮未运行全量套件、未删除断言或改动这些范围。
+  - 向导/教程实体设备验收仍待进行；本地截图保存在忽略目录 `data/startup-review/`，不能替代真机录屏。
+  - 未创建 PR、未合并 main、未部署。
 - questions: 无。
