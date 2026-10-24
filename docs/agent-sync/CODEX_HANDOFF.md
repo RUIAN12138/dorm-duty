@@ -1,30 +1,33 @@
-# Codex → ChatGPT · 新宿舍规则卡片重心微调
+# Codex → ChatGPT · v2 通知抽屉退出生命周期修复
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/b1c69f06e0154521bd7be87d85db11aa6a85e0f2
-- related_pr: 无（继续使用独立预览分支，未创建 PR）
-- requirements: 用户目标“不断改进新手引导页面和宿舍创建页面，做到简洁高效”；沿用 `docs/agent-sync/USER_REQUIREMENTS.md` 的黑白极简、单屏规则选择及新旧宿舍隔离边界。本轮只调整新版创建规则页三种完成方式卡片的视觉平衡。
+- code_sha: `61c70f1e26b49eda55c0bf2285d1f33a8d06c38e`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/61c70f1e26b49eda55c0bf2285d1f33a8d06c38e
+- related_pr: 无（未创建 PR）
+- requirements: 处理 `CHATGPT_REVIEW.md` 对 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2` 的 P1-A：v2 系统通知子页关闭时，ChoreBoard 可能因 `pushOpen=false` 立即卸载 ChorePushSettings，跳过 ElasticSheet 的离场过渡及 `closed` 回调。保留用户既定的旧宿舍数据隔离和不部署边界。
 - changed_files:
-  - `frontend/src/components/onboarding/DormWizard.vue`
-  - `scripts/check-dorm-wizard-browser.mjs`
+  - `frontend/src/components/ChoreBoard.vue`
+  - `scripts/check-companion-chat-browser.mjs`
 - implemented:
-  - 规则页保持两列布局，将奇数项中最后一张方式卡片居中；宽度与上排卡片一致，只作用于新建宿舍向导，不影响任务设置工作区。
-  - 增加 320、390、430px 下卡片居中及宽度对齐的浏览器几何断言；未改标题、文案、业务数据、选择逻辑及旧宿舍行为。
+  - 将“当前打开”与“组件是否保持挂载”拆成 `pushOpen` / `pushSheetMounted`。打开通知页先挂载；子页 `closed` 事件到达后才释放挂载。若退场期间重新打开，回调检查当前 `pushOpen`，不会误卸载新打开的内容。
+  - 旧版宿舍仍由 `!board.configuration` 条件维持既有挂载行为；未改通知 API、权限规则或服务端数据。
+  - 浏览器测试仅对隔离宿舍的 `/chores/board` 响应注入 v2 配置，使用真实 ChoreBoard、ChorePushSettings、ElasticSheet；返回通知页时检查离场中间状态与动画结束后的卸载。
+  - 业务分支远端 HEAD 与本 SHA 一致。主工作树中已有的 `site/runtime/email-runtime.cjs` 修改未触碰、未暂存、未提交。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导/教程/预览流程通过，`PASS []`；包括 320/390/430px 新增卡片几何断言、创建草稿、正式页面组件预览与无业务 API 写入检查。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，`PASS []`。
+  - `DORM_BROWSER=chromium node scripts/check-companion-chat-browser.mjs`：62 项检查通过；包括 v2 通知子页退出期间仍挂载、过渡结束后卸载及无浏览器运行时错误。
+  - `DORM_BROWSER=webkit node scripts/check-companion-chat-browser.mjs`：60 项检查通过；覆盖同一通知子页生命周期回归。
   - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；仍有既有 `GuestHome` 大 chunk 警告。
-  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过；Impeccable detector 对本轮目标返回 `[]`。
-  - 修改前后截图位于本机 `data/startup-review/chromium-wizard-rules-default-before-balance.png`、`data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/webkit-wizard-rules-default-before-balance.png`、`data/startup-review/webkit-wizard-rules-default.png`，移动视口 390×844；截图未提交到仓库。
-  - 本轮未运行完整 `npm run web:verify` 或 `npm run spec:check`。
-- CI: GitHub Commit Status `pending`、`total_count=0`、`statuses=[]`；Check Runs 0、Actions Runs 0。无 CI 通过证据。
+  - `npm run spec:validate`：18/18 通过；`node --check scripts/check-companion-chat-browser.mjs` 和 `git diff --check` 通过。
+  - `DORM_CONTINUITY_QA=1` 的 Chromium 与 WebKit 运行均在新增回归到达前失败于既有断言 `settings skeleton dark styling never dims the rest of the application`；该 continuity 路径未通过，本轮未修改骨架视觉。
+  - Impeccable detector 对 `ChoreBoard.vue` 报告原有 line 2876 `cubic-bezier(0.34, 1.56, 0.64, 1)` 弹性曲线警告；本轮差异没有改该行。
+  - 本轮没有重跑完整 `npm run web:verify`；上一评审记录了四项既存 Web 回归失败，本轮不声称全量 Web 回归通过。
+- CI: 对本 SHA 查询到 Commit Status `pending`、`total_count=0`、无 statuses；Check Runs 0、GitHub Actions Runs 0。没有 CI 通过证据。
 - platform_status:
-  - macOS 桌面 Chromium/WebKit 移动视口模拟通过，不等于 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。
-  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库；未生成真实成员、打卡、通知或宿舍数据。
+  - macOS 桌面 Chromium/WebKit 移动视口模拟通过，不等于真实设备验收。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 实体设备未测试。
+  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
 - remaining:
-  - 最新 `CHATGPT_REVIEW.md` 仍为 `reviewed_code_sha=ba7c0ca9b9d5970568f956907d5415bd3109ff39`，早于本 SHA；本 SHA 尚待独立评审。当前评审无针对本 SHA 的新 P0。
-  - 前次评审记录的四项 `web:verify` 失败未在本 SHA 重跑；本轮不声称完整 Web 验证全绿。
-  - 邮箱认证端到端与实体设备体验未验证。
-  - 主工作树原有未提交 `site/runtime/email-runtime.cjs` 修改已保留，未暂存、未提交、未推送。
+  - 当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，未覆盖本 SHA；P1-A 已按建议修复，当前提交尚待独立评审。
+  - `DORM_CONTINUITY_QA=1` 暗色骨架断言失败仍未处理；完整 `web:verify` 与本地实体设备未验收。
+  - 旧宿舍路径由条件保持，但本轮只在隔离浏览器中验证 v2 关闭路径，未进行通知权限真机或线上推送验收。
 - questions: 暂无。
