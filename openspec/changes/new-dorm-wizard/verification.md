@@ -208,3 +208,10 @@
 - `scripts/check-dorm-wizard-browser.mjs` 在隔离环境替身 `Notification.requestPermission()`；WebKit 缺少部分 Web Push API 时仅补最小测试桩以覆盖支持分支，不会弹出真实系统权限框。检查打开设置请求数为 0；点击开启请求一次；模拟拒绝后错误和重试按钮仍可见，再次点击才发起第二次请求。两种浏览器引擎运行完整脚本，各 118 项断言均通过，结果文件 `data/startup-review/chromium-wizard-result.json`、`data/startup-review/webkit-wizard-result.json` 的 `errors` 均为空；当前抽屉截图分别保存在 `data/startup-review/chromium-notification-settings-explanation.png`、`data/startup-review/webkit-notification-settings-explanation.png`。
 - `npm run web:build`（`vue-tsc`、Vite、PWA）通过；`npm run spec:validate` 18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check` 通过。构建有既有大 chunk 提示。全量 `npm run spec:check` 在范围扫描阶段被工作树里既有的未授权文件 `site/runtime/email-runtime.cjs` 阻止；该文件未编辑、未暂存、未提交，本轮其余 OpenSpec scope 将在干净提交树中复核。Impeccable detector 对既有 `ChoreBoard.vue:2869` 弹性曲线报 warning，与本次改动无关，未改其动画。
 - Chromium/WebKit 是 macOS 桌面浏览器的隔离移动视口模拟，不代表实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 已验收。未使用真实通知订阅、未访问正式数据；未创建 PR、未合并、未部署。
+
+## 2026-10-24 规则页按需显示定时任务选择
+- 默认轮换和完成交接模式不显示仅供定时任务使用的任务切换胶囊；按时间安排且有多个可配置任务时，选择器通过已有 `wizard-panel` 过渡平滑出现。单个定时任务时直接显示该任务的时间设置，不显示无意义的单项选择。
+- Chromium 与 WebKit 的 `scripts/check-dorm-wizard-browser.mjs` 全流程均通过（`errors=[]`）：覆盖默认模式隐藏、按时间安排显示、离场动画结束后移除、完成交接隐藏、回到定时模式后恢复同一任务与截止时间，以及 390×844 单屏布局。
+- 同一套测试还覆盖 320/390/430px 宽度、短屏滚动、减少动态效果、预览组件及写入隔离；截图位于 `data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/chromium-wizard-rules-scheduled.png`、`data/startup-review/webkit-wizard-rules-default.png` 与 `data/startup-review/webkit-wizard-rules-scheduled.png`。
+- `npm run web:build` 通过（Vue 类型检查、Vite 与 PWA 构建）；`npm run spec:validate` 18/18 通过；浏览器脚本语法检查与 `git diff --check` 通过。构建仍报告既有 `GuestHome` 大 chunk 提示。
+- Chromium/WebKit 为 macOS 桌面引擎上的隔离移动视口模拟；未做 iPhone、Android 或 HarmonyOS 真机验收。未改规则/后端/数据，不创建 PR、不合并、不部署。

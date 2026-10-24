@@ -51,6 +51,11 @@ The new-room rules page MUST use understandable labels for supported modes and s
 #### Scenario: Round mode selection
 - **WHEN** the user switches a task to completion-round mode
 - **THEN** time-only controls disappear without erasing the retained draft time
+#### Scenario: Hide irrelevant task selector outside scheduled mode
+- **WHEN** the user views or selects a non-time-based unified pacing mode
+- **THEN** the task selector used only to edit scheduled times is hidden
+- **AND** selecting scheduled mode reveals it when multiple tasks have independent times
+- **AND** switching away from scheduled mode preserves each task's saved time and selection state
 ### Requirement: Five-stage creation progress
 New-room creation MUST expose no more than five top-level pages: room name, tasks, page arrangement, rules, and preview/confirmation. Task-specific values remain inside their matching topic page.
 #### Scenario: New-room progress display

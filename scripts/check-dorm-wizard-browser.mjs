@@ -492,8 +492,10 @@ try {
   check((await p.locator('.wizard-tip').textContent())?.trim()==='之后可调整','pacing step companion tip keeps the useful reversibility note without repeating the page question');
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 default rules and all pacing choices fit without vertical scrolling');
+  check(await p.locator('.rule-primary .rule-task-picks').count()===0,'non-scheduled unified pacing hides the task selector used only for scheduled times');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
+  await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
   check(await p.locator('.rule-task-picks button').count()===3&&await p.locator('.rule-time-panel .van-picker').count()===1,'the unified scheduled choice exposes its task selector and time wheel directly on the rules step');
   check(
     JSON.stringify(await p.locator('.rule-mode-picks .wizard-choice span').allTextContents()) === JSON.stringify([
@@ -507,6 +509,18 @@ try {
   check(scheduledFit.scrollHeight<=scheduledFit.clientHeight+1,'390x844 unified scheduled rules and one time wheel fit without vertical scrolling');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-scheduled.png`});
   check(await p.locator('.rule-time-panel .time-field-switch button').count()===2,'scheduled execution and deadline fields switch in place');
+  const retainedDeadline=await p.locator('.rule-time-panel .time-wheel-setting > strong').textContent();
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
+  await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
+  check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'switching back to round mode smoothly removes irrelevant task and time controls');
+  check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'non-scheduled rule choice remains compact without vertical scrolling');
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).click();
+  await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
+  check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'completion handoff also hides the scheduled-only task selector');
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
+  await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
+  check(await p.locator('.rule-task-picks button[aria-pressed="true"]').count()===1,'scheduled task selection is restored after changing the pacing mode');
+  check(await p.locator('.rule-time-panel .time-wheel-setting > strong').textContent()===retainedDeadline,'scheduled deadline remains unchanged when switching between pacing modes');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
   check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-detail').count()===1,'per-task rule editing is available as a separate compact card state');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice').count()===3&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task rotation tab exposes all three runtime rhythms without stacking unrelated controls');
