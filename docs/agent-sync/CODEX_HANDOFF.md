@@ -1,33 +1,38 @@
-# Codex → ChatGPT · v2 通知抽屉退出生命周期修复
+# Codex → ChatGPT · 新宿舍向导校验提示恢复
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `61c70f1e26b49eda55c0bf2285d1f33a8d06c38e`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/61c70f1e26b49eda55c0bf2285d1f33a8d06c38e
+- code_sha: `1a00db1db57234c9b5d2cda2e365c4d6aea371f3`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/1a00db1db57234c9b5d2cda2e365c4d6aea371f3
 - related_pr: 无（未创建 PR）
-- requirements: 处理 `CHATGPT_REVIEW.md` 对 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2` 的 P1-A：v2 系统通知子页关闭时，ChoreBoard 可能因 `pushOpen=false` 立即卸载 ChorePushSettings，跳过 ElasticSheet 的离场过渡及 `closed` 回调。保留用户既定的旧宿舍数据隔离和不部署边界。
+- requirements: 修复新版创建向导中提交必填错误后，用户改正输入但旧提示仍需再次按“继续”才消失的问题。保留现有校验条件、草稿和创建流程；不影响旧宿舍，不触及生产数据；按协作协议仅更新开发分支与本交接文件。
 - changed_files:
-  - `frontend/src/components/ChoreBoard.vue`
-  - `scripts/check-companion-chat-browser.mjs`
+  - `frontend/src/components/onboarding/DormWizard.vue`
+  - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/proposal.md`
+  - `openspec/changes/new-dorm-wizard/design.md`
+  - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
+  - `openspec/changes/new-dorm-wizard/tasks.md`
+  - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - 将“当前打开”与“组件是否保持挂载”拆成 `pushOpen` / `pushSheetMounted`。打开通知页先挂载；子页 `closed` 事件到达后才释放挂载。若退场期间重新打开，回调检查当前 `pushOpen`，不会误卸载新打开的内容。
-  - 旧版宿舍仍由 `!board.configuration` 条件维持既有挂载行为；未改通知 API、权限规则或服务端数据。
-  - 浏览器测试仅对隔离宿舍的 `/chores/board` 响应注入 v2 配置，使用真实 ChoreBoard、ChorePushSettings、ElasticSheet；返回通知页时检查离场中间状态与动画结束后的卸载。
-  - 业务分支远端 HEAD 与本 SHA 一致。主工作树中已有的 `site/runtime/email-runtime.cjs` 修改未触碰、未暂存、未提交。
+  - `DormWizard.vue` 在本地校验错误存在期间，随草稿输入变化重新计算当前步骤错误；预览确认步骤使用 `draftErrors(draft)`，其他步骤复用 `issue()`。无效值仍显示当前错误，有效值修复后提示在无需再次按主按钮的情况下消失。
+  - 增加 Chromium/WebKit 回归断言覆盖空白输入保持错误、修正宿舍名后错误消失；同步更新既有 OpenSpec 变更记录。
+  - 本轮提交只改上述 7 个文件。未修改后端、数据库迁移、正式宿舍数据、创建 API 或旧宿舍路径。工作树中原有的 `site/runtime/email-runtime.cjs` 修改未触碰、未暂存、未提交；开发分支 push 后远端 SHA 与本次完整 SHA 一致。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-companion-chat-browser.mjs`：62 项检查通过；包括 v2 通知子页退出期间仍挂载、过渡结束后卸载及无浏览器运行时错误。
-  - `DORM_BROWSER=webkit node scripts/check-companion-chat-browser.mjs`：60 项检查通过；覆盖同一通知子页生命周期回归。
-  - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；仍有既有 `GuestHome` 大 chunk 警告。
-  - `npm run spec:validate`：18/18 通过；`node --check scripts/check-companion-chat-browser.mjs` 和 `git diff --check` 通过。
-  - `DORM_CONTINUITY_QA=1` 的 Chromium 与 WebKit 运行均在新增回归到达前失败于既有断言 `settings skeleton dark styling never dims the rest of the application`；该 continuity 路径未通过，本轮未修改骨架视觉。
-  - Impeccable detector 对 `ChoreBoard.vue` 报告原有 line 2876 `cubic-bezier(0.34, 1.56, 0.64, 1)` 弹性曲线警告；本轮差异没有改该行。
-  - 本轮没有重跑完整 `npm run web:verify`；上一评审记录了四项既存 Web 回归失败，本轮不声称全量 Web 回归通过。
-- CI: 对本 SHA 查询到 Commit Status `pending`、`total_count=0`、无 statuses；Check Runs 0、GitHub Actions Runs 0。没有 CI 通过证据。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离创建、教程、预览和任务工作台流程通过，新增校验恢复断言通过，最终 `PASS []`。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，最终 `PASS []`。
+  - `npm run web:build`：`vue-tsc`、Vite 与 PWA 构建通过；有既有 `GuestHome` chunk 大于 500 KB 的提示。
+  - `npm run spec:validate`：18/18 通过。
+  - `node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check` 通过。
+  - 在提交后、无本地未提交文件的独立 worktree 中运行 `npm run spec:scope`：通过，17 个变更、364 个受登记文件，digest `79cf479d775f1970c4914c0dc568323d6d391c4158367ae21ea7d020e94c68cd`。主工作树因原有未提交的 `site/runtime/email-runtime.cjs` 文件会被同一范围扫描识别为 out of scope；该用户工作区改动未纳入本次提交。
+  - 移动视口截图：`data/startup-review/chromium-wizard-name-after.png`、`data/startup-review/webkit-wizard-name-after.png`。截图为浏览器模拟，不是实体设备捕获。
+- CI: GitHub API 对本 SHA 返回 Commit Status `pending`、`total_count=0`、无 statuses；Check Runs 0、Actions workflow runs 0。当前没有 CI 成功记录。
 - platform_status:
-  - macOS 桌面 Chromium/WebKit 移动视口模拟通过，不等于真实设备验收。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 实体设备未测试。
+  - macOS Chromium/WebKit 移动视口自动化通过；这不等于真机验收。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机测试。
   - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
 - remaining:
-  - 当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，未覆盖本 SHA；P1-A 已按建议修复，当前提交尚待独立评审。
-  - `DORM_CONTINUITY_QA=1` 暗色骨架断言失败仍未处理；完整 `web:verify` 与本地实体设备未验收。
-  - 旧宿舍路径由条件保持，但本轮只在隔离浏览器中验证 v2 关闭路径，未进行通知权限真机或线上推送验收。
+  - 当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 仍为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，不匹配本 SHA；本次协调检查未发现针对 `61c70f1` 或 `1a00db1` 的新评审。新提交待独立审查。
+  - 前一评审中的 P1-A 通知抽屉卸载时序已由 `61c70f1` 实施并交接，但评审文档没有被改写或视作已评审本 SHA。
+  - 先前评审记录的四项全量 `web:verify` 失败仍未重跑；本轮只做向导定向 Chromium/WebKit 回归，不能称全量 Web 回归通过。
+  - 真实设备及登录、系统通知权限、正式部署仍未验收。
 - questions: 暂无。
