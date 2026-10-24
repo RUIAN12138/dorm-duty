@@ -22,6 +22,11 @@ const enabled=computed(()=>draft.tasks.filter(t=>t.enabled));
 const ruleTasks=computed(()=>enabled.value.filter(t=>t.key!=='water'));
 const globalPacing=computed(()=>{if(!ruleTasks.value.length)return 'round';const value=ruleTasks.value[0]!.rotation;return ruleTasks.value.every(t=>t.rotation===value)?(value==='rotation'?'scheduled':value):'mixed';});
 const hard=(t:DraftTask)=> (t.policy&&t.policy!=='inherit'?t.policy:draft.policy)==='hard';
+const pacingChoices=[
+ {mode:'round' as const,title:'大家做完再开始下一轮',description:'全员完成后，开始新一轮'},
+ {mode:'scheduled' as const,title:'按时间安排',description:'按设定时间执行并截止'},
+ {mode:'completion' as const,title:'做完交给下一位',description:'完成后轮到下一位'},
+];
 type Step={id:string;label:string;kind:string;title:string;tip:string;task?:DraftTask};
 const selectedTask=ref<string|null>(null),advanced=ref(false);
 const creationEditTaskKey=ref<string|null>(null),selectedRuleTaskKey=ref<string|null>(null);
@@ -131,7 +136,7 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
 <TaskEditor v-else-if="current.kind==='task'" :task="current.task!"/>
 <template v-else-if="current.kind==='pages'"><TaskPageBoard :draft="draft" :compact="!workspace"/></template>
 <template v-else-if="current.kind==='second'"><button class="wizard-choice policy-option" data-enter :aria-pressed="draft.second_page_kind!=='nudge'" :class="{selected:draft.second_page_kind!=='nudge'}" @click="draft.second_page_kind='tasks'"><strong>任务页</strong><span>查看安排，完成后交接</span></button><button class="wizard-choice policy-option" data-enter :aria-pressed="draft.second_page_kind==='nudge'" :class="{selected:draft.second_page_kind==='nudge'}" @click="draft.second_page_kind='nudge'"><strong>催促页</strong><span>显示负责人，轻点发出提醒</span></button></template>
-<template v-else-if="current.kind==='rules'"><template v-if="!rulesAdvanced"><div v-if="ruleTasks.length" class="rule-primary" data-enter><div class="creation-task-picks rule-task-picks" aria-label="选择任务"><button v-for="t in ruleTasks" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline'">{{t.name}}</button></div><div class="rule-mode-picks"><button class="wizard-choice" :class="{selected:globalPacing==='round'}" :aria-pressed="globalPacing==='round'" @click="chooseCycle('round')"><strong>大家做完再开始下一轮</strong></button><button class="wizard-choice" :class="{selected:globalPacing==='scheduled'}" :aria-pressed="globalPacing==='scheduled'" @click="chooseCycle('scheduled')"><strong>按时间安排</strong></button><button class="wizard-choice" :class="{selected:globalPacing==='completion'}" :aria-pressed="globalPacing==='completion'" @click="chooseCycle('completion')"><strong>做完交给下一位</strong></button></div><div v-if="globalPacing==='scheduled'&&selectedRuleTask" class="rule-time-panel"><div class="time-field-switch" role="group" aria-label="选择任务时间"><button :class="{selected:ruleTimeField==='execution_time'}" @click="ruleTimeField='execution_time'">执行</button><button :class="{selected:ruleTimeField==='deadline'}" @click="ruleTimeField='deadline'">截止</button></div><TimeWheelSetting v-if="ruleTimeField==='execution_time'" v-model="selectedRuleTask.execution_time" label="执行时间" compact/><TimeWheelSetting v-else v-model="selectedRuleTask.deadline" label="截止时间" compact/></div></div><div v-else class="rule-fixed" data-enter><strong>抬水做完后交给下一位</strong></div><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=true">为单项任务调整</button></template><template v-else><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=false">‹ 使用统一方式</button><div v-if="enabled.length" class="creation-task-picks rule-task-picks" data-enter aria-label="选择任务"><button v-for="t in enabled" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline';ruleFacet='rotation'">{{t.name}}</button></div><Transition name="wizard-panel">
+<template v-else-if="current.kind==='rules'"><template v-if="!rulesAdvanced"><div v-if="ruleTasks.length" class="rule-primary" data-enter><div class="creation-task-picks rule-task-picks" aria-label="选择任务"><button v-for="t in ruleTasks" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline'">{{t.name}}</button></div><div class="rule-mode-picks"><button v-for="choice in pacingChoices" :key="choice.mode" class="wizard-choice" :class="{selected:globalPacing===choice.mode}" :aria-pressed="globalPacing===choice.mode" @click="chooseCycle(choice.mode)"><strong>{{choice.title}}</strong><span>{{choice.description}}</span></button></div><div v-if="globalPacing==='scheduled'&&selectedRuleTask" class="rule-time-panel"><div class="time-field-switch" role="group" aria-label="选择任务时间"><button :class="{selected:ruleTimeField==='execution_time'}" @click="ruleTimeField='execution_time'">执行</button><button :class="{selected:ruleTimeField==='deadline'}" @click="ruleTimeField='deadline'">截止</button></div><TimeWheelSetting v-if="ruleTimeField==='execution_time'" v-model="selectedRuleTask.execution_time" label="执行时间" compact/><TimeWheelSetting v-else v-model="selectedRuleTask.deadline" label="截止时间" compact/></div></div><div v-else class="rule-fixed" data-enter><strong>抬水做完后交给下一位</strong></div><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=true">为单项任务调整</button></template><template v-else><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=false">‹ 使用统一方式</button><div v-if="enabled.length" class="creation-task-picks rule-task-picks" data-enter aria-label="选择任务"><button v-for="t in enabled" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline';ruleFacet='rotation'">{{t.name}}</button></div><Transition name="wizard-panel">
   <div v-if="selectedRuleTask" class="rule-detail" data-enter>
     <header><strong>{{selectedRuleTask.name}}</strong></header>
     <div class="rule-facets" role="tablist" aria-label="任务设置">
@@ -140,11 +145,9 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
     </div>
     <div v-if="ruleFacet==='rotation'">
       <div v-if="selectedRuleTask.key!=='water'" class="rule-rotation">
-        <button class="wizard-choice" :class="{selected:selectedRuleTask.rotation==='round'}" :aria-pressed="selectedRuleTask.rotation==='round'" @click="setTaskCycle(selectedRuleTask,'round')"><strong>大家做完再开始下一轮</strong></button>
-        <button class="wizard-choice" :class="{selected:selectedRuleTask.rotation==='rotation'}" :aria-pressed="selectedRuleTask.rotation==='rotation'" @click="setTaskCycle(selectedRuleTask,'scheduled')"><strong>按时间安排</strong></button>
-        <button class="wizard-choice" :class="{selected:selectedRuleTask.rotation==='completion'}" :aria-pressed="selectedRuleTask.rotation==='completion'" @click="setTaskCycle(selectedRuleTask,'completion')"><strong>做完交给下一位</strong></button>
+        <button v-for="choice in pacingChoices" :key="choice.mode" class="wizard-choice" :class="{selected:selectedRuleTask.rotation===(choice.mode==='scheduled'?'rotation':choice.mode)}" :aria-pressed="selectedRuleTask.rotation===(choice.mode==='scheduled'?'rotation':choice.mode)" @click="setTaskCycle(selectedRuleTask,choice.mode)"><strong>{{choice.title}}</strong><span>{{choice.description}}</span></button>
       </div>
-      <div v-else class="rule-fixed"><strong>做完交给下一位</strong></div>
+      <div v-else class="rule-fixed"><strong>做完交给下一位</strong><span>完成后轮到下一位</span></div>
     </div>
     <div v-else class="rule-timing">
       <div class="rule-override">
@@ -322,14 +325,22 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
   gap: 10px;
 }
 .rule-mode-picks .wizard-choice {
-  min-height: 82px;
-  padding: 12px;
+  display: grid;
+  align-content: center;
   justify-items: center;
+  gap: 1px;
+  min-height: 68px;
+  padding: 6px 8px;
   text-align: center;
 }
 .rule-mode-picks strong {
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.rule-mode-picks span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
 }
 .rule-advanced-toggle {
   margin-top: 8px;
@@ -418,9 +429,22 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
   justify-items: center;
   text-align: center;
 }
+.rule-rotation .wizard-choice {
+  gap: 3px;
+  min-height: 64px;
+  padding: 8px 7px;
+}
 .rule-rotation strong,
 .rotation-choice-cards strong {
   font-size: 15px;
+}
+.rule-rotation strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+.rule-rotation span {
+  font-size: 11px;
+  line-height: 1.2;
 }
 .rule-fixed {
   margin-top: 10px;

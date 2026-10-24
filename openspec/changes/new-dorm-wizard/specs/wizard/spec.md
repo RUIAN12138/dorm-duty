@@ -21,6 +21,9 @@ The product MUST expose a standalone four-page welcome guide and local loopback 
 #### Scenario: Tutorial route
 - **WHEN** the user opens `/guide`
 - **THEN** four swipeable pages are shown and the last page can start the app
+#### Scenario: Actionable tutorial copy
+- **WHEN** a user reads a welcome-guide page
+- **THEN** its short description names the relevant action or entry point, including tapping the companion to leave a message and returning to Home to open Messages and read replies
 #### Scenario: Local development access
 - **WHEN** the user opens the local app at localhost or a loopback address
 - **THEN** an explicit new-room wizard experience action is available and opens an isolated draft without requiring email entry
@@ -34,6 +37,9 @@ The product MUST expose a standalone four-page welcome guide and local loopback 
 
 ### Requirement: Natural task pacing and time wheel
 The new-room rules page MUST use understandable labels for supported modes and show wheel controls only where time settings apply.
+#### Scenario: Explain pacing choices
+- **WHEN** a user sees the three new-room pacing choices
+- **THEN** each choice includes one concise explanation of when the next round or assignee changes, and all three remain visible without vertical scrolling at 390×844 CSS pixels
 #### Scenario: Scheduled task selection
 - **WHEN** the user chooses a time-scheduled task
 - **THEN** its hour/minute wheel is available and updates the draft value

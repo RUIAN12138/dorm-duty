@@ -111,6 +111,15 @@ try {
   await p.goto("http://127.0.0.1:8094/guide");
   await p.locator('[data-testid="welcome-guide"]').waitFor();
   check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
+  check(
+    JSON.stringify(await p.locator(".guide-page p").allTextContents()) === JSON.stringify([
+      "打开首页，看今天的任务和负责人。",
+      "点“我已完成”，查看进度和下一位。",
+      "点球球留话，回首页点消息看回复。",
+      "打开日历看记录；设置里调整任务。",
+    ]),
+    "welcome tutorial copy names the real entry point and action on each page",
+  );
   check(await p.locator(".guide-dots button").evaluateAll((els) => els.every((el) => el.offsetWidth >= 24 && el.offsetHeight >= 44)), "tutorial page indicators expose a stable, accessible touch target");
   const guideDotLayout = await p.locator(".guide-dots button").evaluateAll((els) => els.map((el) => [el.offsetLeft, el.offsetWidth]));
   await p.getByRole("button", { name: "第 4 页", exact: true }).click();
@@ -340,12 +349,30 @@ try {
   await p.locator('[data-task-zone="water"] .page-task--compact').filter({hasText:'厕所'}).click();
   check(await p.locator('[data-task-zone="duty"] .page-task--compact').filter({hasText:'厕所'}).count()===1,'task can return to the duty page before previewing its production selector');
   await p.getByRole('button',{name:'前往完成规则',exact:true}).click();
+  await p.locator('.rule-mode-picks').waitFor();
+  await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
+  check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 default rules and all pacing choices fit without vertical scrolling');
+  await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   check(await p.locator('.rule-task-picks button').count()===3&&await p.locator('.rule-time-panel .van-picker').count()===1,'the unified scheduled choice exposes its task selector and time wheel directly on the rules step');
+  check(
+    JSON.stringify(await p.locator('.rule-mode-picks .wizard-choice span').allTextContents()) === JSON.stringify([
+      '全员完成后，开始新一轮',
+      '按设定时间执行并截止',
+      '完成后轮到下一位',
+    ]),
+    'all pacing choices explain their effect without changing the existing mode labels',
+  );
+  const scheduledFit=await p.locator('.wizard-body').evaluate(el=>({scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,children:[...el.querySelector('.rule-primary').children].map(child=>({className:child.className,height:child.getBoundingClientRect().height}))}));
+  check(scheduledFit.scrollHeight<=scheduledFit.clientHeight+1,'390x844 unified scheduled rules and one time wheel fit without vertical scrolling');
+  await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-scheduled.png`});
   check(await p.locator('.rule-time-panel .time-field-switch button').count()===2,'scheduled execution and deadline fields switch in place');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
   check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-detail').count()===1,'per-task rule editing is available as a separate compact card state');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice').count()===3&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task rotation tab exposes all three runtime rhythms without stacking unrelated controls');
+  check(await p.locator('.rule-detail .rule-rotation .wizard-choice span').count()===3,'per-task pacing choices use the same concise explanations');
+  check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 per-task pacing choices fit without vertical scrolling');
+  await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-per-task.png`});
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   check(await p.locator('.rule-detail .rule-time-panel .van-picker').count()===1,'per-task time tab keeps the scheduled time wheel available in the same wizard step');
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 task rule and single time wheel fit in one screen');

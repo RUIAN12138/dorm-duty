@@ -1,5 +1,11 @@
 # 页面编排与正式值日复用补充验收
 
+## 本轮精简与说明（实现前）
+
+- 仅修改 `WelcomeGuide.vue` 与新版创建向导规则主态，增加浏览器脚本检查；不改已有房间工作台、配置规则或服务端。
+- Chromium 与 WebKit 隔离检查均通过：四页教程文案、三种节奏释义、390×844 默认规则／定时规则（含一个时间轮）／单项节奏设置均无需纵向滚动；窄屏、现有预览隔离、旧工作台与减少动态效果回归通过。
+- 实体 iPhone、Android WebView、HarmonyOS ArkWeb 未验证前不得标为通过。
+
 日期：2026-10-24
 
 ## 已完成
@@ -133,3 +139,22 @@
 - 浏览器回归新增先红后绿：在规则页分别设定地板硬性、厕所软性覆盖，切换全局轮次后重新进入单项编辑，检查两个原选择仍为 `aria-pressed=true`。原实现下 Chromium 断言按预期失败；修复后完整 `node scripts/check-dorm-wizard-browser.mjs`（Chromium）和 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）均通过，页面错误列表为 `[]`。
 - 本节是本地桌面浏览器的移动视口模拟；不代表实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 真机验收。四项既存 `web:verify` 失败继续保留为单独阻塞；本轮没有重跑完整 `web:verify`、没有新的 GitHub CI 证据。
 - 本轮只改新版向导的任务级策略覆盖及其隔离浏览器回归和 OpenSpec 记录；未改旧宿舍配置、生产数据、正式站点或产品流程之外的其他页面。
+
+## 2026-10-24 教程入口文案与节奏说明减负
+
+- `WelcomeGuide.vue`：四条说明改为真实入口和操作提示；将“提醒室友”页聚焦为球球留言及消息查看。四页数量、滑动、球球、页码和按钮布局保持不变。
+- `DormWizard.vue`：为三种全局任务节奏及新版单项规则加入一行短说明，沿用原有规则 ID 与行为；把标题和释义紧凑纵向排布。
+- `scripts/check-dorm-wizard-browser.mjs`：新增教程文案、节奏文案和 390×844 默认规则／定时规则单屏／单项节奏单屏断言，并生成 Chromium、WebKit 对照截图。WebKit 图像已人工检查：三种说明清楚可读，定时选项和时间轮完整显示，底部继续按钮可见；未改变现有房间设置工作台。
+- `node scripts/check-dorm-wizard-browser.mjs` 与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：隔离流程全部断言通过，页面错误为空；覆盖 320/390/430 宽度、短屏安全滚动、完整预览隔离与旧工作台。
+- `npm run web:build`、`npm run spec:check`、`git diff --check` 通过。构建仅提示项目已有的大页面 chunk；OpenSpec 18 项校验与变更范围门禁通过。Impeccable 自动检测结果为 `[]`。
+- 新截图：`data/startup-review/webkit-wizard-rules-default.png`、`data/startup-review/webkit-wizard-rules-scheduled.png`、`data/startup-review/webkit-wizard-rules-per-task.png`、`data/startup-review/webkit-welcome-guide.png`，另有 Chromium 对照图。均为 macOS 浏览器移动视口截图，不是实体手机截图。
+- 未重跑整套 `npm run web:verify`；交接评审记录的四项既有失败仍未解决，本轮不可视作全量回归通过。没有新的 GitHub CI 结果；iPhone Safari/PWA、Android WebView 和 HarmonyOS ArkWeb 未真机验证。
+- 仅本地隔离分支与合成草稿；未提交/推送、未创建 PR、未合并、未部署或接触正式数据。
+
+## 2026-10-24 欢迎引导留言路径说明校正
+
+- 对照实际页面后，将第三页提示从泛化的“在消息里”明确为“点球球留话，回首页点消息看回复。”；Home 的消息入口实际链接到 `/messages`，教程没有虚构独立收件箱入口。只改教程文案和对应浏览器断言，不改流程、布局或业务逻辑。
+- `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）完整隔离流程通过；包含教程四页文案、创建向导、实时预览 API 隔离、任务工作台、320/390/430px 布局与减少动态效果，页面错误列表均为空。
+- `npm run web:build`：Vue 类型检查、Vite 和 PWA 构建通过，保留既有 GuestHome 大 chunk 提示。OpenSpec 校验及范围门禁在本节收尾后再次执行。
+- 两种浏览器均为 macOS 移动视口模拟，不代表实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收。GitHub CI 未确认；未运行完整 `npm run web:verify`，此前记录的四项失败仍是独立阻塞。
+- 仅本地隔离工作树；未创建 PR、未推送、未合并、未部署、未访问正式服务或修改正式数据。

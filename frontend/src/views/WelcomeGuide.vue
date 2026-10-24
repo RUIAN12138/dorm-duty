@@ -8,10 +8,10 @@ const router = useRouter();
 const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
 const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
 const pages = [
-  { title: "先看今天轮到谁", text: "首页会把今天的任务和负责人放在最前面。", mood: "02" },
-  { title: "做完后记录一下", text: "完成任务后可以查看本轮进度和下一位室友。", mood: "05" },
-  { title: "需要时提醒室友", text: "可以给室友留言，也能查看收到的消息。", mood: "03" },
-  { title: "日历里看完成记录", text: "按月查看记录，也可以在设置里调整任务。", mood: "19" },
+  { title: "先看今天轮到谁", text: "打开首页，看今天的任务和负责人。", mood: "02" },
+  { title: "做完后记录一下", text: "点“我已完成”，查看进度和下一位。", mood: "05" },
+  { title: "给室友留话", text: "点球球留话，回首页点消息看回复。", mood: "03" },
+  { title: "日历里看完成记录", text: "打开日历看记录；设置里调整任务。", mood: "19" },
 ];
 const track = ref<HTMLElement>();
 const index = ref(0);
