@@ -8,9 +8,9 @@ const router = useRouter();
 const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
 const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
 const pages = [
-  { title: "先看今天轮到谁", text: "首页会显示今天的任务和负责人。", mood: "02" },
+  { title: "先看今天轮到谁", text: "值日页显示今天的任务和负责人。", mood: "02" },
   { title: "做完后记录一下", text: "点“我已完成”，查看进度和下一位。", mood: "05" },
-  { title: "给室友留话", text: "点球球留话，回首页点消息看回复。", mood: "03" },
+  { title: "给室友留话", text: "点球球留言，再到设置里看消息。", mood: "03" },
   { title: "日历里看完成记录", text: "设置里可以调整任务。", mood: "19" },
 ];
 const track = ref<HTMLElement>();

@@ -197,9 +197,9 @@ try {
   await p.mouse.up();
   check(
     JSON.stringify(await p.locator(".guide-page p").allTextContents()) === JSON.stringify([
-      "首页会显示今天的任务和负责人。",
+      "值日页显示今天的任务和负责人。",
       "点“我已完成”，查看进度和下一位。",
-      "点球球留话，回首页点消息看回复。",
+      "点球球留言，再到设置里看消息。",
       "设置里可以调整任务。",
     ]),
     "welcome tutorial copy names the real entry point and action on each page",
@@ -461,6 +461,8 @@ try {
   await p.screenshot({path:`data/startup-review/${engine}-progress-drag-live.png`});
   await p.mouse.up();
   await p.locator('.page-board--compact').waitFor();
+  await p.waitForFunction(() => document.querySelector('.wizard-tip')?.textContent?.trim() === '轻点移动，长按拖动');
+  check(await p.locator('.wizard-tip').textContent() === '轻点移动，长按拖动', 'page-arrangement tip distinguishes tap-to-move from press-and-drag');
   for (const width of [320, 390, 430]) {
     await p.setViewportSize({ width, height: 844 });
     await p.waitForTimeout(120);

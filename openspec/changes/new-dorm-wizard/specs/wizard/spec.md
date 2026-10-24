@@ -29,7 +29,7 @@ The product MUST expose a standalone four-page welcome guide and local loopback 
 - **THEN** four swipeable pages are shown and the last page can start the app
 #### Scenario: Actionable tutorial copy
 - **WHEN** a user reads a welcome-guide page
-- **THEN** its short description names the relevant action or entry point, including tapping the companion to leave a message and returning to Home to open Messages and read replies
+- **THEN** its short description uses visible navigation names and names the relevant action, including the Duty page and opening Messages from Settings after leaving a note with the companion
 #### Scenario: Local development access
 - **WHEN** the user opens the local app at localhost or a loopback address
 - **THEN** an explicit new-room wizard experience action is available and opens an isolated draft without requiring email entry
@@ -110,6 +110,10 @@ The new-room page-arrangement step MUST fit the title, both page destinations, e
 #### Scenario: Move a task by tap or drag
 - **WHEN** a user taps a task name or long-presses and drags it to the other page group
 - **THEN** the same draft assignment changes, the destination responds, and layout changes animate smoothly; the duty group never accepts more than four enabled tasks
+
+#### Scenario: Explain task reassignment gestures
+- **WHEN** a user views the page-arrangement step
+- **THEN** the companion tip clearly distinguishes tapping to move a task from long-pressing and dragging it
 
 #### Scenario: Change second-page type
 - **WHEN** a user selects task page or nudge page inside the second-page group

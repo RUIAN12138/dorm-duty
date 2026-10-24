@@ -239,3 +239,8 @@
 - `npm run web:build`：Vue 类型检查、Vite/PWA 构建通过；既有 `GuestHome` chunk 超过 500 KB 提示仍在。
 - `npm run spec:validate`：18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过。Impeccable detector 对 `DormWizard.vue` 返回 `[]`。
 - 平台限制：未在实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收。未创建宿舍或写入正式数据；现有宿舍设置工作台的预览按钮继续采用原流程。
+
+## 2026-10-24 · 教程入口术语与任务移动提示
+- 将教程中的泛称「首页」改为正式导航标签「值日页」，留言提示指向「设置」里的「室友消息」；向导页面编排 Tips 从「切换页面」改为明确的「轻点移动，长按拖动」。
+- `scripts/check-dorm-wizard-browser.mjs` 断言四页教程文案及页面编排 Tips，与正式导航和菜单入口标签相符；运行结果记录在本次交接。
+- 未改导航、留言入口、创建规则或旧宿舍流程，也未修改正式数据。
