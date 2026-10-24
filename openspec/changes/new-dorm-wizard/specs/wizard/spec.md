@@ -140,3 +140,19 @@ The first new-room step MUST focus on the room-name question and one accessible 
 - **THEN** the page shows the room-name question, one text input with the accessible name “宿舍名称”, and a concise companion tip explaining that roommates enter their own names after joining
 - **AND** it does not show a second visible field label or helper paragraph repeating the join-name rule
 - **AND** the existing required-name validation, input length limit, and draft persistence remain unchanged
+
+### Requirement: Concise pacing-step tip
+The new-room pacing step MUST keep the companion tip distinct from the page question and preserve only useful supporting context.
+#### Scenario: Pacing tip avoids repeating the question
+- **WHEN** a user sees the pacing-step title and the three choices
+- **THEN** the companion tip says only that the choice can be changed later
+- **AND** it does not repeat the instruction to choose a suitable pacing mode
+- **AND** the available choices, configuration values, and page layout remain unchanged
+
+### Requirement: Creation progress resize listener lifecycle
+The creation progress control MUST keep its responsive measurement fallback when `ResizeObserver` is unavailable and MUST release the fallback listener when unmounted.
+#### Scenario: Resize fallback is removed on exit
+- **WHEN** a browser without `ResizeObserver` opens and then leaves the creation wizard
+- **THEN** the progress control responds to window resize while mounted
+- **AND** the listener registered by that control is removed on unmount
+- **AND** progress dragging remains usable after a cancelled or reversed gesture

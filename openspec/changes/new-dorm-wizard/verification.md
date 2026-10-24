@@ -184,3 +184,16 @@
 - npm run web:build：Vue 类型检查、Vite 与 PWA 构建通过；保留既有 GuestHome 大 chunk 提示。npm run spec:check：OpenSpec 18/18、范围检查 17 个变更/362 个登记文件及 18 个门禁用例通过。Impeccable 对 DormWizard.vue 自动检测结果为 []；git diff --check 通过。
 - Chromium/WebKit 修改前后对照图：data/startup-review/chromium-wizard-name-before.png → data/startup-review/chromium-wizard-name-after.png；data/startup-review/webkit-wizard-name-before.png → data/startup-review/webkit-wizard-name-after.png。截图来自 macOS 浏览器移动视口模拟，非实体手机测试。
 - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证。仅本地合成向导草稿；未访问或改动正式宿舍数据，未推送、未创建 PR、未合并或部署。
+
+## 2026-10-24 规则页球球提示去重
+- 规则页提示由“选择适合宿舍的方式，之后也能修改”精简为“之后可调整”；三种选项文字、配置值和布局保持不变。修改前后 WebKit 截图位于 `data/startup-review/webkit-wizard-rules-tip-before.png` 与 `data/startup-review/webkit-wizard-rules-default.png`。
+- Chromium 与 WebKit `scripts/check-dorm-wizard-browser.mjs`：完整隔离向导均通过；新增提示断言，规则选择、草稿、预览副作用、创建/引导路径继续通过，页面错误为 `[]`。
+- `npm run web:build`、`npm run spec:check`、Impeccable 对 DormWizard/CreationProgress 检测（`[]`）和 `git diff --check` 均通过；构建保留项目既有 GuestHome 大 chunk 提示。
+- 桌面 Chromium/WebKit 移动视口模拟，不等于实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收；未接触正式宿舍数据。
+
+## 2026-10-24 创建进度回退监听生命周期
+- 新增 `observeElementSize.mjs`，在 `ResizeObserver` 不可用时改用窗口 `resize` 并返回精确的反注册函数；`CreationProgress.vue` 在卸载时调用该清理函数。只改变尺寸监听生命周期，不改进度交互。
+- 浏览器脚本在隔离环境模拟无 `ResizeObserver`，验证回退监听只添加一次、事件触发重测、卸载后移除同一监听且不再更新；另对真实进度控件覆盖 `pointercancel`、`lostpointercapture` 及拖动切到下一步再反向松手。首次试图全页移除浏览器 API 会使其他组件初始化失败，故最终采用独立回退助手的隔离测试；正式页面本身未替换浏览器 API。
+- `node scripts/check-dorm-wizard-browser.mjs` 与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：全流程通过，均输出 `PASS []`；涵盖教程、五步向导、预览隔离、创建/首次引导、旧工作台及 320/390/430px 视口。
+- `npm run web:build`、`npm run spec:check`、Impeccable 检测（`[]`）及 `git diff --check` 通过；构建仍有既有 GuestHome 大 chunk 提示。
+- 桌面 Chromium/WebKit 模拟，不等于实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 验收；未创建 PR、未合并、未部署、未访问或修改正式数据。

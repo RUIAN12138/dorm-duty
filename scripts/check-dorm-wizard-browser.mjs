@@ -5,6 +5,7 @@ import {
 } from "../frontend/node_modules/@playwright/test/index.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { observeElementSize } from "../frontend/src/components/onboarding/observeElementSize.mjs";
 const engine = process.env.DORM_BROWSER === "webkit" ? "webkit" : "chromium";
 const b = await (engine === "webkit" ? webkit : chromium).launch({
   headless: true,
@@ -108,6 +109,18 @@ const check = (v, label) => {
   console.log("PASS " + label);
 };
 try {
+  const fallbackListeners=new Set();let resizeFallbackCalls=0;
+  const stopResizeFallback=observeElementSize({},()=>resizeFallbackCalls++,{
+    ResizeObserver:undefined,
+    addEventListener(type,listener){if(type==='resize')fallbackListeners.add(listener);},
+    removeEventListener(type,listener){if(type==='resize')fallbackListeners.delete(listener);},
+  });
+  check(fallbackListeners.size===1,'resize fallback attaches one window listener when ResizeObserver is unavailable');
+  for(const listener of fallbackListeners)listener();
+  check(resizeFallbackCalls===1,'resize fallback remeasures on a window resize event');
+  stopResizeFallback();
+  for(const listener of fallbackListeners)listener();
+  check(fallbackListeners.size===0&&resizeFallbackCalls===1,'resize fallback removes its exact listener and stops updating after cleanup');
   await p.goto("http://127.0.0.1:8094/guide");
   await p.locator('[data-testid="welcome-guide"]').waitFor();
   check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
@@ -310,6 +323,35 @@ try {
     }));
   });
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','vertical pointer-up cancels progress dragging and leaves the page selection unchanged');
+  await p.locator('.creation-progress').evaluate((host) => {
+    const rect = host.getBoundingClientRect();
+    const x = rect.left + 24 + (rect.width - 48) / 4;
+    for (const [type, pointerId] of [['pointercancel',93],['lostpointercapture',94]]) {
+      host.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, pointerId, pointerType: 'touch', button: 0,
+        clientX: x, clientY: rect.top + rect.height / 2,
+      }));
+      host.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, pointerId, pointerType: 'touch', button: 0,
+        clientX: x, clientY: rect.top + rect.height / 2,
+      }));
+    }
+  });
+  await p.waitForFunction(()=>{
+    const thumb=document.querySelector('.progress-glass');
+    return thumb&&!thumb.classList.contains('is-pressed')&&!thumb.classList.contains('is-dragging');
+  });
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','pointercancel and lostpointercapture release the progress control without changing the step');
+  const reverseProgress=await p.locator('.creation-progress').boundingBox();
+  const reverseStepX=(index)=>reverseProgress.x+24+(reverseProgress.width-48)*index/4;
+  const reverseY=reverseProgress.y+reverseProgress.height/2;
+  await p.mouse.move(reverseStepX(1),reverseY);await p.mouse.down();
+  await p.mouse.move(reverseStepX(2),reverseY,{steps:8});
+  await p.locator('[data-step="pages"]').waitFor();
+  await p.mouse.move(reverseStepX(1),reverseY,{steps:8});
+  await p.locator('[data-step="tasks"]').waitFor();
+  await p.mouse.up();
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','progress drag can reverse direction and settle on the original step');
   check(await p.locator('.template-card').count()===4,'template selection keeps stable task slots');
   check(await p.locator('.creation-task-picks button').first().evaluate(async (element) => {
     let stableFrames = 0;
@@ -415,6 +457,8 @@ try {
   check(await p.locator('[data-task-zone="duty"] .page-task--compact').filter({hasText:'厕所'}).count()===1,'task can return to the duty page before previewing its production selector');
   await p.getByRole('button',{name:'前往完成规则',exact:true}).click();
   await p.locator('.rule-mode-picks').waitFor();
+  await p.waitForFunction(()=>document.querySelector('.wizard-tip')?.textContent?.trim()==='之后可调整');
+  check((await p.locator('.wizard-tip').textContent())?.trim()==='之后可调整','pacing step companion tip keeps the useful reversibility note without repeating the page question');
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 default rules and all pacing choices fit without vertical scrolling');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});

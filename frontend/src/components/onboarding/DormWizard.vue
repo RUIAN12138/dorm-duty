@@ -39,7 +39,7 @@ const steps=computed<Step[]>(()=>{
   {id:'name',label:'宿舍名称',kind:'name',title:'宿舍，叫什么？',tip:'室友加入后自己填写姓名'},
   {id:'tasks',label:'任务',kind:'tasks',title:'一起照顾哪些事？',tip:'先选常用任务，再逐项编辑名称'},
   {id:'pages',label:'页面安排',kind:'pages',title:'任务放在哪里？',tip:'轻点切换页面，长按拖动调整'},
-  {id:'rules',label:'完成规则',kind:'rules',title:'任务按什么节奏完成？',tip:'选择适合宿舍的方式，之后也能修改'},
+  {id:'rules',label:'完成规则',kind:'rules',title:'任务按什么节奏完成？',tip:'之后可调整'},
   {id:'preview',label:'预览确认',kind:'preview',title:'先体验，再确认',tip:'这里只改草稿，不会真的打卡'},
  ];
  const list:Step[]=[];

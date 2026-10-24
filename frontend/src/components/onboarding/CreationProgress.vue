@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { animate } from 'motion-v';
 import { motionAllowed, motionTokens } from '../../interaction/motion';
+import { observeElementSize } from './observeElementSize.mjs';
 
 const props = defineProps<{ modelValue: number; labels: string[] }>();
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>();
@@ -16,7 +17,7 @@ const stretch = ref(0);
 let position = props.modelValue;
 let flight: ReturnType<typeof animate> | undefined;
 let targetPosition = 0;
-let resizeObserver: ResizeObserver | undefined;
+let stopObservingSize: (() => void) | undefined;
 let clickSuppressedUntil = 0;
 let gesture: {
   pointerId: number;
@@ -231,14 +232,12 @@ onMounted(() => {
     paint(props.modelValue);
   };
   resize();
-  if (typeof ResizeObserver !== 'undefined' && host.value) {
-    resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(host.value);
-  } else window.addEventListener('resize', resize);
+  if (host.value) stopObservingSize = observeElementSize(host.value, resize, window);
 });
 onBeforeUnmount(() => {
   flight?.stop();
-  resizeObserver?.disconnect();
+  stopObservingSize?.();
+  stopObservingSize = undefined;
 });
 </script>
 
