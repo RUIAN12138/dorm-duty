@@ -1,40 +1,39 @@
-# Codex → ChatGPT · 创建完成页到正式首页的球球连续过渡
+# Codex → ChatGPT · 新宿舍向导一步直达实时预览
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `a59e4f6a38d3e1623566e9272de75a48b3042f8d`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/a59e4f6a38d3e1623566e9272de75a48b3042f8d
+- code_sha: `d762cb28d1a84b22888b4a457c4f3191ebb24fbf`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/d762cb28d1a84b22888b4a457c4f3191ebb24fbf
 - related_pr: 无（未创建 PR）
-- requirements: 延续新宿舍向导精简与交互收尾目标，修复真实创建完成页的球球不能连续进入正式宿舍首页的问题。复用已有共享位置过渡并保证其完整结束；本地体验、旧宿舍业务和正式数据保持隔离。
+- requirements: 减少新版新宿舍创建流程的预览摩擦；在可编辑创建步骤中点一次「预览」即可进入全屏实时预览。保留草稿、旧宿舍流程和现有预览数据隔离。未经用户验收不创建 PR、不合并、不部署、不修改正式数据。
 - changed_files:
   - `frontend/src/components/onboarding/DormWizard.vue`
-  - `frontend/src/components/ChoreBoard.vue`
-  - `frontend/src/interaction/companion.ts`
-  - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/design.md`
   - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
-  - `openspec/changes/new-dorm-wizard/scope.json`
+  - `scripts/check-dorm-wizard-browser.mjs`
 - implemented:
-  - 根因：正式首页已有 680ms WAAPI 球球飞入动画，但交接起点只从旧登录入口采集。真实创建完成页点击「开始使用」没有登记当前球球几何位置，首页球球因此从默认位置出现。
-  - 共享交接函数现在接受显式来源元素；真实邀请码确认页在退出前测量当前向导球球，把位置传给正式值日页已有飞入动画。旧登录入口仍使用默认查询；本地体验不登记真实房间交接。
-  - 首访 schema-v2 页面会等待这个动画的完成状态后再打开欢迎教程，避免教程路由卸载球球组件而中断飞行动画。等待使用完成信号，不使用固定延时；请求已过期或中止时不再继续导航。
-  - 浏览器回归记录 WAAPI 完成/取消状态，验证真实流程首帧坐标与向导球球位置误差小于 2px、动画成功结束后才打开教程、本地体验不触发真实交接。
-  - 业务修复提交 `ec5d6b8b582a8042852cd208a8b39d0878866b36`，OpenSpec 范围登记提交 `03688382137dfd9685d76eb175788231b8f6c58d`，完成时序补充提交 `a59e4f6a38d3e1623566e9272de75a48b3042f8d`；均已推送到原开发分支。
-  - 工作树中原有的 `site/runtime/email-runtime.cjs` 用户修改未编辑、未暂存、未提交；未修改旧宿舍规则、宿舍记录或数据库。
+  - 新宿舍创建流程的可编辑步骤底部「预览」直接调用现有 `openPreview()`，不再先跳到最后确认步骤再额外点击一次「打开实时预览」。
+  - `workspace`（已有宿舍的任务设置流程）继续沿用原先跳转至最后步骤的行为；最终确认页的预览和创建操作未改。
+  - 复用现有全屏正式组件预览和草稿状态。退出预览回到进入前的步骤，保留当前草稿；没有新增正式业务写入、通知或成员数据路径。
+  - 浏览器回归增加从宿舍名称与轮换规则步骤直接打开预览、退出后恢复原步骤与选择、导航顺序草稿保留、预览无业务请求，以及「继续」仍进入最终确认并能完成创建的断言。
+  - 仅上述六个文件属于本次业务提交；原工作树中 `site/runtime/email-runtime.cjs` 的未提交用户修改保持未编辑、未暂存、未提交。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导、预览、真实创建与工作台流程通过，最终 `PASS []`；新增连续过渡起点、动画完成、本地体验隔离断言通过。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，最终 `PASS []`。
-  - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；保留既有 `GuestHome` 超 500 KB chunk 提示。
-  - `npm run spec:validate`：18/18 通过；`npm run spec:scope` 在干净独立 worktree 通过，17 个变更、365 个登记文件，digest `e5b796dabf2fefd827f1574c81b0468fe7ebb62577c01c2e64915aeef4863e79`。
-  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过。
-  - Impeccable detector 在 `DormWizard.vue` 与 `ChoreBoard.vue` 返回一条 `bounce-easing` warning：`ChoreBoard.vue:2879` 的既有动画曲线；本轮未修改该行。
-  - CI：GitHub Status `pending`、0 个 statuses；0 个 Check Runs；0 个 Actions runs。没有 CI 通过记录。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：通过，`PASS []`。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：通过，`PASS []`。
+  - `npm run web:build`：通过（Vue 检查、Vite 与 PWA 构建）；保留既有 `GuestHome` chunk 超 500 KB 提示。
+  - `npm run spec:validate`：18/18 通过。
+  - `npm run spec:scope`：在提交 SHA 的干净独立 worktree 通过；17 个变更、365 个登记文件，digest `6385d7b76a6388603b1a9feb9fff9e9a27bfa4edbfc03e981e4e7550b2f1f029`。
+  - `node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check`：通过。
+  - Impeccable detector：`DormWizard.vue` 输出 `[]`。
+  - 本地 Tabbit 手动检查：在 `http://127.0.0.1:8094/?preview=new-dorm` 的名称步骤点击「预览」，观察到全屏正式预览打开且向导隐藏；退出后回到名称步骤，标题为「宿舍，叫什么？」。这是本地桌面浏览器检查，不是真机验收。
+- CI: GitHub commit status 为 `pending` 且 `statuses=[]`；该 SHA 没有 Check Runs 或 Actions runs 记录。当前没有可确认的 CI 通过或失败结论。
 - platform_status:
-  - macOS Chromium/WebKit 隔离的 390×844 移动视口通过；这是桌面引擎模拟。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验收。
-  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
+  - macOS 上 Chromium 与 WebKit 浏览器回归通过，视口测试属于桌面引擎模拟。
+  - 本地 Tabbit 检查只覆盖名称步骤的手动入口与返回；规则步骤、草稿隔离由自动化断言覆盖。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证；正式站点未部署验证。
 - remaining:
-  - 协调分支当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 是 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，不匹配本交接 SHA；本轮没有针对 `1a00db1`、`0368838` 或本 SHA 的新评审建议。上一轮 P1-A 通知抽屉生命周期修复由 `61c70f1` 实施，但评审文档仍只覆盖旧 SHA。
-  - 更早评审提到四项全量 `web:verify` 失败，本轮未重跑；本轮仅完成新宿舍向导定向回归，不代表全站 Web 验收。
-  - 真实设备、登录、系统通知权限及正式部署仍未验收。
+  - 协调分支最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，与本交接的 `d762cb28d1a84b22888b4a457c4f3191ebb24fbf` 不匹配；没有针对本 SHA 的新评审意见，需 ChatGPT 对新业务 SHA 评审后再处理适用建议。
+  - 之前评审记录过全站 `npm run web:verify` 的四项既存失败；本轮没有重跑全站回归，定向创建向导回归通过不代表全站验收。
+  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
 - questions: 暂无。
