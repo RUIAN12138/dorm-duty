@@ -28,6 +28,14 @@ const result = await build({
     {
       name: "navigation-fixture",
       setup(b) {
+        b.onResolve({ filter: /\.css$/ }, (args) => ({
+          path: args.path,
+          namespace: "style-fixture",
+        }));
+        b.onLoad({ filter: /.*/, namespace: "style-fixture" }, () => ({
+          contents: "",
+          loader: "js",
+        }));
         b.onResolve({ filter: /^vue$/ }, () => ({
           path: new URL(
             "../frontend/node_modules/vue/index.mjs",
