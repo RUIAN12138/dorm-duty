@@ -231,3 +231,11 @@
 - 当前主工作树的 `npm run spec:scope` 被既有、未触碰的 `site/runtime/email-runtime.cjs` 改动阻止；该 23 行工作区内容没有暂存或纳入本次修改。将在提交后的独立干净工作树中重新运行范围检查。
 - 修改后移动视口截图：`data/startup-review/chromium-wizard-name-after.png`、`data/startup-review/webkit-wizard-name-after.png`。这是 macOS Chromium/WebKit 浏览器模拟，不是实体手机截图。iPhone Safari/PWA、Android WebView 和 HarmonyOS ArkWeb 未真机验收；未访问或修改正式宿舍数据。
 - 本轮仅修改新版向导的本地错误提示状态、对应浏览器断言和 OpenSpec 记录；未创建 PR、未合并、未部署。
+## 创建流程一键预览
+
+- `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导回归通过，`PASS []`。名称页和规则页均能一键打开全屏正式组件预览；关闭后名称页/规则页及规则选择保持；预览导航重排保留在草稿；预览交互未发出业务 API 请求。
+- `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，`PASS []`。
+- Tabbit 本地浏览器人工交互（`http://127.0.0.1:8094/?preview=new-dorm`）：观察到预览打开时 `.dorm-wizard` 隐藏、正式 `.chore-board` 显示；退出后恢复到名称步骤。该验证是桌面浏览器中的本地页面操作，不是真机验收。
+- `npm run web:build`：Vue 类型检查、Vite/PWA 构建通过；既有 `GuestHome` chunk 超过 500 KB 提示仍在。
+- `npm run spec:validate`：18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过。Impeccable detector 对 `DormWizard.vue` 返回 `[]`。
+- 平台限制：未在实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收。未创建宿舍或写入正式数据；现有宿舍设置工作台的预览按钮继续采用原流程。

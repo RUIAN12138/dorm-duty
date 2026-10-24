@@ -16,6 +16,12 @@ The wizard SHALL use one draft and MUST NOT write task records or issue business
 - **WHEN** the user completes, undoes, nudges, opens calendar statistics, or changes preview navigation
 - **THEN** no task, reminder, account, push, or room API request is issued
 
+### Requirement: One-action preview access
+Every editable new-room creation step MUST open the full-screen production-component preview directly from its footer preview action, without first navigating to the final confirmation step. Closing preview MUST return to the same wizard step and retain the draft. The existing-room settings workspace MUST keep its current preview navigation.
+#### Scenario: Preview from an editable step
+- **WHEN** the user opens preview from any step before final confirmation and then closes it
+- **THEN** the preview fills the app viewport, the wizard returns to the same step with its current draft values, and preview interactions remain isolated from business writes
+
 ### Requirement: Welcome tutorial and local flow access
 The product MUST expose a standalone four-page welcome guide and local loopback builds MUST provide a visible, isolated route into the new-room wizard, including production-mode bundles served locally.
 #### Scenario: Tutorial route

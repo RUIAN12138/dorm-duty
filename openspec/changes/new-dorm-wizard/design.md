@@ -59,3 +59,6 @@
 
 ## Validation feedback follows the draft
 `DormWizard.vue` 的 `localError` 在用户编辑草稿后，根据当前步骤重新计算；有效输入立即清除已解决的错误，未解决的错误显示最新提示。预览/确认步骤使用 `draftErrors(draft)`，其它步骤继续复用现有 `issue()`。只改状态提示与 `check-dorm-wizard-browser.mjs` 的断言，不改表单校验、输入布局或业务 API。
+
+## One-action live preview access
+仅在新宿舍创建流程的四个可编辑步骤中，页脚「预览」直接调用现有 `openPreview()`，不先切换到第五个确认步骤；既有宿舍设置工作台仍沿用原先跳到预览步骤的行为。关闭全屏预览仍通过现有 `close` 事件恢复向导；草稿、步骤、滚动位置与现有正式页面组件保持原样。最终确认页自己的「打开实时预览」与创建操作不变。浏览器回归从规则步骤打开、关闭并重开，检查步骤/选择保留及预览无业务 API 写入。

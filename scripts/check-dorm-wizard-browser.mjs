@@ -304,6 +304,12 @@ try {
   check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0&&await p.getByLabel('宿舍名称',{exact:true}).count()===1,"room-name step keeps one accessible input without a duplicate visible label or helper");
   check((await p.locator('.wizard-tip').textContent())?.trim()==='室友加入后自己填写姓名',"roommate naming guidance appears once in the concise companion tip");
   check(await p.locator('.tour').count()===0,"the first editable question is not blocked by an automatic tour");
+  await p.getByRole('button',{name:'预览',exact:true}).click();
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='1');
+  check(await p.locator('.wizard-step:not([aria-hidden=true])').getAttribute('data-step')==='name'&&await p.locator('.dorm-wizard').evaluate(el=>getComputedStyle(el).visibility)==='hidden','one-tap preview also opens directly from the room-name step');
+  await p.getByTestId('exit-live-preview').click();
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='0');
+  check(await p.locator('.wizard-step:not([aria-hidden=true])').getAttribute('data-step')==='name'&&await p.getByLabel('宿舍名称',{exact:true}).isVisible(),'closing name-step preview returns to the same question');
   await p.getByRole("button",{name:"退出配置",exact:true}).click();
   await p.locator(".dorm-wizard").waitFor({state:"detached"});
   await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
@@ -594,11 +600,12 @@ try {
   await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).click();
   check(await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).getAttribute('aria-pressed')==='true','completion handoff is an explicit third creation choice');
-  await p.getByRole('button',{name:'预览',exact:true}).click();
+  check(await p.locator('.wizard-step:not([aria-hidden="true"])').getAttribute('data-step')==='rules','live preview can be opened without leaving the current rules step');
   previewTracking = true;
-  await p.getByTestId('open-live-preview').click();
+  await p.getByRole('button',{name:'预览',exact:true}).click();
   const live = p.getByTestId('live-draft-preview');
   await live.waitFor();
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='1');
   check(await p.locator('.dorm-wizard').evaluate(el=>getComputedStyle(el).visibility)==='hidden','full-screen preview removes the wizard from view');
   check(await live.locator('.chore-board').count()===1&&await live.locator('.chore-bottom-nav').count()===1,'preview mounts the production task board and Liquid Glass navigation');
   const guardedActions=await live.locator('.chore-board').evaluate(async el=>{const s=el.__vueParentComponent?.setupState;if(!s||typeof s.complete!=='function'||typeof s.undo!=='function'||typeof s.menuAction!=='function'||typeof s.markRead!=='function')return false;await s.complete(s.board.workspace_tasks[0]);await s.undo(-900);await s.nudgeWater({id:-901,key:'water',assignee_id:-2,status:'pending',can_complete:true});await s.markRead(-902,true);for(const action of ['settings','push','identity','email','recovery','refresh'])s.menuAction(action);return true;});
@@ -628,7 +635,8 @@ try {
   previewTracking = false;
   await p.getByTestId('exit-live-preview').click();
   await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='0');
-  await p.getByTestId('open-live-preview').click();
+  check(await p.locator('.wizard-step:not([aria-hidden="true"])').getAttribute('data-step')==='rules'&&await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).getAttribute('aria-pressed')==='true','closing live preview returns to the same wizard step and rule selection');
+  await p.getByRole('button',{name:'预览',exact:true}).click();
   const reopened=p.getByTestId('live-draft-preview');
   await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='1');
   check(await reopened.count()===1,'closing and reopening keeps the real preview components mounted');
@@ -636,6 +644,7 @@ try {
   await p.getByTestId('exit-live-preview').click();
   await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='0');
   check(writes === 0, "draft edits and preview never write task records");
+  await p.getByRole('button',{name:'继续',exact:true}).click();
   await p.getByRole("button", { name: "确认创建", exact: true }).click();
   await p.locator(".invite-result>strong").waitFor();
   await p.waitForTimeout(900);
