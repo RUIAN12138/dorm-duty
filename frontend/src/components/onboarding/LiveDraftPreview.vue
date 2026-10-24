@@ -86,7 +86,7 @@ const previewData = computed<ChoreBoardData>(() => {
     mode: task.key === "water" ? "completion" : task.rotation === "rotation" ? "scheduled" : task.rotation === "completion" ? "completion" : "self_round",
   }));
   const rounds = categories.filter((category) => category.enabled && category.mode === "self_round").map((category) => ({
-    key: category.key as "floor" | "toilet" | "sink",
+    key: category.key,
     sequence: 1,
     completed: 1,
     total: members.length,

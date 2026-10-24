@@ -72,7 +72,7 @@ onBeforeUnmount(() => {
 });
 function openColors() {
   previewDark.value = darkTheme.value;
-  paletteTask.value = names[current.value]?.[0] || "floor";
+  paletteTask.value = names.value[current.value]?.[0] || "floor";
   colorsOpen.value = true;
 }
 function warningStyle(task: string, shade: number | null) {
@@ -100,14 +100,19 @@ watch(current, (value) => {
 });
 const timer = setInterval(() => (now.value = Date.now()), 60000);
 onBeforeUnmount(() => clearInterval(timer));
-const names = [
+const builtinNames: [string, string][] = [
   ["floor", "地板"],
   ["toilet", "厕所"],
   ["sink", "洗手池"],
   ["water", "抬水"],
 ];
+const names = computed<[string, string][]>(() =>
+  props.categories?.length
+    ? props.categories.map((category) => [category.key, category.name])
+    : builtinNames,
+);
 const cards = computed(() =>
-  names.map(([key, name]) => {
+  names.value.map(([key, name]) => {
     const at = props.activity.last_completed?.find(
       (r) => r.key === key,
     )?.completed_at;

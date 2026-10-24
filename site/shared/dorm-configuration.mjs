@@ -1,4 +1,5 @@
 const keys = ["floor", "toilet", "sink", "water"];
+const validTaskKey = (key) => keys.includes(key) || /^task_[0-9a-f]{32}$/.test(key);
 export function validateDormConfiguration(value) {
   const bad = () => {
     throw new Error("请检查新版宿舍的任务、页面和提醒设置");
@@ -8,7 +9,7 @@ export function validateDormConfiguration(value) {
     value.schema_version !== 2 ||
     !Array.isArray(value.tasks) ||
     value.tasks.length < 1 ||
-    value.tasks.length > 4 ||
+    value.tasks.length > 20 ||
     !Array.isArray(value.pages) ||
     value.pages.length !== 3
   )
@@ -28,7 +29,7 @@ export function validateDormConfiguration(value) {
   if (!["soft", "hard"].includes(value.policy)) bad();
   const tasks = value.tasks.map((t) => {
     if (
-      !keys.includes(t?.key) ||
+      !validTaskKey(t?.key) ||
       typeof t.enabled !== "boolean" ||
       !["duty", "water"].includes(t.page) ||
       !["round", "rotation", "completion"].includes(t.rotation) ||
@@ -67,7 +68,8 @@ export function validateDormConfiguration(value) {
   });
   if (
     new Set(tasks.map((t) => t.key)).size !== tasks.length ||
-    !tasks.some((t) => t.enabled)
+    !tasks.some((t) => t.enabled) ||
+    tasks.filter((t) => t.enabled && t.page === "duty").length > 4
   )
     bad();
   if(value.second_page_kind !== undefined && !["tasks","nudge"].includes(value.second_page_kind)) bad();

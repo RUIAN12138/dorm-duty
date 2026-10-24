@@ -17,6 +17,7 @@ import {
 
 const DAY = 86_400_000;
 const KEYS = ["floor", "toilet", "sink", "water"];
+const MAX_CONFIGURED_TASKS = 20;
 const encoder = new TextEncoder();
 const markerIds = new Set(MARK_IDS);
 export class ChoreError extends Error {
@@ -197,20 +198,28 @@ async function categories(db, roomId) {
     roomId,
   ]);
   const configuration=JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[roomId]))?.configuration||"null");
-  return KEYS.map((key) => rows.find((row) => row.key === key))
+  const keys = configuration?.schema_version === 2
+    ? [...KEYS, ...configuration.tasks.map((task) => task.key).filter((key) => !KEYS.includes(key))]
+    : KEYS;
+  return keys.map((key) => rows.find((row) => row.key === key))
     .filter(Boolean)
     .map(row => configuredCategory(categoryView(row), configuration));
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
-  const initialized = await first(
-    db,
-    "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
-    [room.id, room.id],
-  );
-  if (initialized) return;
-
   const initialConfig = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null");
+  const settingsReady = await first(db, "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=?", [room.id]);
+  if (initialConfig?.schema_version === 2) {
+    const existing = new Set((await all(db, "SELECT key FROM chore_categories WHERE dorm_id=?", [room.id])).map((row) => row.key));
+    if (settingsReady && KEYS.every((key) => existing.has(key)) && initialConfig.tasks.every((task) => existing.has(task.key))) return;
+  } else {
+    const initialized = await first(
+      db,
+      "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
+      [room.id, room.id],
+    );
+    if (initialized) return;
+  }
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "宿舍没有有效成员");
   const legacy = parse(room.rotation_order || "[]"),
@@ -221,18 +230,27 @@ async function initialize(db, room, now) {
   ];
   const shift = order.length > 1 ? [...order.slice(1), order[0]] : order;
   const start = localDate(now);
-  const defaults = [
+  const baseDefaults = [
     ["floor", "地板", "扫地、拖地", "22:00", order],
     ["toilet", "厕所", "清洗便池、冲洗地面", "22:00", shift],
     ["sink", "洗手池", "清洁洗手池、台面和水渍", "22:00", order],
     ["water", "抬水", "将饮用水送到宿舍", "20:00", order],
   ];
+  const defaults = initialConfig?.schema_version === 2
+    ? [
+        ...baseDefaults.map(([key, name, content, hhmm, rotation]) => {
+          const task = initialConfig.tasks.find((entry) => entry.key === key);
+          return [key, task?.name || name, task?.content || task?.name || content, task?.deadline || hhmm, rotation, task];
+        }),
+        ...initialConfig.tasks.filter((task) => !KEYS.includes(task.key)).map((task) => [task.key, task.name, task.content || task.name, task.deadline, order, task]),
+      ]
+    : baseDefaults;
   await db.batch([
     stmt(db, "INSERT OR IGNORE INTO chore_settings(dorm_id) VALUES (?)", [
       room.id,
     ]),
-    ...defaults.map(([key, name, content, hhmm, rotation]) => {
-      const custom = initialConfig?.tasks.find(t=>t.key===key);
+    ...defaults.map(([key, name, content, hhmm, rotation, configured]) => {
+      const custom = configured || initialConfig?.tasks.find(t=>t.key===key);
       return stmt(
         db,
         "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode,enabled,reminder_interval_days) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -436,29 +454,32 @@ async function planDaily(
   const today = localDate(now),
     end = addDate(today, 29),
     rows = [];
+  for (const category of settings.filter((entry) => replaceKeys.includes(entry.key) && entry.mode === "scheduled" && entry.key !== "water"))
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
+      [room.id, category.key, today],
+    );
   for (const category of settings.filter(
-    (entry) => entry.mode === "scheduled",
+    (entry) => entry.enabled && entry.mode === "scheduled" && entry.key !== "water",
   )) {
     const replace = replaceKeys.includes(category.key);
-    if (replace)
-      mutation.update(
-        "chore_tasks",
-        { status: "cancelled" },
-        "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
-        [room.id, category.key, today],
-      );
-    for (let i = replace ? 1 : 0; i < 30; i++) {
+    const existingToday = replace
+      ? await first(db, "SELECT 1 AS exists_today FROM chore_tasks WHERE dorm_id=? AND key=? AND duty_date=? AND status<>'cancelled'", [room.id, category.key, today])
+      : null;
+    for (let i = replace && existingToday ? 1 : 0; i < 30; i++) {
       const day = addDate(today, i),
         uid = scheduledAssignee(category, day);
       if (uid) rows.push(plannedRow(room, category, day, uid, members));
     }
   }
   // Each replacement only touches future rows. Historical / completed rows remain immutable.
-  for (const key of KEYS.filter((entry) => entry !== "water"))
+  for (const category of settings.filter((entry) => entry.enabled && entry.mode === "scheduled" && entry.key !== "water"))
     appendRows(
       mutation,
-      rows.filter((row) => row[1] === key),
-      replaceKeys.includes(key),
+      rows.filter((row) => row[1] === category.key),
+      replaceKeys.includes(category.key),
     );
   return end;
 }
@@ -613,7 +634,7 @@ async function maintain(db, room, now) {
     const tokens = new Set(existing.map((row) => `${row.key}:${row.task_key}`));
     let missing = replacements.length > 0;
     for (const category of settings.filter(
-      (entry) => entry.mode === "scheduled",
+      (entry) => entry.enabled && entry.mode === "scheduled",
     ))
       for (let i = 0; i < 30; i++) {
         const day = addDate(today, i);
@@ -629,7 +650,7 @@ async function maintain(db, room, now) {
         "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
         [room.id],
       );
-    if (pending && !ids.includes(pending.assignee_id)) {
+    if (pending && water && !ids.includes(pending.assignee_id)) {
       const uid = water.rotation_order[0],
         member = members.find((entry) => entry.user_id === uid);
       mutation.update(
@@ -644,7 +665,7 @@ async function maintain(db, room, now) {
       );
       missing = true;
     }
-    if (water.enabled && !pending) {
+    if (water?.enabled && !pending) {
       const last = await first(
         db,
         "SELECT assignee_id,sequence FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
@@ -914,9 +935,9 @@ async function historyChange(request, db, room, who, now) {
   } else {
     target = integer(input.member_id);
     key = input.key;
-    if (!KEYS.includes(key)) invalid();
     const member = members.find((m) => m.user_id === target),
       category = settings.find((c) => c.key === key);
+    if (!category) invalid("请选择宿舍成员和任务");
     if (!member || !category) invalid("请选择宿舍成员和任务");
     name = category.name;
     marker = member.marker_id;
@@ -1312,7 +1333,7 @@ async function claim(request, db, env, now) {
     201,
   );
 }
-function normalizeCategory(input, current, ids, today, allowV2Completion = false) {
+function normalizeCategory(input, current, ids, today, allowedKeys = KEYS, allowV2Completion = false) {
   object(
     input,
     [
@@ -1331,7 +1352,7 @@ function normalizeCategory(input, current, ids, today, allowV2Completion = false
     ["key"],
   );
   if (
-    !KEYS.includes(input.key) ||
+    !allowedKeys.includes(input.key) ||
     (input.mode !== undefined &&
       !(input.key === "water" ? ["completion"] : ["scheduled", "self_round", ...(allowV2Completion ? ["completion"] : [])]).includes(input.mode))
   )
@@ -1454,45 +1475,78 @@ async function configure(request, db, room, who, now, orderOnly = false) {
       { key: input.key, rotation_order: input.rotation_order },
     ];
   let nextConfiguration = null;
+  let currentConfiguration = null;
+  if (orderOnly) {
+    currentConfiguration = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=? AND schema_version=2",[room.id]))?.configuration || "null");
+  }
   if (!orderOnly && input.configuration !== undefined) {
     if (!(await first(db,"SELECT 1 FROM dorm_configurations WHERE dorm_id=? AND schema_version=2",[room.id]))) fail(409,"legacy_configuration","旧宿舍保持原配置方式");
     try { nextConfiguration=validateDormConfiguration(input.configuration); } catch(e) { invalid(e.message); }
   }
   const expected = integer(input.version),
     { state, settings, members } = await maintain(db, room, now);
-  if (nextConfiguration) input.categories = settings.map(c=>{const task=nextConfiguration.tasks.find(t=>t.key===c.key);return {...c,enabled:!!task?.enabled,name:task?.name||c.name,content:task ? (task.content||task.name) : c.content,deadline_time:task?.deadline||c.deadline_time,reminder_interval_days:task?.interval||c.reminder_interval_days,mode:c.key==='water'?'completion':task?.rotation==='rotation'?'scheduled':task?.rotation==='completion'?'completion':'self_round'};});
+  const ids = members.map((member) => member.user_id),
+    today = localDate(now);
+  if (nextConfiguration) input.categories = nextConfiguration.tasks.map((task) => {
+    const old = settings.find((category) => category.key === task.key);
+    return {
+      key: task.key,
+      name: task.name,
+      content: task.content || task.name,
+      deadline_time: task.deadline,
+      start_date: old?.start_date || today,
+      weekdays: old?.weekdays || [1,2,3,4,5,6,7],
+      rotation_days: old?.rotation_days || task.interval,
+      reminder_interval_days: old?.reminder_interval_days || task.interval,
+      rotation_order: old?.rotation_order || ids,
+      enabled: task.enabled,
+      mode: task.key === "water" ? "completion" : task.rotation === "rotation" ? "scheduled" : task.rotation === "completion" ? "completion" : "self_round",
+    };
+  });
   if (expected !== state.version)
     fail(409, "stale_version", "任务已变化，请刷新设置后重试");
   if (
     !Array.isArray(input.categories) ||
     !input.categories.length ||
-    input.categories.length > 4 ||
+    input.categories.length > (nextConfiguration ? MAX_CONFIGURED_TASKS : 4) ||
     new Set(input.categories.map((entry) => entry?.key)).size !==
       input.categories.length
   )
     invalid();
-  const ids = members.map((member) => member.user_id),
-    today = localDate(now),
-    updatedKeys = input.categories.map((entry) => entry?.key);
+  const updatedKeys = input.categories.map((entry) => entry?.key),
+    configuredKeys = nextConfiguration?.tasks.map((task) => task.key) || null,
+    allowedKeys = configuredKeys || currentConfiguration?.tasks.map((task) => task.key) || KEYS;
   const updated = input.categories.map((entry) => {
     const old = settings.find((category) => category.key === entry?.key);
-    if (!old) invalid();
-    return configuredCategory(normalizeCategory(entry, old, ids, today, !!nextConfiguration), nextConfiguration);
+    if (!old && !nextConfiguration) invalid();
+    const task = nextConfiguration?.tasks.find((item) => item.key === entry?.key);
+    const fallback = old || {
+      key: entry.key,
+      name: task?.name || "新任务",
+      content: task?.content || task?.name || "新任务",
+      deadline_time: task?.deadline || "22:00",
+      start_date: today,
+      weekdays: [1,2,3,4,5,6,7],
+      rotation_days: task?.interval || 3,
+      reminder_interval_days: task?.interval || 3,
+      rotation_order: ids,
+      enabled: task?.enabled ?? false,
+      mode: entry.key === "water" ? "completion" : task?.rotation === "rotation" ? "scheduled" : task?.rotation === "completion" ? "completion" : "self_round",
+    };
+    return configuredCategory(normalizeCategory(entry, fallback, ids, today, allowedKeys, !!nextConfiguration || !!currentConfiguration), nextConfiguration || currentConfiguration);
   });
-  const draft = settings.map(
+  const draft = nextConfiguration ? updated : settings.map(
       (category) =>
         updated.find((entry) => entry.key === category.key) || category,
     ),
     mutation = new Mutation(db, room, state.version, who, !orderOnly);
   if (nextConfiguration) mutation.update("dorm_configurations",{configuration:JSON.stringify(nextConfiguration),updated_at:now.toISOString()},"dorm_id=? AND schema_version=2",[room.id]);
   const waterToReorder = updated.find(
-    (c) =>
-      c.key === "water" &&
-      (orderOnly ||
-        JSON.stringify(c.rotation_order) !==
-          JSON.stringify(
-            settings.find((old) => old.key === "water").rotation_order,
-          )),
+    (c) => {
+      if (c.key !== "water") return false;
+      const previous = settings.find((old) => old.key === "water");
+      return orderOnly || !previous || JSON.stringify(c.rotation_order) !== JSON.stringify(previous.rotation_order);
+    },
   );
   if (waterToReorder)
     await reassignPendingWater(
@@ -1519,26 +1573,51 @@ async function configure(request, db, room, who, now, orderOnly = false) {
     await mutation.finish();
     return json({ version: state.version + 1, categories: draft });
   }
-  for (const category of updated)
-    mutation.update(
-      "chore_categories",
-      {
-        name: category.name,
-        content: category.content,
-        deadline_time: category.deadline_time,
-        start_date: category.start_date,
-        weekdays: JSON.stringify(category.weekdays),
-        rotation_days: category.rotation_days,
-        reminder_interval_days: category.reminder_interval_days,
-        rotation_order: JSON.stringify(category.rotation_order),
-        enabled: category.enabled ? 1 : 0,
-        mode: category.mode,
-      },
-      "dorm_id=? AND key=?",
-      [room.id, category.key],
-    );
+  const retired = nextConfiguration
+    ? settings.filter((category) => !configuredKeys.includes(category.key))
+    : [];
+  for (const category of retired) {
+    mutation.update("chore_categories", { enabled: 0 }, "dorm_id=? AND key=?", [room.id, category.key]);
+    mutation.update("chore_tasks", { status: "cancelled" }, "dorm_id=? AND key=? AND status='pending'", [room.id, category.key]);
+  }
+  for (const category of updated) {
+    const previous = settings.find((entry) => entry.key === category.key);
+    if (previous) {
+      mutation.update(
+        "chore_categories",
+        {
+          name: category.name,
+          content: category.content,
+          deadline_time: category.deadline_time,
+          start_date: category.start_date,
+          weekdays: JSON.stringify(category.weekdays),
+          rotation_days: category.rotation_days,
+          reminder_interval_days: category.reminder_interval_days,
+          rotation_order: JSON.stringify(category.rotation_order),
+          enabled: category.enabled ? 1 : 0,
+          mode: category.mode,
+        },
+        "dorm_id=? AND key=?",
+        [room.id, category.key],
+      );
+    } else {
+      mutation.raw(
+        `INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,weekdays,rotation_days,rotation_order,enabled,mode,reminder_interval_days)
+         SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE ${mutation.guard}`,
+        [room.id, category.key, category.name, category.content, category.deadline_time, category.start_date, JSON.stringify(category.weekdays), category.rotation_days, JSON.stringify(category.rotation_order), category.enabled ? 1 : 0, category.mode, category.reminder_interval_days, ...mutation.guardValues],
+      );
+    }
+  }
   for (const category of updated.filter((entry) => entry.key !== "water")) {
     const previous = settings.find((entry) => entry.key === category.key);
+    if (!previous) {
+      if (category.enabled && category.mode === "self_round") {
+        appendRows(mutation, members.map((member) => roundRow(room, category, member, members, now, 1)));
+      } else if (category.enabled && category.mode === "completion") {
+        await planCompletionTurn(db, mutation, room, category, members, now);
+      }
+      continue;
+    }
     if (category.mode !== previous.mode) {
       mutation.update(
         "chore_tasks",

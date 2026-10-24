@@ -26,7 +26,7 @@ const props = defineProps<{
   members: ChoreMember[];
   version: number;
   token: string;
-  initialCategory?: "floor" | "toilet" | "sink" | "water";
+  initialCategory?: string;
 }>();
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];

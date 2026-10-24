@@ -649,7 +649,7 @@ let poll: ReturnType<typeof setInterval> | null = null,
 function tasksForDutyPage(tasks: ChoreTask[]) {
   const configuration = board.value?.configuration;
   if (!configuration) return tasks.filter((task) => task.key !== "water");
-  const dutyKeys = new Set(
+  const dutyKeys = new Set<string>(
     configuration.tasks
       .filter((task) => task.enabled && task.page === "duty")
       .map((task) => task.key),

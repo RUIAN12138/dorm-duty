@@ -297,3 +297,13 @@
 - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（macOS WebKit）：171 项隔离检查通过，`PASS []`。
 - `npm run web:build`：通过，包含 `vue-tsc`、Vite、PWA 与 Worker 构建；仍有既有 `GuestHome` chunk 超过 500 KB 提示。`npm run spec:validate`：18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check` 通过。
 - 桌面 Chromium/WebKit 模拟不是屏幕阅读器或实体设备验收；iPhone Safari、Android WebView、HarmonyOS ArkWeb 与真实辅助技术未验证。未访问正式数据、未建 PR、未合并、未部署。
+
+## 2026-10-24 · schema-v2 自定义任务容量扩展
+
+- schema-v2 房间现在可配置最多 20 个稳定 ID 任务；值日页仍最多启用 4 项。自定义任务可加入第二任务页或催促页，不再要求先删除四个内置任务之一。任务 ID 使用 `task_` 加 32 位十六进制随机 ID；前端创建、工作台增删、配置持久化、任务轮转、完成/撤销、日历和统计卡片均识别此 ID。
+- 数据库迁移只放宽任务键约束，保留既有任务、历史快照、提醒、轮序和外键关联；旧宿舍继续使用四个固定任务键和既有约束，不自动迁移。删除自定义任务会停用其配置并取消尚未执行任务，已完成历史仍保留。
+- `node scripts/check-dorm-wizard.mjs`：108 项隔离 SQLite 检查通过，覆盖 20 项上限、21 项拒绝、值日页四项限制、创建/持久化、轮转、完成/撤销、日历及旧宿舍隔离。
+- `node site/scripts/check-dynamic-task-migration.mjs`：迁移检查通过，保留 7 张既有表，4 项迁移完整性检查通过。`node scripts/check-stats-palette.mjs`：通过，含自定义任务日间/夜间颜色保存、恢复及非法键拒绝。`npm --prefix frontend run typecheck`、关键 Node 文件 `--check` 与 `npm run spec:validate`（19/19）通过。
+- Chromium 和 WebKit 的隔离移动视口 `scripts/check-dorm-wizard-browser.mjs` 各 173 项通过，结果文件 `data/startup-review/chromium-wizard-result.json`、`data/startup-review/webkit-wizard-result.json` 均为 `errors=[]`。覆盖创建向导、生产统计卡片中显示新任务、任务工作台持久化及预览流程。
+- `npm run web:verify` 在本轮实现后退出码为 0；构建保留项目现有的 `GuestHome` 大 chunk 提示。此后只删除了 Worker 中未使用的本地辅助常量，并重复通过该 Worker 语法检查及核心回归。OpenSpec 范围门禁将在提交后的干净工作树复核。
+- Chromium/WebKit 是 macOS 桌面浏览器模拟，不等于 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收；未连接真实设备。CI 状态待提交推送后查询。未访问或修改正式宿舍数据，未创建 PR、未合并或部署。

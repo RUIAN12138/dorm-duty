@@ -100,16 +100,18 @@ const api = http.createServer(async (req, res) => {
     res.end("{}");
   }
 });
-await new Promise((r) => api.listen(8096, "127.0.0.1", r));
-process.env.DORM_API_ORIGIN = "http://127.0.0.1:8096";
+const apiPort = Number(process.env.DORM_PREVIEW_API_PORT || 8096);
+await new Promise((r) => api.listen(apiPort, "127.0.0.1", r));
+process.env.DORM_API_ORIGIN = `http://127.0.0.1:${apiPort}`;
+const previewPort = Number(process.env.DORM_PREVIEW_PORT || 8094);
 const vite = await createServer({
   root: process.cwd() + "/frontend",
   configFile: process.cwd() + "/frontend/vite.config.ts",
-  server: { port: 8094, host: "127.0.0.1", strictPort: true },
+  server: { port: previewPort, host: "127.0.0.1", strictPort: true },
 });
 await vite.listen();
 console.log(
-  "隔离启动预览 http://127.0.0.1:8094/ · 临时SQLite/合成身份/无真实邮件或AI",
+  `隔离启动预览 http://127.0.0.1:${previewPort}/ · 临时SQLite/合成身份/无真实邮件或AI`,
 );
 async function close() {
   await vite.close();

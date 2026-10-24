@@ -72,15 +72,27 @@ New-room creation MUST expose no more than five top-level pages: room name, task
 - **THEN** the content, page title, and companion tip update during the drag, and release settles the thumb to the nearest stage
 - **AND** the final pointer-up position is applied even if the platform coalesces or omits the last pointer-move event
 
-### Requirement: Explain custom-task capacity before activation
-The task-selection step MUST state the recovery action before presenting the custom-task action as available when all four stable task slots are occupied. Freeing a slot MUST restore the custom-task action without changing task data or limits.
-#### Scenario: All task slots are occupied
-- **WHEN** all four stable task slots are enabled
-- **THEN** the task-selection page explains that one task must be removed before adding a custom task
-- **AND** it does not present a custom-task button that can only return an error after activation
-#### Scenario: A task slot is available
-- **WHEN** at least one task slot is disabled
-- **THEN** the custom-task action is available and reuses the available stable slot
+### Requirement: Version-2 rooms support additional stable task IDs
+Explicit schema-v2 rooms MUST support custom tasks in addition to the four canonical task IDs, while preserving the four-enabled-task limit on the duty page. Custom tasks MUST use stable identifiers and persist through creation, settings, rotation, completion, undo, calendar projection, statistics, and preview. Legacy rooms MUST retain their existing four-task configuration path without migration.
+#### Scenario: Add a task while canonical tasks remain enabled
+- **WHEN** a creator adds a custom task while all four canonical tasks are enabled
+- **THEN** the draft assigns a stable custom ID and keeps all canonical tasks unchanged
+- **AND** the task can be assigned to the second page without consuming a duty-page slot
+#### Scenario: Enforce the duty-page limit
+- **WHEN** a schema-v2 configuration contains more than four enabled tasks assigned to the duty page
+- **THEN** server validation rejects the configuration before saving it
+#### Scenario: Custom task lifecycle
+- **WHEN** a configured custom task is scheduled or rotated, completed, undone, and shown in calendar data
+- **THEN** its stable ID and history remain associated with that task across each operation
+#### Scenario: Statistics include custom tasks
+- **WHEN** a schema-v2 room has an enabled custom task and matching activity records
+- **THEN** the production statistics view displays that task using its configured name and accepts its per-task colors
+#### Scenario: Retire a custom task
+- **WHEN** a custom task is removed from a saved v2 configuration
+- **THEN** future pending assignments are cancelled, historical records remain readable, and the retired task is not silently restored
+#### Scenario: Legacy-room isolation
+- **WHEN** a legacy room without schema-v2 configuration is read or configured
+- **THEN** it remains on the existing canonical four-key path and is not migrated
 #### Scenario: Existing-room settings
 - **WHEN** a user configures an existing room
 - **THEN** its existing settings progress control and flow remain unchanged

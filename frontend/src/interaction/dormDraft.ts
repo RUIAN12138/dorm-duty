@@ -1,4 +1,5 @@
-export type TaskKey = "floor" | "toilet" | "sink" | "water";
+export type TaskKey = "floor" | "toilet" | "sink" | "water" | `task_${string}`;
+export const MAX_DORM_TASKS = 20;
 export interface DraftTask {
   key: TaskKey;
   name: string;
@@ -70,6 +71,24 @@ export const taskDefaults: DraftTask[] = [
     interval: 3,
   },
 ];
+export function createCustomTask(): DraftTask {
+  const suffix = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID().replaceAll("-", "").toLowerCase()
+    : Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join("");
+  return {
+    key: `task_${suffix}`,
+    name: "",
+    content: "",
+    enabled: true,
+    page: "water",
+    rotation: "round",
+    display: "title",
+    deadline: "22:00",
+    interval: 3,
+  };
+}
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 export function createDormDraft(): DormDraft {
   return {

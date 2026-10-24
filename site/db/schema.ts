@@ -339,7 +339,7 @@ export const choreCategories = sqliteTable(
     ),
     check(
       "chore_category_key_check",
-      sql`${table.key} IN ('floor','toilet','sink','water')`,
+      sql`${table.key} IN ('floor','toilet','sink','water') OR (length(${table.key})=37 AND substr(${table.key},1,5)='task_' AND substr(${table.key},6) NOT GLOB '*[^0-9a-f]*')`,
     ),
     check(
       "chore_rotation_days_check",
@@ -387,7 +387,7 @@ export const choreTasks = sqliteTable(
       .where(sql`${table.key}='water' AND ${table.status}='pending'`),
     check(
       "chore_task_key_check",
-      sql`${table.key} IN ('floor','toilet','sink','water')`,
+      sql`${table.key} IN ('floor','toilet','sink','water') OR (length(${table.key})=37 AND substr(${table.key},1,5)='task_' AND substr(${table.key},6) NOT GLOB '*[^0-9a-f]*')`,
     ),
     check(
       "chore_task_status_check",

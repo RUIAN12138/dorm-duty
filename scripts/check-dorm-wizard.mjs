@@ -116,6 +116,51 @@ try {
     pushJobs:h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM chore_push_jobs WHERE dorm_id=?").get(dormId).n,
     corrections:h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM chore_history_entries WHERE dorm_id=?").get(dormId).n,
   });
+  const dynamicKey=`task_${"1".repeat(32)}`,scheduledKey=`task_${"2".repeat(32)}`;
+  const dynamicTask=(key,name,page,rotation)=>({key,name,content:`清理${name}`,enabled:true,page,rotation,display:"title",deadline:"22:00",interval:1});
+  const expandableConfig={schema_version:2,policy:"soft",pages:config.pages,second_page_kind:"tasks",tasks:[
+    dynamicTask("floor","地板","duty","round"),
+    dynamicTask("toilet","厕所","duty","round"),
+    dynamicTask("sink","洗手池","duty","round"),
+    dynamicTask("water","抬水","water","completion"),
+  ]};
+  const expandableRoom=await create("可扩展任务宿舍",expandableConfig);
+  await verifyEmail("dynamic-task-peer@example.invalid");
+  const expandablePeer=await (await joinRoom(expandableRoom.invite_code,"额外任务室友")).json();
+  const expandableBoard=await board(expandableRoom);
+  const expandedConfiguration={...expandableConfig,tasks:[
+    ...expandableConfig.tasks,
+    dynamicTask(dynamicKey,"阳台","duty","round"),
+    dynamicTask(scheduledKey,"公共区","water","rotation"),
+  ]};
+  const twentyTaskConfig={...expandedConfiguration,tasks:[...expandedConfiguration.tasks,...Array.from({length:14},(_,index)=>dynamicTask(`task_${String(index+3).padStart(32,"0")}`,`公共区域${index+1}`,"water","round"))]};
+  check(validateDormConfiguration(twentyTaskConfig).tasks.length===20,"schema-v2 accepts the documented twenty-task configuration ceiling");
+  assert.throws(()=>validateDormConfiguration({...twentyTaskConfig,tasks:[...twentyTaskConfig.tasks,dynamicTask(`task_${"f".repeat(32)}`,"额外任务","water","round")]}),/检查新版宿舍/);
+  checks++;
+  console.log("PASS schema-v2 rejects a twenty-first configured task");
+  const expansion=await h.request("/chores/settings",{token:expandableRoom.access_token,method:"PATCH",data:{version:expandableBoard.version,categories:expandableBoard.categories,configuration:expandedConfiguration}});
+  check(expansion.ok,"schema-v2 settings can add stable custom categories beyond four builtin tasks");
+  let expandedBoard=await board(expandableRoom);
+  check(expandedBoard.configuration.tasks.length===6&&expandedBoard.categories.some(c=>c.key===dynamicKey)&&expandedBoard.categories.some(c=>c.key===scheduledKey),"custom task IDs and configuration persist in the server board");
+  check(expandedBoard.rounds.some(r=>r.key===dynamicKey&&r.sequence===1&&r.total===2),"a new custom round category starts with the real member rotation");
+  check(expandedBoard.workspace_tasks.some(t=>t.key===scheduledKey&&t.duty_date===expandedBoard.today)&&expandedBoard.next_tasks.some(t=>t.key===scheduledKey&&t.duty_date>expandedBoard.today),"a new scheduled custom category creates current and upcoming assignments");
+  const tooManyOnDuty={...expandedConfiguration,tasks:expandedConfiguration.tasks.map(t=>t.key===scheduledKey?{...t,page:"duty"}:t)};
+  const invalidDutyExpansion=await h.request("/chores/settings",{token:expandableRoom.access_token,method:"PATCH",data:{version:expandedBoard.version,categories:expandedBoard.categories,configuration:tooManyOnDuty}});
+  check(invalidDutyExpansion.status===422,"server still rejects more than four enabled tasks on the duty page");
+  const dynamicOwnerTask=expandedBoard.workspace_tasks.find(t=>t.key===dynamicKey&&t.assignee_id===expandableRoom.member_id&&t.status==="pending");
+  assert(dynamicOwnerTask);
+  check((await h.request(`/chores/tasks/${dynamicOwnerTask.id}/complete`,{token:expandableRoom.access_token,method:"PATCH",data:{}})).ok,"a custom self-round task can be completed");
+  check((await h.request(`/chores/tasks/${dynamicOwnerTask.id}/undo`,{token:expandableRoom.access_token,method:"PATCH",data:{}})).ok,"a custom self-round completion can be undone");
+  expandedBoard=await board(expandableRoom);
+  check(expandedBoard.workspace_tasks.find(t=>t.id===dynamicOwnerTask.id)?.status==="pending","custom undo restores the original task row");
+  check((await h.request(`/chores/tasks/${dynamicOwnerTask.id}/complete`,{token:expandableRoom.access_token,method:"PATCH",data:{}})).ok,"a restored custom task can be completed again");
+  const peerDynamicBoard=await board(expandableRoom,expandablePeer.access_token,expandablePeer.member.user_id);
+  const dynamicPeerTask=peerDynamicBoard.workspace_tasks.find(t=>t.key===dynamicKey&&t.assignee_id===expandablePeer.member.user_id&&t.status==="pending");
+  assert(dynamicPeerTask);
+  check((await h.request(`/chores/tasks/${dynamicPeerTask.id}/complete`,{token:expandablePeer.access_token,method:"PATCH",data:{}})).ok,"the second member can complete their own custom round turn");
+  expandedBoard=await board(expandableRoom);
+  check(expandedBoard.rounds.find(r=>r.key===dynamicKey)?.sequence===2,"custom round advances only after every current member completes");
+  check(expandedBoard.calendar.filter(record=>record.key===dynamicKey).length===2,"custom completions remain visible in calendar history");
   await verifyEmail("joining@example.invalid");
   const joined=await joinRoom(room.invite_code,"自行加入");
   check(joined.status===201,"verified email may create own name only in a new room");

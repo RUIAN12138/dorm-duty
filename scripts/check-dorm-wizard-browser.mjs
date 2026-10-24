@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { observeElementSize } from "../frontend/src/components/onboarding/observeElementSize.mjs";
 const engine = process.env.DORM_BROWSER === "webkit" ? "webkit" : "chromium";
+const origin = process.env.DORM_WIZARD_ORIGIN || "http://127.0.0.1:8094";
 const b = await (engine === "webkit" ? webkit : chromium).launch({
   headless: true,
   ...(engine === "chromium"
@@ -174,7 +175,7 @@ try {
   stopResizeFallback();
   for(const listener of fallbackListeners)listener();
   check(fallbackListeners.size===0&&resizeFallbackCalls===1,'resize fallback removes its exact listener and stops updating after cleanup');
-  await p.goto("http://127.0.0.1:8094/guide");
+  await p.goto(`${origin}/guide`);
   await p.locator('[data-testid="welcome-guide"]').waitFor();
   check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
   check(await p.locator(".guide-page .dorm-companion").evaluateAll((els) => els.every((el) => el.getAttribute("data-effects-mode") === "lite")), "welcome tutorial keeps the companion motion while suppressing color ribbons and particles");
@@ -312,7 +313,7 @@ try {
   check(await p.locator('.wizard-step:not([aria-hidden=true])').getAttribute('data-step')==='name'&&await p.getByLabel('宿舍名称',{exact:true}).isVisible(),'closing name-step preview returns to the same question');
   await p.getByRole("button",{name:"退出配置",exact:true}).click();
   await p.locator(".dorm-wizard").waitFor({state:"detached"});
-  await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
+  await p.goto(`${origin}/?preview=new-dorm`);
   await p.locator(".dorm-wizard").waitFor();
   check(await p.getByLabel("宿舍名称",{exact:true}).isVisible(),"local creation preview also starts on the first editable question");
   await p.getByLabel("宿舍名称",{exact:true}).fill("本地体验宿舍");
@@ -322,7 +323,7 @@ try {
   check(await p.getByText("本机仅保留向导草稿，不会创建宿舍或生成有效邀请码。",{exact:true}).count()===1&&createRequests===0,"finishing local experience never calls the room creation API");
   await p.getByRole("button",{name:"退出体验",exact:true}).click();
   check(await p.evaluate((count)=>window.__companionHandoffFlights.length===count,localFlightsBeforeExit),"exiting the local wizard experience does not register a real-room companion flight");
-  await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
+  await p.goto(`${origin}/?preview=new-dorm`);
   await p.locator(".dorm-wizard").waitFor();
   check(!new URL(p.url()).searchParams.has("preview"), "local preview shortcut opens the wizard and cleans its query flag");
   check(await p.getByLabel("宿舍名称",{exact:true}).isVisible(),"reopened local wizard retains the direct first-question entry");
@@ -421,15 +422,15 @@ try {
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','progress drag can reverse direction and settle on the original step');
   const creationSlots=p.locator('.wizard-step[data-step="tasks"] .template-card');
   check(await creationSlots.count()===4&&await creationSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true')),'template selection keeps four enabled stable task slots by default');
-  check(await p.getByRole('button',{name:'自定义任务',exact:true}).count()===0&&await p.getByRole('status').filter({hasText:'移除一项后可添加自定义任务'}).count()===1,'full creation task slots explain how to free a slot before exposing custom-task action');
-  const creationSlotName=await creationSlots.first().locator('strong').textContent();
-  await creationSlots.first().click();
-  check(await p.getByRole('button',{name:'自定义任务',exact:true}).isVisible()&&await p.getByRole('status').filter({hasText:'移除一项后可添加自定义任务'}).count()===0,'freeing one creation task slot restores the custom-task action');
+  check(await p.getByRole('button',{name:'自定义任务',exact:true}).isVisible()&&await p.getByRole('status').filter({hasText:'最多20项任务'}).count()===0,'custom-task action remains available when all four builtin tasks are enabled');
   await p.getByRole('button',{name:'自定义任务',exact:true}).click();
   await p.locator('.creation-task-edit .task-editor').waitFor();
-  await p.getByLabel('任务名称',{exact:true}).fill(creationSlotName);
+  await p.getByLabel('任务名称',{exact:true}).fill('阳台');
   await p.locator('.creation-task-edit button').first().click();
-  check(await creationSlots.count()===4&&await creationSlots.first().getAttribute('aria-pressed')==='true'&&await creationSlots.first().locator('strong').textContent()===creationSlotName,'custom task reuses the freed stable slot and restores the original draft during isolation');
+  check(await creationSlots.count()===5&&await creationSlots.evaluateAll(nodes=>nodes.slice(0,4).every(node=>node.getAttribute('aria-pressed')==='true'))&&await creationSlots.last().locator('strong').textContent()==='阳台','adding a custom task preserves all four builtin draft tasks');
+  await p.waitForFunction(()=>Object.keys(localStorage).some(key=>{try{return JSON.parse(localStorage.getItem(key)||'null')?.draft?.tasks?.some(task=>/^task_[0-9a-f]{32}$/.test(task.key)&&task.name==='阳台'&&task.page==='water')}catch{return false}}));
+  const previewCustomKey=await p.evaluate(()=>Object.keys(localStorage).flatMap(key=>{try{return JSON.parse(localStorage.getItem(key)||'null')?.draft?.tasks||[]}catch{return []}}).find(task=>task.name==='阳台')?.key);
+  check(true,'custom task receives a stable ID and defaults to the second page');
   check(await p.locator('.creation-task-picks button').first().evaluate(async (element) => {
     let stableFrames = 0;
     let previous = element.getBoundingClientRect();
@@ -557,7 +558,7 @@ try {
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
-  check(await p.locator('.rule-task-picks button').count()===3&&await p.locator('.rule-time-panel .van-picker').count()===1,'the unified scheduled choice exposes its task selector and time wheel directly on the rules step');
+  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-time-panel .van-picker').count()===1,'the unified scheduled choice exposes all four non-water tasks and its time wheel directly on the rules step');
   check(
     JSON.stringify(await p.locator('.rule-mode-picks .wizard-choice span').allTextContents()) === JSON.stringify([
       '全员完成后，开始新一轮',
@@ -583,7 +584,7 @@ try {
   check(await p.locator('.rule-task-picks button[aria-pressed="true"]').count()===1,'scheduled task selection is restored after changing the pacing mode');
   check(await p.locator('.rule-time-panel .time-wheel-setting > strong').textContent()===retainedDeadline,'scheduled deadline remains unchanged when switching between pacing modes');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
-  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-detail').count()===1,'per-task rule editing is available as a separate compact card state');
+  check(await p.locator('.rule-task-picks button').count()===5&&await p.locator('.rule-detail').count()===1,'per-task rule editing includes the custom task in a separate compact card state');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice').count()===3&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task rotation tab exposes all three runtime rhythms without stacking unrelated controls');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice span').count()===3,'per-task pacing choices use the same concise explanations');
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 per-task pacing choices fit without vertical scrolling');
@@ -637,6 +638,9 @@ try {
   await live.getByTestId('nav-calendar').click();
   await live.locator('[data-testid="chore-calendar"]').waitFor();
   check(true,'calendar preview uses the real calendar component');
+  await live.getByTestId('calendar-view-stats').click();
+  await live.locator(`[data-testid="stats-${previewCustomKey}"]`).waitFor();
+  check(await live.locator('.stat-card').count()===5,'production statistics include the configured custom task');
   const nav=live.locator('.chore-bottom-nav');await p.waitForTimeout(350);const before=await nav.innerText();
   const first=await nav.locator('button').first().boundingBox(),last=await nav.locator('button').last().boundingBox();
   await p.mouse.move(first.x+first.width/2,first.y+first.height/2);await p.mouse.down();await p.waitForTimeout(320);await p.mouse.move(last.x+last.width/2,last.y+last.height/2,{steps:12});await p.mouse.up();
@@ -795,18 +799,19 @@ try {
   await p.locator('.wizard-step[data-step="templates"]').waitFor();
   const activeWorkspaceTemplates=p.locator('.wizard-step:not([aria-hidden="true"])');
   const workspaceSlots=activeWorkspaceTemplates.locator('.template-card');
-  check(await workspaceSlots.count()===4&&await workspaceSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true'))&&await p.getByRole('button',{name:'自定义任务',exact:true}).count()===0&&await p.getByRole('status').filter({hasText:'移除一项后可添加自定义任务'}).count()===1,'full workspace task slots show the recovery action before custom-task activation');
-  const workspaceSlotName=await workspaceSlots.first().locator('strong').textContent();
-  await workspaceSlots.first().click();
+  const workspaceTaskCountBefore=await workspaceSlots.count();
+  const workspaceBuiltinsRemainEnabled=await workspaceSlots.evaluateAll(nodes=>nodes.slice(0,4).every(node=>node.getAttribute('aria-pressed')==='true'));
+  const workspaceAddTaskVisible=await activeWorkspaceTemplates.locator('.add-task').isVisible();
+  const workspaceAtTaskLimit=await activeWorkspaceTemplates.locator('.add-task-guidance').isVisible().catch(()=>false);
+  check(workspaceTaskCountBefore>=4&&workspaceBuiltinsRemainEnabled&&workspaceAddTaskVisible&&!workspaceAtTaskLimit,`workspace exposes an extra task action while builtin tasks remain enabled ${JSON.stringify({workspaceTaskCountBefore,workspaceBuiltinsRemainEnabled,workspaceAddTaskVisible,workspaceAtTaskLimit})}`);
   const customTaskAction=activeWorkspaceTemplates.locator('.add-task');
-  await customTaskAction.waitFor({state:'visible'});
-  check(await customTaskAction.isVisible(),'workspace custom-task action returns when a stable slot is freed');
+  check(await customTaskAction.isVisible(),'workspace custom-task action is available without freeing a builtin slot');
   await customTaskAction.click();
-  await p.locator('.task-editor').waitFor();
-  await p.getByLabel('任务名称',{exact:true}).fill(workspaceSlotName);
+  await p.locator('.wizard-step:not([aria-hidden="true"]) .task-editor').waitFor();
+  await p.getByLabel('任务名称',{exact:true}).fill('阁楼');
   await p.getByRole('button',{name:'前往添加',exact:true}).click();
   await p.locator('.wizard-step[data-step="templates"]').waitFor();
-  check(await workspaceSlots.first().getAttribute('aria-pressed')==='true'&&await workspaceSlots.first().locator('strong').textContent()===workspaceSlotName,'workspace custom task reuses the freed slot without changing saved task data');
+  check(await workspaceSlots.count()===workspaceTaskCountBefore+1&&await workspaceSlots.evaluateAll(nodes=>nodes.slice(0,4).every(node=>node.getAttribute('aria-pressed')==='true'))&&await workspaceSlots.last().locator('strong').textContent()==='阁楼','workspace draft adds a task without disabling an existing task');
   await p.getByRole('button',{name:'前往任务',exact:true}).click();
   await p.locator('.workspace-task-list').waitFor();
   check(
@@ -814,7 +819,7 @@ try {
     "new room settings starts with a task list",
   );
   await p.locator('.workspace-task-row>.wizard-choice').first().click();
-  await p.locator('.task-editor').waitFor();
+  await p.locator('.wizard-step:not([aria-hidden="true"]) .task-editor').waitFor();
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往地面清洁'&&await p.locator('.wizard-steps,.step-caption').count()===0,'task editor stays synchronized to the shared number-free progress control');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'workspace edits at most two fields per screen');
   await p.screenshot({ path: `data/startup-review/${engine}-workspace.png` });
@@ -826,9 +831,12 @@ try {
   check(true, "workspace save returns to same new room");
   // Width/theme/reduced-motion geometry checks are browser simulations, not devices.
   await p.getByTestId('open-tools').click();await p.getByTestId('open-chore-settings').click();
+  await p.locator('.workspace-task-row').first().waitFor();
+  const persistedWorkspaceNames=await p.locator('.workspace-task-row strong').allTextContents();
+  check(persistedWorkspaceNames.includes('阁楼'),`saved workspace configuration persists the added task ${JSON.stringify(persistedWorkspaceNames)}`);
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});await p.locator('.workspace-task-row>.wizard-choice').first().waitFor();check(await p.locator('.dorm-wizard').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${width}px no horizontal overflow`);}
   await p.locator('.workspace-task-row>.wizard-choice').first().click();
-  await p.locator('.task-editor').waitFor();
+  await p.locator('.wizard-step:not([aria-hidden="true"]) .task-editor').waitFor();
   await p.getByRole('button',{name:'使用引导',exact:true}).click();
   await p.locator('.tour').waitFor();
   check(await p.locator('.tour').evaluate(el=>el.getAttribute('role')==='dialog'&&el.getAttribute('aria-modal')==='true'&&!!document.getElementById(el.getAttribute('aria-describedby')||'')),'spotlight exposes a named modal dialog and live description');
