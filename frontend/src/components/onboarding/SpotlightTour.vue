@@ -34,14 +34,13 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <Teleport to="body"
-    ><div
-      class="tour"
-      role="dialog"
-      aria-modal="true"
-      aria-label="功能引导"
-      @keydown.esc="$emit('done')"
-    >
+  <div
+    class="tour"
+    role="dialog"
+    aria-modal="true"
+    aria-label="功能引导"
+    @keydown.esc="$emit('done')"
+  >
       <div
         class="tour-light"
         :style="{
@@ -69,8 +68,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
-    </div></Teleport
-  >
+  </div>
 </template>
 <style scoped>
 .tour {
@@ -119,5 +117,14 @@ onBeforeUnmount(() => {
 }
 .tour button:active {
   transform: scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-light,
+  .tour button {
+    transition: none;
+  }
+  .tour button:active {
+    transform: none;
+  }
 }
 </style>

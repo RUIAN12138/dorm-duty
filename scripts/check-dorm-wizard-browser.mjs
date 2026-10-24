@@ -796,7 +796,18 @@ try {
   // Width/theme/reduced-motion geometry checks are browser simulations, not devices.
   await p.getByTestId('open-tools').click();await p.getByTestId('open-chore-settings').click();
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});await p.locator('.workspace-task-row>.wizard-choice').first().waitFor();check(await p.locator('.dorm-wizard').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${width}px no horizontal overflow`);}
+  await p.getByRole('button',{name:'使用引导',exact:true}).click();
+  await p.locator('.tour-light').waitFor();
+  check(await p.locator('.tour-light').evaluate(el=>getComputedStyle(el).transitionProperty!=='none'),'spotlight keeps its spatial transition when motion is allowed');
+  await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click();
+  await p.locator('.tour').waitFor({state:'detached'});
   await p.emulateMedia({reducedMotion:'reduce',colorScheme:'dark'});
+  await p.getByRole('button',{name:'使用引导',exact:true}).click();
+  await p.locator('.tour-light').waitFor();
+  check(await p.locator('.tour-light').evaluate(el=>getComputedStyle(el).transitionProperty==='none'),'reduced-motion disables spotlight geometry transitions');
+  check(await p.locator('.tour').getByRole('button',{name:'下一步',exact:true}).evaluate(el=>getComputedStyle(el).transitionProperty==='none'),'reduced-motion disables spotlight button transitions');
+  await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click();
+  await p.locator('.tour').waitFor({state:'detached'});
   await p.locator('.workspace-task-row>.wizard-choice').first().click();await p.locator('.task-editor').waitFor();
   check(await p.getByLabel('任务名称',{exact:true}).isVisible(),'reduced motion remains usable');
   check(!errors.length, JSON.stringify(errors));

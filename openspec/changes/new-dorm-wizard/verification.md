@@ -208,6 +208,12 @@
 ## 2026-10-24 欢迎引导文案去重
 - 首屏说明改为“首页会显示今天的任务和负责人。”，日历页说明收敛为“设置里可以调整任务。”；教程页数、标题、顺序、导航、球球及行为不变。
 - `scripts/check-dorm-wizard-browser.mjs` 精确断言四页说明文案，保持滑动同步、跳转、短屏与横屏可达性回归；修改前后截图为 `data/startup-review/webkit-welcome-guide-copy-before.png` 与 `data/startup-review/webkit-welcome-guide-copy-after.png`。
+
+## 2026-10-24 聚光灯尊重减少动态效果
+
+- `SpotlightTour.vue` 在系统开启减少动态效果时关闭光区位置/尺寸过渡和按钮按压缩放；标准动效仍保留原路径。聚光层留在触发它的设置抽屉中，避免被模态层视为外部内容而拦截操作。
+- `scripts/check-dorm-wizard-browser.mjs` 实际打开设置工作台的聚光灯，分别验证标准模式保留空间过渡、减少动态效果时关闭聚光灯和按钮过渡，并实际点击跳过后继续编辑。
+- 浏览器测试为 macOS Chromium/WebKit 隔离视口模拟，不代表 iPhone、Android 或 HarmonyOS 真机验收。
 - 自动化为 macOS WebKit/Chromium 的移动视口模拟，非实体手机验收；未接触正式宿舍数据。
 
 ## 2026-10-24 新版通知权限说明收敛
