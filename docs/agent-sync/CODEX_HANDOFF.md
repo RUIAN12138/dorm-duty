@@ -1,33 +1,37 @@
 # Codex → ChatGPT · 最近一次开发交接
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `c137dbe1e6205e28ee140648afb1497ac47c945d`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/c137dbe1e6205e28ee140648afb1497ac47c945d
-- related_pr: 无（用户要求先验收；只推送隔离开发分支）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮按新版宿舍创建向导的简洁高效目标继续精简教程与任务节奏文案。最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=251e950dca1421f34b7e3aa4bb6af1a461bc2791`，不匹配先前交接的 `8f8467615c5d8eb161a3e772e51a8822c9b1eb4a` 或当前代码 SHA；本轮未重复执行过期建议，未修改评审文件。
+- code_sha: `d7930a70583de86f41629ca231d0c7975eefaf6b`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/d7930a70583de86f41629ca231d0c7975eefaf6b
+- related_pr: 无（保持隔离开发分支，等待用户验收）
+- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；继续精简新宿舍创建与独立欢迎引导。本次名称首屏仅保留标题和单个输入框，将舍友自行填写姓名规则放入球球 Tips。
 - changed_files:
-  - `frontend/src/views/WelcomeGuide.vue`
   - `frontend/src/components/onboarding/DormWizard.vue`
+  - `frontend/src/views/WelcomeGuide.vue`
   - `scripts/check-dorm-wizard-browser.mjs`
-  - `openspec/changes/new-dorm-wizard/{design.md,proposal.md,specs/wizard/spec.md,tasks.md,verification.md}`
+  - `openspec/changes/new-dorm-wizard/design.md`
+  - `openspec/changes/new-dorm-wizard/proposal.md`
+  - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
+  - `openspec/changes/new-dorm-wizard/tasks.md`
+  - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - 将欢迎教程四页的辅助文案改为明确的实际操作；留言页写明“点球球留话，回首页点消息看回复”，对应真实首页 `/messages` 入口。
-  - 新建宿舍规则主态及单项节奏设置，为三种节奏增加一行简短结果说明，使用同一数据定义，保留现有规则 ID、配置和运行语义；紧凑排布不改变页面数与步骤。
-  - 将文案要求与覆盖路径登记到 OpenSpec；没有修改旧宿舍配置、业务数据或正式 App 页面。
+  - 新宿舍首个步骤移除可见的重复字段标签与“舍友加入时自己填写姓名”段落；保留 `aria-label="宿舍名称"`、必填验证、64 字限制、原有草稿和创建行为。球球 Tips 改为“室友加入后自己填写姓名”。
+  - 欢迎教程保留真实操作入口的简短说明；横屏球球占位更紧凑，“跳过”增加轻按反馈并遵循减少动态效果设置。
+  - OpenSpec 补充首屏减负要求与验收。没有改旧宿舍配置、正式 App 数据或业务规则。
 - tests:
-  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离创建向导、教程、预览和工作台流程通过；教程与节奏文案断言通过，覆盖 320/390/430px、规则页 390×844 单屏、预览无业务 API 请求与减少动态效果；页面错误列表均为空。
-  - `npm run web:build`：`vue-tsc`、Vite 和 PWA 构建通过；保留既有约 555 KB `GuestHome` chunk 提示。
-  - `npm run spec:check`：OpenSpec 18/18，17 个 active changes/362 个登记文件范围检查通过，18 项范围门禁通过；最终摘要 `46f030dd4fa7156d0e9d5cb0a9b165919b319a8b22ab351fc7f39224e1b07c52`。
-  - Impeccable 自动检测 `[]`；`git diff --check` 通过。
-  - 此前已在父提交 `8f84676` 记录的隔离 SQLite/API 修复与针对性测试仍包含在当前历史中；本轮没有重跑它们或完整 `npm run web:verify`。
-- CI: GitHub Actions 查询无该 SHA 的 workflow run；Commit Status `state=pending`、`total_count=0`、`statuses=[]`，不能报告 CI 通过。
+  - `node scripts/check-dorm-wizard-browser.mjs` 与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导流程通过；覆盖单输入/无重复文案、球球提示、必填与 64 字限制、草稿回填、步骤跳转、预览副作用隔离、窄屏与减少动态效果；页面错误列表均为 `[]`。
+  - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；仍有既有 GuestHome 大 chunk 提示。
+  - `npm run spec:check`：OpenSpec 18/18；17 个变更/362 个登记文件范围检查通过；18 项范围门禁通过。摘要 `fb67a4de9bd2d6093e0260304243ebb04f7de52928199f5fc9893096701feaca`。
+  - Impeccable 对 DormWizard.vue 自动检测为 `[]`；`git diff --check` 通过。
+  - Chromium/WebKit 前后截图保存在本地忽略目录：`data/startup-review/{chromium,webkit}-wizard-name-before.png` 与 `*-wizard-name-after.png`。
+- CI: GitHub Commit Status 对该 SHA 为 `pending`、`total_count=0`、`statuses=[]`；`gh run list --commit d7930a70583de86f41629ca231d0c7975eefaf6b` 返回 `[]`。没有该提交 CI 通过证据。
 - platform_status:
-  - Chromium 与 WebKit 为 macOS 浏览器的移动视口隔离模拟，不是实体 iPhone Safari/PWA 测试。
+  - Chromium 与 WebKit 为 macOS 桌面浏览器移动视口模拟，不是实体 iPhone Safari/PWA 测试。
   - Android WebView、HarmonyOS ArkWeb 未真机验证。
-  - 只使用本地合成草稿；没有访问或写入正式数据库。
+  - 仅使用本地合成草稿；没有访问或写入正式数据。
 - remaining:
-  - 请对 `c137dbe1e6205e28ee140648afb1497ac47c945d` 独立评审；当前评审 SHA 已过期。
-  - 四项既存 `npm run web:verify` 失败仍为阻塞：手势 opacity 断言、两个测试夹具导入 `memberNames.css`、旧迁移 `/guest/create` 返回 500；本轮未运行全量套件、未删除断言或改动这些范围。
-  - 向导/教程实体设备验收仍待进行；本地截图保存在忽略目录 `data/startup-review/`，不能替代真机录屏。
+  - 当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=251e950dca1421f34b7e3aa4bb6af1a461bc2791` 与本交接代码 SHA 不同；本轮没有套用针对旧 SHA 的建议，请对 d7930a7 独立评审。
+  - 上一交接记录的四项 `npm run web:verify` 失败（手势 opacity 断言、两个测试夹具导入 memberNames.css、旧迁移 /guest/create 返回 500）本轮未重跑；不得将定向浏览器回归表述为全量 Web 回归通过。
+  - iPhone Safari/PWA、Android WebView 与 HarmonyOS ArkWeb 真机验收仍待进行。
   - 未创建 PR、未合并 main、未部署。
 - questions: 无。
