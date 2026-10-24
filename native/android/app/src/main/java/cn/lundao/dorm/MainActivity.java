@@ -43,6 +43,7 @@ public final class MainActivity extends Activity {
     createLayout();
     WebSettings settings=web.getSettings();
     settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
+    android.webkit.CookieManager.getInstance().setAcceptCookie(true);
     settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     web.setWebViewClient(new WebViewClient(){
@@ -189,5 +190,6 @@ public final class MainActivity extends Activity {
   }
   private void navigateBack(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String url=intent.getStringExtra("route");if(trusted(url))web.loadUrl(url);}
+  @Override protected void onPause(){android.webkit.CookieManager.getInstance().flush();super.onPause();}
   @Override protected void onDestroy(){ui.removeCallbacks(loadTimeout);io.shutdownNow();web.destroy();super.onDestroy();}
 }

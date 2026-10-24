@@ -1,3 +1,4 @@
+import { persistentSessionKey } from "../interaction/persistentSession";
 import { reactive } from "vue";
 import { logoutAll, pendingLogout, logoutEvent } from "./logout";
 import { choreRequest, savedChoreToken, saveChoreToken } from "./chores";
@@ -64,6 +65,7 @@ function clearUnboundIdentity(room: EmailRoom) {
   saveChoreToken(room.invite_code, room.member_id, "");
   for (const [storage, key] of [
     [localStorage, "dorm-email-admin-grant"],
+    [localStorage, persistentSessionKey],
     [sessionStorage, "dorm-token"],
   ] as const)
     if (token && storage.getItem(key) === token) storage.removeItem(key);

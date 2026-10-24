@@ -1,3 +1,4 @@
+import { persistentSessionKey } from "../interaction/persistentSession";
 import { ApiError, requestJson } from "./transport";
 export { ApiError } from "./transport";
 export async function api<T>(
@@ -25,6 +26,8 @@ export async function api<T>(
     ) {
       sessionStorage.removeItem("dorm-token");
       try {
+        if (localStorage.getItem(persistentSessionKey) === token)
+          localStorage.removeItem(persistentSessionKey);
         if (localStorage.getItem("dorm-email-admin-grant") === token)
           localStorage.removeItem("dorm-email-admin-grant");
       } catch {

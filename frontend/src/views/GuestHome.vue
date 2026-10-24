@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { persistSessionToken } from "../interaction/persistentSession";
+import StartupGate from "../components/StartupGate.vue";
+import type { StartupStatus } from "../interaction/startup";
 import ScreenStage from "../components/ScreenStage.vue";
 import { provideSheetNavigation } from "../interaction/sheetNavigation";
 provideSheetNavigation();
@@ -99,7 +102,7 @@ async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   emailOpen.value = false;
   cancelSelection();
   if (entry.is_creator) {
-    sessionStorage.setItem("dorm-token", entry.access_token);
+    persistSessionToken(entry.access_token);
     localStorage.setItem("dorm-email-admin-grant", entry.access_token);
     await session.refresh().catch(() => {});
   }
@@ -513,7 +516,7 @@ async function submitName() {
     );
     if (!isCurrent(id, signal)) return;
     if (result.is_creator) {
-      sessionStorage.setItem("dorm-token", result.access_token);
+      persistSessionToken(result.access_token);
       localStorage.setItem("dorm-email-admin-grant", result.access_token);
       await session.refresh();
       if (!isCurrent(id, signal)) return;
@@ -721,7 +724,7 @@ async function submitCreate() {
       signal,
     );
     if (!isCurrent(id, signal)) return;
-    sessionStorage.setItem("dorm-token", result.access_token);
+    persistSessionToken(result.access_token);
     try {
       localStorage.setItem("dorm-email-admin-grant", result.access_token);
     } catch {
@@ -768,7 +771,7 @@ async function acceptRecovered(result: GuestCreation) {
   try {
     await session.init();
     if (!isCurrent(id, signal)) return;
-    sessionStorage.setItem("dorm-token", result.access_token);
+    persistSessionToken(result.access_token);
     try {
       localStorage.setItem("dorm-email-admin-grant", result.access_token);
     } catch {
@@ -835,7 +838,7 @@ async function returnToDorm(room: JoinedDorm) {
           choreToken.value,
         );
         if (current?.id === dorm.value?.id && current.is_admin) {
-          sessionStorage.setItem("dorm-token", choreToken.value);
+          persistSessionToken(choreToken.value);
           localStorage.setItem("dorm-email-admin-grant", choreToken.value);
           await session.refresh();
         }
@@ -909,14 +912,30 @@ watch(emailOpen, (open, previous) => {
 });
 window.addEventListener(logoutEvent, emailLogout);
 window.addEventListener(identityUnboundEvent, identityUnbound);
+const startupStatus = ref<StartupStatus>("initializing");
+const startupBlocked = computed(() =>
+  ["initializing", "verifying", "recovery-failed"].includes(
+    startupStatus.value,
+  ),
+);
 let bootRunning = false;
 let bootReady = false;
 let disposed = false;
 async function boot() {
   if (bootRunning || disposed) return;
   bootRunning = true;
+  startupStatus.value = "verifying";
   try {
     await bootEntry();
+    if (!disposed)
+      startupStatus.value =
+        error.value && !member.value
+          ? "recovery-failed"
+          : member.value
+            ? "authenticated"
+            : "unauthenticated";
+  } catch {
+    if (!disposed) startupStatus.value = "recovery-failed";
   } finally {
     bootRunning = false;
   }
@@ -987,7 +1006,7 @@ async function bootEntry() {
         localStorage.getItem("dorm-email-admin-grant") || "";
     }
   } else if (code || saved.guest_mode === "demo")
-    void loadDorm(
+    await loadDorm(
       code,
       code === saved.invite_code ? saved.member_id : undefined,
     );
@@ -1014,7 +1033,9 @@ onUnmounted(() => {
 
 <template>
   <ScreenStage :signed-in="navVisible">
+    <StartupGate :status="startupStatus" @retry="boot" />
     <main
+      v-if="!startupBlocked"
       ref="entrySurface"
       class="guest-page"
       :class="{
@@ -1450,7 +1471,7 @@ onUnmounted(() => {
   </ScreenStage>
   <ChoreBottomNav v-if="navVisible" :section="section" />
   <button
-    v-if="!navVisible"
+    v-if="!navVisible && !startupBlocked"
     class="entry-appearance"
     aria-label="设置"
     @click="appearanceOpen = true"

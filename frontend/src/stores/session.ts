@@ -1,5 +1,10 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
+import {
+  restoreSessionToken,
+  persistSessionToken,
+  forgetSessionToken,
+} from "../interaction/persistentSession";
 import { api, post } from "../api";
 import type { User, Dorm } from "../api/types";
 export const useSession = defineStore("session", () => {
@@ -50,15 +55,7 @@ export const useSession = defineStore("session", () => {
     } catch {
       /* Optional persistence. */
     }
-    let token = sessionStorage.getItem("dorm-token");
-    if (!token) {
-      try {
-        token = localStorage.getItem("dorm-email-admin-grant");
-        if (token) sessionStorage.setItem("dorm-token", token);
-      } catch {
-        /* Optional persistence. */
-      }
-    }
+    const token = restoreSessionToken();
     if (validatedToken !== token) {
       user.value = null;
       dorm.value = null;
@@ -103,7 +100,7 @@ export const useSession = defineStore("session", () => {
       password,
     });
     if (epoch !== lifecycle) return false;
-    sessionStorage.setItem("dorm-token", result.access_token);
+    persistSessionToken(result.access_token);
     try {
       localStorage.removeItem("dorm-email-admin-grant");
     } catch {
@@ -126,7 +123,7 @@ export const useSession = defineStore("session", () => {
     initPromise = null;
     initialized.value = false;
     validatedToken = undefined;
-    sessionStorage.removeItem("dorm-token");
+    forgetSessionToken();
     try {
       localStorage.removeItem("dorm-email-admin-grant");
     } catch {

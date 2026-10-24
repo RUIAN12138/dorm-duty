@@ -898,7 +898,10 @@ watch(
   },
   { flush: "post" },
 );
-async function dismissBannerMessage(id: number, reason: "swipe" | "escape" | "close") {
+async function dismissBannerMessage(
+  id: number,
+  reason: "swipe" | "escape" | "close",
+) {
   const active = reminderBanner.active.value;
   if (!active || active.id !== id || bannerReply.sending.value) return;
   bannerReply.cancel(id);
@@ -1855,7 +1858,8 @@ onUnmounted(() => {
                     </p>
                     <div class="water-task-links">
                       <button
-                        class="water-remind"
+                        class="water-remind water-task-text"
+                        data-card-feedback
                         @click="openTask(water, $event)"
                       >
                         查看任务
@@ -1975,7 +1979,8 @@ onUnmounted(() => {
         :title="detailTask?.name || '任务详情'"
         :origin="detailOrigin"
         :motion="detailMotion"
-        :modal="detailMotion !== 'bottom'"
+        :modal="detailTask?.key === 'water' || detailMotion !== 'bottom'"
+        :edge-to-edge="detailTask?.key === 'water'"
         @closed="
           detailTask = null;
           runQueuedTool();
@@ -3397,5 +3402,30 @@ onUnmounted(() => {
 }
 .water-exception-trigger:active {
   transform: scale(0.96);
+}
+</style>
+
+<style scoped>
+.water-task-links .water-task-text {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  filter: none;
+  color: var(--app-tone-h555, #555);
+  border-radius: 0;
+  transition:
+    transform 220ms var(--ui-ease-out),
+    opacity 120ms ease;
+}
+.water-task-links .water-task-text::before,
+.water-task-links .water-task-text::after {
+  content: none;
+}
+.water-task-links .water-task-text:active:not(:disabled) {
+  transform: scale(0.97);
+  opacity: 0.65;
+  box-shadow: none;
 }
 </style>

@@ -1,3 +1,4 @@
+import { persistentSessionKey } from "../interaction/persistentSession";
 import { choreRequest } from "./chores";
 import { showToast } from "../interaction/notice";
 
@@ -11,6 +12,7 @@ function credentials() {
   const values = [
     sessionStorage.getItem("dorm-token"),
     localStorage.getItem("dorm-email-admin-grant"),
+    localStorage.getItem(persistentSessionKey),
   ];
   for (const key of Object.keys(localStorage))
     if (key.startsWith("dorm-chore-device-v1:"))
@@ -35,6 +37,7 @@ function clearLocal() {
       key.startsWith("dorm-chore-device-v1:") ||
       [
         "dorm-email-admin-grant",
+        persistentSessionKey,
         "dorm-owner-token",
         "dorm-guest-view-v1",
         "dorm-joined-rooms-v1",
