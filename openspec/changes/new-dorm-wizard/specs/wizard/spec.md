@@ -34,6 +34,11 @@ The product MUST expose a standalone four-page welcome guide and local loopback 
 - **WHEN** the user selects a distant page using the page indicator
 - **THEN** the active page content and primary action stay synchronized with the page nearest the visible scroll position, then settle on the selected page
 - **AND** the indicator touch targets keep fixed layout positions while the active capsule stretches visually
+#### Scenario: Short or landscape guide viewport
+- **WHEN** the welcome guide is shown in a short or landscape viewport
+- **THEN** its header and bottom actions remain visible, and each page can scroll vertically so the companion, title, and guidance text are reachable without clipping
+- **AND** vertical scrolling within a page does not change the selected horizontal page
+- **AND** in landscape, the companion's reserved gap is compact and the skip action has the same subtle press response as the primary action
 
 ### Requirement: Natural task pacing and time wheel
 The new-room rules page MUST use understandable labels for supported modes and show wheel controls only where time settings apply.
@@ -127,3 +132,11 @@ The production-component preview MUST use synthetic draft data and reject every 
 #### Scenario: Preview requests display-only content
 - **WHEN** a preview user opens locally renderable calendar, statistics, task details, or display-only help
 - **THEN** it renders from synthetic data without a business API request
+
+### Requirement: Minimal room-name step
+The first new-room step MUST focus on the room-name question and one accessible text input. The rule that roommates enter their own names when joining MUST be communicated without duplicating the field label and a separate helper paragraph.
+#### Scenario: Room-name step content
+- **WHEN** a user opens the first new-room step
+- **THEN** the page shows the room-name question, one text input with the accessible name “宿舍名称”, and a concise companion tip explaining that roommates enter their own names after joining
+- **AND** it does not show a second visible field label or helper paragraph repeating the join-name rule
+- **AND** the existing required-name validation, input length limit, and draft persistence remain unchanged

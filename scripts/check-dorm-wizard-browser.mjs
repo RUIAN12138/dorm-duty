@@ -111,6 +111,23 @@ try {
   await p.goto("http://127.0.0.1:8094/guide");
   await p.locator('[data-testid="welcome-guide"]').waitFor();
   check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
+  const skipButton = p.getByRole("button", { name: "跳过" });
+  const skipBounds = await skipButton.boundingBox();
+  await p.mouse.move(skipBounds.x + skipBounds.width / 2, skipBounds.y + skipBounds.height / 2);
+  await p.mouse.down();
+  await p.waitForFunction(() => {
+    const el = document.querySelector(".guide-skip");
+    if (!el) return false;
+    const style = getComputedStyle(el);
+    return style.transform !== "none" && new DOMMatrixReadOnly(style.transform).a < 0.999 && Number(style.opacity) < 0.99;
+  });
+  const skipPress = await skipButton.evaluate((el) => ({ transform: getComputedStyle(el).transform, opacity: Number(getComputedStyle(el).opacity) }));
+  check(skipPress.transform !== "none" && skipPress.opacity < 1, "tutorial skip action gives a subtle tactile press response");
+  await p.evaluate(() => document.querySelector(".guide-skip").addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, { capture: true, once: true }));
+  await p.mouse.up();
   check(
     JSON.stringify(await p.locator(".guide-page p").allTextContents()) === JSON.stringify([
       "打开首页，看今天的任务和负责人。",
@@ -122,6 +139,46 @@ try {
   );
   check(await p.locator(".guide-dots button").evaluateAll((els) => els.every((el) => el.offsetWidth >= 24 && el.offsetHeight >= 44)), "tutorial page indicators expose a stable, accessible touch target");
   const guideDotLayout = await p.locator(".guide-dots button").evaluateAll((els) => els.map((el) => [el.offsetLeft, el.offsetWidth]));
+  const guideDefaultViewport = p.viewportSize();
+  for (const viewport of [{width:844,height:390},{width:568,height:320},{width:320,height:568}]) {
+    await p.setViewportSize(viewport);
+    for (let pageIndex = 0; pageIndex < 4; pageIndex++) {
+      await p.getByRole("button", { name: `第 ${pageIndex + 1} 页`, exact: true }).click();
+      await p.waitForFunction((expected) => {
+        const pages = [...document.querySelectorAll(".guide-page")];
+        const active = pages.findIndex((page) => page.getAttribute("aria-hidden") === "false");
+        const track = document.querySelector(".guide-pages");
+        return active === expected && !!track && Math.abs(track.scrollLeft - expected * track.clientWidth) < 2;
+      }, pageIndex);
+      const guideReachability = await p.locator('.guide-page[aria-hidden="false"]').evaluate((slide) => {
+        const track = slide.parentElement;
+        const header = document.querySelector(".welcome-guide header").getBoundingClientRect();
+        const footer = document.querySelector(".welcome-guide footer").getBoundingClientRect();
+        slide.scrollTop = 0;
+        const firstTop = slide.firstElementChild.getBoundingClientRect().top;
+        const pageTop = slide.getBoundingClientRect().top;
+        slide.scrollTop = slide.scrollHeight;
+        const lastBottom = slide.lastElementChild.getBoundingClientRect().bottom;
+        const pageBottom = slide.getBoundingClientRect().bottom;
+        return {
+          firstVisibleAtStart: firstTop >= pageTop - 1,
+          lastVisibleAtEnd: lastBottom <= pageBottom + 1,
+          headerVisible: header.top >= 0 && header.bottom <= innerHeight,
+          footerVisible: footer.top >= 0 && footer.bottom <= innerHeight,
+          horizontalPage: Math.round(track.scrollLeft / track.clientWidth),
+        };
+      });
+      if (viewport.width === 568 && viewport.height === 320 && pageIndex === 0) {
+        await p.locator('.guide-page[aria-hidden="false"]').evaluate((slide) => { slide.scrollTop = 0; });
+        await p.screenshot({ path: `data/startup-review/${engine}-welcome-guide-landscape-after.png` });
+      }
+      check(guideReachability.firstVisibleAtStart && guideReachability.lastVisibleAtEnd && guideReachability.headerVisible && guideReachability.footerVisible && guideReachability.horizontalPage === pageIndex,
+        `${viewport.width}x${viewport.height} welcome page ${pageIndex + 1} stays vertically reachable without moving horizontal selection`);
+    }
+  }
+  await p.setViewportSize(guideDefaultViewport);
+  await p.getByRole("button", { name: "第 1 页", exact: true }).click();
+  await p.waitForFunction(() => Math.abs(document.querySelector(".guide-pages").scrollLeft) < 2);
   await p.getByRole("button", { name: "第 4 页", exact: true }).click();
   await p.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const guideTransitionState = await p.evaluate(() => {
@@ -176,6 +233,8 @@ try {
   await p.getByLabel("宿舍名称",{exact:true}).waitFor({state:"visible"});
   check(await p.locator('.welcome-slides').count()===0,"first-time creation skips the redundant creation-only slide deck");
   check(await p.getByRole('heading',{name:"宿舍，叫什么？",exact:true}).isVisible(),"first-time creation opens directly on the editable room-name question");
+  check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0&&await p.getByLabel('宿舍名称',{exact:true}).count()===1,"room-name step keeps one accessible input without a duplicate visible label or helper");
+  check((await p.locator('.wizard-tip').textContent())?.trim()==='室友加入后自己填写姓名',"roommate naming guidance appears once in the concise companion tip");
   check(await p.locator('.tour').count()===0,"the first editable question is not blocked by an automatic tour");
   await p.getByRole("button",{name:"退出配置",exact:true}).click();
   await p.locator(".dorm-wizard").waitFor({state:"detached"});
@@ -203,8 +262,14 @@ try {
   if (await guide.count()) await guide.getByRole("button", { name: "跳过", exact: true }).click();
   await guide.waitFor({state:'detached',timeout:2000}).catch(()=>{});
   check(await guide.count()===0,'preview screenshots are captured after dismissing the spotlight guide');
-  await p.getByLabel("宿舍名称", { exact: true }).fill("向导隔离宿舍");
+  const roomNameInput=p.getByLabel("宿舍名称", { exact: true });
+  check(await roomNameInput.evaluate(input=>input.maxLength)===64,"room-name input keeps the existing 64-character limit");
+  await roomNameInput.fill("");
+  await p.getByRole("button",{name:"继续",exact:true}).click();
+  check(await p.getByText("先填写宿舍名称",{exact:true}).count()===1,"room-name required validation remains active");
+  await roomNameInput.fill("向导隔离宿舍");
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===1,'dorm name screen asks only one question');
+  check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0,"dorm name screen has no duplicate label or helper text");
   check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');
   check(await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'progress bar has no visible numeric or symbol labels');
   const progressTargets=await p.locator('.progress-hit').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height};}));
@@ -214,7 +279,7 @@ try {
   check(progressTrack?.height===20,'progress track has the stronger 20px black-and-gray treatment');
   await p.evaluate(()=>{let count=0;Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{count++;return true}});Object.defineProperty(window,'__wizardHaptics',{configurable:true,get:()=>count});});
   await p.waitForTimeout(450);
-  await p.screenshot({path:`data/startup-review/${engine}-wizard-basic.png`});
+  await p.screenshot({path:`data/startup-review/${engine}-wizard-name-after.png`});
   await p.locator('.creation-progress').evaluate((host) => {
     const rect = host.getBoundingClientRect();
     const stepX = (index) => rect.left + 24 + (rect.width - 48) * index / 4;

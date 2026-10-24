@@ -1,5 +1,23 @@
 # 页面编排与正式值日复用补充验收
 
+## 欢迎引导短屏裁切回归
+
+- 基线复现：在 844×390 和 568×320 CSS 视口下，`.guide-page` 的内容高度超过分页容器，球球顶部被裁切；欢迎页把 `overflow-y` 设为 hidden，内容无法向上滚动查看。
+- 目标：短屏/横屏只允许引导页主体纵向滚动，顶部标题栏、底部页码和主按钮保持可见；横向切页与纵向滚动互不干扰。常规竖屏布局保持原样。
+- `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离流程通过；新增 12 项对照断言，检查 844×390、568×320 横屏与 320×568 窄屏下四页内容起始/末尾可达、顶部与底部操作始终可见、纵向滚动不改当前横向页。
+- `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；仅保留既有 `GuestHome` 大 chunk 提示。
+- `npm run spec:check` 与 `git diff --check`：通过；OpenSpec 18 项验证成功，全部在途变更范围门禁通过。
+- 更新后截图：`data/startup-review/chromium-welcome-guide-landscape-568x320.png`、`data/startup-review/chromium-welcome-guide-landscape-844x390.png`。短屏横屏的球球、标题、说明和继续操作可在首屏同时看见；需要时每页仍能单独纵向滚动。
+- Chromium/WebKit 均为 macOS 浏览器模拟；实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未验证。本轮未查询新的 GitHub CI；未合并、未推送、未创建 PR、未部署或访问正式数据。
+
+## 欢迎引导轻量收尾
+
+- 复核发现横屏规则缩小了 `DormCompanion` 视觉尺寸，却仍保留内层按钮 48px 的常规下边距；改为横屏 8px，缩小后释放的空间留给当前步骤内容。
+- 「跳过」与「继续」采用一致的轻按缩放/透明度反馈；减少动态效果时关闭形变并恢复不透明度。只作用于独立教程。
+- `node scripts/check-dorm-wizard-browser.mjs` 和 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导回归通过；新增实测「跳过」按压形变，以及横屏球球下边距后的教程截图。
+- `npm run web:build`：`vue-tsc`、Vite 与 PWA 构建通过，保留既有 `GuestHome` 大 chunk 提示。`npm run spec:check`：OpenSpec 18/18、17 个变更/362 个登记文件范围检查、18 项范围门禁通过。Impeccable detector 返回 `[]`，`git diff --check` 通过。
+- 新横屏截图：`data/startup-review/chromium-welcome-guide-landscape-after.png`。实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 仍未验证；未查询新的 GitHub CI，未推送、PR、合并或发布。
+
 ## 本轮精简与说明（实现前）
 
 - 仅修改 `WelcomeGuide.vue` 与新版创建向导规则主态，增加浏览器脚本检查；不改已有房间工作台、配置规则或服务端。
@@ -158,3 +176,11 @@
 - `npm run web:build`：Vue 类型检查、Vite 和 PWA 构建通过，保留既有 GuestHome 大 chunk 提示。`npm run spec:check`：18 项 OpenSpec 校验、17 个 active changes/362 个登记文件范围检查及 18 项范围门禁通过；Impeccable 检查为 `[]`；`git diff --check` 通过。
 - 两种浏览器均为 macOS 移动视口模拟，不代表实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收。GitHub CI 未确认；未运行完整 `npm run web:verify`，此前记录的四项失败仍是独立阻塞。
 - 业务修改提交为 `fb7a49a1220e12ba89d8b482f6799fcbd7a535a8`，已推送到 `codex/new-dorm-wizard-preview`；GitHub 对该 SHA 无 workflow run，Commit Status 为 `pending / total_count=0 / statuses=[]`。未创建 PR、未合并、未部署、未访问正式服务或修改正式数据。
+
+## 2026-10-24 新宿舍名称首屏精简
+
+- 新宿舍名称步骤移除重复的可见字段标签与辅助段落；输入框仍通过 aria-label="宿舍名称" 提供无障碍名称。把舍友加入时自行填写姓名的规则并入球球提示。必填校验、64 字上限、草稿逻辑与旧宿舍路径没有改动。
+- node scripts/check-dorm-wizard-browser.mjs 与 DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs：完整隔离向导流程通过；新增断言确认单个可访问输入、无重复标签/说明、球球提示内容、必填校验与 64 字限制。既有草稿回填与步骤回退断言仍通过，页面错误列表均为 []。
+- npm run web:build：Vue 类型检查、Vite 与 PWA 构建通过；保留既有 GuestHome 大 chunk 提示。npm run spec:check：OpenSpec 18/18、范围检查 17 个变更/362 个登记文件及 18 个门禁用例通过。Impeccable 对 DormWizard.vue 自动检测结果为 []；git diff --check 通过。
+- Chromium/WebKit 修改前后对照图：data/startup-review/chromium-wizard-name-before.png → data/startup-review/chromium-wizard-name-after.png；data/startup-review/webkit-wizard-name-before.png → data/startup-review/webkit-wizard-name-after.png。截图来自 macOS 浏览器移动视口模拟，非实体手机测试。
+- iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证。仅本地合成向导草稿；未访问或改动正式宿舍数据，未推送、未创建 PR、未合并或部署。
