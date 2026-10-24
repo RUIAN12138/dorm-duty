@@ -1755,6 +1755,7 @@ async function completeOnce(db, room, who, now, id) {
   const finished = {
     ...task,
     status: "completed",
+    completed_by: who.user_id,
     completed_at: completedAt,
     assignee_name_snapshot: member.nickname,
     marker_id_snapshot: member.marker_id,
@@ -1931,7 +1932,7 @@ async function undoOnce(db, room, who, now, id) {
   await mutation.finish();
   return json({
     task: taskView(
-      { ...task, status: "pending", completed_at: null },
+      { ...task, status: "pending", completed_at: null, completed_by: null },
       now,
       who,
       settings,

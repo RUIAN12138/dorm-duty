@@ -54,3 +54,24 @@
 - 没有可报告的 GitHub CI 运行状态；本地构建与自动化不等于 CI。
 - 仅使用脚本创建的隔离 SQLite 宿舍与合成身份，没有读取或写入正式数据库。
 - 未创建 PR、未合并 main、未部署正式网站。
+
+## 2026-10-24 ChatGPT P1 follow-up (`reviewed_code_sha=9e9512b`)
+
+### 修复与隔离测试
+
+- `site/worker/chores.mjs`：完成 API 的即时 `task` 回执现在携带实际 `completed_by`；普通撤销回执明确将其清为 `null`，与撤销事务写入后的数据库状态一致。未改变授权谓词、任务推进、历史结构或旧宿舍业务规则。
+- `scripts/check-dorm-wizard.mjs`：共 88 项隔离 SQLite/API 检查通过。新增本人完成→撤销、硬性代做→代做者撤销的 PATCH 回执与数据库/下一次 board GET 对照；新增新版抬水软性代做拒绝、硬性代做允许、队列推进与撤回、提前抬水额度创建/撤回及提醒/推送副作用检查。
+- 相关回归：`node site/scripts/check-water-flex.mjs`（74 项）、`node site/scripts/check-water-reassign.mjs`（45 项）、`node site/scripts/check-undo.mjs`（73 项）通过；`node --check site/worker/chores.mjs`、`node --check scripts/check-dorm-wizard.mjs`、`git diff --check` 通过。
+
+### P1-B 四项 Web 回归调查
+
+- 当前 `9e9512b` 工作树上逐项重跑，四项与前交接描述一致：`scripts/check-screen-gesture-check.mjs` 的 `swipePose.opacity<1` 断言失败；`scripts/check-settings-save-lifecycle.mjs` 与 `scripts/check-navigation-components.mjs` 因打包夹具无法导入 `memberNames.css` 失败；`site/scripts/check-scheduled-reminders.mjs` 的旧迁移用例 `/guest/create` 返回 500、期望 201（其余 10 个子用例、177 个断言通过）。
+- 在只读 detached worktree `6b7d6761daa80d8f285ca14e96c4ff51620bdbd0` 以相同命令对照复跑：前三项出现相同断言/导入错误；定时提醒测试同样 10/11 子用例通过，失败仍为 `/guest/create` 500 而期望 201。故这些是当前权限补丁之前已存在的失败；本轮未改动四个对应测试文件或其无关产品组件。
+- `npm run web:verify`：前端构建、Worker 构建、邮件运行时构建通过；整套回归仅上述四项失败，其余脚本通过。不能报告全套验证为绿色。
+- `npm run spec:validate`：18/18 通过；`npm run spec:scope`：17 个 active changes、363 个登记文件通过范围检查。最终摘要随 handoff 记录；文档本身不嵌入自引用摘要。
+
+### 设备、CI 与边界
+
+- GitHub CI 尚无本轮新业务提交状态；浏览器/自动化均为本地隔离测试，iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未做真机验证。
+- 仅使用本地临时 SQLite 和合成身份；没有连接生产服务、读取/修改正式宿舍数据库、创建 PR、合并 main 或部署。
+- 剩余事项：四项先存 Web 回归失败仍保持阻塞，需后续在对应范围单独处理；P1-A 和 P1-C 本地验收通过，等待新业务 SHA 的独立评审。

@@ -159,12 +159,21 @@ try {
     h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}}),
   ]);
   check(concurrent.filter(r=>r.ok).length===1&&concurrent.filter(r=>r.status===409).length===1,"concurrent completion advances the handoff exactly once");
+  const completionReceipt=await concurrent.find(r=>r.ok).clone().json();
+  const completionRow=h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(firstTurn.id);
+  check(completionReceipt.task.status===completionRow.status&&completionReceipt.task.assignee_id===completionRow.assignee_id&&completionReceipt.task.completed_by===completionRow.completed_by&&completionReceipt.task.completed_by===completionRoom.member_id,"self-completion receipt matches persisted completion identity");
   let pendingTurns=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(completionRoom.dorm.id);
   check(pendingTurns.length===1&&pendingTurns[0].sequence===2&&pendingTurns[0].assignee_id===completionPeer.member.user_id,"successful completion creates one next turn for the next active member");
   const directV2Mode=await h.request("/chores/settings",{token:completionRoom.access_token,method:"PATCH",data:{version:completionBoard.version+1,categories:completionBoard.categories}});
   check(directV2Mode.status===422,"the new completion mode requires an explicit v2 configuration payload");
   const completionUndo=await h.request(`/chores/tasks/${firstTurn.id}/undo`,{token:completionRoom.access_token,method:"PATCH",data:{}});
   check(completionUndo.ok,"undo cancels the next completion turn and restores the just-completed turn");
+  const completionUndoReceipt=await completionUndo.clone().json();
+  const completionUndoRow=h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(firstTurn.id);
+  check(completionUndoReceipt.task.status===completionUndoRow.status&&completionUndoReceipt.task.assignee_id===completionUndoRow.assignee_id&&completionUndoReceipt.task.completed_by===completionUndoRow.completed_by&&completionUndoReceipt.task.status==="pending"&&completionUndoReceipt.task.completed_by===null,"self-undo receipt matches the restored database row");
+  const completionUndoBoard=await board(completionRoom,completionRoom.access_token,completionRoom.member_id);
+  const completionUndoView=completionUndoBoard.workspace_tasks.find(t=>t.id===firstTurn.id)||completionUndoBoard.today_tasks.find(t=>t.id===firstTurn.id);
+  check(completionUndoView?.status===completionUndoRow.status&&completionUndoView.assignee_id===completionUndoRow.assignee_id&&completionUndoView.completed_by===completionUndoRow.completed_by,"self-undo receipt agrees with the next board GET");
   const restored=pendingTurns=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(completionRoom.dorm.id);
   check(restored.length===1&&restored[0].sequence===1&&restored[0].assignee_id===firstTurn.assignee_id,"undo leaves exactly the original assignee's turn pending");
   await h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}});
@@ -375,19 +384,92 @@ try {
   check(hardCompletionPeerBoard.workspace_tasks.find(t=>t.id===hardCompletionTask.id)?.can_complete===true,"hard completion turn allows a cover only under the explicit hard policy");
   const hardCompletionCover=await h.request(`/chores/tasks/${hardCompletionTask.id}/complete`,{token:hardCompletionThird.access_token,method:"PATCH",data:{}});
   check(hardCompletionCover.ok,"hard completion turn accepts a permitted cover");
+  const hardCompletionReceipt=await hardCompletionCover.clone().json();
   const hardCompletionRow=h.db.sqlite.prepare("SELECT assignee_id,completed_by,assignee_name_snapshot FROM chore_tasks WHERE id=?").get(hardCompletionTask.id);
   check(hardCompletionRow.assignee_id===hardCompletionRoom.member_id&&hardCompletionRow.completed_by===hardCompletionThird.member.user_id&&hardCompletionRow.assignee_name_snapshot==="代做室友","handoff preserves the assigned owner and snapshots the actual completer");
+  check(hardCompletionReceipt.task.status==="completed"&&hardCompletionReceipt.task.assignee_id===hardCompletionRow.assignee_id&&hardCompletionReceipt.task.completed_by===hardCompletionRow.completed_by,"delegated completion receipt matches persisted planned owner and actual completer");
   const hardCompletionNext=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(hardCompletionRoom.dorm.id);
   check(hardCompletionNext.length===1&&hardCompletionNext[0].sequence===2&&hardCompletionNext[0].assignee_id===hardCompletionPeer.member.user_id,"completion handoff follows configured rotation instead of advancing to the arbitrary cover");
   const hardCompletionThirdBoard=await board(hardCompletionRoom,hardCompletionThird.access_token,hardCompletionThird.member.user_id);
+  const hardCompletionUndoView=hardCompletionThirdBoard.undo_tasks.find(t=>t.id===hardCompletionTask.id);
+  check(hardCompletionUndoView?.status==="completed"&&hardCompletionUndoView.assignee_id===hardCompletionRow.assignee_id&&hardCompletionUndoView.completed_by===hardCompletionRow.completed_by,"delegated completion receipt agrees with the next board GET");
   const hardCompletionHistory=hardCompletionThirdBoard.calendar.find(r=>r.id===hardCompletionTask.id);
   check(hardCompletionHistory?.assignee_id===hardCompletionThird.member.user_id&&hardCompletionHistory?.assignee_name==="代做室友","handoff history credits the actual completer");
   check(hardCompletionThirdBoard.undo_tasks.some(t=>t.id===hardCompletionTask.id),"hard completion cover receives its undo entry");
   const hardCompletionOwnerUndo=await h.request(`/chores/tasks/${hardCompletionTask.id}/undo`,{token:hardCompletionRoom.access_token,method:"PATCH",data:{}});
   check(hardCompletionOwnerUndo.status===403,"completion turn owner cannot undo another member's cover");
-  check((await h.request(`/chores/tasks/${hardCompletionTask.id}/undo`,{token:hardCompletionThird.access_token,method:"PATCH",data:{}})).ok,"completion cover can undo and restore the original planned turn");
+  const hardCompletionUndo=await h.request(`/chores/tasks/${hardCompletionTask.id}/undo`,{token:hardCompletionThird.access_token,method:"PATCH",data:{}});
+  check(hardCompletionUndo.ok,"completion cover can undo and restore the original planned turn");
+  const hardCompletionUndoReceipt=await hardCompletionUndo.clone().json();
+  const hardCompletionUndoRow=h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(hardCompletionTask.id);
+  check(hardCompletionUndoReceipt.task.status===hardCompletionUndoRow.status&&hardCompletionUndoReceipt.task.assignee_id===hardCompletionUndoRow.assignee_id&&hardCompletionUndoReceipt.task.completed_by===hardCompletionUndoRow.completed_by&&hardCompletionUndoReceipt.task.status==="pending"&&hardCompletionUndoReceipt.task.completed_by===null,"delegate-undo receipt clears the actual completer and matches the database row");
+  const hardCompletionRestoredBoard=await board(hardCompletionRoom,hardCompletionThird.access_token,hardCompletionThird.member.user_id);
+  const hardCompletionRestoredView=hardCompletionRestoredBoard.workspace_tasks.find(t=>t.id===hardCompletionTask.id)||hardCompletionRestoredBoard.today_tasks.find(t=>t.id===hardCompletionTask.id);
+  check(hardCompletionRestoredView?.status===hardCompletionUndoRow.status&&hardCompletionRestoredView.assignee_id===hardCompletionUndoRow.assignee_id&&hardCompletionRestoredView.completed_by===hardCompletionUndoRow.completed_by,"delegate-undo receipt agrees with the next board GET");
   const hardCompletionRestored=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(hardCompletionRoom.dorm.id);
   check(hardCompletionRestored.length===1&&hardCompletionRestored[0].sequence===1&&hardCompletionRestored[0].assignee_id===hardCompletionRoom.member_id,"undo restores the planned completion owner without changing the rotation order");
+
+  const hardWaterConfig={...config,policy:"hard",tasks:config.tasks.map(t=>t.key==="water"?{...t,enabled:true,page:"duty",rotation:"rotation",execution_time:"08:00",deadline:"22:00"}:{...t,enabled:false})};
+  const hardWaterRoom=await create("硬性抬水权限",hardWaterConfig);
+  await verifyEmail("water-cover@example.invalid");
+  const hardWaterPeer=await (await joinRoom(hardWaterRoom.invite_code,"抬水代做室友")).json();
+  const waterSnapshot=(dormId,taskId)=>({
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(dormId).version,
+    task:h.db.sqlite.prepare("SELECT id,status,sequence,assignee_id,completed_by,completed_at FROM chore_tasks WHERE id=?").get(taskId),
+    pending:h.db.sqlite.prepare("SELECT id,sequence,assignee_id,status FROM chore_tasks WHERE dorm_id=? AND key='water' AND status IN ('pending','completed') ORDER BY sequence,id").all(dormId),
+    credits:h.db.sqlite.prepare("SELECT user_id,task_id,status,consumed_by FROM chore_water_credits WHERE dorm_id=? ORDER BY id").all(dormId),
+    flow:h.db.sqlite.prepare("SELECT queue,handoff,undo_state FROM chore_water_flow WHERE dorm_id=?").get(dormId)||null,
+    sideEffects:sideEffects(dormId),
+  });
+  const hardWaterBoard=await board(hardWaterRoom);
+  const hardWaterTask=hardWaterBoard.water_task;
+  assert(hardWaterTask?.status==="pending");
+  const hardWaterPeerBoard=await board(hardWaterRoom,hardWaterPeer.access_token,hardWaterPeer.member.user_id);
+  check(hardWaterPeerBoard.water_task?.can_complete===true,"hard v2 water turn exposes controlled cover after the configured execution time");
+  const hardWaterCover=await h.request(`/chores/tasks/${hardWaterTask.id}/complete`,{token:hardWaterPeer.access_token,method:"PATCH",data:{}});
+  check(hardWaterCover.ok,"hard v2 water turn accepts a permitted cover through the completion API");
+  const hardWaterReceipt=await hardWaterCover.clone().json();
+  const hardWaterRow=h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(hardWaterTask.id);
+  check(hardWaterReceipt.task.status===hardWaterRow.status&&hardWaterReceipt.task.assignee_id===hardWaterRow.assignee_id&&hardWaterReceipt.task.completed_by===hardWaterRow.completed_by&&hardWaterRow.assignee_id===hardWaterRoom.member_id&&hardWaterRow.completed_by===hardWaterPeer.member.user_id,"hard water cover receipt preserves planned owner and reports the actual completer");
+  const hardWaterOrder=hardWaterBoard.categories.find(c=>c.key==="water").rotation_order;
+  const plannedNext=hardWaterOrder[(hardWaterOrder.indexOf(hardWaterTask.assignee_id)+1)%hardWaterOrder.length];
+  check(hardWaterReceipt.next_water?.assignee_id===plannedNext,"hard water cover advances the configured queue, not the cover identity");
+  const hardWaterUndo=await h.request(`/chores/tasks/${hardWaterTask.id}/undo`,{token:hardWaterPeer.access_token,method:"PATCH",data:{}});
+  check(hardWaterUndo.ok,"actual water cover can undo its own completion");
+  const hardWaterUndoReceipt=await hardWaterUndo.clone().json();
+  const hardWaterUndoRow=h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(hardWaterTask.id);
+  check(hardWaterUndoReceipt.task.status===hardWaterUndoRow.status&&hardWaterUndoReceipt.task.assignee_id===hardWaterUndoRow.assignee_id&&hardWaterUndoReceipt.task.completed_by===hardWaterUndoRow.completed_by&&hardWaterUndoRow.status==="pending"&&hardWaterUndoRow.completed_by===null,"hard water undo receipt matches the restored persisted row");
+  const hardWaterRestored=await board(hardWaterRoom,hardWaterPeer.access_token,hardWaterPeer.member.user_id);
+  check(hardWaterRestored.water_task?.id===hardWaterTask.id&&hardWaterRestored.water_task.assignee_id===hardWaterUndoRow.assignee_id&&hardWaterRestored.water_task.status===hardWaterUndoRow.status&&hardWaterRestored.water_task.completed_by===null,"hard water undo restores the same planned turn on the next board GET");
+  const beforeAdvanceEffects=sideEffects(hardWaterRoom.dorm.id);
+  const hardWaterAdvance=await h.request("/chores/water/advance",{token:hardWaterPeer.access_token,method:"POST",data:{version:hardWaterRestored.version,task_id:hardWaterRestored.water_task.id}});
+  check(hardWaterAdvance.ok,"a non-current member may record an early water credit under the existing rule");
+  const hardWaterAdvanceReceipt=await hardWaterAdvance.clone().json();
+  const creditRow=h.db.sqlite.prepare("SELECT user_id,task_id,status,consumed_by FROM chore_water_credits WHERE dorm_id=?").get(hardWaterRoom.dorm.id);
+  check(creditRow.user_id===hardWaterPeer.member.user_id&&creditRow.task_id===hardWaterAdvanceReceipt.task.id&&creditRow.status==="pending"&&creditRow.consumed_by===null,"early water action persists one pending credit for its actor");
+  check(JSON.stringify(sideEffects(hardWaterRoom.dorm.id))===JSON.stringify(beforeAdvanceEffects),"early water credit does not send reminders or queue notifications");
+  const hardWaterCreditUndo=await h.request(`/chores/tasks/${creditRow.task_id}/undo`,{token:hardWaterPeer.access_token,method:"PATCH",data:{}});
+  check(hardWaterCreditUndo.ok,"unused early water credit can be withdrawn by its creator");
+  const cancelledCredit=h.db.sqlite.prepare("SELECT status,consumed_by FROM chore_water_credits WHERE task_id=?").get(creditRow.task_id);
+  check(cancelledCredit.status==="cancelled"&&cancelledCredit.consumed_by===null,"withdrawing early water marks only the unused credit cancelled");
+  const waterAfterCreditUndo=await board(hardWaterRoom,hardWaterPeer.access_token,hardWaterPeer.member.user_id);
+  check(waterAfterCreditUndo.water_task?.id===hardWaterTask.id&&waterAfterCreditUndo.water_task.status==="pending"&&waterAfterCreditUndo.water_task.assignee_id===hardWaterRoom.member_id,"withdrawing early water credit leaves the planned queue unchanged");
+  check(JSON.stringify(sideEffects(hardWaterRoom.dorm.id))===JSON.stringify(beforeAdvanceEffects),"early credit undo does not enqueue reminder or push side effects");
+
+  const softWaterConfig={...hardWaterConfig,policy:"soft",tasks:hardWaterConfig.tasks.map(t=>t.key==="water"?{...t,policy:"soft"}:t)};
+  const softWaterRoom=await create("软性抬水权限",softWaterConfig);
+  await verifyEmail("soft-water-peer@example.invalid");
+  const softWaterPeer=await (await joinRoom(softWaterRoom.invite_code,"软性抬水室友")).json();
+  const softWaterBoard=await board(softWaterRoom);
+  const softWaterTask=softWaterBoard.water_task;
+  assert(softWaterTask?.status==="pending");
+  const softWaterPeerBoard=await board(softWaterRoom,softWaterPeer.access_token,softWaterPeer.member.user_id);
+  check(softWaterPeerBoard.water_task?.can_complete===false,"soft v2 water turn is not exposed as completable to a different member");
+  const softWaterBefore=waterSnapshot(softWaterRoom.dorm.id,softWaterTask.id);
+  const softWaterAttempt=await h.request(`/chores/tasks/${softWaterTask.id}/complete`,{token:softWaterPeer.access_token,method:"PATCH",data:{}});
+  check(softWaterAttempt.status===403,"soft v2 water turn rejects a different member at the service boundary");
+  const softWaterAfter=waterSnapshot(softWaterRoom.dorm.id,softWaterTask.id);
+  check(JSON.stringify(softWaterAfter)===JSON.stringify(softWaterBefore),"denied soft water completion preserves version, queue, credits, history and notification state");
   console.log(
     JSON.stringify({
       checks,
