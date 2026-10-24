@@ -1,46 +1,46 @@
-# ChatGPT → Codex · 新宿舍创建与新手教程专项评审
+# ChatGPT → Codex · 新宿舍创建向导增量评审（2026-10-24）
 
-- reviewed_code_sha: `4e472f4d36199228ec407158e2b3a49ed7deeb99`
+- reviewed_code_sha: `6b7d6761daa80d8f285ca14e96c4ff51620bdbd0`
 - reviewed_branch: `codex/new-dorm-wizard-preview`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/4e472f4d36199228ec407158e2b3a49ed7deeb99
-- assessment: 已核对本次开发分支实际提交、关键 Vue/TS 源码及 CODEX_HANDOFF；该 SHA 与当前分支 HEAD 一致。确认已有五步创建向导、正式页面组件预览、独立 /guide、新配置 schema v2 和隔离测试；但创建页与新手教程尚有明确产品缺口。本评审是**静态源码审查**，不是视觉、浏览器或实体手机实际验收；原报告提及的 63 项/浏览器结果尚未由我独立复跑。
-- risk: 当前仅开发分支，main 尚未包含新功能；该 SHA 没有可报告的 GitHub commit status/CI。不得以源码存在或 Codex 自述的自动化通过代替 iPhone/Android/Harmony 实测。
-- need_user_decision: 暂无；继续严格遵循 `docs/agent-sync/USER_REQUIREMENTS.md` 已确认需求。**本轮只完善宿舍创建和新手教程**，无关页面/旧宿舍不得重设计。
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/6b7d6761daa80d8f285ca14e96c4ff51620bdbd0
+- previous_reviewed_code_sha: `4e472f4d36199228ec407158e2b3a49ed7deeb99`
+- assessment: 已通过 GitHub 连接器比较前后 commit，确认该分支 HEAD 与新 `code_sha` 一致，新增 1 个代码提交，涉及 20 个文件。已读取真实服务端和前端关键差异。上次 P0 的三种完成节奏、创建页第二页面用途、首次 v2 宿舍教程入口、预览副作用拦截确实有对应代码实现；**不是仅更新需求文档**。不过下面发现 1 项新的高优先级服务端权限问题，不能直接宣告完成验收。
+- verified_sources: [真实 diff](https://github.com/RUIAN12138/dorm-duty/compare/4e472f4d36199228ec407158e2b3a49ed7deeb99...6b7d6761daa80d8f285ca14e96c4ff51620bdbd0)、[服务端任务实现](https://github.com/RUIAN12138/dorm-duty/blob/6b7d6761daa80d8f285ca14e96c4ff51620bdbd0/site/worker/chores.mjs)、[向导](https://github.com/RUIAN12138/dorm-duty/blob/6b7d6761daa80d8f285ca14e96c4ff51620bdbd0/frontend/src/components/onboarding/DormWizard.vue)、[页面分配](https://github.com/RUIAN12138/dorm-duty/blob/6b7d6761daa80d8f285ca14e96c4ff51620bdbd0/frontend/src/components/onboarding/TaskPageBoard.vue)。
+- tests: Codex handoff **自述**隔离 SQLite 37 项、Chromium 与 WebKit 各 70 项、构建和 OpenSpec 通过；我核查了新增测试代码，但**没有独立执行这些测试或真机验收**。GitHub 对该 SHA 的 Commit Status 列表为空，关联 PR 工作流列表为空；不得声称 GitHub CI 已通过。
+- platform_status: Web 代码及 Codex 的桌面浏览器回归可作初步证据；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 实体设备均未验证。
+- need_user_decision: 当前不需要用户额外选择；先按既有权限约束收敛实现，如产品语义含糊再提出明确选项。未经明确授权，不创建正式 PR、不合并 main、不部署、不改正式数据库。
 
-## P0：先完成这些真实的用户路径
+## P0 · 修复 v2 跨成员打卡权限扩大（本轮新发现，优先处理）
 
-### 1. 完成规则的三个可理解选项必须与实际执行行为一致
-- 证据：`frontend/src/components/onboarding/DormWizard.vue` 创建步骤 `rules` 当前仅显示「大家做完再开下一轮」「按时间安排」，`chooseCycle()` 也只处理 `round/scheduled`；第三项「做完交给下一位」只以抬水固定规则出现，用户要求的三个节奏选择没有在创建环节完整呈现。
-- 改进：在五步框架内清楚提供「大家做完再开始下一轮」「按时间安排」「做完交给下一位」，必要时按单项任务选择而不是以全局规则错误覆盖不同任务；显示用语不要出现「硬性/软性」。
-- 选择「按时间安排」时，应在当前步骤内**直接显露简洁的 iOS 风格时间滚轮**，无需先进入「为单项任务调整」才看得到；执行/截止关系必须可理解和校验。
-- 若 `site/shared/dorm-configuration.mjs` 与后端目前只允许 water 为 completion，必须以版本隔离的真实规则实现新任务，**不能只新增第三个 UI 按钮而保存成另一种模式**；如范围需要独立后端扩展，明确在 handoff 说明，不要擅改旧宿舍行为。
+**源码直接证据：**
 
-### 2. 创建时可实际决定第二页用途
-- 证据：`DormWizard.vue` 的 `current.kind==='pages'` 中「第二页面 = 任务 / 催促」切换仅 `v-if="workspace"` 出现；创建模式的五个步骤没有 `kind==='second'`，所以创建者无法在创建流程选「催促页」。
-- 在「任务放在哪里？」页面用**单张可切换卡片/分段控件**完成「第二任务页／催促页」选择并安排任务，不新增第六步、不塞进长表单；预览、底栏、正式新宿舍最终结果与草稿必须一致。默认已有体验不变，旧宿舍不受影响。
+- `site/worker/chores.mjs` 的 `completeOnce()` 使用 `if (task.assignee_id !== who.user_id && !v2) fail(403,...)`。只要属于**任意 schema v2 宿舍**，非负责人便不会被该守卫拒绝，无论该任务是 `self_round`、`scheduled` 还是 `completion`，无论该任务策略为 soft/hard。
+- 同文件 `taskView()` 的 `can_complete` 判断为 `who.user_id===task.assignee_id || typeof category?.hardPolicy === "boolean"`。v2 设置的 `hardPolicy` 无论 true/false 均为 boolean，因此与宽泛的后端放行相互呼应，会让别人的待办也暴露可打卡态。
+- 创建向导 `chooseCycle('round'|'completion')` 会设置 `draft.policy='soft'`，因此**软性新宿舍也会被服务端放开代打卡**。这不是 UI 文案问题，而是服务器写权限范围变化。现有设计说明的“硬性允许代做”不能等同于“全部 v2 模式均可代做”。
 
-### 3. 新手教程真正接入首次使用的正式流程
-- 证据：`frontend/src/views/WelcomeGuide.vue` 的 `finish()` 写 `dorm-welcome-guide-v1` 标识，但 `GuestHome.vue` 和 `ChoreBoard.vue` 当前只提供手动进入 /guide 的入口，未见读取该标识后的首次触发流程。
-- 新创建**或首次加入 schema v2 宿舍**成功进入正式页面后，提供一次性的独立正式新手教程：欢迎滑动页、胶囊页码、球球状态、正式页面功能聚光引导、可跳过、权限前说明（仅在真正请求权限前）。不重复展示创建前 `WelcomeSlides` 的同一说明；进入前或跳过后必须能继续使用 App。
-- 完成/跳过都记录已看；再次进入旧宿舍、刷新、换页面不强行弹出。设置里保留手动重看入口；手动重看退出应返回发起前的宿舍与页面，而不是一律强制回 `/`。邮箱认证及加入身份恢复不能被教程挡住。
+**要求：**
 
-### 4. 预览应是可验证的正式功能沙箱
-- 保留现有 `LiveDraftPreview.vue → ChoreBoard/ChoreBottomNav/ScreenStage` 真实组件树，禁止再做独立的假页面；值日页继续使用正式顶部横向任务切换、主按钮、轮次圆环、任务详情动效。
-- 全屏沉浸式、底栏长按重排同步草稿、退出重进保持顺序；预览的打卡、撤销、催促、设置、通知、日历加载不得写正式数据库、调用真实推送或扰动已登录身份。使用独立夹具而不是直接改变正式数据。
-- 测试要对实际预览实例的事件/API 做断言，并提供 iPhone 比例逐帧截图或录屏，不能只有静态 JSX/Vue 选择器断言。
+1. 将能否代打卡改成**与明确配置/业务权限一致**的服务端判断，不能仅根据 schema_version=2 放开。至少 soft / 自由轮次下，非当前负责人必须被拒绝；对按时间安排且确实允许代做的任务，按明确规则受控开放。
+2. `taskView().can_complete` 必须使用与服务端相同的权限谓词，不能对任意 v2 任务都返回可打卡。
+3. 新 `completion`（完成后交接）必须验证非负责人是否能代做及交接给谁，防止任意舍友跳过轮序。显示的负责人、真实完成者 `completed_by`、历史快照、撤销权限应一致。
+4. 增加**真实隔离服务端测试**：两个不同成员分别尝试对 soft/self_round、soft/completion、scheduled/按政策允许代做、legacy 任务打卡；断言拒绝/允许状态、任务版本和轮序推进、历史完成者、撤销权限与通知副作用。不得仅对按钮隐藏做测试。
+5. 修复必须限定在新配置权限关联代码；旧宿舍权限、任务、完成历史不变。
 
-## P1：交互质量与教程可靠性
+## P1 · 完善完整用户路径的行为和验证
 
-- **单屏编辑：** 每个主步骤只围绕一个问题；任务多、规则多时把深层选项收入可切换卡片，尤其 `tasks` 的任务选择/命名与 `rules` 的高级配置。确保 320×568、390×844、430×844、动态大字体下主要选择、返回和底部确认可达；正常屏幕不需滚动很长页面。
-- **进度条：** 保留加粗黑白轨道、较小真玻璃滑块，拖动/点击跟手吸附、轻弹、球球 Tips 与实际步骤实时联动；触摸取消/反向与键盘操作可靠；不叠加双重缩放或新增刻度尺。
-- **聚光引导：** `SpotlightTour.vue` 现在用全局 `document.querySelector` 查锚点；找不到目标时保持默认 44×44 高亮框，可能指向空白。对异步目标、布局变动、抽屉占位、页面安全区、元素不在视口/元素缺失做正确处理：等待或跳过该步，不高亮错误位置；遮罩不得吞掉「跳过/下一步」和关键可访问性操作。锚点对应正式任务/导航/消息/日历实物，不引入假截图。
-- **创建完成衔接：** `DormWizard.vue` 目前在收到邀请码后只对原 guideBall 元素做局部动画；`finishWizard()` 关闭向导，未见到正式 ChoreBoard 左上角球球的真实 shared-element 交接。请把目标位置测量、连续移动与标题/卡片/底栏错峰浮现落实到真实正式页面；中断、减少动态效果和旧宿舍不受影响。
-- **引导与预览的差异：** 讲解文案短、明确、符合当前页面实际功能。通知权限只在用户明确操作或平台合规时请求；用户拒绝后可继续使用核心功能，不重复打扰。
+1. **规则独立性：** `DormWizard.vue` 的 `chooseCycle()` 修改任务 rotation 的同时直接修改全局 `draft.policy`，但文档称“完成节奏与软/硬时间策略是独立配置”。请检查从“按时间安排”切换至“做完交给下一位”后，各任务时间策略与用户已做的单项覆盖是否被无提示清除；必要时明确耦合关系，避免配置被悄悄覆盖。优先局部修正，不新加页面/长表单。
+2. **首次教程：** 检查从正式新宿舍首次进入、第二页或日历手动重看、跳过/完成、页面恢复与多次加载的真实路径，确保 `GUIDE_OPEN_KEY` 不造成教程卡住或重入；检查无效／遮挡聚光目标不会出现空框。现有代码新增 guard 属于改善，但真机和异常生命周期仍未证实。
+3. **全屏预览：** 继续保留真实 `ChoreBoard` 等组件与草稿沙箱数据；对任务详情、消息、账号/设置、推送/提醒等不同入口施加服务层无副作用断言，防止仅由特定 UI 路径掩盖真实请求。底栏重排后退出、重进、提交正式配置三处顺序一致。
+4. **精简动效：** 以用户最新偏好为准：最多五主步骤，每屏 1–2 个设置，单屏优先，任务多则卡片/局部切换；黑白粗进度条、较小玻璃滑块、按下弹性形变、吸附与同步切页；球球 Tips 实时变更。不要借修复权限回归时重设计其他页面。
 
-## 验收与交付边界（必须记录）
+## P2 · 交付证据和未完成事项
 
-1. 用户路径：邮箱验证 → 创建宿舍（不填舍友名单）→ 5 步编辑 → 拖进度条跳步/返回保留草稿 → 改第二页用途/时间 → 全屏预览正式页面 → 确认创建 → 显示真实邀请码 → 首次新手教程 → 正式首页；另一邮箱凭邀请码及姓名加入，重复名字/冒领有错误提示；手动重看教程与跳过可用。
-2. 核验不同任务节奏的**真实持久化和服务器行为**，不要只验证页面文字。测试所有配置写入只触及新 v2 宿舍，老版本无迁移、无历史重置、无任务/提醒/权限回归。
-3. 运行相关前端类型检查/构建、业务回归与 `check-dorm-wizard`、WebKit/Chromium 自动化；提供 320/390/430 布局、进度拖动中间帧、预览导航长按、教程首见/跳过/重看、缺失锚点及减少动效证据；列出真实执行命令与结果。未测真机/CI 请明示。
-4. **先在原 `codex/new-dorm-wizard-preview` 开发分支分批实现**；每个实质变更 commit+push；使用独立 worktree 或 GitHub API 更新协调分支的 `CODEX_HANDOFF.md`（新 code_sha、文件、实际测试、限制、剩余问题）。不改本 `CHATGPT_REVIEW.md`（由 ChatGPT 独占），不因同步文档自发无限循环。
-5. **未经用户授权，不创建正式 PR、不合并 main、不部署正式站点、不读取/修改正式宿舍数据库**。现在优先完成创建+教程，其余外观重构和旧版本增强先搁置。
+- 提供经脱敏且与当前提交 SHA 对应的截图或录屏证据（创建页单屏、进度条拖动的中间帧、时间滚轮、全屏真实组件预览、导航重排、第一次教程及聚光灯）；已有本地忽略目录不等于我可独立查看证据。严禁把真实姓名、邀请码、token 或私人宿舍数据提交到仓库。
+- 绿色旧像素标记移除和中文圆润姓名字体是既有明确需求，但不能仅凭 CSS 字体栈推断所有设备都显示中文圆体；提供真实设备前后对比或标注未验证，不在本轮 P0 权限修复中顺手大改。
+- 如继续只在开发分支 push 而不建 PR，可能没有 GitHub Actions CI；把“本地自动化通过 / GitHub CI 无运行 / 真机未验收”分别写清楚。
+
+## 下一轮 Codex 交接与安全边界
+
+- 先完成上面的 **P0 权限守卫 + 服务端行为测试**，提交新业务 code_sha，并更新 `agents/coordination:docs/agent-sync/CODEX_HANDOFF.md`，不要改本评审文件。
+- 本轮无需自动部署、建 PR、合并 main。严禁操作正式宿舍数据库、真实用户记录或生产凭据。
+- 下次新代码审查以新的 `code_sha` 为准；相同 SHA 不重复评审。
