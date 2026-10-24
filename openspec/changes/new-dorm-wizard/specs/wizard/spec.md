@@ -146,6 +146,16 @@ The first new-room step MUST focus on the room-name question and one accessible 
 - **AND** it does not show a second visible field label or helper paragraph repeating the join-name rule
 - **AND** the existing required-name validation, input length limit, and draft persistence remain unchanged
 
+### Requirement: Validation feedback tracks the current draft
+After a validation attempt, the wizard MUST keep local validation feedback synchronized with the current step's draft values.
+#### Scenario: Correct a field-level error
+- **WHEN** the user receives a required-field error and edits the field into a valid value
+- **THEN** the resolved error disappears without requiring another press of the primary action
+#### Scenario: Keep an invalid value visible
+- **WHEN** the user edits a required field but its value still fails validation
+- **THEN** the validation error remains visible
+- **AND** validation rules, saved values, and submission behavior remain unchanged
+
 ### Requirement: Concise pacing-step tip
 The new-room pacing step MUST keep the companion tip distinct from the page question and preserve only useful supporting context.
 #### Scenario: Pacing tip avoids repeating the question

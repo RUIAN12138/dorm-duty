@@ -56,3 +56,6 @@
 
 ## Welcome guide copy hierarchy
 欢迎教程标题负责标明当前主题，正文只增加标题未提供的操作地点或有用补充。首屏正文不再复述“打开首页”；日历页标题已说明查看完成记录，正文仅提示设置里可以调整任务。四页结构、真实操作路径及球球内容保持不变。
+
+## Validation feedback follows the draft
+`DormWizard.vue` 的 `localError` 在用户编辑草稿后，根据当前步骤重新计算；有效输入立即清除已解决的错误，未解决的错误显示最新提示。预览/确认步骤使用 `draftErrors(draft)`，其它步骤继续复用现有 `issue()`。只改状态提示与 `check-dorm-wizard-browser.mjs` 的断言，不改表单校验、输入布局或业务 API。

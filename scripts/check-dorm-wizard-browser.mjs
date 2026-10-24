@@ -313,7 +313,11 @@ try {
   await roomNameInput.fill("");
   await p.getByRole("button",{name:"继续",exact:true}).click();
   check(await p.getByText("先填写宿舍名称",{exact:true}).count()===1,"room-name required validation remains active");
+  await roomNameInput.fill(" ");
+  check(await p.locator('.wizard-error').textContent()==='先填写宿舍名称','editing the field without fixing its value keeps the validation error visible');
   await roomNameInput.fill("向导隔离宿舍");
+  await p.locator('.wizard-error').waitFor({state:'detached'});
+  check(await p.locator('.wizard-error').count()===0,'correcting the room name clears its stale required-field message without another continue tap');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===1,'dorm name screen asks only one question');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0,"dorm name screen has no duplicate label or helper text");
   check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');

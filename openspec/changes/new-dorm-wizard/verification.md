@@ -215,3 +215,12 @@
 - 同一套测试还覆盖 320/390/430px 宽度、短屏滚动、减少动态效果、预览组件及写入隔离；截图位于 `data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/chromium-wizard-rules-scheduled.png`、`data/startup-review/webkit-wizard-rules-default.png` 与 `data/startup-review/webkit-wizard-rules-scheduled.png`。
 - `npm run web:build` 通过（Vue 类型检查、Vite 与 PWA 构建）；`npm run spec:validate` 18/18 通过；浏览器脚本语法检查与 `git diff --check` 通过。构建仍报告既有 `GuestHome` 大 chunk 提示。
 - Chromium/WebKit 为 macOS 桌面引擎上的隔离移动视口模拟；未做 iPhone、Android 或 HarmonyOS 真机验收。未改规则/后端/数据，不创建 PR、不合并、不部署。
+
+## 2026-10-24 校验提示随输入恢复
+- 复现：空宿舍名提交后显示“先填写宿舍名称”；将输入改成有效名称时，旧提示仍显示，必须再次按“继续”才消失。
+- 修复：`DormWizard.vue` 在本地错误存在期间随草稿编辑重算当前步骤校验；预览步骤使用完整 `draftErrors(draft)`，其他步骤复用 `issue()`。校验规则、草稿格式、创建 API 和旧宿舍流程未改。无效空白输入仍保持错误提示，输入有效名称后无需再次点击即可清除。
+- `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs` 与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导回归均通过，最终结果 `PASS []`；新增断言覆盖“无效值继续报错”和“修正后立即清除”。
+- `npm run web:build` 通过（Vue 类型检查、Vite 与 PWA）；仍有既有 `GuestHome` chunk 大于 500 KB 的构建提示。`npm run spec:validate` 18/18 通过；浏览器脚本 `node --check` 与 `git diff --check` 通过。
+- 当前主工作树的 `npm run spec:scope` 被既有、未触碰的 `site/runtime/email-runtime.cjs` 改动阻止；该 23 行工作区内容没有暂存或纳入本次修改。将在提交后的独立干净工作树中重新运行范围检查。
+- 修改后移动视口截图：`data/startup-review/chromium-wizard-name-after.png`、`data/startup-review/webkit-wizard-name-after.png`。这是 macOS Chromium/WebKit 浏览器模拟，不是实体手机截图。iPhone Safari/PWA、Android WebView 和 HarmonyOS ArkWeb 未真机验收；未访问或修改正式宿舍数据。
+- 本轮仅修改新版向导的本地错误提示状态、对应浏览器断言和 OpenSpec 记录；未创建 PR、未合并、未部署。
