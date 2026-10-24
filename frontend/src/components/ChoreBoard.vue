@@ -17,6 +17,7 @@ import {
   companionEnabled,
   errorEmotion,
   companionEntering,
+  waitForCompanionHandoff,
 } from "../interaction/companion";
 import LoadingSkeleton from "./LoadingSkeleton.vue";
 import {
@@ -1180,6 +1181,8 @@ async function load(): Promise<boolean> {
         delete query.tour;
         void router.replace({ path: router.currentRoute.value.path, query, hash: router.currentRoute.value.hash });
       } else {
+        await waitForCompanionHandoff();
+        if (id !== requestId || requestController.signal.aborted) return false;
         openWelcomeGuide(true);
       }
     }

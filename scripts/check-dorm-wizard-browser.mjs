@@ -30,16 +30,22 @@ await p.addInitScript(() => {
   Element.prototype.animate = function (keyframes, options) {
     const frames = Array.isArray(keyframes) ? keyframes : [];
     const first = frames[0];
+    let handoffFlight;
     if (options?.duration === 680 && typeof first?.transform === "string") {
       const target = this.getBoundingClientRect();
-      window.__companionHandoffFlights.push({
+      handoffFlight = {
         duration: options.duration,
         inTaskBoard: !!this.closest?.('[data-testid="chore-board"]'),
         firstTransform: first.transform,
         target: { left: target.left, top: target.top, width: target.width, height: target.height },
-      });
+        finished: false,
+        cancelled: false,
+      };
+      window.__companionHandoffFlights.push(handoffFlight);
     }
-    return animate.call(this, keyframes, options);
+    const animation = animate.call(this, keyframes, options);
+    if (handoffFlight) animation.finished.then(() => { handoffFlight.finished = true; }, () => { handoffFlight.cancelled = true; });
+    return animation;
   };
   window.__systemPermissionPromptCount = 0;
   const NotificationApi = window.Notification || class Notification {};
@@ -652,6 +658,7 @@ try {
     "creating-room completion carries the wizard companion's live position into the production task-board flight");
   const firstUseGuide=p.getByTestId('welcome-guide');
   await firstUseGuide.waitFor({state:'visible',timeout:5000});
+  check(await p.evaluate((count)=>{const flight=window.__companionHandoffFlights.slice(count).find(item=>item.inTaskBoard);return !!flight?.finished&&!flight.cancelled;},flightsBeforeStart),"the first-entry tutorial waits until the companion's arrival motion finishes");
   check(await firstUseGuide.count()===1,'new schema-v2 room automatically opens the welcome guide on first entry');
   await p.getByRole('button',{name:'第 4 页',exact:true}).click();
   await p.getByRole('button',{name:'开始使用',exact:true}).click();

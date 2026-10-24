@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, watch } from "vue";
 export interface EmotionDefinition {
   id: string;
   name: string;
@@ -151,4 +151,14 @@ export function finishCompanionHandoff() {
   clearTimeout(arrivalTimeout);
   arrival = null;
   companionEntering.value = false;
+}
+export function waitForCompanionHandoff(): Promise<void> {
+  if (!companionEntering.value) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = watch(companionEntering, (pending) => {
+      if (pending) return;
+      stop();
+      resolve();
+    });
+  });
 }

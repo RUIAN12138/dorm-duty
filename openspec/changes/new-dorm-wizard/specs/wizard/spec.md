@@ -85,6 +85,7 @@ When a real room is created and the user chooses to start using it, the wizard M
 - **WHEN** the user selects “开始使用” on the real invite confirmation page
 - **THEN** the production task board's companion starts from the wizard companion's measured position and size
 - **AND** the existing reduced-motion behavior remains in effect
+- **AND** the first-entry tutorial does not navigate away until the companion arrival motion has completed or its existing reduced-motion path has finished
 #### Scenario: Exit local wizard experience
 - **WHEN** the user exits a local wizard experience
 - **THEN** no real-room companion handoff is registered
