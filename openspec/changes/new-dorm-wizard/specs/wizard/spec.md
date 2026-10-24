@@ -79,6 +79,16 @@ Opening the new-room creation flow MUST show the first editable room-name step d
 - **WHEN** a user opens `/guide` or enters a version-2 room for the first time
 - **THEN** the existing four-page welcome guide or the existing first-entry guide behavior remains unchanged
 
+### Requirement: Carry the companion into a newly created room
+When a real room is created and the user chooses to start using it, the wizard MUST pass the visible companion's current screen geometry to the production task board's existing shared-position arrival animation. The local experience path MUST NOT register a real-room handoff.
+#### Scenario: Start using a created room
+- **WHEN** the user selects “开始使用” on the real invite confirmation page
+- **THEN** the production task board's companion starts from the wizard companion's measured position and size
+- **AND** the existing reduced-motion behavior remains in effect
+#### Scenario: Exit local wizard experience
+- **WHEN** the user exits a local wizard experience
+- **THEN** no real-room companion handoff is registered
+
 ### Requirement: Single-screen new-room page arrangement
 The new-room page-arrangement step MUST fit the title, both page destinations, enabled task names, second-page type, and wizard actions within a normal phone viewport without reducing the established large type. This compact presentation MUST NOT alter the existing-room settings workspace.
 

@@ -122,10 +122,12 @@ let arrival: {
   at: number;
 } | null = null;
 let arrivalTimeout: ReturnType<typeof setTimeout> | undefined;
-export function captureCompanionHandoff() {
-  const element = document.querySelector<HTMLElement>(
-    "[data-companion-login] .dorm-companion",
-  );
+export function captureCompanionHandoff(sourceElement?: HTMLElement | null) {
+  const element =
+    sourceElement ??
+    document.querySelector<HTMLElement>(
+      "[data-companion-login] .dorm-companion",
+    );
   if (!companionEnabled.value || !element) return;
   const rect = element.getBoundingClientRect();
   if (!rect.width || !rect.height) return;

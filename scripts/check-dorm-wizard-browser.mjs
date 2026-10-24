@@ -25,6 +25,22 @@ const p = await b.newPage({
 });
 p.setDefaultTimeout(20000);
 await p.addInitScript(() => {
+  window.__companionHandoffFlights = [];
+  const animate = Element.prototype.animate;
+  Element.prototype.animate = function (keyframes, options) {
+    const frames = Array.isArray(keyframes) ? keyframes : [];
+    const first = frames[0];
+    if (options?.duration === 680 && typeof first?.transform === "string") {
+      const target = this.getBoundingClientRect();
+      window.__companionHandoffFlights.push({
+        duration: options.duration,
+        inTaskBoard: !!this.closest?.('[data-testid="chore-board"]'),
+        firstTransform: first.transform,
+        target: { left: target.left, top: target.top, width: target.width, height: target.height },
+      });
+    }
+    return animate.call(this, keyframes, options);
+  };
   window.__systemPermissionPromptCount = 0;
   const NotificationApi = window.Notification || class Notification {};
   Object.defineProperty(NotificationApi, "requestPermission", {
@@ -289,9 +305,11 @@ try {
   check(await p.getByLabel("宿舍名称",{exact:true}).isVisible(),"local creation preview also starts on the first editable question");
   await p.getByLabel("宿舍名称",{exact:true}).fill("本地体验宿舍");
   for(let step=0;step<4;step++)await p.getByRole("button",{name:"继续",exact:true}).click();
+  const localFlightsBeforeExit=await p.evaluate(()=>window.__companionHandoffFlights.length);
   await p.getByRole("button",{name:"完成体验",exact:true}).click();
   check(await p.getByText("本机仅保留向导草稿，不会创建宿舍或生成有效邀请码。",{exact:true}).count()===1&&createRequests===0,"finishing local experience never calls the room creation API");
   await p.getByRole("button",{name:"退出体验",exact:true}).click();
+  check(await p.evaluate((count)=>window.__companionHandoffFlights.length===count,localFlightsBeforeExit),"exiting the local wizard experience does not register a real-room companion flight");
   await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
   await p.locator(".dorm-wizard").waitFor();
   check(!new URL(p.url()).searchParams.has("preview"), "local preview shortcut opens the wizard and cleans its query flag");
@@ -622,7 +640,16 @@ try {
   await p.screenshot({
     path: `data/startup-review/${engine}-wizard-finish.png`,
   });
+  const finishBall = await p.locator('.dorm-wizard .guide-ball .dorm-companion').boundingBox();
+  const flightsBeforeStart = await p.evaluate(() => window.__companionHandoffFlights.length);
   await p.getByRole("button", { name: "开始使用", exact: true }).click();
+  await p.waitForFunction((count) => window.__companionHandoffFlights.slice(count).some(flight => flight.inTaskBoard), flightsBeforeStart);
+  const createdRoomFlight = await p.evaluate((count) => window.__companionHandoffFlights.slice(count).find(flight => flight.inTaskBoard), flightsBeforeStart);
+  const expectedX = finishBall.x - createdRoomFlight.target.left;
+  const expectedY = finishBall.y - createdRoomFlight.target.top;
+  const firstFlightPosition = createdRoomFlight.firstTransform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+  check(createdRoomFlight.duration === 680 && firstFlightPosition && Math.abs(Number(firstFlightPosition[1]) - expectedX) < 2 && Math.abs(Number(firstFlightPosition[2]) - expectedY) < 2,
+    "creating-room completion carries the wizard companion's live position into the production task-board flight");
   const firstUseGuide=p.getByTestId('welcome-guide');
   await firstUseGuide.waitFor({state:'visible',timeout:5000});
   check(await firstUseGuide.count()===1,'new schema-v2 room automatically opens the welcome guide on first entry');
