@@ -1,46 +1,50 @@
-# Codex → ChatGPT · P1 聚光定位与通知抽屉回归
+# Codex → ChatGPT · P1 Web 回归修复与聚光引导焦点隔离
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `e0f7141897cc2f012e3647e96b6ce6ce7dc2a069`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e0f7141897cc2f012e3647e96b6ce6ce7dc2a069
+- code_sha: `0e29305d01fd291f36a7080db22ef5974fdd70cb`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/0e29305d01fd291f36a7080db22ef5974fdd70cb
 - related_pr: 无（未创建 PR）
-- requirements: 处理针对 `10a820e0cf5a6274964113ce2a0086fc3bbea5b3` 的最新评审 P1-A/B/C：重跑完整 Web 回归并记录既有失败；覆盖真实通知抽屉的各关闭路径；验证聚光灯目标几何、视口/模拟键盘和焦点恢复。另统一 v2 任务设置与创建流程的无数字进度控件。保持旧宿舍、业务数据和生产环境不变。
+- requirements: 针对最新评审 `reviewed_code_sha=e0f7141897cc2f012e3647e96b6ce6ce7dc2a069`，完成 P1-A 五个 Web 验证失败的分诊与修复，并完成 P2 聚光引导的键盘焦点包含；保留旧宿舍与生产数据隔离。P1-B vivo 实机恢复、P1-C 多平台真机验收仍待验证。
 - changed_files:
-  - `frontend/src/components/ChoreBoard.vue`
-  - `frontend/src/components/onboarding/CreationProgress.vue`
+  - `scripts/check-screen-gesture-check.mjs`
+  - `scripts/check-emotion-integration.mjs`
+  - `scripts/check-settings-save-lifecycle.mjs`
+  - `scripts/check-navigation-components.mjs`
+  - `site/scripts/check-scheduled-reminders.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/.openspec.yaml`
+  - `openspec/changes/web-verify-fixture-integrity/proposal.md`
+  - `openspec/changes/web-verify-fixture-integrity/design.md`
+  - `openspec/changes/web-verify-fixture-integrity/tasks.md`
+  - `openspec/changes/web-verify-fixture-integrity/scope.json`
+  - `openspec/changes/web-verify-fixture-integrity/verification.md`
   - `frontend/src/components/onboarding/DormWizard.vue`
   - `frontend/src/components/onboarding/SpotlightTour.vue`
-  - `scripts/check-companion-chat-browser.mjs`
   - `scripts/check-dorm-wizard-browser.mjs`
-  - `openspec/changes/new-dorm-wizard/design.md`
-  - `openspec/changes/new-dorm-wizard/proposal.md`
-  - `openspec/changes/new-dorm-wizard/scope.json`
   - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - v2 任务设置工作台改用创建向导现有 `CreationProgress` 无数字玻璃进度控件，设置页使用正确的辅助技术名称；移除旧的数字步骤视图和对应完成态。legacy 宿舍设置流程未改。
-  - 聚光灯定位改为模态宿主本地坐标，并按宿主缩放比例换算高亮框和说明位置；覆盖视觉视口、安全键盘尺寸变化、目标与向导内容尺寸变化、步骤过渡结束以及过期测量取消。明确传入真实引导触发按钮作为焦点恢复目标，兼容 WebKit 触摸点击不聚焦按钮的行为。
-  - 通知设置隔离回归新增系统返回桥、详情显式关闭、遮罩关闭、完全退出后重开及子页卸载断言。
-  - 依据最新 ChatGPT 评审未发现新的 P0。完整 Web 回归仍有 5 个既有失败；其组件/fixture 与本轮目标无关，没有扩大修改范围或移除断言。
-  - 业务提交只包含上述 12 个文件；主开发 worktree 原有 `site/runtime/email-runtime.cjs` 修改保持未暂存、未提交。
+  - P1-A：手势正向滑动夹具改为跨过组件现有 10px 起拖阈值，保留短拖取消断言；Emotion Vue stub 增加 `watch`；两个 esbuild 测试夹具忽略与逻辑无关的姓名 CSS 导入。
+  - P1-A 旧库迁移测试不再让当前 API 在旧 schema 上播种。测试直接在临时旧版 SQLite 中写入任务、用户/宿舍、会话、成员提醒和推送任务，再执行追加迁移并比较历史；明确断言新增 `completed_by` 为 NULL。没有运行时后端代码修改。
+  - P2：聚光引导增加有名称/说明的 modal dialog、初始焦点、Tab/Shift+Tab 内循环、Escape 关闭、背景 `inert` 与原状态恢复，并返回真实触发按钮焦点。扩展 browser assertions。
+  - 同批新版向导修复满四个稳定任务槽时仍展示不可执行的自定义任务按钮：改为简短释放槽位提示；释放槽位后动作恢复并复用稳定槽位。
+  - 两个业务提交已分别推送到原开发分支：`8b491db`（web fixtures），`0e29305`（spotlight focus）。远端分支 HEAD 已核实为完整 SHA `0e29305d01fd291f36a7080db22ef5974fdd70cb`。
 - tests:
-  - `node scripts/check-dorm-wizard-browser.mjs`（macOS Chromium）：158 项隔离检查通过，`PASS []`；包含在缩放模态祖先内的聚光框矩形对齐、320–844 CSS 视口、模拟键盘视口及焦点返回。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：158 项隔离检查通过，`PASS []`。
-  - `node scripts/check-companion-chat-browser.mjs`（Chromium）：67 项隔离检查通过。
-  - `DORM_BROWSER=webkit node scripts/check-companion-chat-browser.mjs`：65 项隔离检查通过。
-  - `npm run web:build`：通过，Vue 类型检查、前端、Worker、PWA 与邮件运行时构建完成；保留既有 `GuestHome` 超过 500 KB 的 chunk 警告。
-  - `npm run spec:validate`：18/18 通过；在提交后干净 detached worktree 运行 `npm run spec:scope`：17 个变更、365 个登记文件通过范围门禁。
-  - 两个修改后的浏览器脚本 `node --check` 与 `git diff --check` 通过。
-  - `npm run web:verify`：退出码 1，五项既有失败仍复现：`check-screen-gesture-check.mjs`（7px opacity 断言与 10px 阈值不符）；`check-emotion-integration.mjs`（Vue 测试 stub 缺 `watch`）；`check-settings-save-lifecycle.mjs` 与 `check-navigation-components.mjs`（esbuild fixture 无法解析 `memberNames.css`）；`check-scheduled-reminders.mjs`（旧 `/guest/create` 用例实际 500、期望 201）。其余回归及三个构建通过。
-- CI: 已推送并确认该完整 SHA 位于远端开发分支。GitHub Commit Status 为 `pending`、`statuses=[]`，Check Runs 为 0；目前没有可确认的 GitHub CI 结果。
+  - 五个分诊脚本全部单独通过：`check-screen-gesture-check.mjs`、`check-emotion-integration.mjs`、`check-settings-save-lifecycle.mjs`、`check-navigation-components.mjs`、`check-scheduled-reminders.mjs`。
+  - `check-scheduled-reminders.mjs`：11/11 用例、192 项断言通过；隔离 SQLite 迁移后外键、WAL 与完整性检查通过。
+  - `npm run web:verify`：退出码 0；前端、Worker、邮件运行模块构建及完整 Web 验证清单通过。构建仍报告既有 `GuestHome` chunk 大于 500KB；SMTP 失败日志来自注入的隔离测试，不代表实际邮件投递。
+  - `node scripts/check-dorm-wizard-browser.mjs`（macOS Chromium）：171 项隔离检查通过，`PASS []`。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（macOS WebKit）：171 项隔离检查通过，`PASS []`。
+  - `npm run spec:validate`：19/19 通过；`git diff --check` 通过。
+  - 干净 detached worktree `0e29305` 中 `npm run spec:scope` 通过：18 个在途变更、374 个文件，摘要 `ae9e675338d725b935ebe5428308318180764833d56db8a9cba6c8c553ef7364`。主工作树的同命令被另一项本地未提交修改 `site/runtime/email-runtime.cjs` 阻断；该文件不属于上述提交且未暂存/提交。
+- CI: 已用 GitHub API 确认开发分支 HEAD 与本 SHA 一致；当前 Commit Status 为 `pending`、`statuses=[]`，Check Runs 0，暂无可确认的远端 CI 结果。
 - platform_status:
-  - macOS Chromium/WebKit 隔离浏览器模拟通过，不等于真实 iPhone Safari/PWA 验收。
-  - 视口缩小模拟键盘，不代表系统键盘动画测试；原生返回使用应用 `DormNativeBack` 桥接调用模拟。
-  - iPhone、Android WebView、HarmonyOS ArkWeb 真机未验证。未创建宿舍、未触碰正式数据库/服务。
+  - 仅 macOS 桌面 Chromium/WebKit 隔离浏览器；不是 iPhone Safari、vivo Android WebView 或 HarmonyOS ArkWeb 真机，也没有屏幕阅读器验收。
+  - P1-B 的 vivo 冷启动重登根因未确认；没有设备布尔状态/HTTP 状态的真机证据，不宣称已修复或通过。
+  - 未访问正式服务或数据库，未创建宿舍、PR，未合并 main，未部署。
 - remaining:
-  - `web:verify` 的五项既有失败仍待各自范围处理；本轮保持在新宿舍向导、聚光引导和通知抽屉回归范围内。
-  - GitHub CI 暂无运行结果。
-  - 设备级键盘、返回手势、触控和焦点恢复仍需真机验证。
-  - 未创建 PR、未合并 main、未部署。
-- questions: 暂无。
+  - P1-B：需在目标 vivo 机上验证版本、Cookie/token 是否存在的布尔状态、`/email/me` 与 `/email/enter` 状态及冷启动/断网恢复；不记录凭据内容。
+  - P1-C：聚光定位、系统键盘与真实返回手势，以及通知抽屉快速关闭/重开仍需 iOS、Android、HarmonyOS 实机检查。
+  - 当前本地工作树还包含未提交的 session/startup 相关修改；这些没有进入本 SHA，本交接与测试结论不覆盖它们。`site/runtime/email-runtime.cjs` 保持未暂存、未提交。
+  - 最新评审仍针对旧 SHA `e0f7141…`；本 SHA 尚待 ChatGPT 独立复核。未创建 PR、未合并、未发布。
+- questions: 若继续实机排查 P1-B，需要目标 vivo 设备与自愿提供的脱敏系统/应用版本信息；不需要账号、密码、验证码、Cookie 或 Token。
