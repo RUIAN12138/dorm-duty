@@ -2289,6 +2289,7 @@ onUnmounted(() => {
       />
       <SpotlightTour
         v-if="featureTourOpen && !preview"
+        return-focus-selector="[data-testid=open-feature-tour]"
         :steps="[
           { target: '.board-identity', text: '球球会根据当前页面提供提示，点设置可以查看其他功能。' },
           { target: '.completion-surface', text: '轮到你时，完成任务后在这里记录。' },

@@ -75,6 +75,17 @@ New-room creation MUST expose no more than five top-level pages: room name, task
 - **WHEN** a user configures an existing room
 - **THEN** its existing settings progress control and flow remain unchanged
 
+### Requirement: Version-2 settings share the concise progress control
+The version-2 task-settings workspace MUST use the same number-free draggable progress control as new-room creation, with an accessible name that identifies task settings. The workspace's dynamic task-editing steps and draft behavior MUST remain unchanged, and legacy-room settings MUST remain untouched.
+#### Scenario: Navigate version-2 task settings
+- **WHEN** a user opens the settings workspace for a version-2 room
+- **THEN** the black-and-white glass progress slider shows no visible numbers, ticks, or duplicate step-count caption
+- **AND** tapping or dragging a destination still changes the active task-setting step and preserves the draft
+- **AND** assistive technology identifies the control as task-settings progress
+#### Scenario: Legacy settings remain unchanged
+- **WHEN** a user opens settings for a legacy room without a version-2 configuration
+- **THEN** the legacy settings page and its progress behavior remain unchanged
+
 ### Requirement: Start creation at the first actionable question
 Opening the new-room creation flow MUST show the first editable room-name step directly instead of an additional creation-only introduction. The standalone `/guide`, the once-per-member guide for first entry into a version-2 room, and manual workspace help MUST remain available.
 #### Scenario: First-time creation entry

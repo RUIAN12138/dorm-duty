@@ -1671,6 +1671,51 @@ try {
         (await page.getByTestId("push-settings").count()) === 0,
       "v2 notification subpage unmounts after its closed transition completes",
     );
+    await page.getByTestId("open-system-notifications").click();
+    await notificationPage.waitFor();
+    const handledNativeBack = await page.evaluate(() =>
+      window.DormNativeBack?.(),
+    );
+    await page.waitForTimeout(80);
+    check(
+      handledNativeBack === true &&
+        (await notificationPage.count()) === 1 &&
+        (await notificationPage.getAttribute("class"))?.includes("sheet-page-leave-active"),
+      "system-back closes the notification subpage through its exit transition",
+    );
+    await notificationPage.waitFor({ state: "detached" });
+    check(
+      (await page.getByTestId("open-system-notifications").count()) === 1 &&
+        (await page.locator(".sheet-layer").count()) === 1,
+      "system-back returns to the retained parent settings drawer",
+    );
+
+    await page.getByTestId("open-system-notifications").click();
+    await notificationPage.waitFor();
+    await page.getByLabel("关闭详情", { exact: true }).click();
+    await page.locator(".sheet-layer").waitFor({ state: "detached" });
+    await notificationPage.waitFor({ state: "detached" });
+    check(
+      (await page.locator(".sheet-layer").count()) === 0 &&
+        (await page.getByTestId("push-settings").count()) === 0,
+      "closing notification details releases the sheet and notification content",
+    );
+
+    await page.getByTestId("open-tools").click();
+    await page.getByTestId("open-preferences").click();
+    await page.getByTestId("open-system-notifications").click();
+    await page.getByTestId("push-settings").waitFor();
+    check(
+      (await notificationPage.count()) === 1,
+      "notification settings can reopen cleanly after a completed close",
+    );
+    await page.mouse.click(8, 8);
+    await page.locator(".sheet-layer").waitFor({ state: "detached" });
+    await notificationPage.waitFor({ state: "detached" });
+    check(
+      (await page.getByTestId("push-settings").count()) === 0,
+      "overlay dismissal releases the notification page without a stranded sheet",
+    );
     check(errors.length === 0, "no browser runtime errors");
     console.log(
       JSON.stringify(

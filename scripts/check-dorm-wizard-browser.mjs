@@ -779,12 +779,19 @@ try {
   await p.getByTestId("open-tools").click();
   await p.getByTestId("open-chore-settings").click();
   await p.getByRole("dialog", { name: "任务配置工作台" }).waitFor();
+  check(await p.locator('.creation-progress').count()===1&&await p.locator('.wizard-steps,.step-caption').count()===0,'version-2 task settings reuse the number-free creation progress control');
+  check(await p.locator('.creation-progress').getAttribute('aria-label')==='任务配置进度'&&await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'task-settings progress has an accurate accessible name without visible step numbers');
+  await p.getByRole('button',{name:'前往添加',exact:true}).click();
+  await p.locator('.wizard-step[data-step="templates"]').waitFor();
+  await p.getByRole('button',{name:'前往任务',exact:true}).click();
+  await p.locator('.workspace-task-list').waitFor();
   check(
     (await p.locator(".workspace-task-list").count()) === 1,
     "new room settings starts with a task list",
   );
   await p.locator('.workspace-task-row>.wizard-choice').first().click();
   await p.locator('.task-editor').waitFor();
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往地面清洁'&&await p.locator('.wizard-steps,.step-caption').count()===0,'task editor stays synchronized to the shared number-free progress control');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'workspace edits at most two fields per screen');
   await p.screenshot({ path: `data/startup-review/${engine}-workspace.png` });
   await p.getByRole("button", { name: "预览", exact: true }).click();
@@ -796,11 +803,70 @@ try {
   // Width/theme/reduced-motion geometry checks are browser simulations, not devices.
   await p.getByTestId('open-tools').click();await p.getByTestId('open-chore-settings').click();
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});await p.locator('.workspace-task-row>.wizard-choice').first().waitFor();check(await p.locator('.dorm-wizard').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${width}px no horizontal overflow`);}
+  await p.locator('.workspace-task-row>.wizard-choice').first().click();
+  await p.locator('.task-editor').waitFor();
   await p.getByRole('button',{name:'使用引导',exact:true}).click();
   await p.locator('.tour-light').waitFor();
   check(await p.locator('.tour-light').evaluate(el=>getComputedStyle(el).transitionProperty!=='none'),'spotlight keeps its spatial transition when motion is allowed');
+  const spotlightAlignment=async target=>{
+    await p.waitForFunction(selector=>{
+      const target=document.querySelector(selector),light=document.querySelector('.tour-light');
+      if(!target||!light)return false;
+      const a=target.getBoundingClientRect(),b=light.getBoundingClientRect();
+      return Math.max(Math.abs(b.left-(a.left-6)),Math.abs(b.top-(a.top-6)),Math.abs(b.right-(a.right+6)),Math.abs(b.bottom-(a.bottom+6)))<=1;
+    },target,{timeout:1000}).catch(()=>{});
+    return p.evaluate(selector=>{
+    const target=document.querySelector(selector),light=document.querySelector('.tour-light');
+    if(!target||!light)return null;
+    const a=target.getBoundingClientRect(),b=light.getBoundingClientRect();
+    const errors=[Math.abs(b.left-(a.left-6)),Math.abs(b.top-(a.top-6)),Math.abs(b.right-(a.right+6)),Math.abs(b.bottom-(a.bottom+6))];
+    const host=document.querySelector('.tour'),hostBox=host?.getBoundingClientRect(),computed=light&&getComputedStyle(light);
+    return {errors,max:Math.max(...errors),target:{x:a.x,y:a.y,width:a.width,height:a.height},light:{x:b.x,y:b.y,width:b.width,height:b.height,inlineTop:light.style.top,top:computed?.top,animations:light.getAnimations().map(animation=>animation.playState)},host:hostBox&&{x:hostBox.x,y:hostBox.y,width:hostBox.width,height:hostBox.height},viewport:{height:innerHeight,visualHeight:visualViewport?.height,offsetTop:visualViewport?.offsetTop}};
+    },target);
+  };
+  const firstSpotlight=await spotlightAlignment('.creation-progress, .wizard-steps');
+  check(!!firstSpotlight&&firstSpotlight.max<=8,'spotlight light aligns to the real progress control within 8px');
+  await p.locator('.dorm-wizard').evaluate(el=>{el.style.transform='scale(.96)';el.style.transformOrigin='50% 0';});
+  await p.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  const transformedSpotlight=await spotlightAlignment('.creation-progress, .wizard-steps');
+  check(!!transformedSpotlight&&transformedSpotlight.max<=8,'spotlight geometry remains aligned inside a scaled modal ancestor');
+  await p.locator('.dorm-wizard').evaluate(el=>{el.style.transform='';el.style.transformOrigin='';});
+  await p.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await p.locator('.tour').getByRole('button',{name:'下一步',exact:true}).click();
+  await p.getByText('每次只安排一件事；确认前都保存在草稿。',{exact:true}).waitFor();
+  const footerSpotlight=await spotlightAlignment('.wizard-footer');
+  check(!!footerSpotlight&&footerSpotlight.max<=8,'spotlight follows the real footer through the next-step transition');
+  await p.locator('.tour').getByRole('button',{name:'上一步',exact:true}).click();
+  await p.getByText('点选或拖动进度条，随时回去修改。',{exact:true}).waitFor();
+  const returnedSpotlight=await spotlightAlignment('.creation-progress, .wizard-steps');
+  check(!!returnedSpotlight&&returnedSpotlight.max<=8,'spotlight returns to the progress target through the reverse transition');
+  for(const [width,height] of [[320,568],[390,844],[430,844],[568,320],[844,390]]){
+    await p.setViewportSize({width,height});
+    await p.evaluate(()=>visualViewport?.dispatchEvent(new Event('resize')));
+    const alignment=await spotlightAlignment('.creation-progress, .wizard-steps');
+    check(!!alignment&&alignment.max<=8,`spotlight remains aligned at ${width}x${height} CSS viewport${alignment?` (${JSON.stringify(alignment)})`:''}`);
+  }
+  await p.getByLabel('任务名称',{exact:true}).focus();
+  await p.evaluate(()=>{document.documentElement.dataset.interaction='keyboard';window.dispatchEvent(new Event('ui-motion-change'));});
+  await p.setViewportSize({width:390,height:520});
+  await p.evaluate(()=>visualViewport?.dispatchEvent(new Event('resize')));
+  const keyboardSpotlight=await spotlightAlignment('.creation-progress, .wizard-steps');
+  check(!!keyboardSpotlight&&keyboardSpotlight.max<=8&&await p.evaluate(()=>document.activeElement?.matches('.task-editor input')),'spotlight remains aligned and preserves the focused field during a simulated keyboard viewport resize');
+  await p.setViewportSize({width:430,height:844});
+  await p.evaluate(()=>{document.documentElement.dataset.interaction='pointer';window.dispatchEvent(new Event('ui-motion-change'));});
   await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click();
   await p.locator('.tour').waitFor({state:'detached'});
+  check(await p.evaluate(()=>document.activeElement?.matches('button[aria-label="使用引导"]')),'closing spotlight restores focus to its real trigger');
+  await p.getByRole('button',{name:'使用引导',exact:true}).click();
+  await p.locator('.tour-light').waitFor();
+  await p.locator('.creation-progress, .wizard-steps').first().evaluate(el=>el.style.display='none');
+  await p.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await p.getByText('每次只安排一件事；确认前都保存在草稿。',{exact:true}).waitFor();
+  check((await spotlightAlignment('.wizard-footer'))?.max<=8,'spotlight skips a missing target and aligns its next real target');
+  await p.locator('.creation-progress, .wizard-steps').first().evaluate(el=>el.style.display='');
+  await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click();
+  await p.locator('.tour').waitFor({state:'detached'});
+  check(await p.evaluate(()=>document.activeElement?.matches('button[aria-label="使用引导"]')),'missing-target skip restores focus to the guide trigger');
   await p.emulateMedia({reducedMotion:'reduce',colorScheme:'dark'});
   await p.getByRole('button',{name:'使用引导',exact:true}).click();
   await p.locator('.tour-light').waitFor();
@@ -808,7 +874,6 @@ try {
   check(await p.locator('.tour').getByRole('button',{name:'下一步',exact:true}).evaluate(el=>getComputedStyle(el).transitionProperty==='none'),'reduced-motion disables spotlight button transitions');
   await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click();
   await p.locator('.tour').waitFor({state:'detached'});
-  await p.locator('.workspace-task-row>.wizard-choice').first().click();await p.locator('.task-editor').waitFor();
   check(await p.getByLabel('任务名称',{exact:true}).isVisible(),'reduced motion remains usable');
   check(!errors.length, JSON.stringify(errors));
   await fs.writeFile(

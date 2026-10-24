@@ -28,6 +28,7 @@
     "site/drizzle/0019_dorm_configuration.sql",
     "scripts/check-dorm-wizard.mjs",
     "scripts/check-dorm-wizard-browser.mjs",
+    "scripts/check-companion-chat-browser.mjs",
     "scripts/preview-startup/server.mjs",
     "docs/NEW_DORM_WIZARD.md",
     "openspec/changes/new-dorm-wizard/",

@@ -4,7 +4,7 @@ import { animate } from 'motion-v';
 import { motionAllowed, motionTokens } from '../../interaction/motion';
 import { observeElementSize } from './observeElementSize.mjs';
 
-const props = defineProps<{ modelValue: number; labels: string[] }>();
+const props = defineProps<{ modelValue: number; labels: string[]; navLabel?: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>();
 
 const host = ref<HTMLElement>();
@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
   <nav
     ref="host"
     class="creation-progress"
-    aria-label="新宿舍创建进度"
+    :aria-label="navLabel || '新宿舍创建进度'"
     @pointerdown="down"
     @pointermove="move"
     @pointerup="up"

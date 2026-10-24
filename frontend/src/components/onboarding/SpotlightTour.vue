@@ -1,40 +1,105 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onBeforeUnmount } from "vue";
-const props = defineProps<{ steps: { target: string; text: string }[] }>();
+const props = defineProps<{
+  steps: { target: string; text: string }[];
+  returnFocusSelector?: string;
+}>();
 const emit = defineEmits<{ done: [] }>();
 const noteTop = ref(100);
-const trigger = document.activeElement as HTMLElement | null;
+const activeElement = document.activeElement;
+const trigger =
+  (props.returnFocusSelector
+    ? document.querySelector<HTMLElement>(props.returnFocusSelector)
+    : null) ||
+  (activeElement instanceof HTMLElement && activeElement !== document.body
+    ? activeElement
+    : null);
+const host = ref<HTMLElement>();
 const index = ref(0),
   box = ref({ x: 16, y: 80, width: 44, height: 44 });
+let positionFrame = 0;
+let positionRevision = 0;
+const observedLayout = new Set<Element>();
+const targetObserver = typeof ResizeObserver === "undefined"
+  ? null
+  : new ResizeObserver(schedulePosition);
 async function position() {
+  const revision = ++positionRevision;
   const step = props.steps[index.value];
   if (!step) { emit("done"); return; }
   await nextTick();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (revision !== positionRevision) return;
   const el = document.querySelector<HTMLElement>(step.target);
+  const wizard = host.value?.closest<HTMLElement>(".dorm-wizard");
+  for (const item of [el, wizard?.querySelector<HTMLElement>(".wizard-guide"), wizard?.querySelector<HTMLElement>(".wizard-body")]) {
+    if (targetObserver && item && !observedLayout.has(item)) {
+      targetObserver.observe(item);
+      observedLayout.add(item);
+    }
+  }
   const r = el?.getBoundingClientRect();
+  const hostRect = host.value?.getBoundingClientRect();
+  const hostWidth = host.value?.offsetWidth || hostRect?.width || 1;
+  const hostHeight = host.value?.offsetHeight || hostRect?.height || 1;
+  const scaleX = (hostRect?.width || hostWidth) / hostWidth;
+  const scaleY = (hostRect?.height || hostHeight) / hostHeight;
+  const viewportTop = window.visualViewport?.offsetTop ?? 0;
+  const viewportBottom = viewportTop + (window.visualViewport?.height ?? window.innerHeight);
   const style = el ? getComputedStyle(el) : null;
   const visible = !!el && !!r && !!style && el.isConnected &&
     style.display !== "none" && style.visibility !== "hidden" &&
     Number(style.opacity) > 0 && r.width > 0 && r.height > 0 &&
-    r.bottom > 0 && r.right > 0 && r.top < window.innerHeight && r.left < window.innerWidth;
+    r.bottom > viewportTop && r.right > 0 && r.top < viewportBottom && r.left < window.innerWidth;
   if (!visible || !r) {
     if (index.value + 1 < props.steps.length) index.value++;
     else emit("done");
     return;
   }
-  noteTop.value = r.bottom + 180 > window.innerHeight ? Math.max(16, r.top - 170) : r.bottom + 24;
-  box.value = { x: r.x - 6, y: r.y - 6, width: r.width + 12, height: r.height + 12 };
+  const originX = hostRect?.left ?? 0;
+  const originY = hostRect?.top ?? 0;
+  noteTop.value = r.bottom + 180 > viewportBottom
+    ? Math.max(16 / scaleY, (r.top - originY - 170) / scaleY)
+    : (r.bottom - originY + 24) / scaleY;
+  box.value = {
+    x: (r.x - originX - 6) / scaleX,
+    y: (r.y - originY - 6) / scaleY,
+    width: (r.width + 12) / scaleX,
+    height: (r.height + 12) / scaleY,
+  };
+}
+function schedulePosition() {
+  positionRevision++;
+  if (positionFrame) cancelAnimationFrame(positionFrame);
+  positionFrame = requestAnimationFrame(() => {
+    positionFrame = 0;
+    void position();
+  });
+}
+function layoutTransitionEnd(event: TransitionEvent) {
+  const target = event.target as HTMLElement | null;
+  if (target?.classList.contains("wizard-guide") && event.propertyName === "flex-basis")
+    schedulePosition();
 }
 watch(index, position, { immediate: true });
-window.addEventListener("resize", position);
+window.addEventListener("resize", schedulePosition);
+window.visualViewport?.addEventListener("resize", schedulePosition);
+window.visualViewport?.addEventListener("scroll", schedulePosition);
+document.addEventListener("transitionend", layoutTransitionEnd, true);
 onBeforeUnmount(() => {
-  window.removeEventListener("resize", position);
+  if (positionFrame) cancelAnimationFrame(positionFrame);
+  targetObserver?.disconnect();
+  observedLayout.clear();
+  window.removeEventListener("resize", schedulePosition);
+  window.visualViewport?.removeEventListener("resize", schedulePosition);
+  window.visualViewport?.removeEventListener("scroll", schedulePosition);
+  document.removeEventListener("transitionend", layoutTransitionEnd, true);
   if (trigger?.isConnected) trigger.focus({ preventScroll: true });
 });
 </script>
 <template>
   <div
+    ref="host"
     class="tour"
     role="dialog"
     aria-modal="true"

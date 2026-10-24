@@ -250,3 +250,37 @@
 - 将教程中的泛称「首页」改为正式导航标签「值日页」，留言提示指向「设置」里的「室友消息」；向导页面编排 Tips 从「切换页面」改为明确的「轻点移动，长按拖动」。
 - `scripts/check-dorm-wizard-browser.mjs` 断言四页教程文案及页面编排 Tips，与正式导航和菜单入口标签相符；运行结果记录在本次交接。
 - 未改导航、留言入口、创建规则或旧宿舍流程，也未修改正式数据。
+
+## 2026-10-24 · 聚光引导与通知抽屉回归
+
+- 新版任务配置工作台沿用创建向导的无数字进度滑块；旧宿舍仍走 legacy 设置页。
+- 聚光引导在其模态宿主内用宿主本地坐标定位，并覆盖窗口/模拟键盘视口变化、尺寸变化、目标缺失跳过和焦点返回。
+- 通知设置子页覆盖应用原生返回桥、显式关闭、遮罩关闭、关闭后重新打开和卸载回收。
+- 浏览器回归均使用隔离 fixture；未写入正式宿舍数据，也未触发真实推送。
+
+| 检查 | 结果 |
+| --- | --- |
+| `npm run spec:validate` | 通过，18 项规范检查 |
+| `npm run web:build` | 通过；前端、Worker 与邮件运行时构建成功。构建器报告既有 `GuestHome` 大 chunk 提示 |
+| `node scripts/check-dorm-wizard-browser.mjs` | Chromium 通过，158 项检查，0 错误 |
+| `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs` | WebKit 通过，158 项检查，0 错误 |
+| `node scripts/check-companion-chat-browser.mjs` | Chromium 通过，67 项检查，0 错误 |
+| `DORM_BROWSER=webkit node scripts/check-companion-chat-browser.mjs` | WebKit 通过，65 项检查，0 错误 |
+| `npm run web:verify` | 未全绿：构建及其余检查通过，5 个既有、与本轮修改文件无关的回归失败，详见下文 |
+
+### `web:verify` 未通过项
+
+1. `scripts/check-screen-gesture-check.mjs`：7px 移动仍期待遮罩 opacity 已变化，但组件阈值为 10px。
+2. `scripts/check-emotion-integration.mjs`：测试 Vue stub 未提供 `watch`，而被测 companion 导入了 `watch`。
+3. `scripts/check-settings-save-lifecycle.mjs`：esbuild 测试 fixture 无法解析 `memberNames.css`。
+4. `scripts/check-navigation-components.mjs`：esbuild 测试 fixture 无法解析 `memberNames.css`。
+5. `site/scripts/check-scheduled-reminders.mjs`：遗留 `/guest/create` fixture 预期 201，实际 500。
+
+这些失败对应的组件/服务和测试 fixture 均不在本轮范围；本次没有为通过总套件而改动或放宽它们。隔离工作树在本轮开始时已有 `site/runtime/email-runtime.cjs` 用户修改，保持未暂存、未提交。
+
+### 平台边界与未验证事项
+
+- Chromium 与 WebKit 桌面浏览器自动化通过；视口尺寸和键盘高度通过浏览器视口模拟，不代表 iOS 系统键盘实测。
+- 未连接 iPhone，也未在 Android WebView、HarmonyOS ArkWeb 真机上运行；系统返回事件通过应用返回桥模拟。
+- 没有真实设备触控、键盘动画或原生焦点恢复的设备级证据。
+- 本轮未创建 PR、未合并 main、未部署服务器、未访问或修改正式数据库。
