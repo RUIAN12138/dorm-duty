@@ -24,6 +24,8 @@
     "docs/icon-backup-v81/",
     "scripts/check-startup-session.mjs",
     "scripts/check-startup-browser.mjs",
+    "scripts/check-api-transport.mjs",
+    "site/scripts/check-email-accounts.mjs",
     "scripts/generate-companion-icons.mjs",
     "scripts/preview-startup/",
     "scripts/check-optics-experiment.mjs",

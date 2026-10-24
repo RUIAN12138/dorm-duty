@@ -21,7 +21,7 @@ const config = {
   publicOrigin: "https://backend-test.example",
   otpSecret: "a".repeat(64),
 };
-const service = runtime.createEmailRuntime(h.db, {
+let service = runtime.createEmailRuntime(h.db, {
   config,
   autoStart: false,
   reminderGraceMs: 0,
@@ -286,6 +286,29 @@ try {
   const resumed = await api("/email/enter", { dorm_id: room.dorm.id });
   eq(resumed.member_id, ordinary.member_id);
   const restoredCookie = cookie;
+  await service.close();
+  service = runtime.createEmailRuntime(h.db, {
+    config,
+    autoStart: false,
+    reminderGraceMs: 0,
+    now: () => new Date(time),
+    send: async (message) => {
+      if (failSend) throw new Error("fixture SMTP offline");
+      delivered.push(message);
+    },
+  });
+  cookie = restoredCookie;
+  eq((await api("/email/me")).logged_in, true);
+  eq((await api("/email/me")).email, "second@example.invalid");
+  eq(
+    (
+      await h.request(
+        `/chores/board?invite_code=${room.invite_code}&member_id=${resumed.member_id}`,
+        { token: resumed.access_token },
+      )
+    ).status,
+    200,
+  );
   // Five bad attempts consume the guessing budget; expired/resend codes fail.
   cookie = "";
   const attempt = await api(

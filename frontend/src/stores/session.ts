@@ -18,7 +18,7 @@ export const useSession = defineStore("session", () => {
     requestId = 0;
   let pending: { token: string | null; promise: Promise<void> } | null = null;
   function refresh(): Promise<void> {
-    const token = sessionStorage.getItem("dorm-token");
+    const token = restoreSessionToken();
     if (pending?.token === token) return pending.promise;
     const id = ++requestId;
     if (validatedToken !== undefined && validatedToken !== token) {
@@ -35,7 +35,7 @@ export const useSession = defineStore("session", () => {
       api<Dorm | null>("/dorms/current", { headers }),
     ])
       .then(([nextUser, nextDorm]) => {
-        if (id !== requestId || sessionStorage.getItem("dorm-token") !== token)
+        if (id !== requestId || restoreSessionToken() !== token)
           return;
         user.value = nextUser;
         dorm.value = nextDorm;
@@ -70,18 +70,18 @@ export const useSession = defineStore("session", () => {
           await refresh();
         } catch {
           if (epoch !== lifecycle) return;
-          if (sessionStorage.getItem("dorm-token") !== token) return init();
+          if (restoreSessionToken() !== token) return init();
           user.value = null;
           dorm.value = null;
           // Keep the email grant on connection failure so the next init retries.
-          if (sessionStorage.getItem("dorm-token")) return;
+          if (restoreSessionToken()) return;
         }
       }
-      if (epoch === lifecycle && sessionStorage.getItem("dorm-token") !== token)
+      if (epoch === lifecycle && restoreSessionToken() !== token)
         return init();
       if (
         epoch === lifecycle &&
-        sessionStorage.getItem("dorm-token") === token
+        restoreSessionToken() === token
       ) {
         validatedToken = token;
         initialized.value = true;
@@ -109,7 +109,7 @@ export const useSession = defineStore("session", () => {
     await refresh();
     if (
       epoch === lifecycle &&
-      sessionStorage.getItem("dorm-token") === result.access_token
+      restoreSessionToken() === result.access_token
     ) {
       initialized.value = true;
       return true;

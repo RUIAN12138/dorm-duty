@@ -1,11 +1,14 @@
-import { persistentSessionKey } from "../interaction/persistentSession";
+import {
+  forgetSessionTokenIfCurrent,
+  restoreSessionToken,
+} from "../interaction/persistentSession";
 import { ApiError, requestJson } from "./transport";
 export { ApiError } from "./transport";
 export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = sessionStorage.getItem("dorm-token");
+  const token = restoreSessionToken();
   const headers = new Headers({ "Content-Type": "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
   new Headers(options.headers).forEach((value, key) => headers.set(key, value));
@@ -22,18 +25,10 @@ export async function api<T>(
       path !== "/auth/login" &&
       !!token &&
       headers.get("Authorization") === `Bearer ${token}` &&
-      sessionStorage.getItem("dorm-token") === token
+      restoreSessionToken() === token
     ) {
-      sessionStorage.removeItem("dorm-token");
-      try {
-        if (localStorage.getItem(persistentSessionKey) === token)
-          localStorage.removeItem(persistentSessionKey);
-        if (localStorage.getItem("dorm-email-admin-grant") === token)
-          localStorage.removeItem("dorm-email-admin-grant");
-      } catch {
-        /* Optional persistence. */
-      }
-      window.dispatchEvent(new Event("auth-expired"));
+      if (forgetSessionTokenIfCurrent(token))
+        window.dispatchEvent(new Event("auth-expired"));
     }
     throw error;
   }

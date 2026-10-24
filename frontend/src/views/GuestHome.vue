@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { persistSessionToken } from "../interaction/persistentSession";
+import {
+  persistSessionToken,
+  restoreSessionToken,
+} from "../interaction/persistentSession";
 import DormWizard from "../components/onboarding/DormWizard.vue";
 import {
   configurationOf,
@@ -439,7 +442,7 @@ async function creatorToken(person: GuestMember, code = inviteCode.value) {
   await session.init();
   if (
     session.dorm?.invite_code !== code &&
-    sessionStorage.getItem("dorm-token")
+    restoreSessionToken()
   ) {
     try {
       await session.refresh();
@@ -450,7 +453,7 @@ async function creatorToken(person: GuestMember, code = inviteCode.value) {
   return session.dorm?.invite_code === code &&
     session.dorm.is_admin &&
     session.user?.id === person.user_id
-    ? sessionStorage.getItem("dorm-token") || ""
+    ? restoreSessionToken() || ""
     : "";
 }
 const occupiedMarks = computed(

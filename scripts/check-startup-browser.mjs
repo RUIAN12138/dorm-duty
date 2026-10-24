@@ -7,6 +7,8 @@ import {
 } from "../frontend/node_modules/@playwright/test/index.mjs";
 import { createHarness } from "../site/scripts/check-cloud-backend.mjs";
 const engine = process.env.DORM_BROWSER === "webkit" ? "webkit" : "chromium";
+const port = Number(process.env.DORM_TEST_PORT || 8094);
+const appUrl = `http://127.0.0.1:${port}`;
 const out = "data/startup-review";
 await fs.mkdir(out, { recursive: true });
 const h = await createHarness();
@@ -37,7 +39,7 @@ const vite = await createServer({
   configFile:
     (process.env.DORM_BASELINE_ROOT || process.cwd() + "/frontend") +
     "/vite.config.ts",
-  server: { host: "127.0.0.1", port: 8094, strictPort: true, proxy: {} },
+  server: { host: "127.0.0.1", port, strictPort: true, proxy: {} },
 });
 await vite.listen();
 const b = await (engine === "webkit" ? webkit : chromium).launch({
@@ -49,53 +51,85 @@ const b = await (engine === "webkit" ? webkit : chromium).launch({
       }
     : {}),
 });
-const ctx = await b.newContext({
+const contextOptions = {
   viewport: { width: 390, height: 844 },
   isMobile: true,
   hasTouch: true,
-});
-const p = await ctx.newPage();
+};
+let ctx = await b.newContext(contextOptions);
+let p = await ctx.newPage();
 p.setDefaultTimeout(30000);
 let logged = true,
   fail = false,
   release;
 let gate = new Promise((r) => (release = r));
 let delaying = true;
+const emailCookieName = "dorm_email_session";
+const emailCookieValue = "isolated-session";
+let emailCookieRequests = 0;
+const emailCookieObservations = [];
 const errors = [];
-p.on("pageerror", (e) => errors.push(e.message));
-await p.route(/\/(email|chores|auth|dorms|guest|health)\//, async (route) => {
-  const req = route.request(),
-    u = new URL(req.url());
-  if (u.pathname.startsWith("/email/")) {
-    if (delaying) await gate;
-    if (fail) return route.abort("failed");
-    const data =
-      u.pathname === "/email/config"
-        ? { available: true, registration_required: true }
-        : u.pathname === "/email/me"
-          ? {
-              logged_in: logged,
-              email: logged ? "test@example.invalid" : "",
-              rooms: logged ? [room] : [],
-            }
-          : u.pathname === "/email/enter"
-            ? { ...room, access_token: claim.access_token }
-            : {};
-    return route.fulfill({ json: data });
-  }
-  if (u.pathname === "/health")
-    return route.fulfill({ json: { status: "ok" } });
-  const response = await h.request(u.pathname + u.search, {
-    method: req.method(),
-    token: req.headers().authorization?.replace(/^Bearer /, ""),
-    ...(req.postData() ? { data: JSON.parse(req.postData()) } : {}),
+async function installRoutes(page) {
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route(/\/(email|chores|auth|dorms|guest|health)\//, async (route) => {
+    const req = route.request(),
+      u = new URL(req.url());
+    if (u.pathname.startsWith("/email/")) {
+      if (delaying) await gate;
+      if (fail) return route.abort("failed");
+      const hasEmailSession = (await ctx.cookies(appUrl)).some(
+        (cookie) =>
+          cookie.name === emailCookieName &&
+          cookie.value === emailCookieValue,
+      );
+      if (u.pathname === "/email/me") {
+        emailCookieObservations.push(hasEmailSession);
+        if (hasEmailSession) emailCookieRequests++;
+      }
+      if (u.pathname === "/email/enter" && (!logged || !hasEmailSession))
+        return route.fulfill({
+          status: 401,
+          json: { message: "email session required" },
+        });
+      const accountLoggedIn = logged && hasEmailSession;
+      const data =
+        u.pathname === "/email/config"
+          ? { available: true, registration_required: true }
+          : u.pathname === "/email/me"
+            ? {
+                logged_in: accountLoggedIn,
+                email: accountLoggedIn ? "test@example.invalid" : "",
+                rooms: accountLoggedIn ? [room] : [],
+              }
+            : u.pathname === "/email/enter"
+              ? { ...room, access_token: claim.access_token }
+              : {};
+      return route.fulfill({ json: data });
+    }
+    if (u.pathname === "/health")
+      return route.fulfill({ json: { status: "ok" } });
+    const response = await h.request(u.pathname + u.search, {
+      method: req.method(),
+      token: req.headers().authorization?.replace(/^Bearer /, ""),
+      ...(req.postData() ? { data: JSON.parse(req.postData()) } : {}),
+    });
+    return route.fulfill({
+      status: response.status,
+      contentType: "application/json",
+      body: await response.text(),
+    });
   });
-  return route.fulfill({
-    status: response.status,
-    contentType: "application/json",
-    body: await response.text(),
-  });
-});
+}
+await ctx.addCookies([
+  {
+    name: emailCookieName,
+    value: emailCookieValue,
+    url: appUrl,
+    httpOnly: true,
+    sameSite: "Strict",
+  },
+]);
+await installRoutes(p);
 let count = 0;
 const check = (v, label) => {
   assert(v, label);
@@ -106,7 +140,7 @@ try {
   if (process.env.DORM_BASELINE_ROOT) {
     release();
     delaying = false;
-    await p.goto("http://127.0.0.1:8094/water");
+    await p.goto(`${appUrl}/water`);
     await p.getByRole("button", { name: "查看任务", exact: true }).click();
     const old = p.locator(".elastic-sheet");
     await old.waitFor();
@@ -117,7 +151,7 @@ try {
     await p.screenshot({ path: `${out}/${engine}-water-before.png` });
     console.log("baseline water capture complete");
   } else {
-    await p.goto("http://127.0.0.1:8094/", { waitUntil: "domcontentloaded" });
+    await p.goto(`${appUrl}/`, { waitUntil: "domcontentloaded" });
     await p.locator('[data-startup="verifying"]').waitFor();
     check(
       (await p.locator(".guest-page").count()) === 0,
@@ -134,7 +168,26 @@ try {
           .evaluate((el) => getComputedStyle(el).pointerEvents === "none")),
       "authenticated cold start reaches board",
     );
-    await p.goto("http://127.0.0.1:8094/water");
+    const cookieRequestsBeforeReopen = emailCookieRequests;
+    const restoredState = await ctx.storageState();
+    await ctx.close();
+    ctx = await b.newContext({ ...contextOptions, storageState: restoredState });
+    p = await ctx.newPage();
+    p.setDefaultTimeout(30000);
+    await installRoutes(p);
+    await p.goto(`${appUrl}/`, { waitUntil: "domcontentloaded" });
+    await p.locator(".chore-board").waitFor();
+    check(
+      await p.evaluate(() => !!localStorage.getItem("dorm-guest-view-v1")) &&
+        await p.locator(".guest-entry").count() === 0 &&
+        await p.getByTestId("email-account-panel").count() === 0,
+      "fresh browser context restores the selected room from durable profile storage",
+    );
+    check(
+      emailCookieRequests > cookieRequestsBeforeReopen,
+      "cold-start account restoration is backed by the retained HttpOnly email cookie",
+    );
+    await p.goto(`${appUrl}/water`);
     await p.getByRole("button", { name: "查看任务", exact: true }).click();
     const sheet = p.locator(".is-edge-sheet .elastic-sheet");
     await sheet.waitFor();
@@ -172,6 +225,30 @@ try {
     await p.reload();
     await p.locator(".chore-board").waitFor();
     check(true, "dark reduced-motion cold start settles");
+    const stateWithoutEmailCookie = await ctx.storageState();
+    stateWithoutEmailCookie.cookies = stateWithoutEmailCookie.cookies.filter(
+      (cookie) => cookie.name !== emailCookieName,
+    );
+    await ctx.close();
+    ctx = await b.newContext({
+      ...contextOptions,
+      storageState: stateWithoutEmailCookie,
+    });
+    p = await ctx.newPage();
+    p.setDefaultTimeout(30000);
+    await installRoutes(p);
+    await p.goto(`${appUrl}/`, { waitUntil: "domcontentloaded" });
+    await p.locator(".guest-page").waitFor();
+    check(
+      (await p.locator(".chore-board").count()) === 0 &&
+        (await p.getByTestId("email-account-panel").count()) > 0 &&
+        (await p.evaluate(() =>
+          Object.keys(localStorage).some((key) =>
+            key.startsWith("dorm-chore-device-v1:"),
+          ),
+        )),
+      "missing email cookie requires email entry even when the local member bearer remains",
+    );
     check(errors.length === 0, JSON.stringify(errors));
     await fs.writeFile(
       `${out}/${engine}-startup-result.json`,
@@ -180,6 +257,7 @@ try {
   }
 } catch (e) {
   console.error("PAGE_ERRORS", errors);
+  console.error("EMAIL_COOKIE_PRESENT", emailCookieObservations);
   console.error((await p.content()).slice(-1200));
   await p.screenshot({ path: `${out}/${engine}-failure.png` });
   throw e;

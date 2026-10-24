@@ -48,3 +48,11 @@ vivo实体机杀进程/重启，iPhone Safari/PWA中文英文表情键盘、主�
 
 ## 用户最新图标覆盖
 用户提供1254×1254图片并指定“图标改成这个”，覆盖先前由引擎导出的图标方案。使用docs/icon-source/user-selected.png原图，只缩放导出，不重画、不反色、不裁切。深浅模式使用同一原图；移除不适用于整幅位图的Safari mask-icon声明，避免显示成实心方块。应用内球球及启动球球形象不变。此前导出资源另备份于docs/icon-backup-v81/before-user-selected，原v81备份仍保留。
+
+## 2026-10-24 · 持久会话恢复冲突复核
+
+- 普通 bearer token 仍为服务端签发的原值，恢复过程不延长 7 天服务端有效期。持久副本 `dorm-auth-token-v1` 为 canonical source，`sessionStorage` 仅作当前标签的兼容镜像；旧标签的迟到 401 不能删除已替换的新 token。
+- 邮箱成员准入仍通过 HttpOnly `dorm_email_session` 和 `/email/me` 服务端验证。本地 bearer token 不构成邮箱会话替代，也不会自动重新进入邮箱身份。
+- 新增隔离服务重建回归：邮箱运行时关闭后以同一测试 SQLite 重建，原 Cookie 继续得到相同账号与舍友身份，原成员 Bearer 仍可访问宿舍数据；没有重签 Cookie 或延长过期时间。此为 Node 服务进程边界测试，不是 iOS/Android WebView 实机重启验收。
+- 会话单元测试 13 项通过；Chromium 和 macOS WebKit 的隔离移动视口启动回归各 11 项通过，含重新创建新浏览器 context 后恢复持久 storageState，以及没有邮箱 Cookie 时不能用成员 Bearer 绕过准入。该过程不模拟 Android WebView 原生数据目录及 OS 杀进程，不替代实体 vivo 完全退出重启验收。
+- `npm run web:verify` 全量验证退出码 0；`npm run spec:validate` 19/19 通过。当前工作树的 `npm run spec:scope` 单独被本轮开始前已有、未触碰的 `site/runtime/email-runtime.cjs` 修改拒绝；该文件未暂存、未提交。
