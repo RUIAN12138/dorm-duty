@@ -22,7 +22,8 @@ const h = await createHarness(),
 let browser, server, runtime, page;
 let failModel = false,
   modelDelay = 500,
-  pushConfigRequests = 0;
+  pushConfigRequests = 0,
+  forceV2Board = false;
 const check = (condition, label) => {
   assert(condition, label);
   checks.push(label);
@@ -234,10 +235,36 @@ try {
         token: headers.authorization?.slice(7),
         ...(body ? { data: JSON.parse(body) } : {}),
       });
+    let responseBody = await r.text();
+    if (forceV2Board && u.pathname === "/chores/board" && r.ok) {
+      const value = JSON.parse(responseBody);
+      value.configuration = {
+        schema_version: 2,
+        pages: [
+          { id: "duty", label: "值日" },
+          { id: "water", label: "抬水" },
+          { id: "calendar", label: "日历" },
+        ],
+        tasks: ["floor", "toilet", "sink", "water"].map((key) => ({
+          key,
+          name: key,
+          content: "",
+          enabled: true,
+          page: key === "water" ? "water" : "duty",
+          rotation: "round",
+          display: "title",
+          deadline: "22:00",
+          interval: 3,
+        })),
+        policy: "soft",
+        second_page_kind: "tasks",
+      };
+      responseBody = JSON.stringify(value);
+    }
     await route.fulfill({
       status: r.status,
       contentType: "application/json",
-      body: await r.text(),
+      body: responseBody,
     });
   });
   await page.addInitScript(() => {
@@ -1599,6 +1626,50 @@ try {
       (await page.locator(".chat-bubble.user").count()) === 1 &&
         (await page.locator(".chat-bubble.user").innerText()) === chosenQuick,
       "preset question sends a real chat only after user taps it",
+    );
+
+    // Re-enter through an isolated v2 board response. Closing the notification
+    // subpage must let its own Vue transition finish before ChoreBoard unmounts it.
+    forceV2Board = true;
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto(url);
+    await page.getByTestId("pane-duty").waitFor();
+    await page.getByTestId("open-tools").click();
+    await page.getByTestId("open-preferences").click();
+    await page.getByTestId("open-system-notifications").click();
+    const notificationPage = page.locator(
+      '.sheet-navigation-page[data-sheet-page="系统通知"]',
+    );
+    await notificationPage.waitFor();
+    await page.getByTestId("push-settings").waitFor();
+    await page.waitForTimeout(400);
+    await page.getByLabel("返回上一层设置", { exact: true }).click();
+    await page.waitForTimeout(80);
+    const notificationExit = await page
+      .locator(".sheet-navigation-page")
+      .evaluateAll((els) =>
+        els.map((el) => ({
+          title: el.getAttribute("data-sheet-page"),
+          className: el.className,
+          opacity: getComputedStyle(el).opacity,
+          transform: getComputedStyle(el).transform,
+        })),
+      );
+    check(
+      (await notificationPage.count()) === 1 &&
+        notificationExit.some(
+          (page) =>
+            page.title === "系统通知" &&
+            page.className.includes("sheet-page-leave-active") &&
+            page.opacity !== "0",
+        ),
+      "v2 notification subpage stays mounted through its horizontal exit transition",
+    );
+    await page.waitForTimeout(400);
+    check(
+      (await notificationPage.count()) === 0 &&
+        (await page.getByTestId("push-settings").count()) === 0,
+      "v2 notification subpage unmounts after its closed transition completes",
     );
     check(errors.length === 0, "no browser runtime errors");
     console.log(

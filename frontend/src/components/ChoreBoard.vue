@@ -255,8 +255,17 @@ const waterExceptionOpen = ref(false);
 const roundOpen = ref(false);
 const roundVisibleCount = ref(0);
 const pushOpen = ref(false);
+const pushSheetMounted = ref(false);
 const recoveryOpen = ref(false);
 let queuedTool: (() => void) | null = null;
+function openPushSettings() {
+  pushSheetMounted.value = true;
+  pushOpen.value = true;
+}
+function closePushSettings() {
+  presentNewReminders();
+  if (!pushOpen.value) pushSheetMounted.value = false;
+}
 function openTools() {
   if (detailTask.value) {
     queuedTool = () => {
@@ -279,9 +288,7 @@ function menuAction(action: MenuAction) {
       messagesOpen.value = true;
     },
     join: () => emit("join-dorm"),
-    push: () => {
-      pushOpen.value = true;
-    },
+    push: openPushSettings,
     companion: () => {
       companionOpen.value = true;
     },
@@ -2225,11 +2232,11 @@ onUnmounted(() => {
         @closed="presentNewReminders"
       />
       <ChorePushSettings
-        v-if="!preview && (!board.configuration || pushOpen)"
+        v-if="!preview && (!board.configuration || pushSheetMounted)"
         v-model="pushOpen"
         :token="token"
         :nickname="board.member.nickname"
-        @closed="presentNewReminders"
+        @closed="closePushSettings"
       />
       <CreatorRecovery
         v-if="!preview"
