@@ -197,3 +197,8 @@
 - `node scripts/check-dorm-wizard-browser.mjs` 与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：全流程通过，均输出 `PASS []`；涵盖教程、五步向导、预览隔离、创建/首次引导、旧工作台及 320/390/430px 视口。
 - `npm run web:build`、`npm run spec:check`、Impeccable 检测（`[]`）及 `git diff --check` 通过；构建仍有既有 GuestHome 大 chunk 提示。
 - 桌面 Chromium/WebKit 模拟，不等于实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 验收；未创建 PR、未合并、未部署、未访问或修改正式数据。
+
+## 2026-10-24 欢迎引导文案去重
+- 首屏说明改为“首页会显示今天的任务和负责人。”，日历页说明收敛为“设置里可以调整任务。”；教程页数、标题、顺序、导航、球球及行为不变。
+- `scripts/check-dorm-wizard-browser.mjs` 精确断言四页说明文案，保持滑动同步、跳转、短屏与横屏可达性回归；修改前后截图为 `data/startup-review/webkit-welcome-guide-copy-before.png` 与 `data/startup-review/webkit-welcome-guide-copy-after.png`。
+- 自动化为 macOS WebKit/Chromium 的移动视口模拟，非实体手机验收；未接触正式宿舍数据。

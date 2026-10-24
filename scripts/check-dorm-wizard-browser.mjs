@@ -143,10 +143,10 @@ try {
   await p.mouse.up();
   check(
     JSON.stringify(await p.locator(".guide-page p").allTextContents()) === JSON.stringify([
-      "打开首页，看今天的任务和负责人。",
+      "首页会显示今天的任务和负责人。",
       "点“我已完成”，查看进度和下一位。",
       "点球球留话，回首页点消息看回复。",
-      "打开日历看记录；设置里调整任务。",
+      "设置里可以调整任务。",
     ]),
     "welcome tutorial copy names the real entry point and action on each page",
   );
@@ -218,7 +218,7 @@ try {
   });
   await p.locator('.guide-page[aria-hidden="false"] h1', { hasText: "日历里看完成记录" }).waitFor();
   check(JSON.stringify(await p.locator(".guide-dots button").evaluateAll((els) => els.map((el) => [el.offsetLeft, el.offsetWidth]))) === JSON.stringify(guideDotLayout), "tutorial page indicator keeps its layout fixed while the capsule animates");
-  await p.screenshot({ path: `data/startup-review/${engine}-welcome-guide.png` });
+  await p.screenshot({ path: `data/startup-review/${engine}-welcome-guide-copy-after.png` });
   check(await p.getByRole("button", { name: "开始使用", exact: true }).isVisible(), "last tutorial page exposes the start action");
   await p.getByRole("button", { name: "开始使用", exact: true }).click();
   const localEntry=p.getByTestId("dev-new-dorm-wizard");

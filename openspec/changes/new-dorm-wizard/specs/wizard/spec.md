@@ -156,3 +156,11 @@ The creation progress control MUST keep its responsive measurement fallback when
 - **THEN** the progress control responds to window resize while mounted
 - **AND** the listener registered by that control is removed on unmount
 - **AND** progress dragging remains usable after a cancelled or reversed gesture
+
+### Requirement: Welcome guide copy avoids title repetition
+Each welcome-guide page MUST use its body to add useful context or an action without restating the page title.
+#### Scenario: Tutorial copy stays concise
+- **WHEN** a user reads the first or calendar tutorial page
+- **THEN** the first page tells the user that today's tasks and assignee appear on Home without repeating an “open Home” instruction
+- **AND** the calendar page keeps its completion-record topic in the title and uses the body only to add that tasks can be adjusted in Settings
+- **AND** the tutorial page count, order, navigation, and behavior remain unchanged

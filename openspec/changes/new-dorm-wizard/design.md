@@ -50,3 +50,6 @@
 
 ## Creation progress resize fallback
 `CreationProgress.vue` 通过本地 `observeElementSize.mjs` 选择 `ResizeObserver` 或窗口 `resize` 回退，并保留返回的清理函数，在组件卸载时调用。浏览器回归直接使用无 `ResizeObserver` 的隔离环境验证回退监听的触发与清理；主页面继续覆盖真实创建进度控件的取消、丢失指针捕获和反向拖动。
+
+## Welcome guide copy hierarchy
+欢迎教程标题负责标明当前主题，正文只增加标题未提供的操作地点或有用补充。首屏正文不再复述“打开首页”；日历页标题已说明查看完成记录，正文仅提示设置里可以调整任务。四页结构、真实操作路径及球球内容保持不变。
