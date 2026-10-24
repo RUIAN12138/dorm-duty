@@ -1,38 +1,37 @@
-# Codex → ChatGPT · 新宿舍向导校验提示恢复
+# Codex → ChatGPT · 创建完成页到正式首页的球球连续过渡
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `1a00db1db57234c9b5d2cda2e365c4d6aea371f3`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/1a00db1db57234c9b5d2cda2e365c4d6aea371f3
+- code_sha: `03688382137dfd9685d76eb175788231b8f6c58d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/03688382137dfd9685d76eb175788231b8f6c58d
 - related_pr: 无（未创建 PR）
-- requirements: 修复新版创建向导中提交必填错误后，用户改正输入但旧提示仍需再次按“继续”才消失的问题。保留现有校验条件、草稿和创建流程；不影响旧宿舍，不触及生产数据；按协作协议仅更新开发分支与本交接文件。
+- requirements: 延续新宿舍向导精简与交互收尾目标，修复真实创建完成页的球球不能连续进入正式宿舍首页的问题。仅复用现有共享位置过渡；本地体验、旧宿舍业务和正式数据保持隔离。
 - changed_files:
   - `frontend/src/components/onboarding/DormWizard.vue`
+  - `frontend/src/interaction/companion.ts`
   - `scripts/check-dorm-wizard-browser.mjs`
-  - `openspec/changes/new-dorm-wizard/proposal.md`
-  - `openspec/changes/new-dorm-wizard/design.md`
   - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
+  - `openspec/changes/new-dorm-wizard/scope.json`
 - implemented:
-  - `DormWizard.vue` 在本地校验错误存在期间，随草稿输入变化重新计算当前步骤错误；预览确认步骤使用 `draftErrors(draft)`，其他步骤复用 `issue()`。无效值仍显示当前错误，有效值修复后提示在无需再次按主按钮的情况下消失。
-  - 增加 Chromium/WebKit 回归断言覆盖空白输入保持错误、修正宿舍名后错误消失；同步更新既有 OpenSpec 变更记录。
-  - 本轮提交只改上述 7 个文件。未修改后端、数据库迁移、正式宿舍数据、创建 API 或旧宿舍路径。工作树中原有的 `site/runtime/email-runtime.cjs` 修改未触碰、未暂存、未提交；开发分支 push 后远端 SHA 与本次完整 SHA 一致。
+  - 根因：正式首页已有 680ms WAAPI 球球飞入动画，但交接起点只从旧登录入口采集。创建成功页点击「开始使用」没有登记当前球球几何位置，正式首页因此从默认位置显示。
+  - 共享交接函数现在接受显式来源元素；真实邀请码确认页在退出前测量当前向导球球，并把位置传给正式值日页原有的飞入动画。原登录来源仍使用默认查询；本地体验没有真实房间交接。
+  - 在浏览器测试中拦截该动画，比较「开始使用」点击前球球坐标与正式任务页首帧位移，误差小于 2px；另验证本地体验退出不新增真实首页交接。
+  - 同步 OpenSpec 需求、验收记录与范围白名单。业务代码提交为 `ec5d6b8b582a8042852cd208a8b39d0878866b36`，随后登记范围的文档提交为当前完整 SHA `03688382137dfd9685d76eb175788231b8f6c58d`。两个提交都已推送到原开发分支。
+  - 工作树中原有的 `site/runtime/email-runtime.cjs` 用户修改未编辑、未暂存、未提交；未修改旧宿舍规则、宿舍记录或数据库。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离创建、教程、预览和任务工作台流程通过，新增校验恢复断言通过，最终 `PASS []`。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导、预览、真实创建与工作台流程通过，最终 `PASS []`；包含新增连续过渡几何断言与本地体验隔离断言。
   - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，最终 `PASS []`。
-  - `npm run web:build`：`vue-tsc`、Vite 与 PWA 构建通过；有既有 `GuestHome` chunk 大于 500 KB 的提示。
-  - `npm run spec:validate`：18/18 通过。
-  - `node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check` 通过。
-  - 在提交后、无本地未提交文件的独立 worktree 中运行 `npm run spec:scope`：通过，17 个变更、364 个受登记文件，digest `79cf479d775f1970c4914c0dc568323d6d391c4158367ae21ea7d020e94c68cd`。主工作树因原有未提交的 `site/runtime/email-runtime.cjs` 文件会被同一范围扫描识别为 out of scope；该用户工作区改动未纳入本次提交。
-  - 移动视口截图：`data/startup-review/chromium-wizard-name-after.png`、`data/startup-review/webkit-wizard-name-after.png`。截图为浏览器模拟，不是实体设备捕获。
-- CI: GitHub API 对本 SHA 返回 Commit Status `pending`、`total_count=0`、无 statuses；Check Runs 0、Actions workflow runs 0。当前没有 CI 成功记录。
+  - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；保留既有 `GuestHome` 超 500 KB chunk 提示。
+  - `npm run spec:validate`：18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过；Impeccable detector 对修改后的向导文件返回 `[]`。
+  - 在提交 SHA 的干净独立 worktree 运行 `npm run spec:scope`：通过，17 个变更、365 个登记文件，digest `625b0da598f7030c9e35cf081abff9fad3499bb7989fe7c2e2c5afea13a00ae4`。
+  - CI：GitHub Status `pending`、0 个 statuses；0 个 Check Runs；该 SHA 有 0 个 GitHub Actions runs。没有 CI 通过记录。
 - platform_status:
-  - macOS Chromium/WebKit 移动视口自动化通过；这不等于真机验收。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机测试。
+  - macOS Chromium/WebKit 在隔离的 390×844 移动视口中通过；这是桌面浏览器引擎模拟。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验收。
   - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
 - remaining:
-  - 当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 仍为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，不匹配本 SHA；本次协调检查未发现针对 `61c70f1` 或 `1a00db1` 的新评审。新提交待独立审查。
-  - 前一评审中的 P1-A 通知抽屉卸载时序已由 `61c70f1` 实施并交接，但评审文档没有被改写或视作已评审本 SHA。
-  - 先前评审记录的四项全量 `web:verify` 失败仍未重跑；本轮只做向导定向 Chromium/WebKit 回归，不能称全量 Web 回归通过。
-  - 真实设备及登录、系统通知权限、正式部署仍未验收。
+  - 协调分支当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 是 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，不匹配本交接 SHA；本轮没有针对 `1a00db1` 或本 SHA 的新评审建议。上一轮 P1-A 通知抽屉生命周期修复已由 `61c70f1` 提交，但评审文档仍只覆盖旧 SHA。
+  - 更早评审提到四项全量 `web:verify` 失败，本轮未重跑；本轮仅完成新宿舍向导定向回归，不代表全站 Web 验收。
+  - 真实设备、登录、系统通知权限及正式部署仍未验收。
 - questions: 暂无。
