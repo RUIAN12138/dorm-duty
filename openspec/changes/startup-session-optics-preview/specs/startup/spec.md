@@ -12,6 +12,18 @@ The application MUST use the durable browser session token as the canonical bear
 #### Scenario: A delayed unauthorized response arrives after a new login
 - **WHEN** an API request made with an old token returns unauthorized after a replacement token has been persisted
 - **THEN** the replacement token remains stored and the current session is not marked expired
+
+### Requirement: Do not classify an unverified session as signed out
+The route guard MUST keep protected content and the password-login page out of view while session restoration is unresolved. A retained credential that cannot be verified because of a temporary connection failure MUST return the user to the public startup recovery surface, not the login form.
+
+#### Scenario: Temporary failure while opening a protected route
+- **WHEN** a stored session token is retained but session initialization remains unresolved
+- **THEN** navigation returns to the public startup surface
+- **AND** it does not redirect to `/admin/login`
+
+#### Scenario: Rejected or absent session after verification settles
+- **WHEN** session initialization completes without a valid user
+- **THEN** protected routes continue to redirect to `/admin/login`
 ### Requirement: A live email session survives service-process restart
 The email authentication service MUST restore an unexpired HttpOnly session cookie and its bound dorm identities after an application-server runtime restart. Restart recovery MUST use the existing persisted session and configured expiry; it MUST NOT mint a new email session or extend its lifetime.
 #### Scenario: Restart with an unexpired email cookie

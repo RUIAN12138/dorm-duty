@@ -93,3 +93,139 @@ check(m.restoreSessionToken()==='legacy-getter-fallback','a throwing localStorag
 if(localDescriptor)Object.defineProperty(globalThis,'localStorage',localDescriptor);
 else delete globalThis.localStorage;
 console.log(`${n} total session checks passed`);
+
+// Exercise the actual router guard with isolated Vue Router/session/email
+// fixtures. A network-failed restoration must not present password login.
+let guard;
+const routeHarness = {
+  session: {
+    initialized: false,
+    user: null,
+    initCalls: 0,
+    async init() {
+      this.initCalls++;
+    },
+  },
+  emailAccount: { required: false, loggedIn: false },
+  refreshEmailAccount: async () => {},
+  createRouter(options) {
+    return {
+      options,
+      beforeEach(callback) {
+        guard = callback;
+      },
+    };
+  },
+};
+globalThis.__routeHarness = routeHarness;
+const routerBuild = await build({
+  entryPoints: ["frontend/src/router/index.ts"],
+  bundle: true,
+  write: false,
+  format: "esm",
+  define: { "import.meta.env.BASE_URL": JSON.stringify("/") },
+  plugins: [
+    {
+      name: "startup-route-fixtures",
+      setup(builder) {
+        builder.onResolve({ filter: /\.vue$/ }, (args) => ({
+          path: args.path,
+          external: true,
+        }));
+        builder.onResolve({ filter: /^vue-router$/ }, () => ({
+          path: "router",
+          namespace: "route-fixture",
+        }));
+        builder.onLoad(
+          { filter: /.*/, namespace: "route-fixture" },
+          (args) => {
+            if (args.path === "router")
+              return {
+                contents:
+                  "export const createWebHistory=()=>({}); export const createRouter=(options)=>globalThis.__routeHarness.createRouter(options);",
+              };
+            if (args.path === "session")
+              return {
+                contents:
+                  "export const useSession=()=>globalThis.__routeHarness.session;",
+              };
+            return {
+              contents:
+                "export const emailAccount=globalThis.__routeHarness.emailAccount; export const refreshEmailAccount=()=>globalThis.__routeHarness.refreshEmailAccount();",
+            };
+          },
+        );
+        builder.onResolve({ filter: /stores\/session/ }, () => ({
+          path: "session",
+          namespace: "route-fixture",
+        }));
+        builder.onResolve({ filter: /api\/email/ }, () => ({
+          path: "email",
+          namespace: "route-fixture",
+        }));
+      },
+    },
+  ],
+});
+await import(
+  "data:text/javascript;base64," +
+    Buffer.from(routerBuild.outputFiles[0].text).toString("base64")
+);
+const route = (path, isPublic = false) => ({
+  path,
+  fullPath: `${path}?tab=next`,
+  meta: { public: isPublic },
+});
+routeHarness.session = {
+  initialized: false,
+  user: null,
+  initCalls: 0,
+  async init() {
+    this.initCalls++;
+  },
+};
+check(
+  (await guard(route("/", true))) === undefined &&
+    routeHarness.session.initCalls === 0,
+  "public startup route remains available without running the protected-route guard",
+);
+routeHarness.session = {
+  initialized: false,
+  user: null,
+  initCalls: 0,
+  async init() {
+    this.initCalls++;
+  },
+};
+check(
+  (await guard(route("/manage"))) === "/" &&
+    routeHarness.session.initCalls === 1,
+  "unresolved retained session returns to public recovery instead of password login",
+);
+check(
+  (await guard(route("/admin/login", true))) === "/",
+  "unresolved session cannot flash the login form",
+);
+routeHarness.session = { initialized: true, user: null, async init() {} };
+const rejectedSessionRedirect = await guard(route("/manage"));
+check(
+  rejectedSessionRedirect.path === "/admin/login" &&
+    rejectedSessionRedirect.query.next === "/manage?tab=next",
+  "verified signed-out session still reaches the requested login flow",
+);
+routeHarness.session = { initialized: true, user: { id: 7 }, async init() {} };
+check(
+  (await guard(route("/manage"))) === undefined,
+  "verified authenticated session can enter protected routes",
+);
+check(
+  (await guard(route("/admin/login", true))) === "/dorm",
+  "verified authenticated session skips the login page",
+);
+routeHarness.refreshEmailAccount = async () => { throw new Error("offline"); };
+routeHarness.session = { initialized: true, user: null, async init() {} };
+check(
+  (await guard(route("/manage"))) === "/",
+  "email-verification transport failure stays on the public recovery surface",
+);
+console.log("7 router recovery checks passed");

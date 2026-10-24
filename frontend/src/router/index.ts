@@ -57,6 +57,10 @@ router.beforeEach(async (to) => {
   }
   const session = useSession();
   await session.init();
+  // A retained token that could not be checked is not proof of logout. Keep
+  // protected and login routes behind the public startup recovery surface so
+  // temporary network failures cannot flash a misleading login page.
+  if (!session.initialized) return "/";
   if (!to.meta.public && !session.user)
     return { path: "/admin/login", query: { next: to.fullPath } };
   if (to.path === "/admin/login" && session.user) return "/dorm";

@@ -11,6 +11,7 @@
     "frontend/src/components/ChoreBoard.vue",
     "frontend/src/interaction/startup.ts",
     "frontend/src/interaction/persistentSession.ts",
+    "frontend/src/router/index.ts",
     "frontend/src/experiments/",
     "frontend/public/apple-touch-icon.png",
     "frontend/public/favicon",

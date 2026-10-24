@@ -36,3 +36,14 @@ node scripts/preview-startup/server.mjs -> http://127.0.0.1:8094/
 - `npm run web:verify` 全量验证退出码 0：前后端构建以及清单内前端、服务端、迁移和邮件检查全部通过。之前记录的五项失败属于较早一次检查结果，不再是当前结果；没有为清绿而删减断言或改变业务阈值。
 - `npm run spec:validate`：19/19 通过。当前含未提交用户改动的工作树直接运行 `npm run spec:scope` 会报 `Out of scope: site/runtime/email-runtime.cjs`；该文件未由本轮触碰、暂存或提交。范围检查需在只包含本轮授权文件的干净工作树再次运行。
 - 仍未在实体 vivo、iPhone 或 HarmonyOS 设备测试。当前预览服务使用隔离数据；未创建 PR、未推送、未合并或部署。
+
+## 2026-10-24 · 临时会话恢复失败不再误导至登录页
+
+- 根因：路由守卫等待 `session.init()` 后只检查 `session.user`。网络验证失败时，session 有意保留本地 bearer 并保持 `initialized=false`，守卫却仍把用户送往 `/admin/login`，把暂时无法验证表现成已登出。
+- 修复：会话初始化未完成时，受保护页及登录页都返回公开启动入口；启动入口继续按既有流程显示恢复／重试。初始化完成且无有效用户时，受保护页面仍按原行为跳到登录页；邮箱准入检查和主动退出逻辑不变。
+- `node scripts/check-startup-session.mjs`：原 13 项会话存储/API 检查通过；新增 7 项实际路由守卫隔离断言通过，覆盖公开入口、未完成恢复、已验证登出、已登录与邮箱验证网络错误。
+- `npm --prefix frontend run typecheck`：通过。
+- `npm run web:verify`：前端与 Worker 构建及完整列出的前后端回归脚本均通过，退出码 0；构建仍显示既有 `GuestHome` 超 500 KB 提示。
+- `npm run spec:validate`：19/19 通过；`npm run spec:scope` 在去除临时 node_modules 符号链接并恢复测试生成文件后通过，18 个 change、383 个登记文件。
+- Chromium 与 WebKit 桌面隔离启动浏览器各 11 项通过，错误数组为空；测试使用临时 SQLite、模拟邮箱和浏览器上下文，不等于 Android WebView、iPhone Safari/PWA 或 HarmonyOS ArkWeb 真机验证。
+- 未访问正式服务或数据库，未创建宿舍、PR，未合并 main，未部署。原开发工作树中的 `site/runtime/email-runtime.cjs` 用户修改没有触碰。
