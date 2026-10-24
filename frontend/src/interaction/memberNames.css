@@ -1,0 +1,19 @@
+/* Only person labels. No downloadable font, no global text/font override. */
+.rounded-member-name,
+.task-detail-assignee,
+.round-ranking strong,
+.order-people strong,
+.member-row strong,
+.record-person {
+  font-family:
+    "Yuanti SC", "Hiragino Maru Gothic ProN", "Hiragino Sans GB",
+    "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-weight: 600;
+  font-synthesis: none;
+  letter-spacing: 0.015em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-detail-person {
+  gap: 12px;
+}

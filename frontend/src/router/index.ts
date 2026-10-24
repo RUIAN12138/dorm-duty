@@ -14,6 +14,11 @@ export const router = createRouter({
       meta: { public: true },
     },
     {
+      path: "/guide",
+      component: () => import("../views/WelcomeGuide.vue"),
+      meta: { public: true },
+    },
+    {
       path: "/water",
       component: () => import("../views/GuestHome.vue"),
       meta: { public: true },
@@ -38,7 +43,7 @@ export const router = createRouter({
   ],
 });
 router.beforeEach(async (to) => {
-  if (["/", "/water", "/calendar"].includes(to.path)) return;
+  if (["/", "/water", "/calendar", "/guide"].includes(to.path)) return;
   try {
     await refreshEmailAccount();
     if (

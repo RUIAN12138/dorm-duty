@@ -20,7 +20,7 @@ const claim = await (
     data: { invite_code: room.invite_code, nickname: member.nickname },
   })
 ).json();
-const entry = {
+let entry = {
   id: room.dorm.id,
   name: "启动隔离预览",
   invite_code: room.invite_code,
@@ -29,6 +29,7 @@ const entry = {
   marker_id: member.marker_id,
   is_creator: false,
 };
+let currentToken = claim.access_token;
 let logged = true;
 const api = http.createServer(async (req, res) => {
   try {
@@ -59,7 +60,7 @@ const api = http.createServer(async (req, res) => {
                   rooms: logged ? [entry] : [],
                 }
               : u.pathname === "/email/enter"
-                ? { ...entry, access_token: claim.access_token }
+                ? { ...entry, access_token: currentToken }
                 : {},
         ),
       );
@@ -75,8 +76,25 @@ const api = http.createServer(async (req, res) => {
       token: req.headers.authorization?.replace(/^Bearer /, ""),
       ...(body ? { data: JSON.parse(body) } : {}),
     });
+    const text = await response.text();
+    if (u.pathname === "/guest/create" && response.ok) {
+      const created = JSON.parse(text);
+      const user = created.dorm.members.find(
+        (m) => m.user_id === created.member_id,
+      );
+      entry = {
+        id: created.dorm.id,
+        name: created.dorm.name,
+        invite_code: created.invite_code,
+        member_id: created.member_id,
+        nickname: user.nickname,
+        marker_id: user.marker_id,
+        is_creator: true,
+      };
+      currentToken = created.access_token;
+    }
     res.writeHead(response.status, { "content-type": "application/json" });
-    res.end(await response.text());
+    res.end(text);
   } catch {
     res.writeHead(500);
     res.end("{}");

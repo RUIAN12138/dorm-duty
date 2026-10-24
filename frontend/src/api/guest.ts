@@ -1,3 +1,4 @@
+import type { DormConfiguration } from "../interaction/dormDraft";
 import { query } from "./index";
 import { requestJson } from "./transport";
 import type { Duty } from "./types";
@@ -11,6 +12,7 @@ export interface GuestDorm {
   id: number;
   name: string;
   is_demo: boolean;
+  configuration?: DormConfiguration | null;
   members: GuestMember[];
 }
 export interface GuestTasks {
@@ -45,6 +47,7 @@ export function createGuestDorm(
     nickname: string;
     members: string[];
     marker_id?: string;
+    configuration?: DormConfiguration;
   },
   signal: AbortSignal,
 ) {

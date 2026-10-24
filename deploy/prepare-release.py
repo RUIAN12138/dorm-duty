@@ -22,6 +22,7 @@ subprocess.run(['node', 'scripts/embed-frontend.mjs'], cwd=root / 'site', env={*
 files = ['scripts/local-server.mjs','scripts/native-push-provider.mjs','site/worker/backend.mjs','site/worker/chores.mjs','site/shared/member-marks.mjs','site/shared/push-endpoint.mjs','site/local/database.mjs','site/local/sqlite-d1.mjs','site/runtime/push-runtime.cjs','site/runtime/WEB_PUSH_LICENSE', 'site/scripts/check-native-push.mjs', 'site/scripts/check-cloud-backend.mjs', 'site/scripts/check-history.mjs', 'site/scripts/check-recency.mjs']
 files += ['site/shared/notifications.mjs']
 files += ['scripts/companion-ai.mjs']
+files += ['site/shared/dorm-configuration.mjs']
 files += ['site/shared/http-json.mjs', 'site/worker/water-flow.mjs']
 files += ['site/shared/ical.mjs', 'site/worker/calendar.mjs']
 files += ['site/runtime/email-runtime.cjs', 'site/runtime/NODEMAILER_LICENSE']

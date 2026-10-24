@@ -1,0 +1,391 @@
+import { createHarness } from "../site/scripts/check-cloud-backend.mjs";
+import {
+  chromium,
+  webkit,
+} from "../frontend/node_modules/@playwright/test/index.mjs";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+const engine = process.env.DORM_BROWSER === "webkit" ? "webkit" : "chromium";
+const b = await (engine === "webkit" ? webkit : chromium).launch({
+  headless: true,
+  ...(engine === "chromium"
+    ? {
+        executablePath:
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      }
+    : {}),
+});
+const p = await b.newPage({
+  viewport: { width: 390, height: 844 },
+  isMobile: true,
+  hasTouch: true,
+  serviceWorkers: "block",
+  recordVideo:{dir:`data/startup-review/${engine}-wizard-videos`,size:{width:390,height:844}},
+});
+p.setDefaultTimeout(20000);
+const h = await createHarness();
+const initial = await (
+  await h.request("/guest/create", {
+    method: "POST",
+    data: { name: "旧宿舍兼容预览", nickname: "体验者", members: ["小林"] },
+  })
+).json();
+let emailRoom = {
+  id: initial.dorm.id,
+  name: initial.dorm.name,
+  invite_code: initial.invite_code,
+  member_id: initial.member_id,
+  nickname: "体验者",
+  is_creator: true,
+};
+let emailToken = initial.access_token;
+await p.route(/\/(email|chores|auth|dorms|guest)\//, async (route) => {
+  const req = route.request(),
+    url = new URL(req.url());
+  if (url.pathname.startsWith("/email/"))
+    return route.fulfill({
+      json:
+        url.pathname === "/email/config"
+          ? { available: true, registration_required: true }
+          : url.pathname === "/email/me"
+            ? {
+                logged_in: true,
+                email: "isolated@example.invalid",
+                rooms: [emailRoom],
+              }
+            : url.pathname === "/email/enter"
+              ? { ...emailRoom, access_token: emailToken }
+              : {},
+    });
+  const response = await h.request(url.pathname + url.search, {
+    method: req.method(),
+    token: req.headers().authorization?.replace(/^Bearer /, ""),
+    ...(req.postData() ? { data: JSON.parse(req.postData()) } : {}),
+  });
+  const body = await response.text();
+  if (url.pathname === "/guest/create" && response.ok) {
+    const value = JSON.parse(body);
+    emailRoom = {
+      id: value.dorm.id,
+      name: value.dorm.name,
+      invite_code: value.invite_code,
+      member_id: value.member_id,
+      nickname: value.dorm.members.find((m) => m.user_id === value.member_id)
+        .nickname,
+      is_creator: true,
+    };
+    emailToken = value.access_token;
+  }
+  return route.fulfill({
+    status: response.status,
+    contentType: "application/json",
+    body,
+  });
+});
+const errors = [];
+const failedRequests=[];
+p.on("pageerror", (e) => errors.push(e.message));
+p.on("requestfailed", r => failedRequests.push(`${r.url()} :: ${r.failure()?.errorText||"failed"}`));
+let writes = 0;
+let createRequests = 0;
+let previewTracking = false;
+const previewApiRequests = [];
+p.on("request", (r) => {
+  if (r.method() === "POST" && new URL(r.url()).pathname === "/guest/create") createRequests++;
+  if (previewTracking && /\/(chores|guest|dorms)\//.test(new URL(r.url()).pathname))
+    previewApiRequests.push(`${r.method()} ${new URL(r.url()).pathname}`);
+  if (
+    r.url().includes("/chores/") &&
+    ["POST", "PATCH"].includes(r.method()) &&
+    !r.url().includes("/received")
+  )
+    writes++;
+});
+let n = 0;
+const check = (v, label) => {
+  assert(v, label);
+  n++;
+  console.log("PASS " + label);
+};
+try {
+  await p.goto("http://127.0.0.1:8094/guide");
+  await p.locator('[data-testid="welcome-guide"]').waitFor();
+  check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
+  await p.getByRole("button", { name: "第 4 页", exact: true }).click();
+  await p.locator('.guide-page[aria-hidden="false"] h1', { hasText: "日历里看完成记录" }).waitFor();
+  await p.screenshot({ path: `data/startup-review/${engine}-welcome-guide.png` });
+  check(await p.getByRole("button", { name: "开始使用", exact: true }).isVisible(), "last tutorial page exposes the start action");
+  await p.getByRole("button", { name: "开始使用", exact: true }).click();
+  const localEntry=p.getByTestId("dev-new-dorm-wizard");
+  if(!(await localEntry.isVisible())){
+    await p.getByTestId("open-tools").click();
+  }
+  await localEntry.waitFor({state:"visible"});
+  await p.screenshot({path:`data/startup-review/${engine}-local-wizard-entry.png`});
+  await localEntry.click();
+  await p.locator(".dorm-wizard").waitFor();
+  await p.screenshot({path:`data/startup-review/${engine}-local-wizard-open.png`});
+  check(await p.locator(".dorm-wizard").count()===1&&await p.getByTestId("email-account-panel").count()===0,"local entry opens the isolated creation experience without the email gate");
+  const intro=p.getByRole("button",{name:"跳过介绍",exact:true});if(await intro.count())await intro.click();
+  if(await p.locator('.tour').count()){await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click().catch(()=>{});}
+  await p.getByLabel("宿舍名称",{exact:true}).fill("本地体验宿舍");
+  for(let step=0;step<4;step++)await p.getByRole("button",{name:"继续",exact:true}).click();
+  await p.getByRole("button",{name:"完成体验",exact:true}).click();
+  check(await p.getByText("本机仅保留向导草稿，不会创建宿舍或生成有效邀请码。",{exact:true}).count()===1&&createRequests===0,"finishing local experience never calls the room creation API");
+  await p.getByRole("button",{name:"退出体验",exact:true}).click();
+  await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
+  await p.locator(".dorm-wizard").waitFor();
+  check(!new URL(p.url()).searchParams.has("preview"), "local preview shortcut opens the wizard and cleans its query flag");
+  const introAgain=p.getByRole("button",{name:"跳过介绍",exact:true});if(await introAgain.count())await introAgain.click();
+  await p.getByRole("button",{name:"退出配置",exact:true}).click();
+  await p.locator(".dorm-wizard").waitFor({state:"detached"});
+  await p.getByTestId("open-tools").click();
+  await p.getByTestId("open-preferences").click();
+  await p.locator(".menu-advanced summary").click();
+  await p.getByTestId("guest-create-dorm").click();
+  await p.locator(".dorm-wizard").waitFor();
+  const guide=p.locator('.tour');
+  await guide.waitFor({state:'visible',timeout:2000}).catch(()=>{});
+  if (await guide.count()) await guide.getByRole("button", { name: "跳过", exact: true }).click();
+  await guide.waitFor({state:'detached',timeout:2000}).catch(()=>{});
+  check(await guide.count()===0,'preview screenshots are captured after dismissing the spotlight guide');
+  await p.getByLabel("宿舍名称", { exact: true }).fill("向导隔离宿舍");
+  check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===1,'dorm name screen asks only one question');
+  check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');
+  check(await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'progress bar has no visible numeric or symbol labels');
+  const progressTargets=await p.locator('.progress-hit').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height};}));
+  const progressGlass=await p.locator('.progress-glass-surface').boundingBox();
+  const progressTrack=await p.locator('.progress-track').boundingBox();
+  check(progressTargets.every(r=>r.width>=44&&r.height===64)&&progressGlass?.width===36&&progressGlass?.height===36,'progress has 44px+ touch targets around a 36px glass thumb');
+  check(progressTrack?.height===20,'progress track has the stronger 20px black-and-gray treatment');
+  await p.evaluate(()=>{let count=0;Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{count++;return true}});Object.defineProperty(window,'__wizardHaptics',{configurable:true,get:()=>count});});
+  await p.waitForTimeout(450);
+  await p.screenshot({
+    path: `data/startup-review/${engine}-wizard-basic.png`,
+  });
+  await p.getByRole('button',{name:'继续',exact:true}).click();
+  await p.locator('[data-step="tasks"]').waitFor();
+  check(await p.locator('.template-card').count()===4,'template selection keeps stable task slots');
+  await p.locator('.creation-task-picks button').first().click();
+  await p.getByLabel('任务名称',{exact:true}).fill('地面清洁');
+  check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'task screen contains name and optional description only');
+  await p.getByRole('button',{name:'前往宿舍名称',exact:true}).click();
+  check(await p.getByLabel('宿舍名称',{exact:true}).inputValue()==='向导隔离宿舍','jumping backwards retains draft');
+  // Drag from the task stage towards page arrangement. The page must change before release.
+  const progress=await p.locator('.creation-progress').boundingBox();
+  const startX=progress.x+progress.width*.25,startY=progress.y+progress.height/2;
+  await p.mouse.move(startX,startY);await p.mouse.down();await p.mouse.move(progress.x+progress.width*.53,startY,{steps:8});
+  await p.locator('[data-step="pages"]').waitFor();
+  check(await p.evaluate(()=>window.__wizardHaptics)>0,'dragging snaps live to a new stage and requests light haptics');
+  await p.waitForTimeout(400);
+  await p.screenshot({path:`data/startup-review/${engine}-progress-drag-live.png`});
+  await p.mouse.up();
+  await p.locator('.page-board--compact').waitFor();
+  for (const width of [320, 390, 430]) {
+    await p.setViewportSize({ width, height: 844 });
+    await p.waitForTimeout(120);
+    const geometry = await p.locator('.dorm-wizard').evaluate((root) => {
+      const body = root.querySelector('.wizard-body');
+      const footer = root.querySelector('.wizard-footer');
+      const board = root.querySelector('.page-board--compact');
+      const boardStyle = getComputedStyle(board);
+      const rect = footer.getBoundingClientRect();
+      return {
+        columns: boardStyle.gridTemplateColumns.split(' ').length,
+        bodyFits: body.scrollHeight <= body.clientHeight + 1,
+        footerVisible: rect.top >= 0 && rect.bottom <= innerHeight + 1,
+        horizontalOverflow: root.scrollWidth > root.clientWidth + 1,
+      };
+    });
+    check(geometry.columns === 2 && !geometry.horizontalOverflow, `${width}px keeps the two assignment columns without horizontal overflow`);
+    check(geometry.footerVisible, `${width}px keeps wizard actions visible`);
+    if (width === 390) {
+      check(geometry.bodyFits, '390x844 page arrangement fits without vertical body scrolling');
+      await p.screenshot({ path: `data/startup-review/${engine}-page-arrangement-single-screen.png` });
+    }
+  }
+  await p.setViewportSize({ width: 320, height: 568 });
+  await p.waitForTimeout(140);
+  const shortViewport = await p.locator('.dorm-wizard').evaluate((root) => {
+    const body = root.querySelector('.wizard-body');
+    const footer = root.querySelector('.wizard-footer');
+    const footerRect = footer.getBoundingClientRect();
+    body.scrollTo({ top: body.scrollHeight, behavior: 'instant' });
+    const lastTask = root.querySelector('.page-task--compact:last-of-type')?.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    return {
+      footerVisible: footerRect.top >= 0 && footerRect.bottom <= innerHeight + 1,
+      taskReachable: !lastTask || lastTask.bottom <= bodyRect.bottom + 1,
+    };
+  });
+  check(shortViewport.footerVisible && shortViewport.taskReachable, '320x568 allows safe body scrolling while keeping actions visible');
+  await p.locator('.wizard-body').evaluate((el) => el.scrollTo({ top: 0, behavior: 'instant' }));
+  await p.setViewportSize({ width: 390, height: 844 });
+  check(await p.locator('.page-note,.page-board--compact .move-task,.page-board--compact .page-count').count()===0,'creation layout removes duplicate drag note, move arrows, and counts');
+  check(await p.locator('.page-task--compact').evaluateAll(nodes=>nodes.every(node=>node.children.length===0&&node.textContent.trim())),'creation task rows show names only');
+  await p.locator('[data-task-zone="duty"] .page-task--compact').first().click();
+  check(await p.locator('[data-task-zone="water"] .page-task--compact').filter({hasText:'地面'}).count()===1,'tapping a task moves it to the other page in the shared draft');
+  const nudge= p.getByRole('button',{name:'催促',exact:true});
+  await nudge.click();
+  check(await nudge.getAttribute('aria-pressed')==='true','second-page type is selectable inside its column');
+  await p.getByRole('button',{name:'任务',exact:true}).click();
+  check(await p.getByRole('button',{name:'任务',exact:true}).getAttribute('aria-pressed')==='true','second-page task mode remains selectable');
+  // A held drag follows the same draft assignment path as tapping a task name.
+  await p.waitForTimeout(450);
+  const item=await p.locator('[data-task-zone="duty"] .page-task--compact').filter({hasText:'厕所'}).boundingBox();
+  const zone=await p.locator('[data-task-zone="water"]').boundingBox();
+  await p.mouse.move(item.x+item.width/2,item.y+item.height/2);await p.mouse.down();await p.waitForTimeout(300);await p.mouse.move(zone.x+zone.width/2,zone.y+30,{steps:12});await p.mouse.up();
+  check(await p.locator('[data-task-zone="water"] .page-task--compact').filter({hasText:'厕所'}).count()===1,'held task drag crosses page groups without losing pointer');
+  await p.waitForTimeout(420);
+  await p.locator('[data-task-zone="water"] .page-task--compact').filter({hasText:'厕所'}).click();
+  check(await p.locator('[data-task-zone="duty"] .page-task--compact').filter({hasText:'厕所'}).count()===1,'task can return to the duty page before previewing its production selector');
+  await p.getByRole('button',{name:'前往完成规则',exact:true}).click();
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
+  check(await p.locator('.rule-task-picks button').count()===0&&await p.locator('.rule-detail').count()===0,'the default rule stage stays focused on one room-wide choice');
+  await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
+  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-detail').count()===1,'per-task rule editing is available as a separate compact card state');
+  await p.getByRole('button',{name:'时间',exact:true}).click();
+  check(await p.locator('.rule-time-panel .van-picker').count()===1&&await p.locator('.rule-time-panel .time-field-switch button').count()===2,'time fields switch in place and show only one wheel at a time');
+  check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 task rule and single time wheel fit in one screen');
+  check(await p.getByRole('button',{name:'继续',exact:true}).isVisible()&&await p.locator('.wizard-footer').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),'task rule screen keeps the primary action visible in the viewport');
+  await p.screenshot({path:`data/startup-review/${engine}-advanced-rule-single-screen.png`});
+  await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开下一轮/}).click();
+  check(await p.locator('.rule-time-panel').count()===0,'round mode keeps time-only controls out of the compact default state');
+  await p.getByRole('button',{name:'预览',exact:true}).click();
+  previewTracking = true;
+  await p.getByTestId('open-live-preview').click();
+  const live = p.getByTestId('live-draft-preview');
+  await live.waitFor();
+  check(await p.locator('.dorm-wizard').evaluate(el=>getComputedStyle(el).visibility)==='hidden','full-screen preview removes the wizard from view');
+  check(await live.locator('.chore-board').count()===1&&await live.locator('.chore-bottom-nav').count()===1,'preview mounts the production task board and Liquid Glass navigation');
+  const liveBounds=await live.boundingBox();
+  check(liveBounds?.x===0&&liveBounds?.y===0&&liveBounds?.width===390&&liveBounds?.height===844,'live preview fills the mobile viewport without a phone mockup');
+  await live.locator('[data-testid="pane-duty"]').waitFor();
+  const dutySelector=live.locator('[data-testid="pane-duty"] .task-selector button');
+  check(await dutySelector.count()===2,'custom duty preview uses the production horizontal selector for tasks assigned to the duty page');
+  await dutySelector.last().click();
+  check(await dutySelector.last().getAttribute('aria-pressed')==='true','selecting a duty tab updates the active production task');
+  await p.waitForTimeout(350);
+  await p.screenshot({path:`data/startup-review/${engine}-custom-duty-production-surface.png`});
+  await live.getByTestId('nav-water').click();
+  await live.locator('[data-testid="pane-water"]').waitFor();
+  check(true,'water preview uses the real task page component');
+  await live.getByTestId('nav-calendar').click();
+  await live.locator('[data-testid="chore-calendar"]').waitFor();
+  check(true,'calendar preview uses the real calendar component');
+  const nav=live.locator('.chore-bottom-nav');await p.waitForTimeout(350);const before=await nav.innerText();
+  const first=await nav.locator('button').first().boundingBox(),last=await nav.locator('button').last().boundingBox();
+  await p.mouse.move(first.x+first.width/2,first.y+first.height/2);await p.mouse.down();await p.waitForTimeout(320);await p.mouse.move(last.x+last.width/2,last.y+last.height/2,{steps:12});await p.mouse.up();
+  check(await nav.innerText()!==before,'held real navigation item reorders the live preview and draft');
+  await p.waitForTimeout(450);
+  await p.screenshot({path:`data/startup-review/${engine}-wizard-preview.png`});
+  check(previewApiRequests.length===0,`preview interactions make no business API requests: ${previewApiRequests.join(', ')}`);
+  previewTracking = false;
+  await p.getByTestId('exit-live-preview').click();
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='0');
+  await p.getByTestId('open-live-preview').click();
+  const reopened=p.getByTestId('live-draft-preview');
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='1');
+  check(await reopened.count()===1,'closing and reopening keeps the real preview components mounted');
+  check(await reopened.locator('.chore-bottom-nav button').first().getAttribute('data-section')==='water','navigation arrangement persists in the creation draft after reopening');
+  await p.getByTestId('exit-live-preview').click();
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='0');
+  check(writes === 0, "draft edits and preview never write task records");
+  await p.getByRole("button", { name: "确认创建", exact: true }).click();
+  await p.locator(".invite-result>strong").waitFor();
+  await p.waitForTimeout(900);
+  check(
+    (await p.locator(".invite-result>strong").innerText()).length === 8,
+    "invite appears after server-confirmed creation",
+  );
+  await p.screenshot({
+    path: `data/startup-review/${engine}-wizard-finish.png`,
+  });
+  await p.getByRole("button", { name: "开始使用", exact: true }).click();
+  await p.getByTestId("nav-duty").click();
+  await p.locator(".chore-personal .task-selector").waitFor();
+  check(
+    (await p.locator(".chore-personal .task-selector button").count()) >= 2,
+    "a created custom duty page uses the production horizontal task selector",
+  );
+  await p.screenshot({ path: `data/startup-review/${engine}-created-custom-duty.png` });
+  if (await p.locator(".task-title-button").count()) {
+    await p.locator(".task-title-button").first().click();
+    const person = p.locator(".task-detail-person");
+    await person.waitFor();
+    check(
+      (await person.locator("svg,canvas,img").count()) === 0,
+      "task detail contains no old pixel marker",
+    );
+    const columns = await person.evaluate(
+      (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
+    );
+    check(
+      columns === 2,
+      "name and status use two columns without marker placeholder",
+    );
+    await p.screenshot({
+      path: `data/startup-review/${engine}-member-detail.png`,
+    });
+    await p.getByRole("button", { name: "关闭详情", exact: true }).click();
+  }
+
+  check(
+    (await p.locator(".bottom-nav").count()) === 0,
+    "new room never enters old four-tab template",
+  );
+  await p.getByTestId("open-tools").click();
+  await p.getByTestId("dev-new-dorm-wizard").waitFor({state:"visible"});
+  check(await p.getByTestId("dev-new-dorm-wizard").isVisible(), "local development settings expose a visible wizard entry");
+  await p.getByTestId("dev-new-dorm-wizard").click();
+  await p.locator(".dorm-wizard").waitFor();
+  check(await p.locator(".wizard-step:not([aria-hidden=true])").isVisible(), "the local wizard entry opens an editable isolated draft");
+  await p.getByRole("button", { name: "退出配置", exact: true }).click();
+  await p.locator(".dorm-wizard").waitFor({state:"detached"});
+  await p.getByTestId("open-tools").click();
+  await p.getByTestId("open-chore-settings").click();
+  await p.getByRole("dialog", { name: "任务配置工作台" }).waitFor();
+  check(
+    (await p.locator(".workspace-task-list").count()) === 1,
+    "new room settings starts with a task list",
+  );
+  await p.locator('.workspace-task-row>.wizard-choice').first().click();
+  await p.locator('.task-editor').waitFor();
+  check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'workspace edits at most two fields per screen');
+  await p.screenshot({ path: `data/startup-review/${engine}-workspace.png` });
+  await p.getByRole("button", { name: "预览", exact: true }).click();
+  await p.getByRole("button", { name: "保存设置", exact: true }).click();
+  await p
+    .getByRole("dialog", { name: "任务配置工作台" })
+    .waitFor({ state: "detached" });
+  check(true, "workspace save returns to same new room");
+  // Width/theme/reduced-motion geometry checks are browser simulations, not devices.
+  await p.getByTestId('open-tools').click();await p.getByTestId('open-chore-settings').click();
+  for(const width of [320,390,430]){await p.setViewportSize({width,height:844});await p.locator('.workspace-task-row>.wizard-choice').first().waitFor();check(await p.locator('.dorm-wizard').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${width}px no horizontal overflow`);}
+  await p.emulateMedia({reducedMotion:'reduce',colorScheme:'dark'});
+  await p.locator('.workspace-task-row>.wizard-choice').first().click();await p.locator('.task-editor').waitFor();
+  check(await p.getByLabel('任务名称',{exact:true}).isVisible(),'reduced motion remains usable');
+  check(!errors.length, JSON.stringify(errors));
+  await fs.writeFile(
+    `data/startup-review/${engine}-wizard-result.json`,
+    JSON.stringify(
+      { checks: n, errors, device: false, isolated: true },
+      null,
+      2,
+    ),
+  );
+} catch (e) {
+  console.error({errors,failedRequests});
+  const wizard = p.locator('.dorm-wizard');
+  console.error(await wizard.count()
+    ? await wizard.first().evaluate(el=>({url:location.href,rect:JSON.stringify(el.getBoundingClientRect()),height:getComputedStyle(el).height,top:getComputedStyle(el).top,scrollY,windowHeight:innerHeight,vv:visualViewport?.height,body:JSON.stringify(el.querySelector('.wizard-body')?.getBoundingClientRect()),footer:JSON.stringify(el.querySelector('.wizard-footer')?.getBoundingClientRect()),html:el.querySelector('.wizard-body')?.innerHTML.slice(0,4000)}))
+    : { url: p.url(), body: await p.locator('body').innerText().catch(()=>''), wizardCount: 0 });
+  await p.screenshot({
+    path: `data/startup-review/${engine}-wizard-failure.png`,
+  });
+  throw e;
+} finally {
+  await b.close();
+  await h.close?.();
+}

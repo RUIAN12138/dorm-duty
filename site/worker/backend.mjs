@@ -1,3 +1,4 @@
+import { validateDormConfiguration } from "../shared/dorm-configuration.mjs";
 // Cloudflare Worker/D1 implementation of the original FastAPI business contract.
 // Business identity comes exclusively from opaque Bearer sessions, never platform headers.
 import { CalendarError } from "./calendar.mjs";
@@ -608,6 +609,7 @@ async function guestView(db, room) {
     id: room.id,
     name: room.name,
     is_demo: Boolean(room.is_demo),
+    configuration: JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null"),
     members: await choreGuestMemberMarks(db, room.id),
   };
 }
@@ -623,9 +625,14 @@ async function guestCreate(request, db, now, emailCreator) {
     fail(401, "email_required", "请先用邮箱验证码登录");
   const input = await body(
     request,
-    ["name", "nickname", "members", "marker_id"],
+    ["name", "nickname", "members", "marker_id", "configuration"],
     ["name", "nickname"],
   );
+  let configuration = null;
+  if (input.configuration !== undefined) {
+    try { configuration = validateDormConfiguration(input.configuration); } catch (e) { invalid(e.message); }
+  }
+  if(configuration && input.members?.length) invalid("新版宿舍由舍友验证邮箱后自行填写姓名加入");
   const name = str(input.name, 1, 64),
     nickname = str(input.nickname, 1, 32),
     others = input.members === undefined ? [] : input.members;
@@ -685,6 +692,9 @@ async function guestCreate(request, db, now, emailCreator) {
       [invite, usernamesJson],
     ),
   );
+  if (configuration) ops.push(stmt(db,
+    "INSERT INTO dorm_configurations(dorm_id,schema_version,configuration,updated_at) SELECT id,2,?,? FROM dormitories WHERE invite_code=?",
+    [JSON.stringify(configuration),current,invite]));
   const duties = Array.from({ length: 30 }, (_, index) => {
     const day = addDate(today, index),
       assignee = index % nicknames.length;

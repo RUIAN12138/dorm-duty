@@ -2,7 +2,7 @@
 import { computed, useAttrs } from "vue";
 import SwipeRecordCell from "./SwipeRecordCell.vue";
 import type { ChoreRecord } from "../api/chores";
-import MemberMark from "./MemberMark.vue";
+import "../interaction/memberNames.css";
 import ChoreTypeIcon from "./ChoreTypeIcon.vue";
 defineOptions({ inheritAttrs: false });
 const attrs = useAttrs();
@@ -84,11 +84,8 @@ const time = (value: string) =>
           : undefined
       "
     >
-      <span class="record-avatar"
-        ><MemberMark :id="record.marker_id" :size="28" inline
-      /></span>
       <span class="record-description"
-        ><strong>{{ record.assignee_name }}</strong
+        ><strong class="rounded-member-name">{{ record.assignee_name }}</strong
         ><span
           ><ChoreTypeIcon :type="record.key === 'water' ? 'water' : 'duty'" />{{
             record.name

@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { persistSessionToken } from "../interaction/persistentSession";
+import DormWizard from "../components/onboarding/DormWizard.vue";
+import {
+  configurationOf,
+  type DormDraft,
+  type DormConfiguration,
+} from "../interaction/dormDraft";
 import StartupGate from "../components/StartupGate.vue";
 import type { StartupStatus } from "../interaction/startup";
 import ScreenStage from "../components/ScreenStage.vue";
@@ -44,6 +50,7 @@ import {
   identityUnboundEvent,
 } from "../api/email";
 import { showToast } from "vant";
+import { isLocalPreviewAvailable } from "../interaction/localPreview";
 import { ApiError } from "../api";
 import { logoutEvent, pendingLogout } from "../api/logout";
 import { useSession } from "../stores/session";
@@ -81,6 +88,8 @@ const creatingRoom = ref(false),
   createNickname = ref(""),
   createMembers = ref("");
 const createdInvite = ref("");
+const localWizardExperience = ref(false);
+const localWizardPreviewAvailable = isLocalPreviewAvailable();
 const recoveryOpen = ref(false);
 const emailOpen = ref(false);
 const migrationToken = ref(""),
@@ -595,6 +604,7 @@ function cancelSelection() {
   choosingMember.value = false;
   changingDorm.value = false;
   creatingRoom.value = false;
+  localWizardExperience.value = false;
   pendingPerson.value = null;
   pendingClaimToken.value = "";
   enteredName.value = "";
@@ -707,12 +717,34 @@ function openCreate() {
   createMembers.value = "";
   createMarker.value = "pixel-01";
 }
+function openWizardExperience() {
+  if (!localWizardPreviewAvailable) return;
+  cancelSelection();
+  localWizardExperience.value = true;
+  creatingRoom.value = true;
+  wizardConfiguration.value = undefined;
+  createdInvite.value = "";
+}
+const wizardConfiguration = ref<DormConfiguration | undefined>();
+async function submitWizard(draft: DormDraft) {
+  createName.value = draft.name;
+  createNickname.value = draft.nickname;
+  createMembers.value = "";
+  wizardConfiguration.value = configurationOf(draft);
+  await submitCreate();
+}
+function finishWizard() {
+  creatingRoom.value = false;
+  localWizardExperience.value = false;
+  wizardConfiguration.value = undefined;
+}
 async function submitCreate() {
   if (loading.value) return;
   const { id, signal } = startRequest();
   try {
     const result = await createGuestDorm(
       {
+        configuration: wizardConfiguration.value,
         name: createName.value.trim(),
         marker_id: createMarker.value,
         nickname: createNickname.value.trim(),
@@ -737,7 +769,7 @@ async function submitCreate() {
     }
     await refreshEmailAccount().catch(() => {});
     if (!isCurrent(id, signal)) return;
-    creatingRoom.value = false;
+    creatingRoom.value = !!wizardConfiguration.value;
     createdInvite.value = result.invite_code;
     inviteCode.value = result.invite_code;
     viewMode.value = "dorm";
@@ -746,11 +778,10 @@ async function submitCreate() {
         (person) => person.user_id === result.member_id,
       ) || null;
     remember();
-    await router.replace({
-      path: route.path,
-      query: { ...route.query },
-    });
+    if (!wizardConfiguration.value)
+      await router.replace({ path: route.path, query: { ...route.query } });
     await loadDorm(result.invite_code, result.member_id, result.access_token);
+    if (wizardConfiguration.value) creatingRoom.value = true;
   } catch (e) {
     if (isCurrent(id, signal)) error.value = (e as Error).message;
   } finally {
@@ -1013,7 +1044,15 @@ async function bootEntry() {
   else if (sharedLink) openDormChange();
 }
 onMounted(() => {
-  void boot();
+  const launchDevWizard =
+    localWizardPreviewAvailable && route.query.preview === "new-dorm";
+  void boot().then(async () => {
+    if (!launchDevWizard || disposed || startupBlocked.value) return;
+    const query = { ...route.query };
+    delete query.preview;
+    await router.replace({ path: route.path, query, hash: route.hash });
+    if (!disposed && !startupBlocked.value) openWizardExperience();
+  });
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
@@ -1064,75 +1103,17 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <section
-        v-if="creatingRoom"
-        class="guest-dorm-form"
-        data-testid="guest-create-form"
-        aria-labelledby="create-title"
-      >
-        <div class="entry-heading">
-          <h1 id="create-title">创建你的宿舍</h1>
-          <HintPopover
-            title="创建者权限"
-            :text="
-              emailAccount.loggedIn
-                ? '用当前邮箱创建，自动拥有创建者权限。换设备后用同一邮箱登录即可。'
-                : '管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。'
-            "
-          />
-        </div>
-        <form @submit.prevent="submitCreate">
-          <label for="create-name">宿舍名称</label>
-          <input
-            id="create-name"
-            v-model="createName"
-            data-testid="guest-create-name"
-            maxlength="64"
-            placeholder="例如：6-402"
-            autocomplete="off"
-            required
-            :disabled="loading"
-          />
-          <label for="create-nickname">你的名字</label>
-          <input
-            id="create-nickname"
-            v-model="createNickname"
-            data-testid="guest-create-nickname"
-            maxlength="32"
-            placeholder="室友怎么称呼你"
-            autocomplete="nickname"
-            required
-            :disabled="loading"
-          />
-          <label for="create-members"
-            >其他室友的名字 <span class="guest-muted">（选填）</span></label
-          >
-          <textarea
-            id="create-members"
-            v-model="createMembers"
-            data-testid="guest-create-members"
-            rows="3"
-            maxlength="2000"
-            placeholder="每行一位，也可以用逗号分隔"
-            :disabled="loading"
-          ></textarea>
-          <MarkerPicker v-model="createMarker" :disabled="loading" />
-          <p v-if="error" class="guest-create-error" role="alert">
-            {{ error }}
-          </p>
-          <button
-            type="submit"
-            class="guest-primary"
-            data-testid="guest-create-submit"
-            :disabled="loading"
-          >
-            {{ loading ? "正在创建…" : "创建宿舍" }}
-          </button>
-        </form>
-        <div class="guest-form-actions">
-          <button :disabled="loading" @click="cancelSelection">返回</button>
-        </div>
-      </section>
+      <Teleport v-if="creatingRoom" to="body"><DormWizard
+        :busy="loading"
+        :experience="localWizardExperience"
+        :creator-name="member?.nickname || emailAccount.rooms?.[0]?.nickname || '创建者'"
+        :error="error"
+        :invite="createdInvite || undefined"
+        :draft-key="localWizardExperience ? 'dorm-create-experience-v2' : `dorm-create-v2:${emailAccount.email || 'local'}`"
+        @submit="submitWizard"
+        @cancel="cancelSelection"
+        @done="finishWizard"
+      /></Teleport>
       <section
         v-else-if="changingDorm"
         class="guest-dorm-form guest-switch-form"
@@ -1283,6 +1264,14 @@ onUnmounted(() => {
               恢复管理权限
             </button>
           </div>
+          <button
+            v-if="localWizardPreviewAvailable"
+            class="local-wizard-preview-link"
+            data-testid="dev-new-dorm-wizard"
+            @click="openWizardExperience"
+          >
+            体验新版创建流程
+          </button>
         </section>
         <template v-else-if="dorm && (!loading || pendingPerson)">
           <aside
@@ -1356,7 +1345,7 @@ onUnmounted(() => {
               data-testid="guest-name-form"
               @submit.prevent="submitName"
             >
-              <label for="member-name">你在宿舍名单中的名字</label>
+              <label for="member-name">{{ dorm.configuration ? '你的姓名' : '你在宿舍名单中的名字' }}</label>
               <input
                 id="member-name"
                 v-model="enteredName"
@@ -1425,11 +1414,13 @@ onUnmounted(() => {
               :member-id="member.user_id"
               :token="choreToken"
               :demo="viewMode === 'demo'"
+              @configuration="dorm && (dorm.configuration = $event)"
               @expired="identityExpired"
               @member="member = $event"
               @switch-member="changeMember"
               @join-dorm="openDormChange"
               @create-dorm="openCreate"
+              @local-wizard="openWizardExperience"
               @recover-owner="recoveryOpen = true"
               @email-account="emailOpen = true"
               @exit-demo="exitDemo"
@@ -1469,9 +1460,13 @@ onUnmounted(() => {
       />
     </main>
   </ScreenStage>
-  <ChoreBottomNav v-if="navVisible" :section="section" />
+  <ChoreBottomNav
+    v-if="navVisible"
+    :section="section"
+    :pages="dorm?.configuration?.pages"
+  />
   <button
-    v-if="!navVisible && !startupBlocked"
+    v-if="!navVisible && !startupBlocked && !creatingRoom"
     class="entry-appearance"
     aria-label="设置"
     @click="appearanceOpen = true"
@@ -1479,11 +1474,27 @@ onUnmounted(() => {
     <van-icon name="setting-o" />
   </button>
   <ElasticSheet v-model="appearanceOpen" title="设置" expandable
-    ><AppearanceSettings /><CheckForUpdates />
+    ><AppearanceSettings />
+    <button class="entry-guide-link" @click="appearanceOpen = false; void router.push('/guide')">使用引导</button>
+    <CheckForUpdates />
   </ElasticSheet>
 </template>
 
 <style scoped>
+.entry-guide-link {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font: inherit;
+  transition: transform 220ms var(--ui-ease-out), opacity 160ms;
+}
+.entry-guide-link:active { transform: scale(.985); }
 .join-new-title {
   margin: 0 0 18px;
   font-size: 19px;
@@ -1558,6 +1569,23 @@ onUnmounted(() => {
     padding: 6px 0;
   }
 }
+</style>
+
+<style scoped>
+.local-wizard-preview-link {
+  display: block;
+  min-height: 44px;
+  margin: 14px auto 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  transition: transform 220ms var(--ui-ease-out), opacity 160ms;
+}
+.local-wizard-preview-link:active { transform: scale(.985); }
 </style>
 
 <style scoped>

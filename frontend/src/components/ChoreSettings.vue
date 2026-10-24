@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import { ref, watch, onUnmounted } from "vue";
 import { ApiError } from "../api";
 import { showToast } from "../interaction/notice";
@@ -9,7 +10,6 @@ import {
 } from "../api/chores";
 import ElasticSheet from "./ElasticSheet.vue";
 import TimeWheel from "./TimeWheel.vue";
-import MemberMark from "./MemberMark.vue";
 import SortableMembers from "./SortableMembers.vue";
 import HintPopover from "./HintPopover.vue";
 const scheduleOpen = ref(false),
@@ -298,10 +298,9 @@ async function save() {
               :key="memberId"
             >
               <span class="order-position">{{ index + 1 }}</span
-              ><MemberMark
-                :id="person(memberId)?.marker_id"
-                :size="20"
-              /><strong>{{ person(memberId)?.nickname || "室友" }}</strong
+              ><strong class="rounded-member-name">{{
+                person(memberId)?.nickname || "室友"
+              }}</strong
               ><button
                 type="button"
                 :disabled="index === 0"

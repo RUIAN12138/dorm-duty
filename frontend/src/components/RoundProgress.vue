@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import {
   computed,
   ref,
@@ -10,7 +11,6 @@ import {
 import { animate as springAnimate, useMotionValue } from "motion-v";
 import { motionTokens } from "../interaction/motion";
 import type { ChoreBoardData } from "../api/chores";
-import MemberMark from "./MemberMark.vue";
 import { motionAllowed } from "../interaction/motion";
 const props = defineProps<{
   round: ChoreBoardData["rounds"][number];
@@ -376,9 +376,7 @@ onBeforeUnmount(() => {
           <span class="rank-number">{{
             String(index + 1).padStart(2, "0")
           }}</span
-          ><MemberMark inline :id="person.marker_id" :size="28" /><strong>{{
-            person.nickname
-          }}</strong
+          ><strong>{{ person.nickname }}</strong
           ><van-icon
             :name="filter === 'completed' ? 'success' : 'circle'"
             aria-hidden="true"

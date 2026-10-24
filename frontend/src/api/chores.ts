@@ -1,3 +1,4 @@
+import type { DormConfiguration } from "../interaction/dormDraft";
 import { query } from "./index";
 import { requestJson } from "./transport";
 
@@ -20,6 +21,7 @@ export interface ChoreCategory {
   mode: "scheduled" | "self_round" | "completion";
 }
 export interface ChoreTask {
+  completed_by?: number | null;
   id: number;
   key: "floor" | "toilet" | "sink" | "water";
   name: string;
@@ -72,6 +74,8 @@ export interface ChoreReminder {
   read_at: string | null;
 }
 export interface ChoreBoardData {
+  configuration?: DormConfiguration | null;
+  workspace_tasks?: ChoreTask[];
   today: string;
   server_time: string;
   version: number;

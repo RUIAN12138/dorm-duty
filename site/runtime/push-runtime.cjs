@@ -7683,11 +7683,19 @@ function categoryView(row) {
     mode: row.mode
   };
 }
+function configuredCategory(category, configuration) {
+  if (!configuration) return category;
+  const task = configuration.tasks.find((t) => t.key === category.key);
+  const hard = (task?.policy && task.policy !== "inherit" ? task.policy : configuration.policy) === "hard";
+  Object.defineProperties(category, { hardRound: { value: hard && category.mode === "self_round", configurable: true }, hardPolicy: { value: hard, configurable: true }, executionTime: { value: task?.execution_time || "08:00", configurable: true } });
+  return category;
+}
 async function categories(db, roomId) {
   const rows = await all(db, "SELECT * FROM chore_categories WHERE dorm_id=?", [
     roomId
   ]);
-  return KEYS.map((key) => rows.find((row) => row.key === key)).filter(Boolean).map(categoryView);
+  const configuration = JSON.parse((await first(db, "SELECT configuration FROM dorm_configurations WHERE dorm_id=?", [roomId]))?.configuration || "null");
+  return KEYS.map((key) => rows.find((row) => row.key === key)).filter(Boolean).map((row) => configuredCategory(categoryView(row), configuration));
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
@@ -7697,6 +7705,7 @@ async function initialize(db, room, now) {
     [room.id, room.id]
   );
   if (initialized) return;
+  const initialConfig = JSON.parse((await first(db, "SELECT configuration FROM dorm_configurations WHERE dorm_id=?", [room.id]))?.configuration || "null");
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "\u5BBF\u820D\u6CA1\u6709\u6709\u6548\u6210\u5458");
   const legacy = parse(room.rotation_order || "[]"), ids = members.map((member) => member.user_id);
@@ -7716,22 +7725,25 @@ async function initialize(db, room, now) {
     stmt(db, "INSERT OR IGNORE INTO chore_settings(dorm_id) VALUES (?)", [
       room.id
     ]),
-    ...defaults.map(
-      ([key, name, content, hhmm, rotation]) => stmt(
+    ...defaults.map(([key, name, content, hhmm, rotation]) => {
+      const custom = initialConfig?.tasks.find((t) => t.key === key);
+      return stmt(
         db,
-        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode,enabled,reminder_interval_days) VALUES (?,?,?,?,?,?,?,?,?,?)",
         [
           room.id,
           key,
-          name,
-          content,
-          hhmm,
+          custom?.name || name,
+          custom ? custom.content || custom.name : content,
+          custom?.deadline || hhmm,
           start,
           JSON.stringify(rotation),
-          key === "water" ? "completion" : "self_round"
+          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : "self_round",
+          initialConfig ? custom?.enabled ? 1 : 0 : 1,
+          custom?.interval || 3
         ]
-      )
-    )
+      );
+    })
   ]);
 }
 var Mutation = class {
@@ -7872,7 +7884,7 @@ function roundRow(room, category, member, members, now, sequence) {
     sequence
   );
   row[2] = `round-${sequence}-${member.user_id}`;
-  row[9] = "";
+  if (!category.hardRound) row[9] = "";
   return row;
 }
 async function planRound(db, mutation, room, category, members, now, completingId = null) {
@@ -8008,7 +8020,7 @@ async function maintain(db, room, now) {
   fail(409, "stale_version", "\u5BBF\u820D\u6B63\u5728\u66F4\u65B0\uFF0C\u8BF7\u7A0D\u540E\u5237\u65B0");
 }
 var correctionApplies = "h.id IS NOT NULL AND julianday(h.updated_at)>=julianday(t.completed_at)";
-var historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
+var historySQL = `SELECT t.id,t.key,t.name,COALESCE(t.completed_by,t.assignee_id) AS assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
  CASE WHEN ${correctionApplies} THEN h.completed_at ELSE t.completed_at END AS completed_at,
  COALESCE(h.revision,0) AS revision,
  CASE WHEN ${correctionApplies} THEN 1 ELSE 0 END AS corrected
