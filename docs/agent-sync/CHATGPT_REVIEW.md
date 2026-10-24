@@ -1,49 +1,37 @@
-# ChatGPT → Codex · 新宿舍五次增量提交与教程交互评审（2026-10-24）
+# ChatGPT → Codex · 创建进度尺寸监听与规则页提示增量评审（2026-10-24）
 
-- reviewed_code_sha: `d7930a70583de86f41629ca231d0c7975eefaf6b`
+- reviewed_code_sha: `ba7c0ca9b9d5970568f956907d5415bd3109ff39`
 - reviewed_branch: `codex/new-dorm-wizard-preview`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/d7930a70583de86f41629ca231d0c7975eefaf6b
-- previous_reviewed_code_sha: `251e950dca1421f34b7e3aa4bb6af1a461bc2791`
-- assessment: **确认 5 个真实业务提交、累计 12 个改动文件，开发分支 HEAD 与交接 SHA 一致。** 本次不仅是末次“名称页精简”：期间还修复了上一轮 P1 提前抬水撤回回执不一致、改进五步进度条拖动/释放处理、移除重复创建欢迎幻灯片、完善独立教程短屏可达性与交互，并补充隔离测试。静态检查未发现本轮新增 P0 越权或旧宿舍迁移代码。**仍不能宣布正式验收**：完整 `web:verify` 的四项已知失败未在末次交接中复跑/消除，真实移动设备未验证，开发分支没有 CI 通过记录。
-- diff: https://github.com/RUIAN12138/dorm-duty/compare/251e950dca1421f34b7e3aa4bb6af1a461bc2791...d7930a70583de86f41629ca231d0c7975eefaf6b
-- review_method: 通过 GitHub 连接器读取协调分支 `PROTOCOL.md`、`USER_REQUIREMENTS.md`、`CODEX_HANDOFF.md`、上一 `CHATGPT_REVIEW.md`，核对开发分支 HEAD，读取真实累计 diff、末次 commit patch 和 `CreationProgress.vue`、`DormWizard.vue`、`WelcomeGuide.vue`、`LiveDraftPreview.vue`、`TaskPageBoard.vue`、`GuestHome.vue`、`site/worker/chores.mjs` 及相关浏览器/API 测试；核对 main、全部可检索 PR 的合并/关闭状态、开放 PR 审核/评论/CI 和重要 Issues。**独立静态审查，不代表本人运行本地测试、浏览器或真机。**
-- tests: Codex 报告末次 Chromium 与 WebKit `check-dorm-wizard-browser.mjs`、`web:build`、`spec:check` 及 `diff --check` 通过；源码中确有首屏唯一输入、必填/64 字、滑块交互、短屏横屏四页可达与预览无真实写请求等断言。累计修改的 `check-dorm-wizard.mjs` 也新增提前抬水 credit 取消回执与 SQLite 行、重复撤回 409、正式队列及副作用检查。**未独立复跑，也没有对全部既存 Web 测试成功的证据。**
-- CI: 新业务 SHA 的 Commit Status `statuses=[]`；PR-triggered workflow runs `[]`。不可把本地浏览器或构建结果称为 GitHub CI 通过。
-- PR/main: 可检索 74 个 PR：开放 #24、#80、#81、#82、#83、#84；其他 68 个经逐个 PR metadata 确认历史已合并，无本轮新增合并/关闭。开放 PR 审核提交及 inline threads 均为 0，#80–#84 评论为 0，#24 仅旧评论。各 PR head 的最近可见 workflow 结果：#80/#81 success，#82/#83/#84 failure，#24 action_required；本轮没有新的审核或状态变化，**这些 CI 与当前向导业务 SHA 无关**。main 仍为 `25056ed6c28f2c46f3cef957e8828a1226b7c667`。
-- issues: 重要 #37/#39/#40/#41/#46 均仍 open，评论仍为既有记录；#38 open，未发现新的重要状态变化。
-- platform_status: macOS 桌面 Chromium/WebKit 的移动视口模拟不等于实体 iPhone Safari/PWA；Android WebView、HarmonyOS ArkWeb 均未真机验收。
-- need_user_decision: 无新增必须决定事项。未经用户明确授权，不创建/合并 PR、不部署、不操作正式数据库；只维护隔离开发分支和协调分支各自职责文件。
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ba7c0ca9b9d5970568f956907d5415bd3109ff39
+- previous_reviewed_code_sha: `d7930a70583de86f41629ca231d0c7975eefaf6b`
+- assessment: **确认交接 SHA 是真实业务提交，较上一评审 d7930a7 前进 1 个提交、修改 10 个文件，其中实际产品代码为 CreationProgress.vue、DormWizard.vue、新增 observeElementSize.mjs/.d.mts，浏览器测试有真实新增断言。** 上次 P2 尺寸回退监听未清理的问题在源码中已修复；规则页球球提示缩短。此次未改服务端/数据库，未发现新 P0。**但完整 Web 回归仍有四项失败、没有该 SHA 的 GitHub CI 成功证据、真机未验证，不可宣布发布验收。**
+- diff: https://github.com/RUIAN12138/dorm-duty/compare/d7930a70583de86f41629ca231d0c7975eefaf6b...ba7c0ca9b9d5970568f956907d5415bd3109ff39
+- review_method: GitHub 连接器读取 PROTOCOL、USER_REQUIREMENTS、CODEX_HANDOFF、前一 CHATGPT_REVIEW，核对真实提交和 diff，读取 CreationProgress.vue、observeElementSize.mjs、DormWizard.vue、LiveDraftPreview.vue、TaskPageBoard.vue、WelcomeGuide.vue 和浏览器测试相关段落；查询 main、全部 74 个 PR 的合并/关闭、6 个开放 PR 的审核/评论/线程及其 CI、重要 Issues。**独立静态审查，不等于我独立运行浏览器、Node、CI 或真机测试。**
+- handoff_freshness: 审查时 `codex/new-dorm-wizard-preview` HEAD 已前进至 `914f748462b0cd7161e23b63afad9e38669279d9`（在本次交接 SHA 之后另有 1 个真实业务提交，修改 WelcomeGuide.vue、浏览器断言和 OpenSpec）。**本评审严格仅绑定 handoff 的 ba7c0ca9b9d5970568f956907d5415bd3109ff39；914f748 未纳入本次 reviewed_code_sha，需 Codex 在下次 CODEX_HANDOFF 中更新完整 SHA 后单独评审，不应误以已审核最新 HEAD。**
+- CI: `ba7c0ca9b9d5970568f956907d5415bd3109ff39` 的 GitHub Commit Status `statuses=[]`，PR-triggered Actions workflow runs `[]`；不得报告 CI 已通过。
+- tests: Codex 报告 Chromium/WebKit 的 `scripts/check-dorm-wizard-browser.mjs` 均 `PASS []`，`web:build`、`spec:check` 和 diff check 通过；测试源码确实增加缺失 ResizeObserver 时的注册/触发/清理、进度条 pointercancel/lostpointercapture/反向释放、规则页提示断言。**回退监听测试直接调用 helper 并使用合成 environment，不等于真实 CreationProgress.vue 在无 ResizeObserver 的浏览器中挂载/卸载集成测试；未独立复跑。** Codex 明确 `npm run web:verify` 仍失败四项。
+- PR/main: 全部可检索 74 个 PR：开放 #24、#80、#81、#82、#83、#84，其他 68 个已合并，均无本轮新增关闭/合并。开放 PR 审核提交、inline review threads 为 0，#80–#84 评论 0，#24 仅 2026-10-15 旧评论。各 PR head 可见 workflow：#24 action_required，#80/#81 success，#82/#83/#84 failure，未见新增 CI 结果；这些不是当前向导 SHA 的 CI。main 仍为 `25056ed6c28f2c46f3cef957e8828a1226b7c667`。
+- issues: 重要 #37/#38/#39/#40/#41/#46 仍 open，最后更新时间均早于本轮，未见新状态/阻塞。
+- platform_status: Chromium/WebKit 为桌面浏览器移动视口模拟；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未做真机验收。没有证据证明正式部署。
+- need_user_decision: 无新增必须决定事项；保持未经用户授权不创建正式 PR、不合并 main、不部署、不接触正式数据库。
 
-## P0 · 安全与旧宿舍隔离（本轮无新发现；保留发布门禁）
+## P0 · 安全与旧宿舍隔离
 
-1. **已核对** `undoOnce()` 提前抬水 credit 分支：数据库和即时回执现在一致设置 `status='cancelled'`、`completed_at=null`、`completed_by=null`；重复撤回有 409 防护。对应隔离 API/SQLite 测试确实新增，旧版回执矛盾不应继续作为未修复问题反复派发。
-2. `completeOnce()` 的服务端授权 `canCompleteTask()`、代做 `canDelegateTask()` 和按原计划负责人轮换的既有守卫仍在。此次前端/教程修改没有发现触及旧宿舍配置迁移、成员身份或历史数据的差异。
-3. **验收**：在隔离数据库运行 `node scripts/check-dorm-wizard.mjs` 及旧宿舍/抬水回归；断言 credit 撤回状态、实际完成人、版本/队列、拒绝越权无副作用。无运行证据不得宣布 P0 真正验证完成。
+- **本轮无新 P0。** 真实 diff 没有修改后端、成员身份、历史、通知或旧宿舍迁移。旧宿舍隔离与权限依赖前几轮实现及既有测试，不能仅因本轮未改服务端就推断全链路已验证。
+- **验收门禁**：发布前以隔离数据库重跑新旧宿舍权限、轮序、代做、撤销、历史与推送副作用；预览必须继续使用正式 ChoreBoard/ChoreBottomNav 组件和沙箱数据，真实网络业务写入为零。
 
-## P1 · 剩余真实阻塞与功能验收
+## P1 · 剩余发布阻塞与完整路径
 
-### P1-A · 四项既存 Web 回归失败尚未清除
+1. **四项 Web 回归依旧失败（未修复，非新问题）**：`check-screen-gesture-check.mjs` 的 opacity 断言；`check-settings-save-lifecycle.mjs` 与 `check-navigation-components.mjs` 的 `memberNames.css` 测试打包导入；`check-scheduled-reminders.mjs` 旧迁移 `/guest/create` 返回 500。**执行**：分项确定真实根因、最小修复并保存原始日志，不删断言、不为过测试改无关正式 UI；随后完整重跑 `npm run web:verify`，给出通过/失败数量。若暂不授权跨范围修复，保留独立阻塞，不宣称全绿。
+2. **创建/预览/教程完整链路尚未真机和真实认证验收**：从邮箱认证、新宿舍创建、五步草稿、球球 Tips、进度滑块跳转和反向释放、三种完成节奏及时间滚轮、页面编排、全屏正式组件预览、导航重排，到创建后首次教程/跳过/重看/返回。**验收**：浏览器端使用真实正式组件树、合成身份和网络/存储审计；验证无真实打卡/通知/账号写入；旧宿舍不自动迁移或触发首次 v2 教程。提供路径视频和真实结果，不用单独 mock 页面替代。
+3. **交接落后业务 HEAD**：Codex 需在后续确有新业务改动时，将 `CODEX_HANDOFF.md` 的 `code_sha` 更新为实际 HEAD 完整 SHA，准确报告差异与测试。不要将 914f748 视为本次已评审，也不要仅因文档变化无限循环。
 
-上一轮已记录并在更早代码基线复现：`check-screen-gesture-check.mjs` 的 opacity 断言、`check-settings-save-lifecycle.mjs` 和 `check-navigation-components.mjs` 的 `memberNames.css` 测试夹具导入、`check-scheduled-reminders.mjs` 的旧迁移 `/guest/create` 500。最新 handoff **明确没有重跑完整 `npm run web:verify`**；不能因浏览器专项和 build 成功而自动视为消除。
+## P2 · 本轮改动与细节
 
-- **执行**：逐项定位并给出最小修复/独立问题记录；不要为了过测试删除断言或改无关正式 UI。只有全套 `npm run web:verify` 全绿，或用户明确接受记录在案的独立阻塞，才能推进正式 PR/部署评估。
-- **验收**：保存原始命令、失败日志、根因、修复 diff、对照基线和完整重跑统计；不改变旧宿舍行为。
-
-### P1-B · 新创建向导与正式教程的端到端路径
-
-- 本轮真实改动：`CreationProgress.vue` 处理释放时最终指针采样、触摸点击防重复、44px+ 命中区/20px 轨道/36px 玻璃视觉滑块；`DormWizard.vue` 首屏只留大标题与带 `aria-label` 的一个输入框，舍友命名规则转入球球 Tips；`WelcomeSlides.vue` 被删除，独立 `/guide` 仍在；`WelcomeGuide.vue` 增加横屏短屏页内滚动与跳过按压反馈。对应测试代码存在。
-- **继续核对**：从邮箱认证后新建→五步草稿→滑块拖动与中途跳转→规则校验→全屏预览→正式创建→首次教程→跳过/完成/手动重看，要求草稿、导航顺序和回程均正确；旧宿舍不得被自动引导或重置。
-- **特别验证**：纵向滚动与横向翻页竞争、pointercancel/lostpointercapture、按住再快速反向释放、键盘弹起和 320×568 / 568×320 / 844×390、暗色/减少动态效果。页面切换后球球 Tips 与当前步骤一致；不得因滑块跳步绕过最终服务端校验。
-- **预览隔离**：`LiveDraftPreview.vue` 仍挂载正式 `ChoreBoard` 与 `ChoreBottomNav` 等组件、使用合成草稿；需继续用真实组件树拦截业务请求并核对任务详情/日历/导航长按重排/消息/提醒/账号等入口，无真实写入、无通知，退出后草稿一致。现有源码和浏览器断言只是部分证据，不能称真实设备已验收。
-- **验收**：每条路径提供可重跑的 Chromium/WebKit 浏览器脚本与对应提交 SHA，记录断言数、失败数、网络写请求数及可公开的脱敏关键帧；不要只引用本地忽略目录中的截图文件名。
-
-## P2 · 交互细节和设备证据
-
-1. `CreationProgress.vue` 在 `ResizeObserver` 不可用时添加 `window.resize` 监听，但卸载时只断开 observer，未移除 fallback 监听；建议保存 resize 回调并在 `onBeforeUnmount` 对称移除，避免反复进入向导后的旧监听残留。添加模拟无 ResizeObserver 的挂载/卸载回归。此项为静态发现的低优先级生命周期风险，不应扩大重构。
-2. 新的欢迎页横屏 CSS 使用 `!important` 缩小球球容器；在真机安全区、系统大字体与软键盘场景确认内容没有裁切、固定操作按钮不会遮挡。若有缺口，仅局部修正。
-3. 旧绿色像素标识与中文圆润字体、Bottom Sheet 底部背景连续性、“查看任务”材质、创建完成球球连续转场、三种完成节奏与时间滚轮，继续按需求基线逐项提供实际截图/录屏；本轮变更未直接实现这些视觉项目，不应推断它们已验收。
-4. 真机验收：iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 分别记录设备系统、操作路径、截图/录屏、结果。无法运行时明确“未验证”，不能把 macOS WebKit 模拟说成 iPhone。
+1. **ResizeObserver 回退监听生命周期：源码修复已确认。** `observeElementSize()` 优先观察器并返回 `disconnect()`，否则绑定 `window.resize` 并返回同一 callback 的 `removeEventListener()`；`CreationProgress.vue` 的 `onBeforeUnmount` 调用 disposer。新增 helper 测试有注册、触发、卸载清理断言。**补强验收**：如后续遇到实际兼容问题，再在真实 Vue 组件挂载环境中模拟无 ResizeObserver，确认卸载无遗留监听；不要为测试而全局破坏其他组件的浏览器 API。
+2. **球球规则页 Tips 去重：源码确认**从“选择适合宿舍的方式，之后也能修改”改为“之后可调整”，三种规则选择及底层数据未变；对应断言存在。检查屏幕阅读器提示、快速步骤切换和减少动态效果模式，确保标题与 Tips 不冲突。
+3. **持续未验收视觉项**：黑白粗轨道/清透小滑块、球球连续转场、任务切换、正式页面复用、中文圆润姓名字体、旧绿色像素标识清除、Bottom Sheet 连续背景；以真实截图/录屏与 USER_REQUIREMENTS 逐项核对。iPhone/Android/HarmonyOS 无真机则明确未验证。
 
 ## 下一轮 Codex 交接
 
-优先解决或单独登记 P1-A 的四项回归阻塞；随后完成 P1-B 的完整新宿舍/教程/正式组件预览行为验收；P2 只做范围内小修。任何新业务修改仍在原 `codex/new-dorm-wizard-preview` 分支提交并 push，新 `code_sha` 由 Codex 更新 `CODEX_HANDOFF.md`；不得修改本评审文件。没有新业务 SHA 时不重复评审；不创建/合并 PR、不部署、不接触正式数据库。
+优先处理四项 Web 回归阻塞或明确登记独立阻塞，再完成真实认证、全屏正式组件预览和新手教程的端到端验收；针对后续 HEAD `914f748462b0cd7161e23b63afad9e38669279d9` 及之后的新业务提交，请先准确更新 CODEX_HANDOFF 的 code_sha，下一轮再做独立审查。继续仅在原开发分支提交代码；未经用户授权不创建/合并 PR、不部署、不接触正式数据库。
