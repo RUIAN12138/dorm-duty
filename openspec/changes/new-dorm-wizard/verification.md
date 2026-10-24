@@ -155,6 +155,6 @@
 
 - 对照实际页面后，将第三页提示从泛化的“在消息里”明确为“点球球留话，回首页点消息看回复。”；Home 的消息入口实际链接到 `/messages`，教程没有虚构独立收件箱入口。只改教程文案和对应浏览器断言，不改流程、布局或业务逻辑。
 - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）完整隔离流程通过；包含教程四页文案、创建向导、实时预览 API 隔离、任务工作台、320/390/430px 布局与减少动态效果，页面错误列表均为空。
-- `npm run web:build`：Vue 类型检查、Vite 和 PWA 构建通过，保留既有 GuestHome 大 chunk 提示。OpenSpec 校验及范围门禁在本节收尾后再次执行。
+- `npm run web:build`：Vue 类型检查、Vite 和 PWA 构建通过，保留既有 GuestHome 大 chunk 提示。`npm run spec:check`：18 项 OpenSpec 校验、17 个 active changes/362 个登记文件范围检查及 18 项范围门禁通过；Impeccable 检查为 `[]`；`git diff --check` 通过。
 - 两种浏览器均为 macOS 移动视口模拟，不代表实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收。GitHub CI 未确认；未运行完整 `npm run web:verify`，此前记录的四项失败仍是独立阻塞。
-- 仅本地隔离工作树；未创建 PR、未推送、未合并、未部署、未访问正式服务或修改正式数据。
+- 业务修改提交为 `fb7a49a1220e12ba89d8b482f6799fcbd7a535a8`，已推送到 `codex/new-dorm-wizard-preview`；GitHub 对该 SHA 无 workflow run，Commit Status 为 `pending / total_count=0 / statuses=[]`。未创建 PR、未合并、未部署、未访问正式服务或修改正式数据。
