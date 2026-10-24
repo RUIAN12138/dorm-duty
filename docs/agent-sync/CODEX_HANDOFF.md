@@ -1,3 +1,56 @@
+# Codex → ChatGPT · schema-v2 自定义任务容量扩展
+
+- code_branch: `codex/new-dorm-wizard-preview`
+- code_sha: `e3d0daf59ad30a11c523d725351fc283f88ed06a`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e3d0daf59ad30a11c523d725351fc283f88ed06a
+- related_pr: 无（未创建 PR）
+- requirements: 处理 `CHATGPT_REVIEW.md` 中针对 `0e29305d01fd291f36a7080db22ef5974fdd70cb` 的 P1-B；允许新宿舍同时配置四个内置任务和额外任务，并继续限制值日页最多四项；保持旧宿舍四键路径和历史数据隔离。
+- changed_files:
+  - `docs/NEW_DORM_WIZARD.md`
+  - `frontend/src/api/chores.ts`
+  - `frontend/src/components/ActivitySummary.vue`
+  - `frontend/src/components/ChoreBoard.vue`
+  - `frontend/src/components/ChoreSettings.vue`
+  - `frontend/src/components/onboarding/DormWizard.vue`
+  - `frontend/src/components/onboarding/LiveDraftPreview.vue`
+  - `frontend/src/interaction/dormDraft.ts`
+  - `frontend/src/interaction/statsPalette.ts`
+  - `openspec/changes/new-dorm-wizard/design.md`
+  - `openspec/changes/new-dorm-wizard/scope.json`
+  - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
+  - `openspec/changes/new-dorm-wizard/tasks.md`
+  - `openspec/changes/new-dorm-wizard/verification.md`
+  - `scripts/check-dorm-wizard-browser.mjs`
+  - `scripts/check-dorm-wizard.mjs`
+  - `scripts/check-stats-palette.mjs`
+  - `scripts/preview-startup/server.mjs`
+  - `site/db/schema.ts`
+  - `site/drizzle/0020_dynamic_task_keys.sql`
+  - `site/runtime/push-runtime.cjs`
+  - `site/scripts/check-dynamic-task-migration.mjs`
+  - `site/shared/dorm-configuration.mjs`
+  - `site/shared/notifications.mjs`
+  - `site/worker/calendar.mjs`
+  - `site/worker/chores.mjs`
+- implemented:
+  - schema-v2 支持最多 20 个总任务，四个内置 ID 不变；新增自定义任务使用持久稳定的 `task_<32位十六进制>` ID。服务器在保存前校验 ID 和 20 项上限，并拒绝超过四项的值日页配置。
+  - 创建向导和新版任务工作台可在四个内置任务仍启用时添加额外任务；自定义任务可放在第二任务页，配置可以持久化并用于正式统计卡片及独立的日间/夜间颜色。
+  - Worker 初始化、配置更新、排班、轮次、完成/撤销、历史、日历与提醒查询支持自定义任务。移除已保存任务会停用旧分类并取消未完成任务，保留已完成历史快照。
+  - 新增 SQL 迁移扩展类别、任务及历史任务键约束；旧房间仍走原四键兼容路径，不自动迁移、不更改旧房间数据。
+- tests:
+  - `node scripts/check-dorm-wizard.mjs`：108 项隔离 SQLite 检查通过，含 20 项上限、21 项拒绝、值日页四项上限、创建/保存、轮转、完成/撤销、日历、统计/提醒路径及旧宿舍隔离。
+  - `node site/scripts/check-dynamic-task-migration.mjs`：通过；保留 7 张已有表，4 项迁移完整性断言通过。
+  - `node scripts/check-stats-palette.mjs`：通过；验证自定义任务明暗主题颜色保存、恢复及无效键拒绝。
+  - `npm --prefix frontend run typecheck`：通过。`npm run web:verify`：全部既有前后端构建与回归检查通过（退出码 0）；构建保留既有 `GuestHome` 大 chunk 提示。
+  - Chromium、WebKit 隔离移动视口的 `scripts/check-dorm-wizard-browser.mjs` 各 173 项通过，结果 `errors=[]`；覆盖正式统计卡片显示自定义任务、任务工作台保存恢复及预览隔离。
+  - `npm run spec:validate`：19/19 通过。`npm run spec:scope`：18 个 change、383 个登记文件通过，digest `b3390ce9a5a9bc266ea5828aa9ebb14bb72126de9f187ebd8d78c63a07c975fb`。范围门禁临时夹具 18 项通过；`git diff --check` 与关键 Node 文件语法检查通过。
+- CI: 推送后查询 GitHub：Commit Status `state=pending` 且 `statuses=[]`；Check Runs `total_count=0`；该 SHA 无 Actions run。没有可确认的远程 CI 结果。
+- platform_status: macOS 桌面 Chromium/WebKit 隔离移动视口模拟通过；不代表实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。本轮未访问正式服务或数据库，未执行线上迁移。
+- remaining: 真实设备兼容性仍待设备测试；远程 CI 尚无结果。当前活动工作树里预先存在的未提交 `site/runtime/email-runtime.cjs` 用户改动未触碰、未暂存、未包含在本 SHA。未创建 PR、未合并 main、未部署。
+- questions: 无需立即决策。
+
+---
+
 # Codex → ChatGPT · 会话恢复冲突修复与评审回归复核
 
 - code_branch: `codex/new-dorm-wizard-preview`
