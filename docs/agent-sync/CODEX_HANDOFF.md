@@ -1,38 +1,34 @@
-# Codex → ChatGPT · 新手引导与创建提示术语对齐
+# Codex → ChatGPT · 向导聚光引导可操作性与减少动态效果
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `ef7ab780918cd5cea297d06d615dfaf2a477a5e6`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ef7ab780918cd5cea297d06d615dfaf2a477a5e6
+- code_sha: `10a820e0cf5a6274964113ce2a0086fc3bbea5b3`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/10a820e0cf5a6274964113ce2a0086fc3bbea5b3
 - related_pr: 无（未创建 PR）
-- requirements: 延续“简洁高效”的新手引导与新宿舍创建体验，使用与真实导航一致的入口名称，并清楚描述页面编排的任务移动手势。保持流程、布局、业务规则、旧宿舍数据和正式数据不变。
+- requirements: 延续新手引导和新宿舍创建流程的简洁优化；修复设置工作台中功能引导被模态层拦截的问题，并尊重系统减少动态效果。只改直接相关组件与回归记录，不改旧宿舍业务、正式数据或其他页面。
 - changed_files:
-  - `frontend/src/views/WelcomeGuide.vue`
-  - `frontend/src/components/onboarding/DormWizard.vue`
+  - `frontend/src/components/onboarding/SpotlightTour.vue`
   - `scripts/check-dorm-wizard-browser.mjs`
-  - `openspec/changes/new-dorm-wizard/design.md`
-  - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - 欢迎引导首屏将“首页”改为正式底部导航名称“值日页”，留言提示改为“点球球留言，再到设置里看消息”，对应真实 `ChoreMenu` 的“室友消息”入口。
-  - 创建向导的页面编排球球提示从含义不清的“轻点切换页面”改成“轻点移动，长按拖动”，符合任务点击即跨列移动、长按拖放的现有行为。
-  - 浏览器回归断言锁定四页引导文案和页面编排提示。只改短文案及相应 OpenSpec/回归断言；未改导航、留言入口、创建逻辑、布局、旧宿舍业务或正式数据。
-  - 原工作树中 `site/runtime/email-runtime.cjs` 的未提交用户修改未编辑、未暂存、未提交。
+  - 功能聚光引导不再 Teleport 到模态抽屉之外，留在触发它的设置工作台内容树内，避免模态层把引导按钮当成外部内容而屏蔽点击。
+  - 系统启用 `prefers-reduced-motion` 时，关闭聚光区域的几何过渡和引导按钮按压缩放；标准动效模式保留原有过渡。
+  - 增加浏览器回归：在设置工作台真实打开聚光引导，分别断言标准/减少动态效果样式，并实际点击跳过后继续编辑。
+  - 只提交上述四个文件。开发 worktree 内 `site/runtime/email-runtime.cjs` 有既存未提交修改，本轮未编辑、未暂存、未提交。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导、教程、预览与设置回归通过，最终 `PASS []`；新提示断言通过。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整回归通过，最终 `PASS []`。
-  - `npm run web:build`：Vue 类型检查、Vite 和 PWA 构建通过；保留既有 `GuestHome` chunk 超过 500 KB 提示。
+  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）：142 项隔离浏览器断言通过，最终 `PASS []`；含聚光引导真实关闭操作和减少动态效果检查。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：142 项隔离浏览器断言通过，最终 `PASS []`。
+  - `npm run web:build`：通过；构建保留既有 `GuestHome` chunk 大于 500 KB 的警告。
   - `npm run spec:validate`：18/18 通过。
-  - `npm run spec:scope`：提交 SHA 的干净独立 worktree 通过，17 个变更、365 个登记文件，digest `e7a40616f3dd1a21adfd359cfd09705923631a39d49428aa809a7d8b18663f05`。
-  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check`：通过；Impeccable detector 检查两个 Vue 文件返回 `[]`。
-  - Tabbit 本地浏览器 390×844 手动核验 `/guide`：实际四页正文显示“值日页……”与“点球球留言，再到设置里看消息。”；截图为本机临时产物，未上传仓库，不能视为真机证据。
-- CI: GitHub commit status 为 `pending` 且 `statuses=[]`；无 Check Runs 或 Actions runs 记录，当前没有可确认的 CI 通过/失败结论。
+  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check`：通过。
+  - Impeccable detector 对 `SpotlightTour.vue` 返回 `[]`。
+- CI: GitHub commit status 为 `pending`、`statuses=[]`，Check Runs 为 0；目前没有可确认的 GitHub CI 结果。
 - platform_status:
-  - macOS Chromium 和 WebKit 隔离移动视口回归通过；Tabbit 390×844 是本地桌面浏览器检查。
+  - macOS Chromium 与 WebKit 的隔离移动视口浏览器回归通过；这是浏览器模拟，不是真机测试。
   - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证。
   - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
 - remaining:
-  - 协调分支 `CHATGPT_REVIEW.md` 最新 `reviewed_code_sha` 仍为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，与本次代码 SHA 不匹配；本次没有针对 `ef7ab780918cd5cea297d06d615dfaf2a477a5e6` 的新评审意见。
-  - 之前评审记录的四项全站 `npm run web:verify` 失败未在本轮重跑；本轮通过的是向导定向回归，不代表全站验收。
-  - 用户的长期目标仍是持续精简新手引导和宿舍创建流程；本次只修正三个容易误导用户的短文案。
+  - 最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，与当前代码 SHA 不匹配；目前无针对 `10a820e0cf5a6274964113ce2a0086fc3bbea5b3` 的新评审建议。该旧评审提到的通知抽屉卸载风险已在现有分支通过 `pushSheetMounted` 与 `@closed` 处理，不是本提交改动。
+  - 更早的 ChatGPT 评审记录了完整 `npm run web:verify` 的四项既存失败；本轮未重跑全站回归，本提交的向导专项测试通过不代表这些全站失败已解决。
+  - 无实体 iPhone、Android 或 HarmonyOS 测试证据；本轮不申请发布验收。
 - questions: 暂无。
