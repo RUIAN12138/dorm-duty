@@ -1,34 +1,46 @@
-# Codex → ChatGPT · 向导聚光引导可操作性与减少动态效果
+# Codex → ChatGPT · P1 聚光定位与通知抽屉回归
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `10a820e0cf5a6274964113ce2a0086fc3bbea5b3`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/10a820e0cf5a6274964113ce2a0086fc3bbea5b3
+- code_sha: `e0f7141897cc2f012e3647e96b6ce6ce7dc2a069`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e0f7141897cc2f012e3647e96b6ce6ce7dc2a069
 - related_pr: 无（未创建 PR）
-- requirements: 延续新手引导和新宿舍创建流程的简洁优化；修复设置工作台中功能引导被模态层拦截的问题，并尊重系统减少动态效果。只改直接相关组件与回归记录，不改旧宿舍业务、正式数据或其他页面。
+- requirements: 处理针对 `10a820e0cf5a6274964113ce2a0086fc3bbea5b3` 的最新评审 P1-A/B/C：重跑完整 Web 回归并记录既有失败；覆盖真实通知抽屉的各关闭路径；验证聚光灯目标几何、视口/模拟键盘和焦点恢复。另统一 v2 任务设置与创建流程的无数字进度控件。保持旧宿舍、业务数据和生产环境不变。
 - changed_files:
+  - `frontend/src/components/ChoreBoard.vue`
+  - `frontend/src/components/onboarding/CreationProgress.vue`
+  - `frontend/src/components/onboarding/DormWizard.vue`
   - `frontend/src/components/onboarding/SpotlightTour.vue`
+  - `scripts/check-companion-chat-browser.mjs`
   - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/design.md`
+  - `openspec/changes/new-dorm-wizard/proposal.md`
+  - `openspec/changes/new-dorm-wizard/scope.json`
+  - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - 功能聚光引导不再 Teleport 到模态抽屉之外，留在触发它的设置工作台内容树内，避免模态层把引导按钮当成外部内容而屏蔽点击。
-  - 系统启用 `prefers-reduced-motion` 时，关闭聚光区域的几何过渡和引导按钮按压缩放；标准动效模式保留原有过渡。
-  - 增加浏览器回归：在设置工作台真实打开聚光引导，分别断言标准/减少动态效果样式，并实际点击跳过后继续编辑。
-  - 只提交上述四个文件。开发 worktree 内 `site/runtime/email-runtime.cjs` 有既存未提交修改，本轮未编辑、未暂存、未提交。
+  - v2 任务设置工作台改用创建向导现有 `CreationProgress` 无数字玻璃进度控件，设置页使用正确的辅助技术名称；移除旧的数字步骤视图和对应完成态。legacy 宿舍设置流程未改。
+  - 聚光灯定位改为模态宿主本地坐标，并按宿主缩放比例换算高亮框和说明位置；覆盖视觉视口、安全键盘尺寸变化、目标与向导内容尺寸变化、步骤过渡结束以及过期测量取消。明确传入真实引导触发按钮作为焦点恢复目标，兼容 WebKit 触摸点击不聚焦按钮的行为。
+  - 通知设置隔离回归新增系统返回桥、详情显式关闭、遮罩关闭、完全退出后重开及子页卸载断言。
+  - 依据最新 ChatGPT 评审未发现新的 P0。完整 Web 回归仍有 5 个既有失败；其组件/fixture 与本轮目标无关，没有扩大修改范围或移除断言。
+  - 业务提交只包含上述 12 个文件；主开发 worktree 原有 `site/runtime/email-runtime.cjs` 修改保持未暂存、未提交。
 - tests:
-  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）：142 项隔离浏览器断言通过，最终 `PASS []`；含聚光引导真实关闭操作和减少动态效果检查。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：142 项隔离浏览器断言通过，最终 `PASS []`。
-  - `npm run web:build`：通过；构建保留既有 `GuestHome` chunk 大于 500 KB 的警告。
-  - `npm run spec:validate`：18/18 通过。
-  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check`：通过。
-  - Impeccable detector 对 `SpotlightTour.vue` 返回 `[]`。
-- CI: GitHub commit status 为 `pending`、`statuses=[]`，Check Runs 为 0；目前没有可确认的 GitHub CI 结果。
+  - `node scripts/check-dorm-wizard-browser.mjs`（macOS Chromium）：158 项隔离检查通过，`PASS []`；包含在缩放模态祖先内的聚光框矩形对齐、320–844 CSS 视口、模拟键盘视口及焦点返回。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：158 项隔离检查通过，`PASS []`。
+  - `node scripts/check-companion-chat-browser.mjs`（Chromium）：67 项隔离检查通过。
+  - `DORM_BROWSER=webkit node scripts/check-companion-chat-browser.mjs`：65 项隔离检查通过。
+  - `npm run web:build`：通过，Vue 类型检查、前端、Worker、PWA 与邮件运行时构建完成；保留既有 `GuestHome` 超过 500 KB 的 chunk 警告。
+  - `npm run spec:validate`：18/18 通过；在提交后干净 detached worktree 运行 `npm run spec:scope`：17 个变更、365 个登记文件通过范围门禁。
+  - 两个修改后的浏览器脚本 `node --check` 与 `git diff --check` 通过。
+  - `npm run web:verify`：退出码 1，五项既有失败仍复现：`check-screen-gesture-check.mjs`（7px opacity 断言与 10px 阈值不符）；`check-emotion-integration.mjs`（Vue 测试 stub 缺 `watch`）；`check-settings-save-lifecycle.mjs` 与 `check-navigation-components.mjs`（esbuild fixture 无法解析 `memberNames.css`）；`check-scheduled-reminders.mjs`（旧 `/guest/create` 用例实际 500、期望 201）。其余回归及三个构建通过。
+- CI: 已推送并确认该完整 SHA 位于远端开发分支。GitHub Commit Status 为 `pending`、`statuses=[]`，Check Runs 为 0；目前没有可确认的 GitHub CI 结果。
 - platform_status:
-  - macOS Chromium 与 WebKit 的隔离移动视口浏览器回归通过；这是浏览器模拟，不是真机测试。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证。
-  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
+  - macOS Chromium/WebKit 隔离浏览器模拟通过，不等于真实 iPhone Safari/PWA 验收。
+  - 视口缩小模拟键盘，不代表系统键盘动画测试；原生返回使用应用 `DormNativeBack` 桥接调用模拟。
+  - iPhone、Android WebView、HarmonyOS ArkWeb 真机未验证。未创建宿舍、未触碰正式数据库/服务。
 - remaining:
-  - 最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，与当前代码 SHA 不匹配；目前无针对 `10a820e0cf5a6274964113ce2a0086fc3bbea5b3` 的新评审建议。该旧评审提到的通知抽屉卸载风险已在现有分支通过 `pushSheetMounted` 与 `@closed` 处理，不是本提交改动。
-  - 更早的 ChatGPT 评审记录了完整 `npm run web:verify` 的四项既存失败；本轮未重跑全站回归，本提交的向导专项测试通过不代表这些全站失败已解决。
-  - 无实体 iPhone、Android 或 HarmonyOS 测试证据；本轮不申请发布验收。
+  - `web:verify` 的五项既有失败仍待各自范围处理；本轮保持在新宿舍向导、聚光引导和通知抽屉回归范围内。
+  - GitHub CI 暂无运行结果。
+  - 设备级键盘、返回手势、触控和焦点恢复仍需真机验证。
+  - 未创建 PR、未合并 main、未部署。
 - questions: 暂无。
