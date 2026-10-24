@@ -491,6 +491,19 @@ try {
   await p.waitForFunction(()=>document.querySelector('.wizard-tip')?.textContent?.trim()==='之后可调整');
   check((await p.locator('.wizard-tip').textContent())?.trim()==='之后可调整','pacing step companion tip keeps the useful reversibility note without repeating the page question');
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
+  const rulesViewport=p.viewportSize();
+  for(const width of [320,390,430]){
+    await p.setViewportSize({width,height:rulesViewport?.height||844});
+    await p.waitForTimeout(80);
+    const choiceLayout=await p.locator('.rule-mode-picks').evaluate(grid=>{
+      const bounds=grid.getBoundingClientRect();
+      const cards=[...grid.querySelectorAll('.wizard-choice')].map(card=>card.getBoundingClientRect());
+      return {count:cards.length,center:bounds.left+bounds.width/2,lastCenter:cards[2]?.left+(cards[2]?.width||0)/2,firstWidth:cards[0]?.width,lastWidth:cards[2]?.width};
+    });
+    check(choiceLayout.count===3&&Math.abs(choiceLayout.center-choiceLayout.lastCenter)<1&&Math.abs(choiceLayout.firstWidth-choiceLayout.lastWidth)<1,`${width}px centers the third pacing choice and keeps card widths aligned`);
+  }
+  if(rulesViewport)await p.setViewportSize(rulesViewport);
+  await p.waitForTimeout(80);
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 default rules and all pacing choices fit without vertical scrolling');
   check(await p.locator('.rule-primary .rule-task-picks').count()===0,'non-scheduled unified pacing hides the task selector used only for scheduled times');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});

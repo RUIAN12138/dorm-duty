@@ -333,6 +333,13 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
   padding: 6px 8px;
   text-align: center;
 }
+.dorm-wizard:not(.is-workspace) .rule-mode-picks > .wizard-choice:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: 100%;
+  max-width: calc((100% - 10px) / 2);
+  box-sizing: border-box;
+}
 .rule-mode-picks strong {
   font-size: 16px;
   line-height: 1.2;
