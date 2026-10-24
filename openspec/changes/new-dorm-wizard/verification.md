@@ -37,3 +37,20 @@
 - PUA 设备探测返回 `devices: []`，当前没有可用的实体 iPhone。以上截图和录屏来自 390×844 WebKit 移动视口模拟，不作为实体 iPhone Safari 证据。
 - Android WebView、HarmonyOS ArkWeb 和实体 iPhone 的触摸体验仍需在真实设备检查。
 - 本轮未合并、未提交 PR、未部署正式网站，也未改动既有宿舍数据。
+
+## 2026-10-24 ChatGPT P0 follow-up
+
+- `node scripts/check-dorm-wizard.mjs`：37 项隔离 SQLite 检查通过。新增覆盖 v2 三种节奏持久化、completion 单一接力任务、并发完成一次推进、撤销/重做不复用序号，以及旧宿舍不能启用非抬水 completion。
+- `npm run web:build`：`vue-tsc`、Vite 与 PWA 构建通过；保留既有大 chunk 警告，无本轮类型/构建错误。构建同步更新 `site/runtime/push-runtime.cjs`。
+- `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：70 项通过，页面错误为 0。
+- `node scripts/check-dorm-wizard-browser.mjs`：70 项通过，页面错误为 0。
+- 浏览器测试覆盖五步创建、创建时第二页类型选择、三种节奏、同一步内的执行/截止滚轮、规则页单屏、真实 ChoreBoard/底栏/日历预览、预览 handler 直接调用、预览操作业务 API 请求数为 0、创建后自动欢迎引导、手动跳过安全返回、任务工作台保存与减少动态效果。
+- `npm run spec:scope`、`npm run spec:validate` 与 `git diff --check`：通过；OpenSpec 验证 18 项无错误。
+- 本轮截图/录屏保存在忽略目录 `data/startup-review/`，包括 WebKit 与 Chromium 的向导、页面拖动、真实组件预览、欢迎引导、值日细节与设置视口证据。
+
+### 未验证与交付边界
+
+- 浏览器运行于 macOS WebKit/Chromium 的移动视口模拟，不代表实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb；这些设备仍未连接/测试。
+- 没有可报告的 GitHub CI 运行状态；本地构建与自动化不等于 CI。
+- 仅使用脚本创建的隔离 SQLite 宿舍与合成身份，没有读取或写入正式数据库。
+- 未创建 PR、未合并 main、未部署正式网站。

@@ -47,6 +47,8 @@ async function save(draft: DormDraft) {
             ? "completion"
             : task?.rotation === "rotation"
               ? "scheduled"
+              : task?.rotation === "completion"
+                ? "completion"
               : "self_round",
       };
     });

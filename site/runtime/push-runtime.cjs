@@ -7687,7 +7687,7 @@ function configuredCategory(category, configuration) {
   if (!configuration) return category;
   const task = configuration.tasks.find((t) => t.key === category.key);
   const hard = (task?.policy && task.policy !== "inherit" ? task.policy : configuration.policy) === "hard";
-  Object.defineProperties(category, { hardRound: { value: hard && category.mode === "self_round", configurable: true }, hardPolicy: { value: hard, configurable: true }, executionTime: { value: task?.execution_time || "08:00", configurable: true } });
+  Object.defineProperties(category, { hardRound: { value: hard && category.mode === "self_round", configurable: true }, hardPolicy: { value: hard, configurable: true }, executionTime: { value: task?.execution_time || "08:00", configurable: true }, version2: { value: configuration?.schema_version === 2, configurable: true } });
   return category;
 }
 async function categories(db, roomId) {
@@ -7738,7 +7738,7 @@ async function initialize(db, room, now) {
           custom?.deadline || hhmm,
           start,
           JSON.stringify(rotation),
-          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : "self_round",
+          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : initialConfig && custom?.rotation === "completion" ? "completion" : "self_round",
           initialConfig ? custom?.enabled ? 1 : 0 : 1,
           custom?.interval || 3
         ]
@@ -7913,6 +7913,34 @@ async function planRound(db, mutation, room, category, members, now, completingI
     true
   );
 }
+async function planCompletionTurn(db, mutation, room, category, members, now, completingTask = null) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const max = await first(db, "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL", [room.id, category.key]);
+  const sequence = Number(max?.sequence || 0) + 1;
+  const last = completingTask ? completingTask : await first(db, "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1", [room.id, category.key]);
+  const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+  const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+  const member = members.find((entry) => entry.user_id === category.rotation_order[nextIndex]) || members[0];
+  const day = localDate(now) > category.start_date ? localDate(now) : category.start_date;
+  appendRows(mutation, [plannedRow(room, category, day, member.user_id, members, sequence)]);
+}
+async function maintainCompletionTurn(db, mutation, room, category, members, now) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const pending = await all(db, "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL ORDER BY sequence,id", [room.id, category.key]);
+  if (pending.length) {
+    const keep = pending[0];
+    for (const extra of pending.slice(1)) mutation.update("chore_tasks", { status: "cancelled" }, "id=? AND status='pending'", [extra.id]);
+    if (!members.some((member) => member.user_id === keep.assignee_id)) {
+      const last = await first(db, "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1", [room.id, category.key]);
+      const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+      const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+      const member = members.find((entry) => entry.user_id === category.rotation_order[nextIndex]) || members[0];
+      mutation.update("chore_tasks", { assignee_id: member.user_id, assignee_name_snapshot: member.nickname, marker_id_snapshot: member.marker_id }, "id=? AND status='pending'", [keep.id]);
+    }
+    return;
+  }
+  await planCompletionTurn(db, mutation, room, category, members, now);
+}
 function synchronizedOrder(order, ids) {
   return [
     ...order.filter((id) => ids.includes(id)),
@@ -8001,6 +8029,8 @@ async function maintain(db, room, now) {
       (entry) => entry.mode === "self_round"
     ))
       await planRound(db, mutation, room, category, members, now);
+    for (const category of settings.filter((entry) => entry.mode === "completion" && entry.key !== "water"))
+      await maintainCompletionTurn(db, mutation, room, category, members, now);
     if (!missing && mutation.ops.length === 1)
       return { state, settings, members };
     await planDaily(db, mutation, room, settings, members, now, replacements);

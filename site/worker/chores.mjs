@@ -189,7 +189,7 @@ function configuredCategory(category,configuration){
   if(!configuration)return category;
   const task=configuration.tasks.find(t=>t.key===category.key);
   const hard=(task?.policy&&task.policy!=="inherit"?task.policy:configuration.policy)==="hard";
-  Object.defineProperties(category,{hardRound:{value:hard&&category.mode==="self_round",configurable:true},hardPolicy:{value:hard,configurable:true},executionTime:{value:task?.execution_time||"08:00",configurable:true}});
+  Object.defineProperties(category,{hardRound:{value:hard&&category.mode==="self_round",configurable:true},hardPolicy:{value:hard,configurable:true},executionTime:{value:task?.execution_time||"08:00",configurable:true},version2:{value:configuration?.schema_version===2,configurable:true}});
   return category;
 }
 async function categories(db, roomId) {
@@ -244,7 +244,7 @@ async function initialize(db, room, now) {
           custom?.deadline || hhmm,
           start,
           JSON.stringify(rotation),
-          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : "self_round",
+          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : initialConfig && custom?.rotation === "completion" ? "completion" : "self_round",
           initialConfig ? (custom?.enabled ? 1 : 0) : 1,
           custom?.interval || 3,
         ],
@@ -540,6 +540,36 @@ async function planRound(
     true,
   );
 }
+async function planCompletionTurn(db, mutation, room, category, members, now, completingTask = null) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const max = await first(db,"SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL",[room.id,category.key]);
+  const sequence = Number(max?.sequence || 0) + 1;
+  const last = completingTask
+    ? completingTask
+    : await first(db,"SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1",[room.id,category.key]);
+  const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+  const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+  const member = members.find((entry) => entry.user_id === category.rotation_order[nextIndex]) || members[0];
+  const day = localDate(now) > category.start_date ? localDate(now) : category.start_date;
+  appendRows(mutation,[plannedRow(room,category,day,member.user_id,members,sequence)]);
+}
+async function maintainCompletionTurn(db, mutation, room, category, members, now) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const pending = await all(db,"SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL ORDER BY sequence,id",[room.id,category.key]);
+  if (pending.length) {
+    const keep = pending[0];
+    for (const extra of pending.slice(1)) mutation.update("chore_tasks",{status:"cancelled"},"id=? AND status='pending'",[extra.id]);
+    if (!members.some((member)=>member.user_id===keep.assignee_id)) {
+      const last = await first(db,"SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1",[room.id,category.key]);
+      const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+      const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+      const member = members.find((entry)=>entry.user_id===category.rotation_order[nextIndex]) || members[0];
+      mutation.update("chore_tasks",{assignee_id:member.user_id,assignee_name_snapshot:member.nickname,marker_id_snapshot:member.marker_id},"id=? AND status='pending'",[keep.id]);
+    }
+    return;
+  }
+  await planCompletionTurn(db,mutation,room,category,members,now);
+}
 function synchronizedOrder(order, ids) {
   return [
     ...order.filter((id) => ids.includes(id)),
@@ -641,6 +671,8 @@ async function maintain(db, room, now) {
       (entry) => entry.mode === "self_round",
     ))
       await planRound(db, mutation, room, category, members, now);
+    for (const category of settings.filter((entry)=>entry.mode === "completion" && entry.key !== "water"))
+      await maintainCompletionTurn(db,mutation,room,category,members,now);
     if (!missing && mutation.ops.length === 1)
       return { state, settings, members };
     await planDaily(db, mutation, room, settings, members, now, replacements);
@@ -983,7 +1015,7 @@ async function board(request, db, env, now, url) {
     db,
     `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
     WHERE t.dorm_id=? AND t.key<>'water' AND t.assignee_id=? AND t.status<>'cancelled' AND c.enabled=1
-    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode='self_round' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`,
+    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode IN ('self_round','completion') AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`,
     [room.id, uid, today],
   );
   const nextRows = await all(
@@ -1267,7 +1299,7 @@ async function claim(request, db, env, now) {
     201,
   );
 }
-function normalizeCategory(input, current, ids, today) {
+function normalizeCategory(input, current, ids, today, allowV2Completion = false) {
   object(
     input,
     [
@@ -1288,9 +1320,7 @@ function normalizeCategory(input, current, ids, today) {
   if (
     !KEYS.includes(input.key) ||
     (input.mode !== undefined &&
-      !(
-        input.key === "water" ? ["completion"] : ["scheduled", "self_round"]
-      ).includes(input.mode))
+      !(input.key === "water" ? ["completion"] : ["scheduled", "self_round", ...(allowV2Completion ? ["completion"] : [])]).includes(input.mode))
   )
     invalid("请选择有效的值日方式，抬水按完成顺序轮换");
   const value = { ...current, ...input };
@@ -1417,7 +1447,7 @@ async function configure(request, db, room, who, now, orderOnly = false) {
   }
   const expected = integer(input.version),
     { state, settings, members } = await maintain(db, room, now);
-  if (nextConfiguration) input.categories = settings.map(c=>{const task=nextConfiguration.tasks.find(t=>t.key===c.key);return {...c,enabled:!!task?.enabled,name:task?.name||c.name,content:task ? (task.content||task.name) : c.content,deadline_time:task?.deadline||c.deadline_time,reminder_interval_days:task?.interval||c.reminder_interval_days,mode:c.key==='water'?'completion':(task?.rotation==='rotation')?'scheduled':'self_round'};});
+  if (nextConfiguration) input.categories = settings.map(c=>{const task=nextConfiguration.tasks.find(t=>t.key===c.key);return {...c,enabled:!!task?.enabled,name:task?.name||c.name,content:task ? (task.content||task.name) : c.content,deadline_time:task?.deadline||c.deadline_time,reminder_interval_days:task?.interval||c.reminder_interval_days,mode:c.key==='water'?'completion':task?.rotation==='rotation'?'scheduled':task?.rotation==='completion'?'completion':'self_round'};});
   if (expected !== state.version)
     fail(409, "stale_version", "任务已变化，请刷新设置后重试");
   if (
@@ -1434,7 +1464,7 @@ async function configure(request, db, room, who, now, orderOnly = false) {
   const updated = input.categories.map((entry) => {
     const old = settings.find((category) => category.key === entry?.key);
     if (!old) invalid();
-    return configuredCategory(normalizeCategory(entry, old, ids, today), nextConfiguration);
+    return configuredCategory(normalizeCategory(entry, old, ids, today, !!nextConfiguration), nextConfiguration);
   });
   const draft = settings.map(
       (category) =>
@@ -1526,6 +1556,8 @@ async function configure(request, db, room, who, now, orderOnly = false) {
             [plannedRow(room, category, today, uid, members)],
             true,
           );
+      } else if (category.mode === "completion" && nextConfiguration && category.key !== "water" && category.enabled) {
+        await planCompletionTurn(db,mutation,room,category,members,now);
       }
     } else if (category.mode === "self_round") {
       mutation.update(
@@ -1534,6 +1566,35 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         "dorm_id=? AND key=? AND status='pending'",
         [room.id, category.key],
       );
+    } else if (category.mode === "completion" && nextConfiguration && category.key !== "water") {
+      if (!category.enabled) {
+        mutation.update(
+          "chore_tasks",
+          { status: "cancelled" },
+          "dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL",
+          [room.id, category.key],
+        );
+      } else {
+        const pending = await first(
+          db,
+          "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL ORDER BY sequence,id LIMIT 1",
+          [room.id, category.key],
+        );
+        if (pending) {
+          mutation.update(
+            "chore_tasks",
+            {
+              name: category.name,
+              content: category.content,
+              deadline_at: deadline(pending.duty_date, category.deadline_time),
+            },
+            "id=? AND status='pending'",
+            [pending.id],
+          );
+        } else {
+          await planCompletionTurn(db, mutation, room, category, members, now);
+        }
+      }
     }
   }
   if(nextConfiguration){
@@ -1675,6 +1736,8 @@ async function completeOnce(db, room, who, now, id) {
 
   if (category.mode === "self_round")
     await planRound(db, mutation, room, category, members, now, task.id);
+  else if (category.mode === "completion" && task.key !== "water" && v2)
+    await planCompletionTurn(db,mutation,room,category,members,now,task);
   await mutation.finish();
   const finished = {
     ...task,

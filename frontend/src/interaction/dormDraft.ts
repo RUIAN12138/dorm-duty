@@ -5,7 +5,7 @@ export interface DraftTask {
   content: string;
   enabled: boolean;
   page: "duty" | "water";
-  rotation: "round" | "rotation";
+  rotation: "round" | "rotation" | "completion";
   display: "title" | "card";
   policy?: "inherit" | "soft" | "hard";
   deadline: string;

@@ -120,6 +120,36 @@ const props = defineProps<{
   section: "duty" | "water" | "calendar";
 }>();
 const router = useRouter();
+const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
+const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
+function guideSeenKey() {
+  return `dorm-welcome-guide-v2:${encodeURIComponent(props.invite)}:${props.memberId}`;
+}
+function openWelcomeGuide(firstUse = false) {
+  if (props.preview || props.demo) return;
+  const seenKey = guideSeenKey();
+  if (firstUse) {
+    try {
+      if (localStorage.getItem(seenKey) || sessionStorage.getItem(GUIDE_OPEN_KEY) === seenKey) return;
+      sessionStorage.setItem(GUIDE_OPEN_KEY, seenKey);
+    } catch { /* Guide availability must not depend on optional storage. */ }
+  }
+  const current = router.currentRoute.value;
+  const flow = {
+    version: 2,
+    returnTo: current.fullPath,
+    seenKey: firstUse ? seenKey : null,
+    firstUse,
+    showFeatureTour: true,
+  };
+  try { sessionStorage.setItem(GUIDE_FLOW_KEY, JSON.stringify(flow)); } catch { /* The guide still works with a root fallback. */ }
+  void router.push("/guide").catch(() => {
+    try {
+      sessionStorage.removeItem(GUIDE_FLOW_KEY);
+      if (firstUse) sessionStorage.removeItem(GUIDE_OPEN_KEY);
+    } catch { /* Optional guide progress. */ }
+  });
+}
 onMounted(() =>
   watch(
     () => board.value?.configuration,
@@ -238,6 +268,10 @@ function openTools() {
   } else toolsOpen.value = true;
 }
 function menuAction(action: MenuAction) {
+  if (props.preview && !["order", "messages"].includes(action)) {
+    showToast("预览不会更改正式宿舍");
+    return;
+  }
   const actions: Record<MenuAction, () => void> = {
     order: () => {
       orderOpen.value = true;
@@ -272,7 +306,7 @@ function menuAction(action: MenuAction) {
     refresh: () => {
       void refreshArrangements();
     },
-    guide: () => void router.push("/guide"),
+    guide: () => openWelcomeGuide(false),
     "feature-tour": () => {
       featureTourOpen.value = true;
     },
@@ -384,7 +418,7 @@ watch(chatOpen, (open) => {
   if (!open) chatCommitted.value = false;
 });
 function demoChatUnavailable() {
-  if (!props.demo) return false;
+  if (!props.demo && !props.preview) return false;
   demoNotice();
   return true;
 }
@@ -922,6 +956,7 @@ const presentedMessages = new Set<string>(),
 async function acknowledgeMessage(id: number) {
   if (
     props.demo ||
+    props.preview ||
     document.hidden ||
     !props.token ||
     !unread.value.some((note) => note.id === id)
@@ -1132,6 +1167,17 @@ async function load(): Promise<boolean> {
     if (!props.demo) void pushSync.run(props.token);
     emit("member", result.member);
     scheduleMidnight(result.server_time);
+    if (!props.preview && !props.demo && result.configuration?.schema_version === 2) {
+      await nextTick();
+      if (router.currentRoute.value.query.tour === "1") {
+        featureTourOpen.value = true;
+        const query = { ...router.currentRoute.value.query };
+        delete query.tour;
+        void router.replace({ path: router.currentRoute.value.path, query, hash: router.currentRoute.value.hash });
+      } else {
+        openWelcomeGuide(true);
+      }
+    }
     return true;
   } catch (e) {
     if (id !== requestId || requestController.signal.aborted) return false;
@@ -1398,7 +1444,7 @@ function openReminder(task?: ChoreTask) {
 }
 const {
   error: messageError,
-  read: markRead,
+  read: readReminder,
   reconcile: reconcileMessages,
   retryPending: retryPendingReads,
 } = useReminderInbox(
@@ -1417,6 +1463,8 @@ const {
     },
   },
 );
+const markRead = (id: number, fromBanner = false) =>
+  props.preview ? Promise.resolve(false) : readReminder(id, fromBanner);
 const {
   draft: markerDraft,
   error: markerError,
@@ -2179,18 +2227,19 @@ onUnmounted(() => {
         @closed="presentNewReminders"
       />
       <PermissionPrimer
-        v-if="board.configuration && pushOpen && !pushPrimerAccepted"
+        v-if="!preview && board.configuration && pushOpen && !pushPrimerAccepted"
         @continue="pushPrimerAccepted = true"
         @cancel="pushOpen = false"
       />
       <ChorePushSettings
-        v-if="!board.configuration || pushPrimerAccepted"
+        v-if="!preview && (!board.configuration || pushPrimerAccepted)"
         v-model="pushOpen"
         :token="token"
         :nickname="board.member.nickname"
         @closed="presentNewReminders"
       />
       <CreatorRecovery
+        v-if="!preview"
         v-model="recoveryOpen"
         mode="manage"
         :token="token"

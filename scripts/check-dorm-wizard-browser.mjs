@@ -225,11 +225,14 @@ try {
   check(await p.locator('.page-task--compact').evaluateAll(nodes=>nodes.every(node=>node.children.length===0&&node.textContent.trim())),'creation task rows show names only');
   await p.locator('[data-task-zone="duty"] .page-task--compact').first().click();
   check(await p.locator('[data-task-zone="water"] .page-task--compact').filter({hasText:'地面'}).count()===1,'tapping a task moves it to the other page in the shared draft');
-  const nudge= p.getByRole('button',{name:'催促',exact:true});
+  const secondPageType=p.getByRole('group',{name:'第二页面类型'});
+  const nudge=secondPageType.getByRole('button',{name:'催促',exact:true});
+  check(await secondPageType.count()===1,'new-room creation can select the second page purpose in the real page arrangement board');
   await nudge.click();
   check(await nudge.getAttribute('aria-pressed')==='true','second-page type is selectable inside its column');
-  await p.getByRole('button',{name:'任务',exact:true}).click();
-  check(await p.getByRole('button',{name:'任务',exact:true}).getAttribute('aria-pressed')==='true','second-page task mode remains selectable');
+  const taskPageType=secondPageType.getByRole('button',{name:'任务',exact:true});
+  await taskPageType.click();
+  check(await taskPageType.getAttribute('aria-pressed')==='true','second-page task mode remains selectable');
   // A held drag follows the same draft assignment path as tapping a task name.
   await p.waitForTimeout(450);
   const item=await p.locator('[data-task-zone="duty"] .page-task--compact').filter({hasText:'厕所'}).boundingBox();
@@ -241,17 +244,21 @@ try {
   check(await p.locator('[data-task-zone="duty"] .page-task--compact').filter({hasText:'厕所'}).count()===1,'task can return to the duty page before previewing its production selector');
   await p.getByRole('button',{name:'前往完成规则',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
-  check(await p.locator('.rule-task-picks button').count()===0&&await p.locator('.rule-detail').count()===0,'the default rule stage stays focused on one room-wide choice');
+  check(await p.locator('.rule-task-picks button').count()===3&&await p.locator('.rule-time-panel .van-picker').count()===1,'the unified scheduled choice exposes its task selector and time wheel directly on the rules step');
+  check(await p.locator('.rule-time-panel .time-field-switch button').count()===2,'scheduled execution and deadline fields switch in place');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
   check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-detail').count()===1,'per-task rule editing is available as a separate compact card state');
-  await p.getByRole('button',{name:'时间',exact:true}).click();
-  check(await p.locator('.rule-time-panel .van-picker').count()===1&&await p.locator('.rule-time-panel .time-field-switch button').count()===2,'time fields switch in place and show only one wheel at a time');
+  check(await p.locator('.rule-detail .rule-rotation .wizard-choice').count()===3&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task rotation tab exposes all three runtime rhythms without stacking unrelated controls');
+  await p.getByRole('tab',{name:'时间',exact:true}).click();
+  check(await p.locator('.rule-detail .rule-time-panel .van-picker').count()===1,'per-task time tab keeps the scheduled time wheel available in the same wizard step');
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 task rule and single time wheel fit in one screen');
   check(await p.getByRole('button',{name:'继续',exact:true}).isVisible()&&await p.locator('.wizard-footer').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),'task rule screen keeps the primary action visible in the viewport');
   await p.screenshot({path:`data/startup-review/${engine}-advanced-rule-single-screen.png`});
   await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
-  await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开下一轮/}).click();
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
   check(await p.locator('.rule-time-panel').count()===0,'round mode keeps time-only controls out of the compact default state');
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).click();
+  check(await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).getAttribute('aria-pressed')==='true','completion handoff is an explicit third creation choice');
   await p.getByRole('button',{name:'预览',exact:true}).click();
   previewTracking = true;
   await p.getByTestId('open-live-preview').click();
@@ -259,6 +266,8 @@ try {
   await live.waitFor();
   check(await p.locator('.dorm-wizard').evaluate(el=>getComputedStyle(el).visibility)==='hidden','full-screen preview removes the wizard from view');
   check(await live.locator('.chore-board').count()===1&&await live.locator('.chore-bottom-nav').count()===1,'preview mounts the production task board and Liquid Glass navigation');
+  const guardedActions=await live.locator('.chore-board').evaluate(async el=>{const s=el.__vueParentComponent?.setupState;if(!s||typeof s.complete!=='function'||typeof s.undo!=='function'||typeof s.menuAction!=='function'||typeof s.markRead!=='function')return false;await s.complete(s.board.workspace_tasks[0]);await s.undo(-900);await s.nudgeWater({id:-901,key:'water',assignee_id:-2,status:'pending',can_complete:true});await s.markRead(-902,true);for(const action of ['settings','push','identity','email','recovery','refresh'])s.menuAction(action);return true;});
+  check(guardedActions,'preview component action handlers were exercised directly so hidden controls are not the safety boundary');
   const liveBounds=await live.boundingBox();
   check(liveBounds?.x===0&&liveBounds?.y===0&&liveBounds?.width===390&&liveBounds?.height===844,'live preview fills the mobile viewport without a phone mockup');
   await live.locator('[data-testid="pane-duty"]').waitFor();
@@ -303,6 +312,22 @@ try {
     path: `data/startup-review/${engine}-wizard-finish.png`,
   });
   await p.getByRole("button", { name: "开始使用", exact: true }).click();
+  const firstUseGuide=p.getByTestId('welcome-guide');
+  await firstUseGuide.waitFor({state:'visible',timeout:5000});
+  check(await firstUseGuide.count()===1,'new schema-v2 room automatically opens the welcome guide on first entry');
+  await p.getByRole('button',{name:'第 4 页',exact:true}).click();
+  await p.getByRole('button',{name:'开始使用',exact:true}).click();
+  const featureTour=p.locator('.tour');
+  await featureTour.waitFor({state:'visible',timeout:5000}).catch(()=>{});
+  if(await featureTour.count())await featureTour.getByRole('button',{name:'跳过',exact:true}).click();
+  await featureTour.waitFor({state:'detached',timeout:5000}).catch(()=>{});
+  await p.getByTestId('open-tools').click();
+  await p.getByTestId('open-welcome-guide').click();
+  await p.getByTestId('welcome-guide').waitFor({state:'visible'});
+  await p.getByRole('button',{name:'跳过',exact:true}).click();
+  await p.waitForFunction(()=>location.pathname!=='/guide');
+  check(new URL(p.url()).pathname!=='/guide'&&!new URL(p.url()).searchParams.has('tour'),'manual guide skip returns to the caller without starting the feature tour');
+  await p.getByTestId('nav-duty').waitFor();
   await p.getByTestId("nav-duty").click();
   await p.locator(".chore-personal .task-selector").waitFor();
   check(

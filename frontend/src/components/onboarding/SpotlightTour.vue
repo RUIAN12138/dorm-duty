@@ -7,21 +7,24 @@ const trigger = document.activeElement as HTMLElement | null;
 const index = ref(0),
   box = ref({ x: 16, y: 80, width: 44, height: 44 });
 async function position() {
+  const step = props.steps[index.value];
+  if (!step) { emit("done"); return; }
   await nextTick();
-  const el = document.querySelector(props.steps[index.value]?.target || "none");
-  if (el) {
-    const r = el.getBoundingClientRect();
-    noteTop.value =
-      r.bottom + 180 > window.innerHeight
-        ? Math.max(16, r.top - 170)
-        : r.bottom + 24;
-    box.value = {
-      x: r.x - 6,
-      y: r.y - 6,
-      width: r.width + 12,
-      height: r.height + 12,
-    };
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const el = document.querySelector<HTMLElement>(step.target);
+  const r = el?.getBoundingClientRect();
+  const style = el ? getComputedStyle(el) : null;
+  const visible = !!el && !!r && !!style && el.isConnected &&
+    style.display !== "none" && style.visibility !== "hidden" &&
+    Number(style.opacity) > 0 && r.width > 0 && r.height > 0 &&
+    r.bottom > 0 && r.right > 0 && r.top < window.innerHeight && r.left < window.innerWidth;
+  if (!visible || !r) {
+    if (index.value + 1 < props.steps.length) index.value++;
+    else emit("done");
+    return;
   }
+  noteTop.value = r.bottom + 180 > window.innerHeight ? Math.max(16, r.top - 170) : r.bottom + 24;
+  box.value = { x: r.x - 6, y: r.y - 6, width: r.width + 12, height: r.height + 12 };
 }
 watch(index, position, { immediate: true });
 window.addEventListener("resize", position);

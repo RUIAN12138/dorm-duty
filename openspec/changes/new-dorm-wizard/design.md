@@ -12,8 +12,16 @@
 ## 2026-10-24 用户覆盖：极简向导与分组件动效
 此前九字段 TaskEditor 不再使用。步骤以稳定主题 ID 管理，任务名称/说明、页面、模式、硬性时间、轮换分别编辑；条件步骤动态变化，保留草稿。新版设置先显示任务列表，再进入同一分主题编辑。球球保留实例；标题、控件、辅助操作分层入场。滑块单驱动跟手，释放选择最近有效步骤；模板/任务/导航调整用布局位移。
 加入身份的必要关联文件 site/local/email-runtime.mjs：仅配置版本2且已验证邮箱可新建本人身份，原子绑定；禁止让同一邮箱在同宿舍重复创建，旧名单认领不变。创建者姓名复用当前已登录身份，无预填其他成员，无虚拟成员。
-当前存储域只有四个稳定任务槽，预览明确最多四项；不伪称无限自定义。非抬水任务仍不提供完成即交接规则，抬水沿用原交接；任意任务域和新的轮换引擎尚需单独实现与兼容验收。
+当前存储域只有四个稳定任务槽，预览明确最多四项；不伪称无限自定义。抬水沿用现有交接规则；新版 schema v2 非抬水任务仅开放已实现并测试的 `self_round`、`scheduled`、`completion` 三种模式，旧宿舍配置路径不开放新增模式。
 本次仅隔离预览；不 PR、不合并、不发布、不写生产数据。
+
+## 2026-10-24 ChatGPT P0 follow-up (implementation scope)
+- The existing rules page keeps the five-stage wizard. Each task gets a compact three-way pacing choice; its selected mode is stored in the same draft, while the global preset remains a convenient default. Scheduled mode exposes execution and deadline wheel fields immediately in the rules stage.
+- `completion` handoff is created only from an explicit schema-version-2 configuration. Runtime keeps at most one pending turn per task and advances it transactionally after the assigned member completes. Legacy category settings continue to reject non-water `completion`; no historical rows are migrated or rewritten.
+- The page-arrangement stage exposes the existing `second_page_kind` selector in both workspace and new-room creation, so draft, preview navigation, and final configuration read the same value.
+- First-use guide completion is scoped by room and member. Entry is deferred until authenticated room configuration has loaded; skip and finish return to the caller. Manual replay retains the source route. Legacy rooms do not auto-open it.
+- Preview safety is enforced at handlers that can issue business requests, not only by hiding controls. Browser verification observes outgoing API requests while exercising task, reminder, push, account, and room actions in the real preview component tree.
+- No production data is used. The tests create isolated rooms and synthetic preview fixtures only.
 
 ## 2026-10-24 补充：新建向导最多五个主页面
 

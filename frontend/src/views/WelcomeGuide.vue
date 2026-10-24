@@ -5,6 +5,8 @@ import DormCompanion from "../components/DormCompanion.vue";
 import { motionAllowed } from "../interaction/motion";
 
 const router = useRouter();
+const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
+const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
 const pages = [
   { title: "先看今天轮到谁", text: "首页会把今天的任务和负责人放在最前面。", mood: "02" },
   { title: "做完后记录一下", text: "完成任务后可以查看本轮进度和下一位室友。", mood: "05" },
@@ -42,16 +44,38 @@ function goTo(value: number) {
   programmaticTarget = target;
   el.scrollTo({ left: targetOffset, behavior: motionAllowed() ? "smooth" : "instant" });
 }
-async function finish() {
-  try { localStorage.setItem("dorm-welcome-guide-v1", "done"); } catch { /* Optional progress memory. */ }
-  await router.replace("/");
+function returnTarget(value: unknown) {
+  if (typeof value !== "string") return "/";
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin || !["/", "/water", "/calendar"].includes(url.pathname)) return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch { return "/"; }
+}
+async function finish(skipped = false) {
+  let flow: { version?: number; returnTo?: string; seenKey?: string | null; firstUse?: boolean; showFeatureTour?: boolean } | null = null;
+  try {
+    flow = JSON.parse(sessionStorage.getItem(GUIDE_FLOW_KEY) || "null");
+    if (flow?.version === 2 && flow.firstUse && typeof flow.seenKey === "string")
+      localStorage.setItem(flow.seenKey, "done");
+    localStorage.setItem("dorm-welcome-guide-v1", "done");
+    sessionStorage.removeItem(GUIDE_FLOW_KEY);
+    if (flow?.firstUse) sessionStorage.removeItem(GUIDE_OPEN_KEY);
+  } catch { /* Tutorial and return remain available when storage is blocked. */ }
+  let target = returnTarget(flow?.returnTo);
+  if (!skipped && flow?.version === 2 && flow.showFeatureTour) {
+    const url = new URL(target, window.location.origin);
+    url.searchParams.set("tour", "1");
+    target = `${url.pathname}${url.search}${url.hash}`;
+  }
+  await router.replace(target);
 }
 onMounted(async () => { await nextTick(); updateIndex(); });
 </script>
 
 <template>
   <main class="welcome-guide" data-testid="welcome-guide">
-    <header><button class="guide-skip" @click="finish">跳过</button><span>轮到 · 使用引导</span></header>
+    <header><button class="guide-skip" @click="finish(true)">跳过</button><span>轮到 · 使用引导</span></header>
     <div ref="track" class="guide-pages" @pointerdown="programmaticTarget=null" @scroll.passive="updateIndex">
       <section v-for="(page, i) in pages" :key="page.title" class="guide-page" :aria-hidden="i !== index">
         <DormCompanion :size="112" :mood="page.mood" :interactive="false" :tips="false" />

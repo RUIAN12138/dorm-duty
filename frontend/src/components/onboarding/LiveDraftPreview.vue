@@ -28,8 +28,9 @@ const localTasks = computed<ChoreTask[]>(() => {
   return props.draft.tasks.filter((task) => task.enabled).flatMap((task) => {
     const mode: ChoreCategory["mode"] = task.key === "water"
       ? "completion"
-      : task.rotation === "rotation" ? "scheduled" : "self_round";
-    return memberIds.map((memberId, index) => {
+      : task.rotation === "rotation" ? "scheduled" : task.rotation === "completion" ? "completion" : "self_round";
+    const assignees = mode === "completion" ? memberIds.slice(0, 1) : memberIds;
+    return assignees.map((memberId, index) => {
       const person = members.find((candidate) => candidate.user_id === memberId)!;
       const taskId = id--;
       return {
@@ -82,7 +83,7 @@ const previewData = computed<ChoreBoardData>(() => {
     reminder_interval_days: task.interval,
     rotation_order: [...memberIds],
     enabled: task.enabled,
-    mode: task.key === "water" ? "completion" : task.rotation === "rotation" ? "scheduled" : "self_round",
+    mode: task.key === "water" ? "completion" : task.rotation === "rotation" ? "scheduled" : task.rotation === "completion" ? "completion" : "self_round",
   }));
   const rounds = categories.filter((category) => category.enabled && category.mode === "self_round").map((category) => ({
     key: category.key as "floor" | "toilet" | "sink",

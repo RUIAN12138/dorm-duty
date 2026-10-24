@@ -103,6 +103,19 @@ function needsEmail() {
 function openRecovery() {
   if (!needsEmail()) recoveryOpen.value = true;
 }
+function openGuideFromSettings() {
+  try {
+    sessionStorage.setItem("dorm-guide-flow-v2", JSON.stringify({
+      version: 2,
+      returnTo: router.currentRoute.value.fullPath,
+      seenKey: null,
+      firstUse: false,
+      showFeatureTour: dorm.value?.configuration?.schema_version === 2,
+    }));
+  } catch { /* Direct navigation still falls back safely to the entry page. */ }
+  appearanceOpen.value = false;
+  void router.push("/guide");
+}
 async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   migrationToken.value = "";
   migrationOwnerToken.value = "";
@@ -1475,7 +1488,7 @@ onUnmounted(() => {
   </button>
   <ElasticSheet v-model="appearanceOpen" title="设置" expandable
     ><AppearanceSettings />
-    <button class="entry-guide-link" @click="appearanceOpen = false; void router.push('/guide')">使用引导</button>
+    <button class="entry-guide-link" @click="openGuideFromSettings">使用引导</button>
     <CheckForUpdates />
   </ElasticSheet>
 </template>

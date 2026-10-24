@@ -70,3 +70,39 @@ The new-room page-arrangement step MUST fit the title, both page destinations, e
 #### Scenario: Existing-room settings
 - **WHEN** a user opens task settings for an already-created room
 - **THEN** the current workspace page arrangement layout and controls remain unchanged
+
+### Requirement: Version-2 task pacing reflects real execution
+The new-room wizard MUST expose the three supported pacing choices with understandable labels and persist each choice as the matching runtime mode. The completion handoff mode MUST be enabled only by an explicit version-2 room configuration; legacy room settings and behavior MUST remain unchanged.
+#### Scenario: All members complete before the next round
+- **WHEN** a version-2 task uses “大家做完再开始下一轮”
+- **THEN** it persists as `self_round` and the next round is created only after every active member completes the current round
+#### Scenario: Scheduled task
+- **WHEN** a version-2 task uses “按时间安排”
+- **THEN** it persists as `scheduled` and its time wheel is visible in the current rules step with execution/deadline semantics that can be validated
+#### Scenario: Completion handoff task
+- **WHEN** a version-2 task uses “做完交给下一位”
+- **THEN** it persists as `completion`, has at most one active assignee, and successful completion advances once to the next active member in configured order
+#### Scenario: Legacy room mode safety
+- **WHEN** an existing room without a version-2 configuration is edited through its legacy settings path
+- **THEN** non-water tasks cannot be switched to the new completion mode and their current tasks, order, and history remain intact
+
+### Requirement: First-use guide follows version-2 room entry
+After successful creation or first join of a version-2 room, the standalone welcome guide MUST be offered once per member and room, with a safe return to the originating room/page. Completion and skip both suppress automatic replay, while manual replay returns to its caller. Legacy rooms MUST NOT be automatically redirected.
+#### Scenario: First version-2 room entry
+- **WHEN** a member reaches a version-2 room for the first time
+- **THEN** the standalone guide opens once after room data is ready and can be skipped without blocking normal use
+#### Scenario: Guide return
+- **WHEN** a member finishes, skips, or manually reopens the guide
+- **THEN** the app returns to the originating in-room page and preserves that room context
+#### Scenario: Legacy room entry
+- **WHEN** a member enters a room without version-2 configuration
+- **THEN** the guide does not automatically open
+
+### Requirement: Preview side effects are isolated at action boundaries
+The production-component preview MUST use synthetic draft data and reject every business side effect at the action/service boundary, including completion, undo, nudges, reminder reads, push actions, account actions, and room/settings writes.
+#### Scenario: Preview attempts a business action
+- **WHEN** a preview user triggers an action that would normally mutate a task, reminder, push subscription, account, room, or settings
+- **THEN** no business API request or persistent application state change occurs
+#### Scenario: Preview requests display-only content
+- **WHEN** a preview user opens locally renderable calendar, statistics, task details, or display-only help
+- **THEN** it renders from synthetic data without a business API request

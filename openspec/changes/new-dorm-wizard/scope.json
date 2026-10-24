@@ -1,6 +1,6 @@
 {
   "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
-  "implementationBase": "b1139a4390d0b1398f8b23eca24eae4c4422f19d",
+  "implementationBase": "4e472f4d36199228ec407158e2b3a49ed7deeb99",
   "allowed": [
     "frontend/src/components/onboarding/",
     "frontend/src/interaction/dormDraft.ts",

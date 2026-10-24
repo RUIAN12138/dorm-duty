@@ -114,6 +114,32 @@ try {
   check((await emailApi("/chores/claim",{invite_code:old.invite_code,nickname:"自行加入"})).status===403,"old room still requires creator roster");
   const n=h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM dorm_members WHERE dorm_id=?").get(room.dorm.id).n;
   check(n===2,"no virtual roommate list was created");
+  const completionConfig={...config,policy:"soft",tasks:config.tasks.map(t=>t.key==="floor"?{...t,page:"duty",rotation:"completion"}:t)};
+  const completionRoom=await create("完成后交接宿舍",completionConfig);
+  check(completionRoom.dorm.configuration.tasks.find(t=>t.key==="floor").rotation==="completion","schema-v2 creation persists the explicit completion rhythm");
+  const completionPeerResponse=await emailApi("/chores/claim",{invite_code:completionRoom.invite_code,nickname:"下一位室友"});
+  check(completionPeerResponse.status===201,"a second verified member can join the completion-room fixture");
+  const completionPeer=await completionPeerResponse.json();
+  const completionBoard=await board(completionRoom);
+  check(completionBoard.categories.find(c=>c.key==="floor").mode==="completion","explicit v2 completion config initializes the real completion mode");
+  const firstTurn=completionBoard.workspace_tasks.find(t=>t.key==="floor"&&t.status==="pending");
+  assert(firstTurn);
+  const concurrent=await Promise.all([
+    h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}}),
+    h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}}),
+  ]);
+  check(concurrent.filter(r=>r.ok).length===1&&concurrent.filter(r=>r.status===409).length===1,"concurrent completion advances the handoff exactly once");
+  let pendingTurns=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(completionRoom.dorm.id);
+  check(pendingTurns.length===1&&pendingTurns[0].sequence===2&&pendingTurns[0].assignee_id===completionPeer.member.user_id,"successful completion creates one next turn for the next active member");
+  const directV2Mode=await h.request("/chores/settings",{token:completionRoom.access_token,method:"PATCH",data:{version:completionBoard.version+1,categories:completionBoard.categories}});
+  check(directV2Mode.status===422,"the new completion mode requires an explicit v2 configuration payload");
+  const completionUndo=await h.request(`/chores/tasks/${firstTurn.id}/undo`,{token:completionRoom.access_token,method:"PATCH",data:{}});
+  check(completionUndo.ok,"undo cancels the next completion turn and restores the just-completed turn");
+  const restored=pendingTurns=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(completionRoom.dorm.id);
+  check(restored.length===1&&restored[0].sequence===1&&restored[0].assignee_id===firstTurn.assignee_id,"undo leaves exactly the original assignee's turn pending");
+  await h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}});
+  pendingTurns=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(completionRoom.dorm.id);
+  check(pendingTurns.length===1&&pendingTurns[0].sequence===3&&pendingTurns[0].assignee_id===completionPeer.member.user_id,"re-completion advances once without reusing a cancelled sequence");
   const task = b.workspace_tasks.find(
     (t) => t.key === "floor" && t.status === "pending",
   );
@@ -149,6 +175,8 @@ try {
     "calendar credits actual completer",
   );
   const oldb = await board(old);
+  const legacyCompletion=await h.request("/chores/settings",{token:old.access_token,method:"PATCH",data:{version:oldb.version,categories:oldb.categories.map(c=>c.key==="floor"?{...c,mode:"completion"}:c)}});
+  check(legacyCompletion.status===422,"legacy room settings cannot enable the new non-water completion rhythm");
   const oldtask = oldb.today_tasks[0];
   const oldpeer = old.dorm.members.find((m) => m.user_id !== old.member_id);
   const oldtoken = (

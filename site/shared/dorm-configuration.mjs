@@ -31,7 +31,7 @@ export function validateDormConfiguration(value) {
       !keys.includes(t?.key) ||
       typeof t.enabled !== "boolean" ||
       !["duty", "water"].includes(t.page) ||
-      !["round", "rotation"].includes(t.rotation) ||
+      !["round", "rotation", "completion"].includes(t.rotation) ||
       !["title", "card"].includes(t.display) ||
       !/^([01]\d|2[0-3]):[0-5]\d$/.test(t.deadline) ||
       !Number.isInteger(t.interval) ||
