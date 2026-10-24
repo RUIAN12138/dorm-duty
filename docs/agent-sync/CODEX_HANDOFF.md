@@ -1,12 +1,13 @@
 # Codex → ChatGPT · 创建完成页到正式首页的球球连续过渡
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `03688382137dfd9685d76eb175788231b8f6c58d`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/03688382137dfd9685d76eb175788231b8f6c58d
+- code_sha: `a59e4f6a38d3e1623566e9272de75a48b3042f8d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/a59e4f6a38d3e1623566e9272de75a48b3042f8d
 - related_pr: 无（未创建 PR）
-- requirements: 延续新宿舍向导精简与交互收尾目标，修复真实创建完成页的球球不能连续进入正式宿舍首页的问题。仅复用现有共享位置过渡；本地体验、旧宿舍业务和正式数据保持隔离。
+- requirements: 延续新宿舍向导精简与交互收尾目标，修复真实创建完成页的球球不能连续进入正式宿舍首页的问题。复用已有共享位置过渡并保证其完整结束；本地体验、旧宿舍业务和正式数据保持隔离。
 - changed_files:
   - `frontend/src/components/onboarding/DormWizard.vue`
+  - `frontend/src/components/ChoreBoard.vue`
   - `frontend/src/interaction/companion.ts`
   - `scripts/check-dorm-wizard-browser.mjs`
   - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
@@ -14,24 +15,26 @@
   - `openspec/changes/new-dorm-wizard/verification.md`
   - `openspec/changes/new-dorm-wizard/scope.json`
 - implemented:
-  - 根因：正式首页已有 680ms WAAPI 球球飞入动画，但交接起点只从旧登录入口采集。创建成功页点击「开始使用」没有登记当前球球几何位置，正式首页因此从默认位置显示。
-  - 共享交接函数现在接受显式来源元素；真实邀请码确认页在退出前测量当前向导球球，并把位置传给正式值日页原有的飞入动画。原登录来源仍使用默认查询；本地体验没有真实房间交接。
-  - 在浏览器测试中拦截该动画，比较「开始使用」点击前球球坐标与正式任务页首帧位移，误差小于 2px；另验证本地体验退出不新增真实首页交接。
-  - 同步 OpenSpec 需求、验收记录与范围白名单。业务代码提交为 `ec5d6b8b582a8042852cd208a8b39d0878866b36`，随后登记范围的文档提交为当前完整 SHA `03688382137dfd9685d76eb175788231b8f6c58d`。两个提交都已推送到原开发分支。
+  - 根因：正式首页已有 680ms WAAPI 球球飞入动画，但交接起点只从旧登录入口采集。真实创建完成页点击「开始使用」没有登记当前球球几何位置，首页球球因此从默认位置出现。
+  - 共享交接函数现在接受显式来源元素；真实邀请码确认页在退出前测量当前向导球球，把位置传给正式值日页已有飞入动画。旧登录入口仍使用默认查询；本地体验不登记真实房间交接。
+  - 首访 schema-v2 页面会等待这个动画的完成状态后再打开欢迎教程，避免教程路由卸载球球组件而中断飞行动画。等待使用完成信号，不使用固定延时；请求已过期或中止时不再继续导航。
+  - 浏览器回归记录 WAAPI 完成/取消状态，验证真实流程首帧坐标与向导球球位置误差小于 2px、动画成功结束后才打开教程、本地体验不触发真实交接。
+  - 业务修复提交 `ec5d6b8b582a8042852cd208a8b39d0878866b36`，OpenSpec 范围登记提交 `03688382137dfd9685d76eb175788231b8f6c58d`，完成时序补充提交 `a59e4f6a38d3e1623566e9272de75a48b3042f8d`；均已推送到原开发分支。
   - 工作树中原有的 `site/runtime/email-runtime.cjs` 用户修改未编辑、未暂存、未提交；未修改旧宿舍规则、宿舍记录或数据库。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导、预览、真实创建与工作台流程通过，最终 `PASS []`；包含新增连续过渡几何断言与本地体验隔离断言。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导、预览、真实创建与工作台流程通过，最终 `PASS []`；新增连续过渡起点、动画完成、本地体验隔离断言通过。
   - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，最终 `PASS []`。
   - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；保留既有 `GuestHome` 超 500 KB chunk 提示。
-  - `npm run spec:validate`：18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过；Impeccable detector 对修改后的向导文件返回 `[]`。
-  - 在提交 SHA 的干净独立 worktree 运行 `npm run spec:scope`：通过，17 个变更、365 个登记文件，digest `625b0da598f7030c9e35cf081abff9fad3499bb7989fe7c2e2c5afea13a00ae4`。
-  - CI：GitHub Status `pending`、0 个 statuses；0 个 Check Runs；该 SHA 有 0 个 GitHub Actions runs。没有 CI 通过记录。
+  - `npm run spec:validate`：18/18 通过；`npm run spec:scope` 在干净独立 worktree 通过，17 个变更、365 个登记文件，digest `e5b796dabf2fefd827f1574c81b0468fe7ebb62577c01c2e64915aeef4863e79`。
+  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过。
+  - Impeccable detector 在 `DormWizard.vue` 与 `ChoreBoard.vue` 返回一条 `bounce-easing` warning：`ChoreBoard.vue:2879` 的既有动画曲线；本轮未修改该行。
+  - CI：GitHub Status `pending`、0 个 statuses；0 个 Check Runs；0 个 Actions runs。没有 CI 通过记录。
 - platform_status:
-  - macOS Chromium/WebKit 在隔离的 390×844 移动视口中通过；这是桌面浏览器引擎模拟。
+  - macOS Chromium/WebKit 隔离的 390×844 移动视口通过；这是桌面引擎模拟。
   - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验收。
   - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
 - remaining:
-  - 协调分支当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 是 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，不匹配本交接 SHA；本轮没有针对 `1a00db1` 或本 SHA 的新评审建议。上一轮 P1-A 通知抽屉生命周期修复已由 `61c70f1` 提交，但评审文档仍只覆盖旧 SHA。
+  - 协调分支当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 是 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，不匹配本交接 SHA；本轮没有针对 `1a00db1`、`0368838` 或本 SHA 的新评审建议。上一轮 P1-A 通知抽屉生命周期修复由 `61c70f1` 实施，但评审文档仍只覆盖旧 SHA。
   - 更早评审提到四项全量 `web:verify` 失败，本轮未重跑；本轮仅完成新宿舍向导定向回归，不代表全站 Web 验收。
   - 真实设备、登录、系统通知权限及正式部署仍未验收。
 - questions: 暂无。
