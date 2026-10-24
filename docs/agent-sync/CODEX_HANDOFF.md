@@ -1,37 +1,30 @@
-# Codex → ChatGPT · 新宿舍规则页按需显示定时选择器
+# Codex → ChatGPT · 新宿舍规则卡片重心微调
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `1fa6540fe48ffb5a8a5ccbf53f5841a1dcf7754b`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/1fa6540fe48ffb5a8a5ccbf53f5841a1dcf7754b
+- code_sha: `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/b1c69f06e0154521bd7be87d85db11aa6a85e0f2
 - related_pr: 无（继续使用独立预览分支，未创建 PR）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；在新宿舍创建规则页中，只有选择“按时间安排”且有多个可配置任务时才显示用于切换定时任务的胶囊；轮次完成和交接方式隐藏此控件。保留任务时间、选中状态及现有业务规则，不影响旧宿舍。
+- requirements: 用户目标“不断改进新手引导页面和宿舍创建页面，做到简洁高效”；沿用 `docs/agent-sync/USER_REQUIREMENTS.md` 的黑白极简、单屏规则选择及新旧宿舍隔离边界。本轮只调整新版创建规则页三种完成方式卡片的视觉平衡。
 - changed_files:
   - `frontend/src/components/onboarding/DormWizard.vue`
   - `scripts/check-dorm-wizard-browser.mjs`
-  - `openspec/changes/new-dorm-wizard/proposal.md`
-  - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
-  - `openspec/changes/new-dorm-wizard/tasks.md`
-  - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - 全局轮次模式下，仅在 `globalPacing === 'scheduled' && ruleTasks.length > 1` 时显示任务切换胶囊，并复用已有 `wizard-panel` 过渡。
-  - 单个定时任务直接呈现该任务时间控件；切回轮次或交接模式时收起定时选择器，不清除任务选择及截止时间。
-  - OpenSpec 增加按需显示场景；浏览器断言覆盖轮次/交接隐藏、定时显示、动画结束后移除、选中任务及截止时间恢复。
+  - 规则页保持两列布局，将奇数项中最后一张方式卡片居中；宽度与上排卡片一致，只作用于新建宿舍向导，不影响任务设置工作区。
+  - 增加 320、390、430px 下卡片居中及宽度对齐的浏览器几何断言；未改标题、文案、业务数据、选择逻辑及旧宿舍行为。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导流程通过，`errors=[]`。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导流程通过，`errors=[]`。
-  - 两套浏览器回归覆盖创建向导和教程、三种模式切换、同一任务/截止时间保留、预览正式组件和无业务 API 写入、320/390/430px 视口、短屏可达与减少动态效果。均为 macOS 桌面 Chromium/WebKit 移动视口模拟。
-  - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；存在既有 `GuestHome` 大 chunk 警告。
-  - `npm run spec:check`：在本 SHA 的干净临时 worktree 中通过；OpenSpec 18/18、范围 17 项/364 个文件，digest `2d77480fd0c1cba7e98d8fc9905787f96ca2b2340ce6fa1a567c47f1b8fe8b0b`，范围门禁 18/18。主工作树里原有未提交 `site/runtime/email-runtime.cjs` 不在此验证树中，也未触碰。
-  - `npm run spec:validate`：18/18；`node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过；Impeccable 对 `DormWizard.vue` 检测为 `[]`。
-  - 截图保存在本机：`data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/chromium-wizard-rules-scheduled.png`、`data/startup-review/webkit-wizard-rules-default.png`、`data/startup-review/webkit-wizard-rules-scheduled.png`；未上传到仓库。
-  - 本轮未运行完整 `npm run web:verify`。
-- CI: GitHub Commit Status 为 `pending`，`total_count=0`、`statuses=[]`；Check Runs 为 0，Actions Runs 为 0。没有 CI 通过证据。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导/教程/预览流程通过，`PASS []`；包括 320/390/430px 新增卡片几何断言、创建草稿、正式页面组件预览与无业务 API 写入检查。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整流程通过，`PASS []`。
+  - `npm run web:build`：Vue 类型检查、Vite 与 PWA 构建通过；仍有既有 `GuestHome` 大 chunk 警告。
+  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过；Impeccable detector 对本轮目标返回 `[]`。
+  - 修改前后截图位于本机 `data/startup-review/chromium-wizard-rules-default-before-balance.png`、`data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/webkit-wizard-rules-default-before-balance.png`、`data/startup-review/webkit-wizard-rules-default.png`，移动视口 390×844；截图未提交到仓库。
+  - 本轮未运行完整 `npm run web:verify` 或 `npm run spec:check`。
+- CI: GitHub Commit Status `pending`、`total_count=0`、`statuses=[]`；Check Runs 0、Actions Runs 0。无 CI 通过证据。
 - platform_status:
-  - 隔离合成数据下的 macOS 桌面 Chromium/WebKit 移动视口模拟通过；不是 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。
-  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库；无真实通知、打卡或成员写入。
+  - macOS 桌面 Chromium/WebKit 移动视口模拟通过，不等于 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。
+  - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库；未生成真实成员、打卡、通知或宿舍数据。
 - remaining:
-  - 最新 `CHATGPT_REVIEW.md` 仍为 `reviewed_code_sha=ba7c0ca9b9d5970568f956907d5415bd3109ff39`，未覆盖本提交 `1fa6540fe48ffb5a8a5ccbf53f5841a1dcf7754b`；等待针对新 SHA 的独立评审。
-  - 前次评审提到的四项 `web:verify` 失败未在本 SHA 重跑，不能据旧报告断言当前结果。
-  - 创建/预览/教程仍未做真实认证端到端与三类实体设备验收；姓名圆润字体及绿色标识等需求不属于本轮，仍待后续处理。
+  - 最新 `CHATGPT_REVIEW.md` 仍为 `reviewed_code_sha=ba7c0ca9b9d5970568f956907d5415bd3109ff39`，早于本 SHA；本 SHA 尚待独立评审。当前评审无针对本 SHA 的新 P0。
+  - 前次评审记录的四项 `web:verify` 失败未在本 SHA 重跑；本轮不声称完整 Web 验证全绿。
+  - 邮箱认证端到端与实体设备体验未验证。
   - 主工作树原有未提交 `site/runtime/email-runtime.cjs` 修改已保留，未暂存、未提交、未推送。
 - questions: 暂无。
