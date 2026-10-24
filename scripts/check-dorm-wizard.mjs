@@ -448,12 +448,25 @@ try {
   const creditRow=h.db.sqlite.prepare("SELECT user_id,task_id,status,consumed_by FROM chore_water_credits WHERE dorm_id=?").get(hardWaterRoom.dorm.id);
   check(creditRow.user_id===hardWaterPeer.member.user_id&&creditRow.task_id===hardWaterAdvanceReceipt.task.id&&creditRow.status==="pending"&&creditRow.consumed_by===null,"early water action persists one pending credit for its actor");
   check(JSON.stringify(sideEffects(hardWaterRoom.dorm.id))===JSON.stringify(beforeAdvanceEffects),"early water credit does not send reminders or queue notifications");
+  const hardWaterCreditOwnerUndo=await h.request(`/chores/tasks/${creditRow.task_id}/undo`,{token:hardWaterRoom.access_token,method:"PATCH",data:{}});
+  check(hardWaterCreditOwnerUndo.status===403,"another member cannot withdraw an early water credit");
+  const creditBeforeCreatorUndo=h.db.sqlite.prepare("SELECT status,consumed_by FROM chore_water_credits WHERE task_id=?").get(creditRow.task_id);
+  check(creditBeforeCreatorUndo.status==="pending"&&creditBeforeCreatorUndo.consumed_by===null,"denied credit withdrawal leaves the pending credit unchanged");
   const hardWaterCreditUndo=await h.request(`/chores/tasks/${creditRow.task_id}/undo`,{token:hardWaterPeer.access_token,method:"PATCH",data:{}});
   check(hardWaterCreditUndo.ok,"unused early water credit can be withdrawn by its creator");
+  const hardWaterCreditUndoReceipt=await hardWaterCreditUndo.clone().json();
   const cancelledCredit=h.db.sqlite.prepare("SELECT status,consumed_by FROM chore_water_credits WHERE task_id=?").get(creditRow.task_id);
   check(cancelledCredit.status==="cancelled"&&cancelledCredit.consumed_by===null,"withdrawing early water marks only the unused credit cancelled");
+  const cancelledCreditTask=h.db.sqlite.prepare("SELECT id,status,completed_at,completed_by FROM chore_tasks WHERE id=?").get(creditRow.task_id);
+  check(hardWaterCreditUndoReceipt.task.id===cancelledCreditTask.id&&hardWaterCreditUndoReceipt.task.status===cancelledCreditTask.status&&hardWaterCreditUndoReceipt.task.completed_at===cancelledCreditTask.completed_at&&hardWaterCreditUndoReceipt.task.completed_by===cancelledCreditTask.completed_by&&cancelledCreditTask.status==="cancelled"&&cancelledCreditTask.completed_at===null&&cancelledCreditTask.completed_by===null,"early-credit undo receipt matches the cancelled task row by id");
+  const afterCreditUndoSnapshot=waterSnapshot(hardWaterRoom.dorm.id,creditRow.task_id);
+  const repeatedCreditUndo=await h.request(`/chores/tasks/${creditRow.task_id}/undo`,{token:hardWaterPeer.access_token,method:"PATCH",data:{}});
+  check(repeatedCreditUndo.status===409,"repeating an early-credit undo returns a conflict");
+  check(JSON.stringify(waterSnapshot(hardWaterRoom.dorm.id,creditRow.task_id))===JSON.stringify(afterCreditUndoSnapshot),"repeated credit undo leaves persisted state and side effects unchanged");
   const waterAfterCreditUndo=await board(hardWaterRoom,hardWaterPeer.access_token,hardWaterPeer.member.user_id);
   check(waterAfterCreditUndo.water_task?.id===hardWaterTask.id&&waterAfterCreditUndo.water_task.status==="pending"&&waterAfterCreditUndo.water_task.assignee_id===hardWaterRoom.member_id,"withdrawing early water credit leaves the planned queue unchanged");
+  const visibleWaterTasks=[...(waterAfterCreditUndo.today_tasks||[]),...(waterAfterCreditUndo.workspace_tasks||[]),...(waterAfterCreditUndo.undo_tasks||[]),waterAfterCreditUndo.water_task].filter(Boolean);
+  check(!visibleWaterTasks.some(task=>task.id===creditRow.task_id),"cancelled early-credit task is absent from the next board GET");
   check(JSON.stringify(sideEffects(hardWaterRoom.dorm.id))===JSON.stringify(beforeAdvanceEffects),"early credit undo does not enqueue reminder or push side effects");
 
   const softWaterConfig={...hardWaterConfig,policy:"soft",tasks:hardWaterConfig.tasks.map(t=>t.key==="water"?{...t,policy:"soft"}:t)};

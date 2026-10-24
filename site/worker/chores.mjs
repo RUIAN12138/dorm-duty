@@ -1792,6 +1792,15 @@ async function undo(db, room, who, now, id) {
 async function undoOnce(db, room, who, now, id) {
   const { state, settings, members } = await maintain(db, room, now),
     task = await taskInRoom(db, room, id);
+  if (task.status === "cancelled" && task.key === "water") {
+    const cancelledCredit = await first(
+      db,
+      "SELECT id FROM chore_water_credits WHERE task_id=? AND dorm_id=? AND status='cancelled'",
+      [id, room.id],
+    );
+    if (cancelledCredit)
+      fail(409, "not_completed", "这条打卡已撤销或尚未完成");
+  }
   if ((task.completed_by || task.assignee_id) !== who.user_id)
     fail(403, "not_assignee", "只能撤销自己的打卡");
   if (task.status !== "completed")
@@ -1820,14 +1829,14 @@ async function undoOnce(db, room, who, now, id) {
     );
     mutation.update(
       "chore_tasks",
-      { status: "cancelled", completed_at: null },
+      { status: "cancelled", completed_at: null, completed_by: null },
       "id=? AND status='completed'",
       [id],
     );
     await mutation.finish();
     return json({
       task: taskView(
-        { ...task, status: "pending", completed_at: null },
+        { ...task, status: "cancelled", completed_at: null, completed_by: null },
         now,
         who,
         settings,

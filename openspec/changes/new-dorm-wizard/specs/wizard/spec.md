@@ -27,6 +27,10 @@ The product MUST expose a standalone four-page welcome guide and local loopback 
 #### Scenario: Local experience completion
 - **WHEN** the user completes the local wizard experience
 - **THEN** the app confirms locally without creating a room or issuing a room-creation request
+#### Scenario: Jump between standalone guide pages
+- **WHEN** the user selects a distant page using the page indicator
+- **THEN** the active page content and primary action stay synchronized with the page nearest the visible scroll position, then settle on the selected page
+- **AND** the indicator touch targets keep fixed layout positions while the active capsule stretches visually
 
 ### Requirement: Natural task pacing and time wheel
 The new-room rules page MUST use understandable labels for supported modes and show wheel controls only where time settings apply.
@@ -44,9 +48,20 @@ New-room creation MUST expose no more than five top-level pages: room name, task
 #### Scenario: Dragging between creation stages
 - **WHEN** the user drags the glass thumb across a valid stage boundary
 - **THEN** the content, page title, and companion tip update during the drag, and release settles the thumb to the nearest stage
+- **AND** the final pointer-up position is applied even if the platform coalesces or omits the last pointer-move event
 #### Scenario: Existing-room settings
 - **WHEN** a user configures an existing room
 - **THEN** its existing settings progress control and flow remain unchanged
+
+### Requirement: Start creation at the first actionable question
+Opening the new-room creation flow MUST show the first editable room-name step directly instead of an additional creation-only introduction. The standalone `/guide`, the once-per-member guide for first entry into a version-2 room, and manual workspace help MUST remain available.
+#### Scenario: First-time creation entry
+- **WHEN** a user starts creating a new room with no saved draft
+- **THEN** the room-name field and creation progress are immediately visible
+- **AND** no creation-only welcome slides or automatic spotlight block the first edit
+#### Scenario: Standalone onboarding remains
+- **WHEN** a user opens `/guide` or enters a version-2 room for the first time
+- **THEN** the existing four-page welcome guide or the existing first-entry guide behavior remains unchanged
 
 ### Requirement: Single-screen new-room page arrangement
 The new-room page-arrangement step MUST fit the title, both page destinations, enabled task names, second-page type, and wizard actions within a normal phone viewport without reducing the established large type. This compact presentation MUST NOT alter the existing-room settings workspace.

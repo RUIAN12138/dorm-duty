@@ -81,6 +81,21 @@ function stepAt(clientX: number, rect: DOMRect) {
   return fraction * lastIndex();
 }
 
+function applyHorizontalPoint(clientX: number, active: NonNullable<typeof gesture>) {
+  const raw = stepAt(clientX, active.rect);
+  paint(raw);
+
+  // A small hysteresis prevents the live page from flickering at step boundaries.
+  const current = active.index;
+  const candidate = Math.round(raw);
+  const crossed = candidate > current
+    ? raw >= current + 0.58
+    : candidate < current
+      ? raw <= current - 0.58
+      : false;
+  if (crossed) updateStep(candidate);
+}
+
 function down(event: PointerEvent) {
   if (event.button !== 0 || gesture || props.labels.length < 2) return;
   flight?.stop();
@@ -120,28 +135,36 @@ function move(event: PointerEvent) {
     host.value.setPointerCapture(event.pointerId);
   }
   event.preventDefault();
-  const raw = stepAt(event.clientX, active.rect);
-  paint(raw);
+  applyHorizontalPoint(event.clientX, active);
   const now = performance.now();
   const speed = Math.abs(event.clientX - active.lastX) / Math.max(1, now - active.lastAt);
   stretch.value = Math.min(0.085, 0.035 + speed * 0.012);
   active.lastX = event.clientX;
   active.lastAt = now;
-
-  // A small hysteresis prevents the live page from flickering at step boundaries.
-  const current = active.index;
-  const candidate = Math.round(raw);
-  const crossed = candidate > current
-    ? raw >= current + 0.58
-    : candidate < current
-      ? raw <= current - 0.58
-      : false;
-  if (crossed) updateStep(candidate);
 }
 
 function up(event: PointerEvent) {
   const active = gesture;
   if (!active || event.pointerId !== active.pointerId) return;
+
+  const dx = event.clientX - active.startX;
+  const dy = event.clientY - active.startY;
+  if (!active.dragging && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
+    gesture = null;
+    pressed.value = false;
+    dragging.value = false;
+    stretch.value = 0;
+    settle(props.modelValue);
+    return;
+  }
+  if (!active.dragging && Math.abs(dx) >= 5) {
+    active.dragging = true;
+    dragging.value = true;
+  }
+
+  // Use pointerup as the final sample. Some touch stacks coalesce the last
+  // pointermove, so the thumb and page must settle from the actual release point.
+  if (active.dragging) applyHorizontalPoint(event.clientX, active);
   gesture = null;
   pressed.value = false;
   dragging.value = false;

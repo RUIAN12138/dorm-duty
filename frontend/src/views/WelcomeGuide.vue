@@ -23,6 +23,7 @@ function updateIndex() {
   const measured = Math.max(0, Math.min(pages.length - 1, Math.round(el.scrollLeft / Math.max(1, el.clientWidth))));
   if (programmaticTarget !== null) {
     const targetOffset = programmaticTarget * el.clientWidth;
+    index.value = measured;
     if (Math.abs(el.scrollLeft - targetOffset) < 2) {
       index.value = programmaticTarget;
       programmaticTarget = null;
@@ -33,16 +34,20 @@ function updateIndex() {
 }
 function goTo(value: number) {
   const target = Math.max(0, Math.min(pages.length - 1, value));
-  index.value = target;
   const el = track.value;
   if (!el) return;
   const targetOffset = target * el.clientWidth;
   if (Math.abs(el.scrollLeft - targetOffset) < 2) {
     programmaticTarget = null;
+    index.value = target;
     return;
   }
   programmaticTarget = target;
   el.scrollTo({ left: targetOffset, behavior: motionAllowed() ? "smooth" : "instant" });
+  if (!motionAllowed()) {
+    index.value = target;
+    programmaticTarget = null;
+  }
 }
 function returnTarget(value: unknown) {
   if (typeof value !== "string") return "/";
@@ -85,7 +90,7 @@ onMounted(async () => { await nextTick(); updateIndex(); });
     </div>
     <footer>
       <div class="guide-dots" aria-label="引导进度">
-        <button v-for="(_, i) in pages" :key="i" :class="{ active: i === index }" :aria-label="`第 ${i + 1} 页`" @click="goTo(i)" />
+        <button v-for="(_, i) in pages" :key="i" :class="{ active: i === index }" :aria-label="`第 ${i + 1} 页`" :aria-current="i === index ? 'step' : undefined" @click="goTo(i)" />
       </div>
       <button class="guide-next" @click="index === pages.length - 1 ? finish() : goTo(index + 1)">{{ index === pages.length - 1 ? "开始使用" : "继续" }}</button>
     </footer>
@@ -103,10 +108,12 @@ header { display: flex; align-items: center; justify-content: center; min-height
 h1 { max-width: 12em; font-size: clamp(34px, 9vw, 48px); line-height: 1.14; letter-spacing: -.04em; margin: 0; }
 p { max-width: 22em; margin: 20px 0 0; color: var(--muted); font-size: 17px; line-height: 1.6; }
 footer { display: grid; justify-items: center; gap: 28px; padding-top: 18px; }
-.guide-dots { display: flex; align-items: center; gap: 10px; min-height: 18px; }
-.guide-dots button { width: 8px; height: 8px; border: 0; border-radius: 999px; padding: 0; background: color-mix(in srgb,var(--ink) 22%,transparent); transition: width 260ms cubic-bezier(.22,1,.36,1),background 180ms; }
-.guide-dots button.active { width: 26px; background: var(--ink); }
+.guide-dots { display: flex; align-items: center; gap: 0; min-height: 44px; }
+.guide-dots button { position: relative; flex: 0 0 24px; width: 24px; height: 44px; border: 0; border-radius: 999px; padding: 0; background: transparent; transition: transform 120ms cubic-bezier(.22,1,.36,1); }
+.guide-dots button:active { transform: scale(.94); }
+.guide-dots button::before { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; border-radius: 999px; background: color-mix(in srgb,var(--ink) 22%,transparent); transform: translate(-50%,-50%); transition: transform 260ms cubic-bezier(.22,1,.36,1),background 180ms; }
+.guide-dots button.active::before { background: var(--ink); transform: translate(-50%,-50%) scaleX(2.75); }
 .guide-next { width: 100%; max-width: 460px; min-height: 56px; border: 0; border-radius: 30px; color: var(--canvas); background: var(--ink); font: inherit; font-weight: 600; transition: transform 220ms cubic-bezier(.22,1,.36,1); }
 .guide-next:active { transform: scale(.985); }
-@media (prefers-reduced-motion: reduce) { .guide-dots button,.guide-next { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .guide-dots button,.guide-dots button::before,.guide-next { transition: none; } .guide-dots button:active,.guide-next:active { transform: none; } }
 </style>

@@ -111,8 +111,34 @@ try {
   await p.goto("http://127.0.0.1:8094/guide");
   await p.locator('[data-testid="welcome-guide"]').waitFor();
   check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
+  check(await p.locator(".guide-dots button").evaluateAll((els) => els.every((el) => el.offsetWidth >= 24 && el.offsetHeight >= 44)), "tutorial page indicators expose a stable, accessible touch target");
+  const guideDotLayout = await p.locator(".guide-dots button").evaluateAll((els) => els.map((el) => [el.offsetLeft, el.offsetWidth]));
   await p.getByRole("button", { name: "第 4 页", exact: true }).click();
+  await p.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const guideTransitionState = await p.evaluate(() => {
+    const track = document.querySelector(".guide-pages");
+    const pages = [...document.querySelectorAll(".guide-page")];
+    const activeIndex = pages.findIndex((page) => page.getAttribute("aria-hidden") === "false");
+    const physicalIndex = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    return {
+      activeIndex,
+      physicalIndex,
+      currentStep: document.querySelector(".guide-dots button.active")?.getAttribute("aria-current"),
+      action: document.querySelector(".guide-next")?.textContent?.trim(),
+    };
+  });
+  check(
+    guideTransitionState.activeIndex === guideTransitionState.physicalIndex &&
+      guideTransitionState.currentStep === "step" &&
+      guideTransitionState.action === (guideTransitionState.physicalIndex === 3 ? "开始使用" : "继续"),
+    "guide content and action stay aligned with the page currently in view during direct navigation",
+  );
+  await p.waitForFunction(() => {
+    const track = document.querySelector(".guide-pages");
+    return !!track && Math.abs(track.scrollLeft - 3 * track.clientWidth) < 2;
+  });
   await p.locator('.guide-page[aria-hidden="false"] h1', { hasText: "日历里看完成记录" }).waitFor();
+  check(JSON.stringify(await p.locator(".guide-dots button").evaluateAll((els) => els.map((el) => [el.offsetLeft, el.offsetWidth]))) === JSON.stringify(guideDotLayout), "tutorial page indicator keeps its layout fixed while the capsule animates");
   await p.screenshot({ path: `data/startup-review/${engine}-welcome-guide.png` });
   check(await p.getByRole("button", { name: "开始使用", exact: true }).isVisible(), "last tutorial page exposes the start action");
   await p.getByRole("button", { name: "开始使用", exact: true }).click();
@@ -124,10 +150,29 @@ try {
   await p.screenshot({path:`data/startup-review/${engine}-local-wizard-entry.png`});
   await localEntry.click();
   await p.locator(".dorm-wizard").waitFor();
+  await p.waitForFunction(async () => {
+    const root = document.querySelector('.dorm-wizard');
+    const body = root?.querySelector('.wizard-body');
+    const footer = root?.querySelector('.wizard-footer');
+    if (!body || body.getBoundingClientRect().width === 0 || body.getBoundingClientRect().height === 0 || !footer?.getBoundingClientRect().height) return false;
+    const animations = document.getAnimations({ subtree: true }).filter((animation) =>
+      animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming().iterations),
+    );
+    if (animations.length) await Promise.all(animations.map((animation) => animation.finished.catch(() => {})));
+    return true;
+  });
+  await p.evaluate(() => new Promise(requestAnimationFrame));
   await p.screenshot({path:`data/startup-review/${engine}-local-wizard-open.png`});
   check(await p.locator(".dorm-wizard").count()===1&&await p.getByTestId("email-account-panel").count()===0,"local entry opens the isolated creation experience without the email gate");
-  const intro=p.getByRole("button",{name:"跳过介绍",exact:true});if(await intro.count())await intro.click();
-  if(await p.locator('.tour').count()){await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click().catch(()=>{});}
+  await p.getByLabel("宿舍名称",{exact:true}).waitFor({state:"visible"});
+  check(await p.locator('.welcome-slides').count()===0,"first-time creation skips the redundant creation-only slide deck");
+  check(await p.getByRole('heading',{name:"宿舍，叫什么？",exact:true}).isVisible(),"first-time creation opens directly on the editable room-name question");
+  check(await p.locator('.tour').count()===0,"the first editable question is not blocked by an automatic tour");
+  await p.getByRole("button",{name:"退出配置",exact:true}).click();
+  await p.locator(".dorm-wizard").waitFor({state:"detached"});
+  await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
+  await p.locator(".dorm-wizard").waitFor();
+  check(await p.getByLabel("宿舍名称",{exact:true}).isVisible(),"local creation preview also starts on the first editable question");
   await p.getByLabel("宿舍名称",{exact:true}).fill("本地体验宿舍");
   for(let step=0;step<4;step++)await p.getByRole("button",{name:"继续",exact:true}).click();
   await p.getByRole("button",{name:"完成体验",exact:true}).click();
@@ -136,7 +181,7 @@ try {
   await p.goto("http://127.0.0.1:8094/?preview=new-dorm");
   await p.locator(".dorm-wizard").waitFor();
   check(!new URL(p.url()).searchParams.has("preview"), "local preview shortcut opens the wizard and cleans its query flag");
-  const introAgain=p.getByRole("button",{name:"跳过介绍",exact:true});if(await introAgain.count())await introAgain.click();
+  check(await p.getByLabel("宿舍名称",{exact:true}).isVisible(),"reopened local wizard retains the direct first-question entry");
   await p.getByRole("button",{name:"退出配置",exact:true}).click();
   await p.locator(".dorm-wizard").waitFor({state:"detached"});
   await p.getByTestId("open-tools").click();
@@ -160,12 +205,64 @@ try {
   check(progressTrack?.height===20,'progress track has the stronger 20px black-and-gray treatment');
   await p.evaluate(()=>{let count=0;Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{count++;return true}});Object.defineProperty(window,'__wizardHaptics',{configurable:true,get:()=>count});});
   await p.waitForTimeout(450);
-  await p.screenshot({
-    path: `data/startup-review/${engine}-wizard-basic.png`,
+  await p.screenshot({path:`data/startup-review/${engine}-wizard-basic.png`});
+  await p.locator('.creation-progress').evaluate((host) => {
+    const rect = host.getBoundingClientRect();
+    const stepX = (index) => rect.left + 24 + (rect.width - 48) * index / 4;
+    host.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, pointerId: 91, pointerType: 'touch', button: 0,
+      clientX: stepX(0), clientY: rect.top + rect.height / 2,
+    }));
+    // Simulate a touch platform that coalesces the final pointermove and only
+    // delivers the release at the new step.
+    host.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true, pointerId: 91, pointerType: 'touch', button: 0,
+      clientX: stepX(1), clientY: rect.top + rect.height / 2,
+    }));
   });
-  await p.getByRole('button',{name:'继续',exact:true}).click();
   await p.locator('[data-step="tasks"]').waitFor();
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','progress drag applies the final pointer-up coordinate when the last move is coalesced');
+  check(await p.evaluate(()=>window.__wizardHaptics)>0,'release onto a new step requests one light haptic');
+  await p.locator('.creation-progress').evaluate((host) => {
+    const rect = host.getBoundingClientRect();
+    const x = rect.left + 24 + (rect.width - 48) / 4;
+    host.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, pointerId: 92, pointerType: 'touch', button: 0,
+      clientX: x, clientY: rect.top + rect.height / 2,
+    }));
+    host.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true, pointerId: 92, pointerType: 'touch', button: 0,
+      clientX: x, clientY: rect.top + rect.height / 2 + 16,
+    }));
+  });
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','vertical pointer-up cancels progress dragging and leaves the page selection unchanged');
   check(await p.locator('.template-card').count()===4,'template selection keeps stable task slots');
+  check(await p.locator('.creation-task-picks button').first().evaluate(async (element) => {
+    let stableFrames = 0;
+    let previous = element.getBoundingClientRect();
+    for (let frame = 0; frame < 120 && stableFrames < 3; frame++) {
+      await new Promise(requestAnimationFrame);
+      const next = element.getBoundingClientRect();
+      const stable = Math.abs(next.x - previous.x) < 0.2 && Math.abs(next.y - previous.y) < 0.2 && Math.abs(next.width - previous.width) < 0.2 && Math.abs(next.height - previous.height) < 0.2;
+      stableFrames = stable ? stableFrames + 1 : 0;
+      previous = next;
+    }
+    return stableFrames === 3;
+  }),'task editor controls settle in place before the next wizard interaction');
+  await p.waitForFunction(async () => {
+    const activeAnimations = document.getAnimations({ subtree: true }).filter((animation) =>
+      animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming().iterations),
+    );
+    if (activeAnimations.length) await Promise.all(activeAnimations.map((animation) => animation.finished.catch(() => {})));
+    const step = document.querySelector('.wizard-step:not([aria-hidden="true"])');
+    const entered = [...(step?.querySelectorAll('[data-enter]') || [])];
+    const tip = document.querySelector('.wizard-tip');
+    return document.querySelectorAll('.wizard-step').length === 1
+      && (!tip || Number(getComputedStyle(tip).opacity) >= 0.99)
+      && entered.every((element) => Number(getComputedStyle(element).opacity) >= 0.99);
+  });
+  await p.evaluate(() => new Promise(requestAnimationFrame));
+  await p.screenshot({path:`data/startup-review/${engine}-progress-pointerup-settled.png`});
   await p.locator('.creation-task-picks button').first().click();
   await p.getByLabel('任务名称',{exact:true}).fill('地面清洁');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'task screen contains name and optional description only');
