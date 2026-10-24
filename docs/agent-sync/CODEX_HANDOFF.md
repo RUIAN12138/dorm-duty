@@ -1,40 +1,42 @@
-# Codex → ChatGPT · 新宿舍向导与创建进度回归交接
+# Codex → ChatGPT · 新宿舍向导与创建流程交接
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `ba7c0ca9b9d5970568f956907d5415bd3109ff39`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ba7c0ca9b9d5970568f956907d5415bd3109ff39
-- related_pr: 无（按用户要求保持隔离开发分支，等待用户验收）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；继续精简新宿舍向导并处理针对 `d7930a70583de86f41629ca231d0c7975eefaf6b` 的评审建议。未改旧宿舍业务数据或正式服务。
+- code_sha: `e324cfc8e5f32775b0e9992e2f15dfda2cdcd598`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e324cfc8e5f32775b0e9992e2f15dfda2cdcd598
+- related_pr: 无（保持独立预览分支，未创建 PR）
+- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮针对新宿舍通知权限说明与系统授权动作重复进入两张抽屉的问题，收敛为单一通知设置抽屉。未扩展到旧宿舍行为、正式服务或正式数据。
 - changed_files:
-  - `frontend/src/components/onboarding/CreationProgress.vue`
-  - `frontend/src/components/onboarding/DormWizard.vue`
-  - `frontend/src/components/onboarding/observeElementSize.mjs`
-  - `frontend/src/components/onboarding/observeElementSize.d.mts`
+  - `frontend/src/components/ChoreBoard.vue`
+  - `frontend/src/components/ChorePushSettings.vue`
+  - `frontend/src/components/onboarding/PermissionPrimer.vue`（删除）
   - `scripts/check-dorm-wizard-browser.mjs`
   - `openspec/changes/new-dorm-wizard/design.md`
   - `openspec/changes/new-dorm-wizard/proposal.md`
+  - `openspec/changes/new-dorm-wizard/scope.json`
   - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
 - implemented:
-  - 规则步骤球球提示从“选择适合宿舍的方式，之后也能修改”收紧为“之后可调整”；选项文案、配置、校验与页面布局未改变。
-  - 处理评审 P2：`CreationProgress.vue` 将尺寸监听封装为 `observeElementSize`，有 `ResizeObserver` 时用观察器，否则监听 `window.resize`；组件卸载时调用 disposer，移除同一监听。
-  - 浏览器回归隔离模拟缺失 `ResizeObserver`，断言回退监听注册、重测与清理；真实进度控件新增 `pointercancel`、`lostpointercapture` 和反向拖动后释放覆盖。
-  - OpenSpec 补充文案及监听生命周期要求与验证记录。无旧宿舍迁移、正式数据库或后端业务变更。
+  - 新版宿舍在同一通知设置抽屉呈现用途说明和开启按钮；移除了前置的重复 `PermissionPrimer` 抽屉。通知组件仍仅在非预览且抽屉打开时挂载。
+  - 系统权限仍只在用户明确点击“开启系统通知”时请求；拒绝时显示原错误并保留重试入口。未改订阅接口或权限语义。
+  - 用途文案说明值日与室友留言系统提醒，并保留站内消息提示。仅展示层和新版 ChoreBoard 入口调整。
+  - 浏览器脚本覆盖打开设置时请求数为 0、用户点击请求一次、拒绝时可重试且不会误报成功；等待抽屉实际打开和入场动画结束后保存截图。
 - tests:
-  - `node scripts/check-dorm-wizard-browser.mjs`：Chromium 完整隔离向导/教程流程通过，`PASS []`。覆盖 ResizeObserver 回退清理、取消/失去指针捕获、反向拖动、五步向导、草稿、预览副作用隔离、隔离创建及首次教程、旧工作台、320/390/430px 与减少动态效果。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：WebKit 同脚本通过，`PASS []`。桌面 WebKit 移动视口模拟，不是实体 iPhone Safari。
-  - `npm run web:build`：Vue 类型检查、Vite/PWA 构建通过；存在既有 GuestHome 大 chunk 提示。
-  - `npm run spec:check`：OpenSpec 18/18、变更范围门禁 18/18；`npm run spec:scope`：17 个变更、364 个登记文件通过，摘要 `8bb8333dc9557c71ca8754a0c8432a145181e4f3f925d20d2c766f29bc413246`。
-  - Impeccable 对 `DormWizard.vue`、`CreationProgress.vue` 检测为 `[]`；`git diff --check`、新 helper 与浏览器脚本 `node --check` 通过。
-  - 完整 `npm run web:verify` 已实际运行但**失败，不能视为全量通过**。失败四项：`scripts/check-screen-gesture-check.mjs`（复跑确认 `banner.swipePose.value.opacity<1` 断言失败）；`scripts/check-settings-save-lifecycle.mjs` 与 `scripts/check-navigation-components.mjs`（测试打包器无法把 `frontend/src/interaction/memberNames.css` 导入脚本）；`site/scripts/check-scheduled-reminders.mjs`（旧版本迁移测试调用 `/guest/create` 收到 500，期望 201）。这四项与本次向导改动无关，未为使全量测试转绿而改动相关页面或后端。
-- CI: GitHub Commit Status 对 `ba7c0ca9b9d5970568f956907d5415bd3109ff39` 为 `pending`、`total_count=0`、`statuses=[]`；Actions 查询没有此 SHA 的 workflow run。无 CI 通过证据。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：118 项通过，`errors=[]`，使用隔离合成宿舍和通知 API 替身。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：118 项通过，`errors=[]`。WebKit 缺失部分 Web Push API 时，测试只补最小 API 桩；`Notification.requestPermission()` 被替身拦截，不会弹出真实系统权限框。
+  - `npm run web:build`：`vue-tsc`、Vite、PWA 构建通过；保留既有 `GuestHome` 大 chunk 提示。
+  - `npm run spec:check`：在提交 SHA 的临时干净 worktree 中通过，OpenSpec 18/18、变更范围 17 项/364 个登记文件，digest `97f542179f089282d847f8cade247fef4454d9715d9095f78383a4e31a0e4c1a`，范围门禁用例 18/18。为运行该检查，临时 `node_modules` 依赖链接通过临时 Git exclude 排除；临时 worktree 随后清理。
+  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check` 通过。
+  - 验收截图位于本地 `data/startup-review/chromium-notification-settings-explanation.png` 与 `data/startup-review/webkit-notification-settings-explanation.png`，均为 390×844 移动视口；未上传到仓库。
+  - 本轮未运行完整 `npm run web:verify`。上一评审记录的四项 Web 回归失败尚无修复或重跑证据：opacity 断言、两个 `memberNames.css` 测试导入、旧迁移 `/guest/create` 返回 500；因此不报告全量 Web 验证通过。
+- CI: 对本代码 SHA 查询 GitHub Commit Status、Check Runs 与 Actions Runs：`statuses=[]`、`check_runs=[]`、`workflow runs=[]`；无 CI 通过证据。
 - platform_status:
-  - Chromium 与 WebKit 是 macOS 桌面浏览器移动视口模拟；未进行实体 iPhone Safari/PWA 验收。
-  - Android WebView、HarmonyOS ArkWeb 未真机验证。
-  - 预览/创建浏览器回归使用隔离数据；没有访问或写入正式宿舍数据。
+  - Chromium/WebKit 为 macOS 桌面浏览器的 390×844 隔离视口模拟；拒绝授权流程由 API 替身验证，不等于真实系统权限弹窗测试。
+  - 实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 均未真机验证。
+  - 未创建正式 PR、未合并 main、未部署、未访问或修改正式数据库；无真实订阅或通知发送。
 - remaining:
-  - 当前评审 `reviewed_code_sha=d7930a70583de86f41629ca231d0c7975eefaf6b` 已早于本交接 SHA；请只对新业务 SHA `ba7c0ca9b9d5970568f956907d5415bd3109ff39` 独立评审。评审指出的 P1-A 四项全量 Web 回归失败仍未解决；本轮遵守向导范围未改无关测试/业务。P1-B 的隔离向导与预览路径浏览器测试通过，但真实邮箱认证流程和实体设备验收仍缺证据。
-  - 当前执行工作树另有未纳入本提交的 `site/runtime/email-runtime.cjs` 修改；它不属于本轮向导变更，未暂存、未提交、未推送。其归属尚未确认。
-  - 未创建 PR、未合并 main、未部署、未访问正式数据库。
-- questions: 暂无；等待对新 SHA 的审查及用户预览验收。
+  - 最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=ba7c0ca9b9d5970568f956907d5415bd3109ff39`，早于本交接 SHA；该评审未针对本轮提交，**本 SHA 尚待独立评审**。评审中没有需要本轮处理的新 P0。
+  - 评审记录的四项既存 `web:verify` 失败仍待另行定位或作为范围外阻塞登记；本轮保持通知引导的最小改动，未改无关测试与产品代码。
+  - 真机与真实系统权限弹窗验收仍缺失。
+  - 业务工作树中原有未提交 `site/runtime/email-runtime.cjs` 修改已保留，未暂存、未提交、未推送；不属于本轮修改。
+- questions: 暂无；请针对 `e324cfc8e5f32775b0e9992e2f15dfda2cdcd598` 评审后再给下一轮建议。
