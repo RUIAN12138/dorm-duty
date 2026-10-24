@@ -95,3 +95,34 @@
   - 聚光引导焦点循环及系统返回/屏幕阅读器仍需真实 iOS、Android、HarmonyOS 验收；此前桌面浏览器断言不能替代设备检查。
   - 当前本地业务工作树有未暂存的 `site/runtime/email-runtime.cjs` 用户改动；该内容未触碰、未暂存且不属于 `5fbfb07`。
 - questions: 无需立即决策。若后续要求完成 vivo 实机验收，需要用户方便时提供目标设备并由用户解锁/授权连接；不需要提供任何凭据。
+
+---
+
+# Codex → ChatGPT · 未验证会话不再误跳登录页
+
+- code_branch: `codex/new-dorm-wizard-preview`
+- code_sha: `1cb5c33b5534bf477e50caaee5809efbb57f24f4`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/1cb5c33b5534bf477e50caaee5809efbb57f24f4
+- related_pr: 无（未创建 PR）
+- requirements: 修复会话恢复遇到暂时网络失败时，路由守卫仍把用户误送到密码登录页的问题；有效、过期和主动退出的既有身份规则不变。
+- changed_files:
+  - `frontend/src/router/index.ts`
+  - `scripts/check-startup-session.mjs`
+  - `openspec/changes/startup-session-optics-preview/scope.json`
+  - `openspec/changes/startup-session-optics-preview/specs/startup/spec.md`
+  - `openspec/changes/startup-session-optics-preview/tasks.md`
+  - `openspec/changes/startup-session-optics-preview/verification.md`
+- implemented:
+  - 路由守卫等待 `session.init()` 后检查 `session.initialized`。如果凭证仍保留但身份未能完成验证，受保护路由和 `/admin/login` 都回到公开启动入口，交由现有恢复／重试界面处理。
+  - 验证完成且没有有效用户时，受保护路由仍转到 `/admin/login?next=...`；已登录用户仍从登录页转到 `/dorm`。未改 token 持久化、邮箱 Cookie 验证、有效期、服务端权限或退出流程。
+  - 增补真实 router guard 的隔离测试，并在启动 OpenSpec 登记路由恢复行为。
+- tests:
+  - `node scripts/check-startup-session.mjs`：现有 13 项会话/API 检查及新增 7 项路由守卫检查通过。
+  - `npm --prefix frontend run typecheck`：通过。
+  - `npm run web:verify`：前端、Worker、邮箱运行模块构建及清单内全部前后端回归通过，退出码 0；仍有既有 `GuestHome` 大 chunk 提示。
+  - `DORM_TEST_PORT=24133 node scripts/check-startup-browser.mjs` 与 `DORM_BROWSER=webkit DORM_TEST_PORT=24134 node scripts/check-startup-browser.mjs`：Chromium、WebKit 启动恢复各 11 项通过，`errors=[]`。
+  - `npm run spec:validate`：19/19 通过。`npm run spec:scope`：18 个 change、383 个文件通过。`git diff --check` 通过。
+- CI: GitHub Commit Status `state=pending`、`statuses=[]`；Check Runs `total_count=0`。没有可确认的远程 CI 结果。
+- platform_status: 本机 macOS 桌面 Chromium/WebKit 隔离浏览器通过；不代表实体 iPhone Safari/PWA、vivo Android WebView 或 HarmonyOS ArkWeb 验收。无实体设备冷启动测试。
+- remaining: 本次修复避免“未验证”被路由误判为“登出”，但不能证明 vivo WebView 的 Cookie/localStorage 在强制停止、系统重启后的持久性问题已解决；仍需目标设备验收。本地原开发工作树预先存在的 `site/runtime/email-runtime.cjs` 23 行修改未触碰、未暂存且不在此提交。未访问正式服务／数据库，未创建 PR、未合并、未部署。最新评审仍为 `reviewed_code_sha=0e29305d01fd291f36a7080db22ef5974fdd70cb`，并非针对本次 SHA。
+- questions: 无需立即决策；如需验证 WebView 关闭后恢复，需在 vivo 真机上用独立测试账号按启动／强停／重启／断网流程实测，不收集凭据。
