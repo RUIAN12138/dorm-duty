@@ -715,17 +715,28 @@ function taskView(task, now, who, settings, members) {
     status: task.status,
     completed_at: task.completed_at,
     completed_by: task.completed_by || null,
-    can_complete: Boolean(
-      who &&
-        !who.is_demo &&
-        (who.user_id === task.assignee_id || typeof category?.hardPolicy === "boolean") &&
-        (!category?.hardPolicy || now.toISOString() >= deadline(task.duty_date,category.executionTime)) &&
-        task.status === "pending" &&
-        task.duty_date <= localDate(now) &&
-        category?.enabled,
-    ),
+    can_complete: canCompleteTask(task, category, who, now),
     sequence: task.sequence,
   };
+}
+function canDelegateTask(category) {
+  // Schema version alone is not an authorization grant. The explicit hard
+  // policy is the product rule that permits a roommate to cover a task.
+  return category?.version2 === true && category?.hardPolicy === true;
+}
+function canCompleteTask(task, category, who, now) {
+  if (
+    !task ||
+    !who ||
+    who.is_demo ||
+    !category?.enabled ||
+    task.status !== "pending" ||
+    task.duty_date > localDate(now) ||
+    (who.user_id !== task.assignee_id && !canDelegateTask(category))
+  )
+    return false;
+  return !category.hardPolicy ||
+    now.toISOString() >= deadline(task.duty_date, category.executionTime);
 }
 function reminderView(row) {
   return {
@@ -1095,12 +1106,12 @@ async function board(request, db, env, now, url) {
       ? await all(
           db,
           `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-     WHERE t.dorm_id=? AND t.assignee_id=? AND t.status='completed' AND t.completed_at>=?
-     AND t.id=(SELECT own.id FROM chore_tasks own WHERE own.dorm_id=t.dorm_id AND own.key=t.key AND own.assignee_id=t.assignee_id AND own.status='completed' ORDER BY own.completed_at DESC,own.id DESC LIMIT 1)
+    WHERE t.dorm_id=? AND COALESCE(t.completed_by,t.assignee_id)=? AND t.status='completed' AND t.completed_at>=?
+     AND t.id=(SELECT own.id FROM chore_tasks own WHERE own.dorm_id=t.dorm_id AND own.key=t.key AND COALESCE(own.completed_by,own.assignee_id)=? AND own.status='completed' ORDER BY own.completed_at DESC,own.id DESC LIMIT 1)
      AND c.enabled=1 AND ((t.key='water' AND EXISTS(SELECT 1 FROM chore_water_credits credit WHERE credit.task_id=t.id AND credit.status='pending')) OR (t.sequence IS NULL AND c.mode='scheduled') OR (t.sequence IS NOT NULL AND c.mode IN ('self_round','completion')))
      AND NOT EXISTS(SELECT 1 FROM chore_tasks later WHERE later.dorm_id=t.dorm_id AND later.key=t.key AND later.sequence>t.sequence AND later.status='completed')
      ORDER BY t.completed_at DESC,t.id DESC LIMIT 4`,
-          [room.id, uid, new Date(now.getTime() - DAY).toISOString()],
+          [room.id, uid, new Date(now.getTime() - DAY).toISOString(), uid],
         )
       : [];
   const rounds = [];
@@ -1160,7 +1171,9 @@ async function board(request, db, env, now, url) {
       marker_id,
     })),
     configuration: JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null"),
-    workspace_tasks: workspaceRows.map(task=>({...taskView(task,now,actorForTasks,settings,members),can_complete:Boolean(actorForTasks && task.status=== "pending" && task.duty_date<=today)})),
+    workspace_tasks: workspaceRows.map((task) =>
+      taskView(task, now, actorForTasks, settings, members),
+    ),
     categories: settings,
     rounds,
     today_tasks: todayRows.map((task) =>
@@ -1685,16 +1698,16 @@ async function complete(db, room, who, now, id) {
 async function completeOnce(db, room, who, now, id) {
   const { state, settings, members } = await maintain(db, room, now),
     task = await taskInRoom(db, room, id),
-    category = settings.find((entry) => entry.key === task.key);
-  const v2 = await first(db,"SELECT 1 FROM dorm_configurations WHERE dorm_id=? AND schema_version=2",[room.id]);
-  if (task.assignee_id !== who.user_id && !v2)
-    fail(403, "not_assignee", "只能完成自己的任务");
+    category = settings.find((entry) => entry.key === task.key),
+    v2 = category?.version2 === true;
   if (task.status !== "pending")
     fail(409, "already_completed", "任务已完成或已取消");
   if (!category.enabled) fail(409, "category_disabled", "这项任务已暂停");
   if (task.duty_date > localDate(now))
     fail(422, "future_task", "任务开始后才可以打卡");
   if(v2 && category.hardPolicy && now.toISOString()<deadline(task.duty_date,category.executionTime)) fail(422,"task_not_started","任务到执行时间后才可以打卡");
+  if (!canCompleteTask(task, category, who, now))
+    fail(403, "not_assignee", "只能完成自己的任务");
   const member = members.find((entry) => entry.user_id === who.user_id),
     mutation = new Mutation(
       db,
@@ -1849,8 +1862,8 @@ async function undoOnce(db, room, who, now, id) {
     state.version,
     who,
     false,
-    "EXISTS(SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND assignee_id=? AND status='completed')",
-    [id, task.assignee_id],
+    "EXISTS(SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND COALESCE(completed_by,assignee_id)=? AND status='completed')",
+    [id, who.user_id],
   );
   if (task.key === "water") {
     const flow = await first(

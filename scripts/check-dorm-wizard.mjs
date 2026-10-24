@@ -102,10 +102,22 @@ try {
     if(r.headers.get("set-cookie"))cookie=r.headers.get("set-cookie").split(";")[0];
     return r;
   }
-  const challenge=await (await emailApi("/email/code",{email:"joining@example.invalid"})).json();
-  const digits=sent.at(-1).text.match(/验证码是：(\d{6})/)[1];
-  assert((await emailApi("/email/verify",{email:"joining@example.invalid",code:digits,challenge_id:challenge.challenge_id,mail_enabled:false})).ok);
-  const joined=await emailApi("/chores/claim",{invite_code:room.invite_code,nickname:"自行加入"});
+  async function verifyEmail(email){
+    const challenge=await (await emailApi("/email/code",{email})).json();
+    const digits=sent.at(-1).text.match(/验证码是：(\d{6})/)[1];
+    const verified=await emailApi("/email/verify",{email,code:digits,challenge_id:challenge.challenge_id,mail_enabled:false});
+    assert(verified.ok,`fixture email verification failed for ${email}`);
+  }
+  async function joinRoom(invite_code,nickname){
+    return await emailApi("/chores/claim",{invite_code,nickname});
+  }
+  const sideEffects=(dormId)=>({
+    reminders:h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM chore_reminders WHERE dorm_id=?").get(dormId).n,
+    pushJobs:h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM chore_push_jobs WHERE dorm_id=?").get(dormId).n,
+    corrections:h.db.sqlite.prepare("SELECT COUNT(*) AS n FROM chore_history_entries WHERE dorm_id=?").get(dormId).n,
+  });
+  await verifyEmail("joining@example.invalid");
+  const joined=await joinRoom(room.invite_code,"自行加入");
   check(joined.status===201,"verified email may create own name only in a new room");
   const joinedValue=await joined.json(),token=joinedValue.access_token,peer={user_id:joinedValue.member.user_id};
   const again=await (await emailApi("/chores/claim",{invite_code:room.invite_code,nickname:"自行加入"})).json();
@@ -124,6 +136,24 @@ try {
   check(completionBoard.categories.find(c=>c.key==="floor").mode==="completion","explicit v2 completion config initializes the real completion mode");
   const firstTurn=completionBoard.workspace_tasks.find(t=>t.key==="floor"&&t.status==="pending");
   assert(firstTurn);
+  const completionPeerBoard=await board(completionRoom,completionPeer.access_token,completionPeer.member.user_id);
+  const peerCompletionTurn=completionPeerBoard.workspace_tasks.find(t=>t.id===firstTurn.id);
+  check(peerCompletionTurn?.can_complete===false,"soft completion turn is not exposed as completable to another member");
+  const completionBefore={
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(completionRoom.dorm.id).version,
+    task:h.db.sqlite.prepare("SELECT status,completed_by FROM chore_tasks WHERE id=?").get(firstTurn.id),
+    pending:h.db.sqlite.prepare("SELECT sequence,assignee_id,status FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status IN ('pending','completed') ORDER BY sequence").all(completionRoom.dorm.id),
+    sideEffects:sideEffects(completionRoom.dorm.id),
+  };
+  const softCompletionAttempt=await h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionPeer.access_token,method:"PATCH",data:{}});
+  check(softCompletionAttempt.status===403,"soft completion rhythm rejects another member at the service boundary");
+  const completionAfter={
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(completionRoom.dorm.id).version,
+    task:h.db.sqlite.prepare("SELECT status,completed_by FROM chore_tasks WHERE id=?").get(firstTurn.id),
+    pending:h.db.sqlite.prepare("SELECT sequence,assignee_id,status FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status IN ('pending','completed') ORDER BY sequence").all(completionRoom.dorm.id),
+    sideEffects:sideEffects(completionRoom.dorm.id),
+  };
+  check(JSON.stringify(completionAfter)===JSON.stringify(completionBefore),"denied soft completion leaves task, round version, handoff, history, reminders, and push jobs unchanged");
   const concurrent=await Promise.all([
     h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}}),
     h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}}),
@@ -140,23 +170,67 @@ try {
   await h.request(`/chores/tasks/${firstTurn.id}/complete`,{token:completionRoom.access_token,method:"PATCH",data:{}});
   pendingTurns=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(completionRoom.dorm.id);
   check(pendingTurns.length===1&&pendingTurns[0].sequence===3&&pendingTurns[0].assignee_id===completionPeer.member.user_id,"re-completion advances once without reusing a cancelled sequence");
+
+  const softRoundConfig={...config,policy:"soft",tasks:config.tasks.map(t=>t.key==="floor"?{...t,page:"duty",rotation:"round"}:t)};
+  const softRoundRoom=await create("软性全员轮次权限",softRoundConfig);
+  const softRoundPeer=await (await joinRoom(softRoundRoom.invite_code,"轮次室友")).json();
+  const softRoundBoard=await board(softRoundRoom);
+  const ownerRoundTask=softRoundBoard.workspace_tasks.find(t=>t.key==="floor"&&t.assignee_id===softRoundRoom.member_id&&t.status==="pending");
+  assert(ownerRoundTask);
+  const softRoundPeerBoard=await board(softRoundRoom,softRoundPeer.access_token,softRoundPeer.member.user_id);
+  check(softRoundPeerBoard.workspace_tasks.find(t=>t.id===ownerRoundTask.id)?.can_complete===false,"soft self-round tasks are not exposed as completable to another member");
+  const softRoundBefore={
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(softRoundRoom.dorm.id).version,
+    task:h.db.sqlite.prepare("SELECT status,completed_by FROM chore_tasks WHERE id=?").get(ownerRoundTask.id),
+    sequence:h.db.sqlite.prepare("SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status<>'cancelled'").get(softRoundRoom.dorm.id).sequence,
+    sideEffects:sideEffects(softRoundRoom.dorm.id),
+  };
+  const softRoundAttempt=await h.request(`/chores/tasks/${ownerRoundTask.id}/complete`,{token:softRoundPeer.access_token,method:"PATCH",data:{}});
+  check(softRoundAttempt.status===403,"soft self-round rejects another member at the service boundary");
+  const softRoundAfter={
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(softRoundRoom.dorm.id).version,
+    task:h.db.sqlite.prepare("SELECT status,completed_by FROM chore_tasks WHERE id=?").get(ownerRoundTask.id),
+    sequence:h.db.sqlite.prepare("SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status<>'cancelled'").get(softRoundRoom.dorm.id).sequence,
+    sideEffects:sideEffects(softRoundRoom.dorm.id),
+  };
+  check(JSON.stringify(softRoundAfter)===JSON.stringify(softRoundBefore),"denied soft round leaves completion, sequence, version, history, reminders, and push jobs unchanged");
+
+  const softScheduledConfig={...config,policy:"soft",tasks:config.tasks.map(t=>t.key==="floor"?{...t,page:"duty",rotation:"rotation"}:t)};
+  const softScheduledRoom=await create("软性排班权限",softScheduledConfig);
+  const softScheduledPeer=await (await joinRoom(softScheduledRoom.invite_code,"排班室友")).json();
+  const softScheduledBoard=await board(softScheduledRoom);
+  const softScheduledTask=softScheduledBoard.workspace_tasks.find(t=>t.key==="floor"&&t.assignee_id===softScheduledRoom.member_id&&t.status==="pending");
+  assert(softScheduledTask);
+  const softScheduledPeerBoard=await board(softScheduledRoom,softScheduledPeer.access_token,softScheduledPeer.member.user_id);
+  check(softScheduledPeerBoard.workspace_tasks.find(t=>t.id===softScheduledTask.id)?.can_complete===false,"scheduled mode alone does not grant soft-policy delegation");
+  const softScheduledAttempt=await h.request(`/chores/tasks/${softScheduledTask.id}/complete`,{token:softScheduledPeer.access_token,method:"PATCH",data:{}});
+  check(softScheduledAttempt.status===403,"soft scheduled task rejects a non-assignee despite its scheduled mode");
+
   const task = b.workspace_tasks.find(
     (t) => t.key === "floor" && t.status === "pending",
   );
   assert(task);
+  const scheduledPeerBoard=await board(room,token,peer.user_id);
+  check(scheduledPeerBoard.workspace_tasks.find(t=>t.id===task.id)?.can_complete===true,"hard scheduled task exposes controlled delegation after execution time");
   const res = await h.request(`/chores/tasks/${task.id}/complete`, {
     token,
     method: "PATCH",
     data: {},
   });
-  check(res.ok, "version2 peer can complete another assigned task");
+  check(res.ok, "hard scheduled v2 policy permits another member to complete the assigned task");
   const row = h.db.sqlite
-    .prepare("SELECT assignee_id,completed_by FROM chore_tasks WHERE id=?")
+    .prepare("SELECT assignee_id,completed_by,assignee_name_snapshot FROM chore_tasks WHERE id=?")
     .get(task.id);
   check(
-    row.assignee_id === task.assignee_id && row.completed_by === peer.user_id,
-    "delegate keeps planned owner and records actual completer",
+    row.assignee_id === task.assignee_id && row.completed_by === peer.user_id && row.assignee_name_snapshot===joinedValue.member.nickname,
+    "delegation keeps planned owner while completion identity and history snapshot name the actual completer",
   );
+  const peerUndoBoard=await board(room,token,peer.user_id);
+  check(peerUndoBoard.undo_tasks.some(t=>t.id===task.id),"actual delegate receives the matching undo entry");
+  const ownerUndo=await h.request(`/chores/tasks/${task.id}/undo`,{token:room.access_token,method:"PATCH",data:{}});
+  check(ownerUndo.status===403,"planned owner cannot undo another member's delegated completion");
+  const historyAfterDelegation=peerUndoBoard.calendar.find(r=>r.id===task.id);
+  check(historyAfterDelegation?.assignee_id===peer.user_id&&historyAfterDelegation?.assignee_name===joinedValue.member.nickname,"calendar history attributes delegated work to its actual completer");
   const undo = await h.request(`/chores/tasks/${task.id}/undo`, {
     token,
     method: "PATCH",
@@ -187,6 +261,11 @@ try {
       })
     ).json()
   ).access_token;
+  const legacyBefore={
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(old.dorm.id).version,
+    task:h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(oldtask.id),
+    sideEffects:sideEffects(old.dorm.id),
+  };
   const forbidden = await h.request(`/chores/tasks/${oldtask.id}/complete`, {
     token: oldtoken,
     method: "PATCH",
@@ -196,6 +275,12 @@ try {
     forbidden.status === 403,
     "legacy cannot delegate: original permission unchanged",
   );
+  const legacyAfter={
+    version:h.db.sqlite.prepare("SELECT version FROM chore_settings WHERE dorm_id=?").get(old.dorm.id).version,
+    task:h.db.sqlite.prepare("SELECT status,assignee_id,completed_by FROM chore_tasks WHERE id=?").get(oldtask.id),
+    sideEffects:sideEffects(old.dorm.id),
+  };
+  check(JSON.stringify(legacyAfter)===JSON.stringify(legacyBefore),"legacy delegation rejection preserves its task, version, history, reminders, and push jobs");
   const invalid = await h.request("/guest/create", {
     method: "POST",
     data: {
@@ -256,15 +341,53 @@ try {
   check(unauthorized.status === 403, "noncreator cannot edit workspace");
   const hardConfig={...config,policy:"hard",tasks:[{...config.tasks[0],page:"duty",rotation:"round",execution_time:"20:00",deadline:"22:00"}]};
   const hardRoom=await create("硬性全员测试",hardConfig);
+  const hardRoundPeer=await (await joinRoom(hardRoom.invite_code,"硬性轮次室友")).json();
   const hb=await board(hardRoom);
   check(hb.categories.find(c=>c.key==="floor").mode==="self_round","hard policy does not override chosen full-member round");
-  const ht=hb.workspace_tasks.find(t=>t.key==="floor");
+  const ht=hb.workspace_tasks.find(t=>t.key==="floor"&&t.assignee_id===hardRoom.member_id&&t.status==="pending");
+  assert(ht);
   check(!!ht.deadline_at,"hard full-member round has a persisted deadline");
   const early=await h.request(`/chores/tasks/${ht.id}/complete`,{token:hardRoom.access_token,method:"PATCH",data:{}});
   check(early.status===422&&(await early.json()).detail.code==="task_not_started","execution time is enforced only for new hard tasks");
   const changeTime=await h.request("/chores/settings",{token:hardRoom.access_token,method:"PATCH",data:{version:hb.version,categories:hb.categories,configuration:{...hardConfig,tasks:[{...hardConfig.tasks[0],execution_time:"08:00"}]}}});
   check(changeTime.ok,"hard time update keeps chosen round");
-  check((await h.request(`/chores/tasks/${ht.id}/complete`,{token:hardRoom.access_token,method:"PATCH",data:{}})).ok,"hard task may complete after execution time");
+  const hardRoundPeerBoard=await board(hardRoom,hardRoundPeer.access_token,hardRoundPeer.member.user_id);
+  check(hardRoundPeerBoard.workspace_tasks.find(t=>t.id===ht.id)?.can_complete===true,"hard self-round task permits cover after its execution time");
+  const hardRoundCover=await h.request(`/chores/tasks/${ht.id}/complete`,{token:hardRoundPeer.access_token,method:"PATCH",data:{}});
+  check(hardRoundCover.ok,"hard self-round permits an authorized cover after its execution time");
+  const hardRoundRow=h.db.sqlite.prepare("SELECT assignee_id,completed_by FROM chore_tasks WHERE id=?").get(ht.id);
+  check(hardRoundRow.assignee_id===hardRoom.member_id&&hardRoundRow.completed_by===hardRoundPeer.member.user_id,"hard round cover records the actual completer without changing the planned owner");
+  const hardRoundUndoBoard=await board(hardRoom,hardRoundPeer.access_token,hardRoundPeer.member.user_id);
+  check(hardRoundUndoBoard.undo_tasks.some(t=>t.id===ht.id),"hard round cover receives the matching undo entry");
+  const hardOwnerUndo=await h.request(`/chores/tasks/${ht.id}/undo`,{token:hardRoom.access_token,method:"PATCH",data:{}});
+  check(hardOwnerUndo.status===403,"hard round planned owner cannot undo another member's cover");
+  check((await h.request(`/chores/tasks/${ht.id}/undo`,{token:hardRoundPeer.access_token,method:"PATCH",data:{}})).ok,"hard round cover can undo their own completion");
+
+  const hardCompletionConfig={...config,policy:"hard",tasks:config.tasks.map(t=>t.key==="floor"?{...t,page:"duty",rotation:"completion",execution_time:"08:00"}:t)};
+  const hardCompletionRoom=await create("硬性交接权限",hardCompletionConfig);
+  const hardCompletionPeer=await (await joinRoom(hardCompletionRoom.invite_code,"交接室友")).json();
+  await verifyEmail("third-member@example.invalid");
+  const hardCompletionThird=await (await joinRoom(hardCompletionRoom.invite_code,"代做室友")).json();
+  const hardCompletionBoard=await board(hardCompletionRoom);
+  const hardCompletionTask=hardCompletionBoard.workspace_tasks.find(t=>t.key==="floor"&&t.assignee_id===hardCompletionRoom.member_id&&t.status==="pending");
+  assert(hardCompletionTask);
+  const hardCompletionPeerBoard=await board(hardCompletionRoom,hardCompletionThird.access_token,hardCompletionThird.member.user_id);
+  check(hardCompletionPeerBoard.workspace_tasks.find(t=>t.id===hardCompletionTask.id)?.can_complete===true,"hard completion turn allows a cover only under the explicit hard policy");
+  const hardCompletionCover=await h.request(`/chores/tasks/${hardCompletionTask.id}/complete`,{token:hardCompletionThird.access_token,method:"PATCH",data:{}});
+  check(hardCompletionCover.ok,"hard completion turn accepts a permitted cover");
+  const hardCompletionRow=h.db.sqlite.prepare("SELECT assignee_id,completed_by,assignee_name_snapshot FROM chore_tasks WHERE id=?").get(hardCompletionTask.id);
+  check(hardCompletionRow.assignee_id===hardCompletionRoom.member_id&&hardCompletionRow.completed_by===hardCompletionThird.member.user_id&&hardCompletionRow.assignee_name_snapshot==="代做室友","handoff preserves the assigned owner and snapshots the actual completer");
+  const hardCompletionNext=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(hardCompletionRoom.dorm.id);
+  check(hardCompletionNext.length===1&&hardCompletionNext[0].sequence===2&&hardCompletionNext[0].assignee_id===hardCompletionPeer.member.user_id,"completion handoff follows configured rotation instead of advancing to the arbitrary cover");
+  const hardCompletionThirdBoard=await board(hardCompletionRoom,hardCompletionThird.access_token,hardCompletionThird.member.user_id);
+  const hardCompletionHistory=hardCompletionThirdBoard.calendar.find(r=>r.id===hardCompletionTask.id);
+  check(hardCompletionHistory?.assignee_id===hardCompletionThird.member.user_id&&hardCompletionHistory?.assignee_name==="代做室友","handoff history credits the actual completer");
+  check(hardCompletionThirdBoard.undo_tasks.some(t=>t.id===hardCompletionTask.id),"hard completion cover receives its undo entry");
+  const hardCompletionOwnerUndo=await h.request(`/chores/tasks/${hardCompletionTask.id}/undo`,{token:hardCompletionRoom.access_token,method:"PATCH",data:{}});
+  check(hardCompletionOwnerUndo.status===403,"completion turn owner cannot undo another member's cover");
+  check((await h.request(`/chores/tasks/${hardCompletionTask.id}/undo`,{token:hardCompletionThird.access_token,method:"PATCH",data:{}})).ok,"completion cover can undo and restore the original planned turn");
+  const hardCompletionRestored=h.db.sqlite.prepare("SELECT sequence,assignee_id FROM chore_tasks WHERE dorm_id=? AND key='floor' AND status='pending' ORDER BY sequence").all(hardCompletionRoom.dorm.id);
+  check(hardCompletionRestored.length===1&&hardCompletionRestored[0].sequence===1&&hardCompletionRestored[0].assignee_id===hardCompletionRoom.member_id,"undo restores the planned completion owner without changing the rotation order");
   console.log(
     JSON.stringify({
       checks,
