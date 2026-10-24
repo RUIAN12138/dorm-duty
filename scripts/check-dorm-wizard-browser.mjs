@@ -547,9 +547,9 @@ try {
     const choiceLayout=await p.locator('.rule-mode-picks').evaluate(grid=>{
       const bounds=grid.getBoundingClientRect();
       const cards=[...grid.querySelectorAll('.wizard-choice')].map(card=>card.getBoundingClientRect());
-      return {count:cards.length,center:bounds.left+bounds.width/2,lastCenter:cards[2]?.left+(cards[2]?.width||0)/2,firstWidth:cards[0]?.width,lastWidth:cards[2]?.width};
+      return {count:cards.length,width:bounds.width,left:bounds.left,cards:cards.map(card=>({left:card.left,width:card.width}))};
     });
-    check(choiceLayout.count===3&&Math.abs(choiceLayout.center-choiceLayout.lastCenter)<1&&Math.abs(choiceLayout.firstWidth-choiceLayout.lastWidth)<1,`${width}px centers the third pacing choice and keeps card widths aligned`);
+    check(choiceLayout.count===3&&choiceLayout.cards.every(card=>Math.abs(card.left-choiceLayout.left)<1&&Math.abs(card.width-choiceLayout.width)<1),`${width}px gives all pacing choices the same full-width alignment`);
   }
   if(rulesViewport)await p.setViewportSize(rulesViewport);
   await p.waitForTimeout(80);
@@ -558,7 +558,7 @@ try {
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
-  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-time-panel .van-picker').count()===1,'the unified scheduled choice exposes all four non-water tasks and its time wheel directly on the rules step');
+  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-time-panel .time-segment').count()===2&&await p.locator('.rule-time-panel .van-picker').count()===0,'the unified scheduled choice exposes its tasks and one direct HH:MM control without a second wheel');
   check(
     JSON.stringify(await p.locator('.rule-mode-picks .wizard-choice span').allTextContents()) === JSON.stringify([
       '全员完成后，开始新一轮',
@@ -568,10 +568,52 @@ try {
     'all pacing choices explain their effect without changing the existing mode labels',
   );
   const scheduledFit=await p.locator('.wizard-body').evaluate(el=>({scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,children:[...el.querySelector('.rule-primary').children].map(child=>({className:child.className,height:child.getBoundingClientRect().height}))}));
-  check(scheduledFit.scrollHeight<=scheduledFit.clientHeight+1,'390x844 unified scheduled rules and one time wheel fit without vertical scrolling');
+  check(scheduledFit.scrollHeight<=scheduledFit.clientHeight+1,`390x844 unified scheduled rules fit without vertical scrolling ${JSON.stringify(scheduledFit)}`);
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-scheduled.png`});
+  const unifiedTime=p.locator('.rule-time-panel .time-wheel-setting');
+  const dialLayout=await unifiedTime.locator('.time-dial').evaluate(el=>({display:getComputedStyle(el).display,segments:[...el.querySelectorAll('.time-segment')].map(segment=>({left:segment.getBoundingClientRect().left,borderWidth:getComputedStyle(segment).borderWidth,borderStyle:getComputedStyle(segment).borderStyle}))}));
+  check(dialLayout.display==='flex'&&dialLayout.segments.length===2&&dialLayout.segments[0].left<dialLayout.segments[1].left&&dialLayout.segments.every(segment=>segment.borderWidth==='0px'&&segment.borderStyle==='none'),'HH:MM segments stay horizontal with no browser-default button border');
+  check(await unifiedTime.locator('.time-dial').count()===1&&await unifiedTime.locator('.van-picker').count()===0&&/^\d{2}:\d{2}$/.test(await unifiedTime.getAttribute('data-time-value')||''),'scheduled mode renders one stable HH:MM control with no duplicate wheel');
+  const originalTime=await unifiedTime.getAttribute('data-time-value')||'22:00';
+  const hourSegment=unifiedTime.locator('[data-time-segment="hour"]');
+  await hourSegment.focus();
+  await p.keyboard.press('ArrowUp');
+  check((await unifiedTime.getAttribute('data-time-value'))?.startsWith(`${String((Number(originalTime.slice(0,2))+1)%24).padStart(2,'0')}:`),'hour segment responds to accessible keyboard adjustment');
+  await p.keyboard.press('ArrowDown');
+  await hourSegment.click();
+  const hourInput=p.getByRole('textbox',{name:'截止时间 小时',exact:true});
+  await hourInput.fill('23');
+  await p.keyboard.press('Enter');
+  check((await unifiedTime.getAttribute('data-time-value'))?.startsWith('23:'),'tapping the hour digits opens exact numeric entry');
+  const hourBox=await unifiedTime.locator('[data-time-segment="hour"]').boundingBox();
+  await p.mouse.move(hourBox.x+hourBox.width/2,hourBox.y+hourBox.height/2);
+  await p.mouse.down();
+  await p.mouse.move(hourBox.x+hourBox.width/2,hourBox.y+hourBox.height/2-16,{steps:3});
+  await p.mouse.up();
+  check((await unifiedTime.getAttribute('data-time-value'))?.startsWith('00:')&&await unifiedTime.locator('input').count()===0,'dragging the hour segment wraps 23 to 00 without opening the keyboard');
+  const minuteSegment=unifiedTime.locator('[data-time-segment="minute"]');
+  await minuteSegment.click();
+  await p.getByRole('textbox',{name:'截止时间 分钟',exact:true}).fill('59');
+  await p.keyboard.press('Enter');
+  const minuteBox=await unifiedTime.locator('[data-time-segment="minute"]').boundingBox();
+  await p.mouse.move(minuteBox.x+minuteBox.width/2,minuteBox.y+minuteBox.height/2);
+  await p.mouse.down();
+  await p.mouse.move(minuteBox.x+minuteBox.width/2,minuteBox.y+minuteBox.height/2-16,{steps:3});
+  await p.mouse.up();
+  check((await unifiedTime.getAttribute('data-time-value'))?.endsWith(':00'),'dragging the minute segment wraps 59 to 00');
+  await unifiedTime.locator('[data-time-segment="minute"]').click();
+  await p.getByRole('textbox',{name:'截止时间 分钟',exact:true}).fill('99');
+  await p.keyboard.press('Enter');
+  check((await unifiedTime.getAttribute('data-time-value'))?.endsWith(':00'),'invalid minute input restores the last valid value');
+  await unifiedTime.locator('[data-time-segment="hour"]').click();
+  await p.getByRole('textbox',{name:'截止时间 小时',exact:true}).fill(originalTime.slice(0,2));
+  await p.keyboard.press('Enter');
+  await unifiedTime.locator('[data-time-segment="minute"]').click();
+  await p.getByRole('textbox',{name:'截止时间 分钟',exact:true}).fill(originalTime.slice(3,5));
+  await p.keyboard.press('Enter');
+  check(await unifiedTime.getAttribute('data-time-value')===originalTime,'time-control interaction regression restores the original scheduled draft value');
   check(await p.locator('.rule-time-panel .time-field-switch button').count()===2,'scheduled execution and deadline fields switch in place');
-  const retainedDeadline=await p.locator('.rule-time-panel .time-wheel-setting > strong').textContent();
+  const retainedDeadline=await p.locator('.rule-time-panel .time-wheel-setting').getAttribute('data-time-value');
   await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
   await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
   check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'switching back to round mode smoothly removes irrelevant task and time controls');
@@ -582,7 +624,7 @@ try {
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
   check(await p.locator('.rule-task-picks button[aria-pressed="true"]').count()===1,'scheduled task selection is restored after changing the pacing mode');
-  check(await p.locator('.rule-time-panel .time-wheel-setting > strong').textContent()===retainedDeadline,'scheduled deadline remains unchanged when switching between pacing modes');
+  check(await p.locator('.rule-time-panel .time-wheel-setting').getAttribute('data-time-value')===retainedDeadline,'scheduled deadline remains unchanged when switching between pacing modes');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
   check(await p.locator('.rule-task-picks button').count()===5&&await p.locator('.rule-detail').count()===1,'per-task rule editing includes the custom task in a separate compact card state');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice').count()===3&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task rotation tab exposes all three runtime rhythms without stacking unrelated controls');
@@ -590,8 +632,8 @@ try {
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 per-task pacing choices fit without vertical scrolling');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-per-task.png`});
   await p.getByRole('tab',{name:'时间',exact:true}).click();
-  check(await p.locator('.rule-detail .rule-time-panel .van-picker').count()===1,'per-task time tab keeps the scheduled time wheel available in the same wizard step');
-  check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 task rule and single time wheel fit in one screen');
+  check(await p.locator('.rule-detail .rule-time-panel .time-segment').count()===2&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task time tab exposes one direct HH:MM control and no duplicate wheel');
+  check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 task rule and single HH:MM control fit in one screen');
   check(await p.getByRole('button',{name:'继续',exact:true}).isVisible()&&await p.locator('.wizard-footer').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),'task rule screen keeps the primary action visible in the viewport');
   await p.screenshot({path:`data/startup-review/${engine}-advanced-rule-single-screen.png`});
   await p.locator('.rule-task-picks button').filter({hasText:'地面清洁'}).click();
@@ -842,6 +884,26 @@ try {
   check(await p.locator('.tour').evaluate(el=>el.getAttribute('role')==='dialog'&&el.getAttribute('aria-modal')==='true'&&!!document.getElementById(el.getAttribute('aria-describedby')||'')),'spotlight exposes a named modal dialog and live description');
   check(await p.evaluate(()=>document.activeElement?.matches('.tour[role="dialog"]')),'spotlight moves initial focus into the modal');
   check(await p.locator('.wizard-body').evaluate(el=>el.inert),'spotlight makes the underlying wizard content inert');
+  const excludedFocusCases=[
+    ['display:none','<div style="display:none"><button tabindex="0">隐藏按钮</button></div>'],
+    ['hidden input','<input type="hidden" value="不可见输入">'],
+    ['aria-hidden','<div aria-hidden="true"><button tabindex="0">无障碍隐藏按钮</button></div>'],
+    ['aria-disabled group','<div aria-disabled="true"><button tabindex="0">禁用组按钮</button></div>'],
+    ['inert','<div inert><button tabindex="0">惰性按钮</button></div>'],
+    ['visibility:hidden','<div style="visibility:hidden"><button tabindex="0">不可见按钮</button></div>'],
+    ['content-visibility:hidden','<div style="content-visibility:hidden"><button tabindex="0">跳过渲染按钮</button></div>'],
+    ['opacity:0','<div style="opacity:0"><button tabindex="0">透明按钮</button></div>'],
+    ['disabled fieldset','<fieldset disabled><button tabindex="0">禁用组按钮</button></fieldset>'],
+    ['negative tabindex','<button tabindex="-1">非 Tab 按钮</button>'],
+  ];
+  for(const [label,markup] of excludedFocusCases){
+    await p.locator('.tour').evaluate((host,html)=>{const fixture=document.createElement('div');fixture.dataset.testFocusFixture='';fixture.innerHTML=html;host.append(fixture);},markup);
+    await p.locator('.tour').evaluate(el=>el.focus({preventScroll:true}));
+    await p.keyboard.press('Shift+Tab');
+    check(await p.evaluate(()=>document.activeElement?.textContent?.trim()==='下一步'),`spotlight skips ${label} control when wrapping reverse focus`);
+    await p.locator('.tour').evaluate(el=>el.querySelector('[data-test-focus-fixture]')?.remove());
+  }
+  await p.locator('.tour').evaluate(el=>el.focus({preventScroll:true}));
   await p.keyboard.press('Shift+Tab');
   check(await p.evaluate(()=>document.activeElement?.textContent?.trim()==='下一步'),'spotlight wraps Shift+Tab from the dialog to its last action');
   await p.keyboard.press('Tab');

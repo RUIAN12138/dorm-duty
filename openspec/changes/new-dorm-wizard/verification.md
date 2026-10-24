@@ -307,3 +307,21 @@
 - Chromium 和 WebKit 的隔离移动视口 `scripts/check-dorm-wizard-browser.mjs` 各 173 项通过，结果文件 `data/startup-review/chromium-wizard-result.json`、`data/startup-review/webkit-wizard-result.json` 均为 `errors=[]`。覆盖创建向导、生产统计卡片中显示新任务、任务工作台持久化及预览流程。
 - `npm run web:verify` 在本轮实现后退出码为 0；构建保留项目现有的 `GuestHome` 大 chunk 提示。此后只删除了 Worker 中未使用的本地辅助常量，并重复通过该 Worker 语法检查及核心回归。OpenSpec 范围门禁将在提交后的干净工作树复核。
 - Chromium/WebKit 是 macOS 桌面浏览器模拟，不等于 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收；未连接真实设备。CI 状态待提交推送后查询。未访问或修改正式宿舍数据，未创建 PR、未合并或部署。
+
+## 聚光引导键盘焦点候选过滤
+
+- 当前源码检查发现焦点候选仅按元素选择器收集；未过滤隐藏节点、`inert` / `aria-hidden` 祖先、禁用 fieldset 和不可见控件。补充范围仅限引导模态内部的焦点列表与对应浏览器回归，不改聚光位置、文案、步骤或业务流程。
+- 焦点循环现在只收集当前仍连接 DOM、`tabIndex >= 0`、可见且启用的 tab stop；过滤隐藏、透明、`inert` / `aria-hidden` / `aria-disabled` 祖先、`:disabled` 控件、负 `tabIndex`，并按正 `tabIndex` 规范顺序优先排列。每次按 Tab 都重新读取当前 DOM，因此动态增删控件不会沿用过期列表。
+- 回归在打开的真实聚光引导中逐项动态插入 `display:none`、`input[type=hidden]`、`aria-hidden`、`aria-disabled`、`inert`、`visibility:hidden`、`content-visibility:hidden`、透明、禁用 fieldset 与负 `tabIndex` 控件，并从对话框首尾验证 Tab 与 Shift+Tab 仍只在可操作的引导动作间循环；插入和移除后都重新验证，确保列表随 DOM 更新。
+- `node scripts/check-dorm-wizard-browser.mjs`（macOS Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（macOS WebKit）：各 183 项检查通过，`errors=[]`。`npm --prefix frontend run typecheck`、`npm run spec:validate`（19/19）与 `git diff --check` 通过。
+- 原工作树已有未提交的 `site/runtime/email-runtime.cjs` 用户修改，因此全工作树 `npm run spec:scope` 会因该预存文件超出本 change 范围而拒绝。本轮在不包含该修改的干净 detached worktree 对本批允许文件运行 `npm run spec:scope` 与 `node scripts/test-change-scope.mjs`；18 个 change、383 个文件通过，范围门禁 18/18 通过。
+- 浏览器结果不能替代实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 验收；不访问正式宿舍数据、不创建 PR、不推送、不合并或部署。
+
+## 创建规则卡片与时间控件精修
+
+- 创建规则页三种完成方式现为全宽等宽的纵向卡片；去掉奇数选项居中缩窄规则，定时配置的局部间距收紧，避免窄屏出现孤立半宽卡片或纵向溢出。
+- 移除向导规则页对 Vant 时间滚轮的重复展示，改为单一 `HH:MM` 数字组。可分别点击数字精确输入、用上下方向键调节，或上下拖动；小时与分钟按有效范围循环，无效输入恢复最后有效值。
+- `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs` 与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs` 均通过，分别 191 项检查、`errors=[]`。覆盖 320/390/430px 规则卡片对齐、390×844 单屏布局、时间段水平布局及无默认按钮描边、精确输入、键盘调整、拖动循环、非法值恢复、预览与既有创建流程。
+- `npm --prefix frontend run typecheck` 与 `npm run spec:validate` 通过（19/19）。
+- 修改后截图：`data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/chromium-wizard-rules-scheduled.png`、`data/startup-review/webkit-wizard-rules-scheduled.png`；对照基线：`data/startup-review/before-chromium-wizard-rules-default.png`、`data/startup-review/before-chromium-wizard-rules-scheduled.png`。
+- 自动化浏览器运行于隔离本地预览与模拟移动视口，不等于实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收；旧宿舍业务数据未触碰，未创建 PR、未合并或部署。

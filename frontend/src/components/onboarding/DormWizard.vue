@@ -322,24 +322,17 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
   display: none;
 }
 .rule-mode-picks {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 .rule-mode-picks .wizard-choice {
   display: grid;
   align-content: center;
-  justify-items: center;
-  gap: 1px;
-  min-height: 68px;
-  padding: 6px 8px;
-  text-align: center;
-}
-.dorm-wizard:not(.is-workspace) .rule-mode-picks > .wizard-choice:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: 100%;
-  max-width: calc((100% - 10px) / 2);
-  box-sizing: border-box;
+  justify-items: start;
+  gap: 3px;
+  min-height: 54px;
+  padding: 6px 14px;
+  text-align: left;
 }
 .rule-mode-picks strong {
   font-size: 16px;
@@ -351,10 +344,10 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
   line-height: 1.2;
 }
 .rule-advanced-toggle {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 .rule-task-picks {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 .rule-task-picks button {
   min-height: 40px;
@@ -386,8 +379,8 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
 .rule-time-panel {
   display: grid;
   justify-items: center;
-  gap: 2px;
-  margin-top: 4px;
+  gap: 1px;
+  margin-top: 2px;
 }
 .time-field-switch {
   display: flex;
@@ -418,11 +411,8 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
 .rule-time-panel :deep(.time-wheel-setting > span) {
   display: none;
 }
-.rule-time-panel :deep(.time-wheel-setting > strong) {
+.rule-time-panel :deep(.time-dial) {
   font-size: 30px;
-}
-.rule-time-panel :deep(.time-wheel-setting .van-picker) {
-  margin-top: 0;
 }
 .rule-rotation,
 .rotation-choice-cards {
@@ -472,11 +462,11 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
   max-width: 340px;
 }
 .dorm-wizard.is-rules .wizard-body {
-  padding-top: 14px;
+  padding-top: 10px;
   padding-bottom: 8px;
 }
 .dorm-wizard.is-rules .wizard-body h1 {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .wizard-panel-enter-active,
 .wizard-panel-leave-active {

@@ -101,10 +101,54 @@ function restoreBackground() {
   }
   inertStates.clear();
 }
+const tabStopSelector = [
+  "a[href]",
+  "area[href]",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "iframe",
+  "object",
+  "embed",
+  "audio[controls]",
+  "video[controls]",
+  "summary",
+  '[contenteditable]:not([contenteditable="false"])',
+  "[tabindex]",
+].join(",");
+function isTabStop(element: HTMLElement, root: HTMLElement) {
+  if (
+    !element.isConnected ||
+    element.tabIndex < 0 ||
+    element.matches(":disabled") ||
+    element.closest("[inert], [hidden], [aria-hidden='true'], [aria-disabled='true']")
+  ) return false;
+  const style = getComputedStyle(element);
+  if (
+    style.visibility === "hidden" ||
+    style.visibility === "collapse" ||
+    element.getClientRects().length === 0
+  ) return false;
+  let opacity = 1;
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+    const currentStyle = current === element ? style : getComputedStyle(current);
+    if (currentStyle.display === "none" || currentStyle.contentVisibility === "hidden")
+      return false;
+    const value = Number.parseFloat(currentStyle.opacity);
+    if (Number.isFinite(value)) opacity *= value;
+    if (opacity <= 0.01 || current === root) break;
+  }
+  return opacity > 0.01;
+}
 function focusableElements() {
-  return Array.from(host.value?.querySelectorAll<HTMLElement>(
-    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  ) || []);
+  const root = host.value;
+  if (!root) return [];
+  const controls = Array.from(root.querySelectorAll<HTMLElement>(tabStopSelector))
+    .filter((element) => isTabStop(element, root));
+  const numbered = controls.filter((element) => element.tabIndex > 0)
+    .sort((a, b) => a.tabIndex - b.tabIndex);
+  return [...numbered, ...controls.filter((element) => element.tabIndex === 0)];
 }
 function handleDialogKeydown(event: KeyboardEvent) {
   if (event.key === "Escape") {
