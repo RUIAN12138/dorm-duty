@@ -1,41 +1,37 @@
 # Codex → ChatGPT · 最近一次开发交接
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `4e472f4d36199228ec407158e2b3a49ed7deeb99`
-- code_url: https://github.com/RUIAN12138/dorm-duty/tree/codex/new-dorm-wizard-preview
-- related_pr: 无（按用户当前要求推送开发分支；未创建 PR）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md` 与 `CHATGPT_REVIEW.md` 当前内容；新宿舍创建流程最多五个主页面、单屏页面编排、正式组件全屏草稿预览、任务工作台、软/硬模式及旧宿舍隔离。ChatGPT 评审未绑定代码 SHA（`reviewed_code_sha` 为空），本提交按其中 P0/P1 次序落地并验证。
+- code_sha: `6b7d6761daa80d8f285ca14e96c4ff51620bdbd0`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/6b7d6761daa80d8f285ca14e96c4ff51620bdbd0
+- related_pr: 无（仅按协作协议推送开发分支；未创建 PR）
+- requirements: `docs/agent-sync/USER_REQUIREMENTS.md` 与 `CHATGPT_REVIEW.md`；本次读取的评审绑定上一代码 SHA `4e472f4d36199228ec407158e2b3a49ed7deeb99`，本提交针对其中 P0 创建规则三种节奏、第二页用途、首次教程接入、预览副作用隔离，以及部分 P1 单屏规则/聚光目标问题。新代码 SHA 尚待 ChatGPT 独立审查。
 - changed_files:
-  - `frontend/src/components/onboarding/*`、`frontend/src/interaction/dormDraft.ts`、`frontend/src/views/WelcomeGuide.vue`：五阶段向导、任务/规则编辑、时间轮、全屏预览、独立欢迎教程。
-  - `frontend/src/views/GuestHome.vue`、`frontend/src/router/index.ts`、`frontend/src/components/ChoreMenu.vue`、`scripts/preview-startup/server.mjs`：向导入口、开发环境隔离直达和本地体验流程。
-  - `frontend/src/components/ChoreBoard.vue`、`ChoreBottomNav.vue`、`ChoreCalendar.vue`、`NewTaskPane.vue` 及 API 类型：复用正式任务页、日历、导航与完成界面；预览模式阻断业务读写/提醒/推送副作用，导航重排回写草稿。
-  - `site/shared/dorm-configuration.mjs`、`site/drizzle/0019_dorm_configuration.sql`、`site/worker/{backend,chores}.mjs`、`site/local/email-runtime.mjs`：显式 schema v2 宿舍配置、验证与工作台保存；既有宿舍不自动迁移，旧加入逻辑保留。软性提示、硬性按时并允许代做，实际完成者独立记录。
-  - `frontend/src/interaction/memberNames.css` 及任务成员展示组件：按授权移除指定绿色像素装饰并应用局部圆润系统字体栈，不删除标记资源或数据。
-  - `site/runtime/push-runtime.cjs`、`deploy/prepare-release.py`：同步新 Worker/配置模块到服务器运行包及发布清单。
-  - `scripts/check-dorm-wizard*.mjs`、`docs/NEW_DORM_WIZARD.md`、`openspec/changes/new-dorm-wizard/*`：隔离兼容/浏览器测试、实现说明与 OpenSpec 记录。
+  - `site/worker/chores.mjs`、`site/shared/dorm-configuration.mjs`、`site/runtime/push-runtime.cjs`：仅显式 schema v2 新宿舍支持非抬水 `completion` 轮换；轮次写入与完成推进防并发重复，撤销和再次完成保留顺序；旧配置拒绝该模式。
+  - `frontend/src/components/onboarding/DormWizard.vue`、`TaskWorkspace.vue`、`LiveDraftPreview.vue`、`frontend/src/interaction/dormDraft.ts`：向导/工作台提供三种实际节奏选择，按时间安排在当前规则页显示时间轮；页面编排复用既有第二页用途控件，删除重复选择器；预览映射完成交接节奏。
+  - `frontend/src/components/ChoreBoard.vue`、`frontend/src/views/WelcomeGuide.vue`、`GuestHome.vue`、`SpotlightTour.vue`：新 schema v2 宿舍首次进入时按房间/成员一次性开启正式教程；完成、跳过和手动重看回到调用页面；缺失/隐藏/视口外聚光目标跳过；预览处理器阻断写入与通知类副作用。
+  - `scripts/check-dorm-wizard.mjs`、`scripts/check-dorm-wizard-browser.mjs`：新增服务端真实轮次隔离测试和正式组件树预览/教程/网络请求审计。
+  - `docs/NEW_DORM_WIZARD.md`、`openspec/changes/new-dorm-wizard/{design.md,proposal.md,scope.json,specs/wizard/spec.md,tasks.md,verification.md}`：同步实现边界、验收证据与未测平台状态。
 - implemented:
-  - 新建宿舍流程采用五个可拖动主阶段，20px 黑白进度轨道、36px 玻璃滑块和 44px 以上触摸区；跨步骤实时更新标题、内容和球球提示。
-  - 页面编排为值日与第二页双列，支持点按/长按拖动、第二页用途选择和实时草稿同步；正常 390×844 CSS 视口单屏，短屏可安全滚动。
-  - 草稿预览全屏挂载正式 `ChoreBoard`、正式日历/任务组件及 `ChoreBottomNav`，导航长按重排同步更新草稿；预览操作没有调用业务 API。
-  - 新配置仅在显式创建时写入 v2；加入新宿舍使用已验证邮箱自行填写姓名；旧宿舍不迁移、不重建历史/轮序且仍受原权限限制。
-  - 开发版提供 localhost 可见入口和 `/?preview=new-dorm` 直达，正式域名不显示本地体验入口。
+  - P0 规则：新建配置可选择大家完成后开新轮、按时间安排、完成后交给下一位；新 completion 仅由显式 v2 配置启用，旧宿舍和旧模式保持原行为。并发完成仅推进一次；撤销后可再次完成且不复用已取消的序号。
+  - P0 页面用途：创建模式可在现有页面编排组件内选择第二页为任务页或催促页，不增加第六步，也不展示重复的“第二页用途”控件。
+  - P0 首次教程：新建或首次加入 v2 房间进入正式页面后展示一次独立教程；完成/跳过记忆状态，手动重看返回原页面。旧房间不自动触发。
+  - P0 预览隔离：保留 `LiveDraftPreview.vue` 挂载的正式页面组件；预览操作在处理器/API 边界被阻断，浏览器网络审计未发现业务 API 请求。
+  - P1 收尾：轮换/时间高级设置改为页内卡片切换；聚光引导遇到无效目标不再高亮空白。
 - tests:
-  - `npm run web:build`：通过（`vue-tsc`、Vite、PWA）；有现存 553 kB 主 chunk 提示。
-  - `npm run spec:validate`：18/18 OpenSpec 项目通过。
-  - `npm run spec:scope`：通过；当前 17 项 changes / 363 个登记范围文件。
-  - `node scripts/check-dorm-wizard.mjs`：27 项隔离 SQLite 配置、代做、邮箱身份、并发保存与旧宿舍兼容检查通过。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：63 项通过、0 页面错误。
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：63 项通过、0 页面错误。
+  - `npm run web:build`：通过，包含 `vue-tsc`、Vite 与 PWA；有既有约 557 kB chunk 体积警告。
+  - `node scripts/check-dorm-wizard.mjs`：37 项隔离 SQLite 检查通过，覆盖 v2 三种节奏、并发完成、交接、撤销/重做与旧房间隔离。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：70 项通过、页面错误 0；包括 320/390/430 CSS 视口、创建流程、预览组件树、处理器与网络请求审计、教程路径。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：70 项通过、页面错误 0；同上。
+  - `npm run spec:validate`：18/18 通过。
+  - `npm run spec:scope`：通过，17 个 changes / 363 个登记文件，digest `3d6e0659fe8b9f7a941a41c89cd7ac889fd86e52358ed98e45b17f09ba7ef9b6`。
   - `git diff --check`：通过。
-- CI: 推送后 `gh run list` 无此分支的 Actions 运行；GitHub Commit Status 为 `pending` 且 `total_count=0`，因此当前没有可报告的 CI 通过结果。查询提交：https://github.com/RUIAN12138/dorm-duty/commit/4e472f4d36199228ec407158e2b3a49ed7deeb99
+- CI: `gh run list --repo RUIAN12138/dorm-duty --branch codex/new-dorm-wizard-preview` 返回空数组；GitHub Commit Status `total_count=0`、`state=pending`，没有可报告的 CI 运行或通过结果。
 - platform_status:
-  - Web：生产构建通过；WebKit 与 Chromium 浏览器自动化移动视口（320×568、320×844、390×844、430×844）通过。录屏/截图来自模拟视口，不等于实体 iPhone 测试。
-  - Android WebView：未进行实体设备测试。
-  - HarmonyOS ArkWeb：未进行实体设备测试。
-  - iPhone Safari/PWA：未进行实体设备测试。
+  - Web：本地生产构建、WebKit/Chromium 自动化及移动 CSS 视口检查通过；自动化视口不等于实体手机。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb：均未进行真机测试。
 - remaining:
-  - 用户验收仍待进行；未建 PR、未合并 main、未部署正式网站、未修改正式数据库。
-  - 当前业务存储仍使用四个稳定任务槽；任意数量的新任务及全新轮换引擎未实现，不能按“无限自定义任务”验收。
-  - Android、HarmonyOS 与 iPhone 实体键盘/触摸/安全区验收未完成。
-  - P2 时间轮、教程、姓名字形等已做浏览器预览但仍需用户检查视觉；设备缺中文圆体时会系统回退。
-- questions: 无。下一轮开始前需重新 fetch `agents/coordination` 并重读 `USER_REQUIREMENTS.md` 与 `CHATGPT_REVIEW.md`；评审建议只针对匹配的完整 `code_sha` 执行一次。
+  - 用户视觉验收待进行；未创建 PR、未合并 main、未部署网站、未读取或修改正式数据库。
+  - 业务模型仍使用现有稳定任务槽，任意数量任务与全新轮换引擎不在本提交范围内。
+  - 真机键盘、触控、安全区和系统教程路径待设备验证；浏览器自动化截图/录屏保存在本机忽略目录 `data/startup-review/`，未提交到仓库。
+  - 请 ChatGPT 对完整代码 SHA `6b7d6761daa80d8f285ca14e96c4ff51620bdbd0` 独立复核后更新评审；Codex 未修改 `CHATGPT_REVIEW.md`。
+- questions: 无。
