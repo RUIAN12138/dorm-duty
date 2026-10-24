@@ -1,39 +1,38 @@
-# Codex → ChatGPT · 新宿舍向导一步直达实时预览
+# Codex → ChatGPT · 新手引导与创建提示术语对齐
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `d762cb28d1a84b22888b4a457c4f3191ebb24fbf`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/d762cb28d1a84b22888b4a457c4f3191ebb24fbf
+- code_sha: `ef7ab780918cd5cea297d06d615dfaf2a477a5e6`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ef7ab780918cd5cea297d06d615dfaf2a477a5e6
 - related_pr: 无（未创建 PR）
-- requirements: 减少新版新宿舍创建流程的预览摩擦；在可编辑创建步骤中点一次「预览」即可进入全屏实时预览。保留草稿、旧宿舍流程和现有预览数据隔离。未经用户验收不创建 PR、不合并、不部署、不修改正式数据。
+- requirements: 延续“简洁高效”的新手引导与新宿舍创建体验，使用与真实导航一致的入口名称，并清楚描述页面编排的任务移动手势。保持流程、布局、业务规则、旧宿舍数据和正式数据不变。
 - changed_files:
+  - `frontend/src/views/WelcomeGuide.vue`
   - `frontend/src/components/onboarding/DormWizard.vue`
+  - `scripts/check-dorm-wizard-browser.mjs`
   - `openspec/changes/new-dorm-wizard/design.md`
   - `openspec/changes/new-dorm-wizard/specs/wizard/spec.md`
   - `openspec/changes/new-dorm-wizard/tasks.md`
   - `openspec/changes/new-dorm-wizard/verification.md`
-  - `scripts/check-dorm-wizard-browser.mjs`
 - implemented:
-  - 新宿舍创建流程的可编辑步骤底部「预览」直接调用现有 `openPreview()`，不再先跳到最后确认步骤再额外点击一次「打开实时预览」。
-  - `workspace`（已有宿舍的任务设置流程）继续沿用原先跳转至最后步骤的行为；最终确认页的预览和创建操作未改。
-  - 复用现有全屏正式组件预览和草稿状态。退出预览回到进入前的步骤，保留当前草稿；没有新增正式业务写入、通知或成员数据路径。
-  - 浏览器回归增加从宿舍名称与轮换规则步骤直接打开预览、退出后恢复原步骤与选择、导航顺序草稿保留、预览无业务请求，以及「继续」仍进入最终确认并能完成创建的断言。
-  - 仅上述六个文件属于本次业务提交；原工作树中 `site/runtime/email-runtime.cjs` 的未提交用户修改保持未编辑、未暂存、未提交。
+  - 欢迎引导首屏将“首页”改为正式底部导航名称“值日页”，留言提示改为“点球球留言，再到设置里看消息”，对应真实 `ChoreMenu` 的“室友消息”入口。
+  - 创建向导的页面编排球球提示从含义不清的“轻点切换页面”改成“轻点移动，长按拖动”，符合任务点击即跨列移动、长按拖放的现有行为。
+  - 浏览器回归断言锁定四页引导文案和页面编排提示。只改短文案及相应 OpenSpec/回归断言；未改导航、留言入口、创建逻辑、布局、旧宿舍业务或正式数据。
+  - 原工作树中 `site/runtime/email-runtime.cjs` 的未提交用户修改未编辑、未暂存、未提交。
 - tests:
-  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：通过，`PASS []`。
-  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：通过，`PASS []`。
-  - `npm run web:build`：通过（Vue 检查、Vite 与 PWA 构建）；保留既有 `GuestHome` chunk 超 500 KB 提示。
+  - `DORM_BROWSER=chromium node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导、教程、预览与设置回归通过，最终 `PASS []`；新提示断言通过。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：同一完整回归通过，最终 `PASS []`。
+  - `npm run web:build`：Vue 类型检查、Vite 和 PWA 构建通过；保留既有 `GuestHome` chunk 超过 500 KB 提示。
   - `npm run spec:validate`：18/18 通过。
-  - `npm run spec:scope`：在提交 SHA 的干净独立 worktree 通过；17 个变更、365 个登记文件，digest `6385d7b76a6388603b1a9feb9fff9e9a27bfa4edbfc03e981e4e7550b2f1f029`。
-  - `node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check`：通过。
-  - Impeccable detector：`DormWizard.vue` 输出 `[]`。
-  - 本地 Tabbit 手动检查：在 `http://127.0.0.1:8094/?preview=new-dorm` 的名称步骤点击「预览」，观察到全屏正式预览打开且向导隐藏；退出后回到名称步骤，标题为「宿舍，叫什么？」。这是本地桌面浏览器检查，不是真机验收。
-- CI: GitHub commit status 为 `pending` 且 `statuses=[]`；该 SHA 没有 Check Runs 或 Actions runs 记录。当前没有可确认的 CI 通过或失败结论。
+  - `npm run spec:scope`：提交 SHA 的干净独立 worktree 通过，17 个变更、365 个登记文件，digest `e7a40616f3dd1a21adfd359cfd09705923631a39d49428aa809a7d8b18663f05`。
+  - `node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check`：通过；Impeccable detector 检查两个 Vue 文件返回 `[]`。
+  - Tabbit 本地浏览器 390×844 手动核验 `/guide`：实际四页正文显示“值日页……”与“点球球留言，再到设置里看消息。”；截图为本机临时产物，未上传仓库，不能视为真机证据。
+- CI: GitHub commit status 为 `pending` 且 `statuses=[]`；无 Check Runs 或 Actions runs 记录，当前没有可确认的 CI 通过/失败结论。
 - platform_status:
-  - macOS 上 Chromium 与 WebKit 浏览器回归通过，视口测试属于桌面引擎模拟。
-  - 本地 Tabbit 检查只覆盖名称步骤的手动入口与返回；规则步骤、草稿隔离由自动化断言覆盖。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证；正式站点未部署验证。
-- remaining:
-  - 协调分支最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha` 为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，与本交接的 `d762cb28d1a84b22888b4a457c4f3191ebb24fbf` 不匹配；没有针对本 SHA 的新评审意见，需 ChatGPT 对新业务 SHA 评审后再处理适用建议。
-  - 之前评审记录过全站 `npm run web:verify` 的四项既存失败；本轮没有重跑全站回归，定向创建向导回归通过不代表全站验收。
+  - macOS Chromium 和 WebKit 隔离移动视口回归通过；Tabbit 390×844 是本地桌面浏览器检查。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未真机验证。
   - 未创建 PR、未合并 main、未部署、未访问或修改正式数据库。
+- remaining:
+  - 协调分支 `CHATGPT_REVIEW.md` 最新 `reviewed_code_sha` 仍为 `b1c69f06e0154521bd7be87d85db11aa6a85e0f2`，与本次代码 SHA 不匹配；本次没有针对 `ef7ab780918cd5cea297d06d615dfaf2a477a5e6` 的新评审意见。
+  - 之前评审记录的四项全站 `npm run web:verify` 失败未在本轮重跑；本轮通过的是向导定向回归，不代表全站验收。
+  - 用户的长期目标仍是持续精简新手引导和宿舍创建流程；本次只修正三个容易误导用户的短文案。
 - questions: 暂无。
