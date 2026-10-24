@@ -70,7 +70,7 @@ function submit(){localError.value=draftErrors(draft).join('；');if(localError.
 function toggle(t:DraftTask){t.enabled=!t.enabled;if(!props.workspace){creationEditTaskKey.value=t.enabled?t.key:null;if(t.enabled&&!enabled.value.some(item=>item.key===selectedRuleTaskKey.value))selectedRuleTaskKey.value=t.key;}}
 function chooseCycle(mode:'round'|'scheduled'|'completion'){
  draft.policy=mode==='scheduled'?'hard':'soft';
- for(const task of ruleTasks.value){task.rotation=mode==='scheduled'?'rotation':mode==='completion'?'completion':'round';task.policy='inherit';}
+ for(const task of ruleTasks.value)task.rotation=mode==='scheduled'?'rotation':mode==='completion'?'completion':'round';
  if(!ruleTasks.value.some(t=>t.key===selectedRuleTaskKey.value))selectedRuleTaskKey.value=ruleTasks.value[0]?.key||null;
 }
 function setTaskCycle(task:DraftTask,mode:'round'|'scheduled'|'completion'){

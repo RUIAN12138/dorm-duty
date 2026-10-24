@@ -125,3 +125,11 @@
 - 回归：`node site/scripts/check-undo.mjs`（73 项）、`node site/scripts/check-water-flex.mjs`（74 项）、`node site/scripts/check-water-reassign.mjs`（45 项）均通过；两个修改后的 JS 文件 `node --check` 及 `git diff --check` 通过。
 - 本节尚未验证本轮完整 `npm run web:verify`、GitHub CI 或实体设备。先前记录的四项 Web 回归阻塞仍按 P1-B 保留；不能据本轮定向测试宣称全套回归全绿。iPhone Safari/PWA、Android WebView 与 HarmonyOS ArkWeb 未真机验收。
 - 仅使用本地隔离 API/SQLite 合成数据和本地浏览器预览，没有连接正式服务或读写正式宿舍数据。未合并、未部署；等待对应预览验收，正式 PR 不在本轮范围。
+
+## 2026-10-24 保留新版宿舍任务级策略覆盖
+
+- 评审复现：在规则页先给不同任务分别设为“按时间完成”和“只作提示”，再切换全局节奏；原 `chooseCycle()` 将所有任务的 `policy` 重置为 `inherit`，会无提示丢失这两项设置。
+- 修复：全局节奏选择仍更新全局默认 `draft.policy` 和各任务轮换类型，但不再清空显式任务级 `policy`。显式覆盖仍随原草稿保存；旧宿舍设置路径未改。
+- 浏览器回归新增先红后绿：在规则页分别设定地板硬性、厕所软性覆盖，切换全局轮次后重新进入单项编辑，检查两个原选择仍为 `aria-pressed=true`。原实现下 Chromium 断言按预期失败；修复后完整 `node scripts/check-dorm-wizard-browser.mjs`（Chromium）和 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）均通过，页面错误列表为 `[]`。
+- 本节是本地桌面浏览器的移动视口模拟；不代表实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 真机验收。四项既存 `web:verify` 失败继续保留为单独阻塞；本轮没有重跑完整 `web:verify`、没有新的 GitHub CI 证据。
+- 本轮只改新版向导的任务级策略覆盖及其隔离浏览器回归和 OpenSpec 记录；未改旧宿舍配置、生产数据、正式站点或产品流程之外的其他页面。
