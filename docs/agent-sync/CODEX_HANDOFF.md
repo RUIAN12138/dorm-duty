@@ -1,32 +1,39 @@
 # Codex → ChatGPT · 最近一次开发交接
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `251e950dca1421f34b7e3aa4bb6af1a461bc2791`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/251e950dca1421f34b7e3aa4bb6af1a461bc2791
-- related_pr: 无（依协议仅推送原开发分支；未创建 PR）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮对应 `CHATGPT_REVIEW.md` 中 `reviewed_code_sha=9e9512b632828e3a7d763ed3027fe14d01c154bf` 的 P1-A、P1-B、P1-C。未修改 ChatGPT 独占维护的评审文件。
+- code_sha: `8f8467615c5d8eb161a3e772e51a8822c9b1eb4a`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/8f8467615c5d8eb161a3e772e51a8822c9b1eb4a
+- related_pr: 无（仅推送原隔离开发分支，未创建正式 PR）
+- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮读取的 `CHATGPT_REVIEW.md` 针对 `251e950dca1421f34b7e3aa4bb6af1a461bc2791`，处理 P1-A 提前抬水额度撤回回执与 P1-C 单项任务策略覆盖；同时完成 OpenSpec 中创建入口直达首个可编辑问题。未修改 ChatGPT 独占维护的评审文件。
 - changed_files:
-  - `site/worker/chores.mjs`：为完成回执填入实际 `completed_by`；普通撤销回执清除 `completed_by`。
-  - `scripts/check-dorm-wizard.mjs`：增加 API 回执与 SQLite 持久化结果/后续 board GET 对照，并覆盖新版抬水软硬策略、代做交接、提前额度和副作用边界。
-  - `openspec/changes/new-dorm-wizard/tasks.md`：记录 P1-A/C 测试与 P1-B 基线复现任务完成。
-  - `openspec/changes/new-dorm-wizard/verification.md`：记录本轮 P1 验证、先存 Web 回归失败、设备与 CI 限制。
+  - `frontend/src/components/onboarding/CreationProgress.vue`：保留并验证最终 pointer-up 坐标处理。
+  - `frontend/src/components/onboarding/DormWizard.vue`：创建入口直接进入宿舍名称；移除隐藏的普通 `<template>` 包装；全局节奏切换不再清空单项任务显式策略。
+  - `frontend/src/components/onboarding/WelcomeSlides.vue`：删除仅用于创建前置介绍的三页重复引导。
+  - `frontend/src/views/WelcomeGuide.vue`：保留独立欢迎教程的滚动目标与页码状态同步。
+  - `openspec/changes/new-dorm-wizard/{design.md,proposal.md,specs/wizard/spec.md,tasks.md,verification.md}`：记录创建首问、策略覆盖与验证证据；acceptance 仍为 pending。
+  - `scripts/check-dorm-wizard-browser.mjs`：回归创建直达、进度拖动、任务策略覆盖、全屏预览隔离与教程路径。
+  - `scripts/check-dorm-wizard.mjs`：补提前抬水额度撤回回执、权限、重复请求及数据库一致性检查。
+  - `site/worker/chores.mjs`：提前抬水额度撤回后 API 与 SQLite 均使用 cancelled 状态，并清除 `completed_at` / `completed_by`；同一已取消额度重复撤回返回 409。
 - implemented:
-  - **P1-A 回执一致性**：完成 API 的即时任务回执现在返回数据库记录的实际完成人；常规撤销回执显式将其置空，与事务写入状态一致。未改变权限判断、任务推进、历史归属或旧宿舍规则。
-  - **P1-C 新版抬水覆盖**：隔离 SQLite/API 测试验证硬性任务允许符合现有规则的代做、保留计划负责人并按其队列推进，代做者可撤销恢复原任务；提前抬水记入本人待抵扣额度，撤回后不改变计划队列；软性任务拒绝跨成员完成且无版本、任务、队列、额度、提醒或推送副作用。
-  - **P1-B 基线归因**：四项失败已在当前提交前的 `9e9512b` 与只读基线 `6b7d6761daa80d8f285ca14e96c4ff51620bdbd0` 使用同一命令复现；一致的旧失败记录如下。本轮未修改这些测试所涉范围外文件。
+  - 创建者首次进入新建流程直接看到宿舍名称问题，不再先浏览重复的三页创建介绍。独立 `/guide`、新版宿舍首次进入引导、工作台手动讲解均保留。删除介绍页时暴露出的隐藏 DOM 模板节点已移除；截图显示输入、五步进度和底部操作正常。
+  - 修复评审 P1-A：未抵扣的提前抬水额度撤回后，credit 与 task 行状态均为 cancelled；API 任务回执的 ID、状态、完成时间及完成人与同 ID SQLite 行一致。其他成员不能撤回，重复撤回返回 409，计划抬水队列和通知副作用不变。
+  - 修复评审 P1-C 中单项策略被覆盖的问题：变更全局节奏仍同步更新全局默认及轮换类型，但保留用户明确设定的单项“按时间完成”/“只作提示”策略。Chromium/WebKit 用例先在原实现失败，修复后通过。
 - tests:
-  - `node scripts/check-dorm-wizard.mjs`：88 项隔离 SQLite/API 检查通过。
-  - `node site/scripts/check-water-flex.mjs`：74 项通过；`node site/scripts/check-water-reassign.mjs`：45 项通过；`node site/scripts/check-undo.mjs`：73 项通过。
-  - `node --check site/worker/chores.mjs`、`node --check scripts/check-dorm-wizard.mjs`、`git diff --check`：通过。
-  - `npm run spec:validate`：18/18 通过。
-  - `npm run spec:scope`：17 个 active changes、363 个登记文件通过；digest `8baf5e08bdba1563cb8e431b218aac2f7e07a41af4b187a982bea43c9969b616`。
-  - `npm run web:verify`：前端、Worker、邮件运行时构建均通过；整套回归有 4 项失败，其余脚本通过：`scripts/check-screen-gesture-check.mjs` 的 `swipePose.opacity<1` 断言失败；`scripts/check-settings-save-lifecycle.mjs` 和 `scripts/check-navigation-components.mjs` 的测试打包夹具无法导入 `memberNames.css`；`site/scripts/check-scheduled-reminders.mjs` 的旧迁移用例 `/guest/create` 返回 500、预期 201（其余 10/11 子用例、177 个断言通过）。上述四项与 `6b7d676` 基线上的错误一致，不能报告全套 Web 回归全绿。
-- CI: GitHub Commit Status 对该 SHA 返回 `state=pending`、`total_count=0`、`statuses=[]`；没有可报告的 CI 运行或通过状态。
+  - `node scripts/check-dorm-wizard.mjs`：94 项隔离 SQLite/API 检查通过；未使用真实成员或生产数据。
+  - `node site/scripts/check-undo.mjs`：73 项；`node site/scripts/check-water-flex.mjs`：74 项；`node site/scripts/check-water-reassign.mjs`：45 项，均通过。
+  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）及 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：完整隔离向导回归通过，包含 320/390/430px 布局、创建入口、策略覆盖、预览 API 隔离和减少动态效果；页面错误列表均为空。
+  - `npm run web:build`：`vue-tsc`、Vite、PWA 构建通过；保留既有约 556KB 的 GuestHome chunk 警告。
+  - `npm run spec:check`：18/18 OpenSpec 项目校验及 18 项范围门禁通过；范围输出 17 个 active changes、362 个登记文件，摘要 `ccb20746660b0f24f0240d9e06887840e2384869b854f6587963a4ccc2ae7ff0`。
+  - `node --check site/worker/chores.mjs`、`node --check scripts/check-dorm-wizard.mjs`、`git diff --check` 均通过；Impeccable 自动检测为 `[]`。
+  - 本轮没有重跑完整 `npm run web:verify`；先前评审记录的四项 Web 回归失败仍为发布阻塞：手势 opacity 断言、两个测试夹具导入 `memberNames.css`、旧迁移 `/guest/create` 返回 500。不得据本轮定向检查声称全套回归全绿。
+- CI: GitHub Commit Status 为 `state=pending`、`total_count=0`、`statuses=[]`；该 SHA 查询时没有关联 workflow run，暂无可确认 CI 通过证据。
 - platform_status:
-  - 本地隔离 API/SQLite、构建与 OpenSpec 检查结果如上；测试使用脚本创建的临时数据库与合成身份。
+  - Chromium 和 WebKit 是本地浏览器移动视口模拟，覆盖创建步骤、屏幕尺寸及预览无业务写请求；不是实体 iPhone Safari 测试。
   - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 均未真机验证。
+  - 构建与测试均使用本地合成身份/临时 SQLite；没有连接生产服务、读取或修改正式宿舍数据。
 - remaining:
-  - 请 ChatGPT 独立评审完整业务 SHA `251e950dca1421f34b7e3aa4bb6af1a461bc2791`；本轮评审尚未完成。
-  - 四项 Web 回归失败已确认在前一业务基线存在，仍需单独定位和修复；当前协作范围内不扩展到无关测试与产品代码。
-  - 未创建 PR、未合并 `main`、未部署、未连接正式服务或读取/修改正式宿舍数据库；未修改 `CHATGPT_REVIEW.md`。
+  - 请 ChatGPT 对新的完整业务 SHA `8f8467615c5d8eb161a3e772e51a8822c9b1eb4a` 独立评审；现有针对 `251e950` 的评审已过期。
+  - 上述四项 `web:verify` 失败仍须在明确范围内单独定位，未删除断言或做范围外改动。
+  - 实体设备验收、与该 SHA 绑定的手势/教程录屏人工复核仍待完成；OpenSpec acceptance 保持 pending。
+  - 未创建正式 PR、未合并 main、未部署、未接触正式数据库。
 - questions: 无。
