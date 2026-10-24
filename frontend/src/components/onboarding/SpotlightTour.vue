@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onBeforeUnmount } from "vue";
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 const props = defineProps<{
   steps: { target: string; text: string }[];
   returnFocusSelector?: string;
@@ -20,6 +20,7 @@ const index = ref(0),
 let positionFrame = 0;
 let positionRevision = 0;
 const observedLayout = new Set<Element>();
+const inertStates = new Map<HTMLElement, boolean>();
 const targetObserver = typeof ResizeObserver === "undefined"
   ? null
   : new ResizeObserver(schedulePosition);
@@ -81,6 +82,66 @@ function layoutTransitionEnd(event: TransitionEvent) {
   if (target?.classList.contains("wizard-guide") && event.propertyName === "flex-basis")
     schedulePosition();
 }
+function isolateBackground() {
+  let branch = host.value;
+  while (branch?.parentElement) {
+    const parent = branch.parentElement;
+    for (const sibling of Array.from(parent.children)) {
+      if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
+      inertStates.set(sibling, sibling.inert);
+      sibling.inert = true;
+    }
+    if (parent === document.body) break;
+    branch = parent;
+  }
+}
+function restoreBackground() {
+  for (const [element, wasInert] of inertStates) {
+    if (element.isConnected) element.inert = wasInert;
+  }
+  inertStates.clear();
+}
+function focusableElements() {
+  return Array.from(host.value?.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  ) || []);
+}
+function handleDialogKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    emit("done");
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const controls = focusableElements();
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (!first || !last) {
+    event.preventDefault();
+    host.value?.focus({ preventScroll: true });
+    return;
+  }
+  const active = document.activeElement;
+  const activeIndex = controls.indexOf(active as HTMLElement);
+  if (event.shiftKey && activeIndex <= 0) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && (activeIndex < 0 || activeIndex === controls.length - 1)) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+}
+function keepFocusInside(event: FocusEvent) {
+  const target = event.target;
+  if (host.value && target instanceof Node && !host.value.contains(target))
+    host.value.focus({ preventScroll: true });
+}
+onMounted(async () => {
+  isolateBackground();
+  document.addEventListener("focusin", keepFocusInside, true);
+  await nextTick();
+  host.value?.focus({ preventScroll: true });
+});
 watch(index, position, { immediate: true });
 window.addEventListener("resize", schedulePosition);
 window.visualViewport?.addEventListener("resize", schedulePosition);
@@ -94,6 +155,8 @@ onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener("resize", schedulePosition);
   window.visualViewport?.removeEventListener("scroll", schedulePosition);
   document.removeEventListener("transitionend", layoutTransitionEnd, true);
+  document.removeEventListener("focusin", keepFocusInside, true);
+  restoreBackground();
   if (trigger?.isConnected) trigger.focus({ preventScroll: true });
 });
 </script>
@@ -104,7 +167,9 @@ onBeforeUnmount(() => {
     role="dialog"
     aria-modal="true"
     aria-label="功能引导"
-    @keydown.esc="$emit('done')"
+    aria-describedby="tour-description"
+    tabindex="-1"
+    @keydown="handleDialogKeydown"
   >
       <div
         class="tour-light"
@@ -122,11 +187,10 @@ onBeforeUnmount(() => {
           top: `${noteTop}px`,
         }"
       >
-        <p>{{ steps[index]?.text }}</p>
+        <p id="tour-description" aria-live="polite" aria-atomic="true">{{ steps[index]?.text }}</p>
         <div>
           <button @click="$emit('done')">跳过</button><button v-if="index>0" @click="index--">上一步</button
           ><button
-            autofocus
             @click="index + 1 < steps.length ? index++ : emit('done')"
           >
             {{ index + 1 === steps.length ? "知道了" : "下一步" }}

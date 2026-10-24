@@ -71,6 +71,16 @@ New-room creation MUST expose no more than five top-level pages: room name, task
 - **WHEN** the user drags the glass thumb across a valid stage boundary
 - **THEN** the content, page title, and companion tip update during the drag, and release settles the thumb to the nearest stage
 - **AND** the final pointer-up position is applied even if the platform coalesces or omits the last pointer-move event
+
+### Requirement: Explain custom-task capacity before activation
+The task-selection step MUST state the recovery action before presenting the custom-task action as available when all four stable task slots are occupied. Freeing a slot MUST restore the custom-task action without changing task data or limits.
+#### Scenario: All task slots are occupied
+- **WHEN** all four stable task slots are enabled
+- **THEN** the task-selection page explains that one task must be removed before adding a custom task
+- **AND** it does not present a custom-task button that can only return an error after activation
+#### Scenario: A task slot is available
+- **WHEN** at least one task slot is disabled
+- **THEN** the custom-task action is available and reuses the available stable slot
 #### Scenario: Existing-room settings
 - **WHEN** a user configures an existing room
 - **THEN** its existing settings progress control and flow remain unchanged
@@ -222,3 +232,13 @@ The version-2 room notification settings MUST explain the notification purpose b
 #### Scenario: User denies permission
 - **WHEN** the user denies or the permission request fails
 - **THEN** the existing error remains visible and the user can retry or leave without a false success state
+
+### Requirement: Spotlight guidance contains keyboard focus
+While the spotlight guide is open, it MUST expose a named modal dialog with a readable description, move keyboard focus into the dialog, keep Tab navigation inside it, and prevent background controls from receiving focus. Closing through Escape, skip, or completion MUST restore the prior background inert state and return focus to the real trigger.
+#### Scenario: Keyboard navigation inside the spotlight guide
+- **WHEN** the spotlight guide opens and a user presses Tab or Shift+Tab
+- **THEN** focus moves among the guide actions without reaching background controls
+- **AND** the background wizard content is inert while the modal is open
+#### Scenario: Escape closes the spotlight guide
+- **WHEN** a user presses Escape while focus is inside the spotlight guide
+- **THEN** the guide closes, restores any prior background inert state, and returns focus to its real trigger

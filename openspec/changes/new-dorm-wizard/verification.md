@@ -284,3 +284,16 @@
 - 未连接 iPhone，也未在 Android WebView、HarmonyOS ArkWeb 真机上运行；系统返回事件通过应用返回桥模拟。
 - 没有真实设备触控、键盘动画或原生焦点恢复的设备级证据。
 - 本轮未创建 PR、未合并 main、未部署服务器、未访问或修改正式数据库。
+
+## 2026-10-24 · 自定义任务容量提示回归
+
+- 新宿舍创建向导和新版任务配置工作台在四个稳定任务槽位全部占用时不再展示不可执行的「自定义任务」入口，而显示简短的释放槽位提示。移除一项后入口恢复，自定义任务复用释放的稳定 ID 槽位，不改变其余草稿任务。
+- Chromium 与 WebKit 隔离移动视口的 `scripts/check-dorm-wizard-browser.mjs` 完整回归均通过（`PASS []`），覆盖创建向导与工作台满槽提示、恢复入口和槽位复用。页面与草稿使用模拟数据，未写入正式宿舍。
+
+## 2026-10-24 · 聚光引导键盘焦点隔离
+- 聚光引导打开时将焦点移入带名称与说明的模态对话框；背景兄弟区域临时设为 `inert` 并记录旧状态。Tab/Shift+Tab 在引导操作间循环，Escape 关闭；卸载时先恢复背景状态，再把焦点交还实际触发按钮。
+- 浏览器回归不再把模拟键盘焦点放在被遮罩的后台字段；改为验证键盘视口变化时焦点仍留在引导框内，并新增初始焦点、背景 inert、Tab 正反循环、Escape 关闭和焦点返回断言。
+- `node scripts/check-dorm-wizard-browser.mjs`（macOS Chromium）：171 项隔离检查通过，`PASS []`。
+- `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（macOS WebKit）：171 项隔离检查通过，`PASS []`。
+- `npm run web:build`：通过，包含 `vue-tsc`、Vite、PWA 与 Worker 构建；仍有既有 `GuestHome` chunk 超过 500 KB 提示。`npm run spec:validate`：18/18 通过；`node --check scripts/check-dorm-wizard-browser.mjs` 与 `git diff --check` 通过。
+- 桌面 Chromium/WebKit 模拟不是屏幕阅读器或实体设备验收；iPhone Safari、Android WebView、HarmonyOS ArkWeb 与真实辅助技术未验证。未访问正式数据、未建 PR、未合并、未部署。

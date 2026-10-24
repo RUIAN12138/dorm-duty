@@ -419,7 +419,17 @@ try {
   await p.locator('[data-step="tasks"]').waitFor();
   await p.mouse.up();
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','progress drag can reverse direction and settle on the original step');
-  check(await p.locator('.template-card').count()===4,'template selection keeps stable task slots');
+  const creationSlots=p.locator('.wizard-step[data-step="tasks"] .template-card');
+  check(await creationSlots.count()===4&&await creationSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true')),'template selection keeps four enabled stable task slots by default');
+  check(await p.getByRole('button',{name:'自定义任务',exact:true}).count()===0&&await p.getByRole('status').filter({hasText:'移除一项后可添加自定义任务'}).count()===1,'full creation task slots explain how to free a slot before exposing custom-task action');
+  const creationSlotName=await creationSlots.first().locator('strong').textContent();
+  await creationSlots.first().click();
+  check(await p.getByRole('button',{name:'自定义任务',exact:true}).isVisible()&&await p.getByRole('status').filter({hasText:'移除一项后可添加自定义任务'}).count()===0,'freeing one creation task slot restores the custom-task action');
+  await p.getByRole('button',{name:'自定义任务',exact:true}).click();
+  await p.locator('.creation-task-edit .task-editor').waitFor();
+  await p.getByLabel('任务名称',{exact:true}).fill(creationSlotName);
+  await p.locator('.creation-task-edit button').first().click();
+  check(await creationSlots.count()===4&&await creationSlots.first().getAttribute('aria-pressed')==='true'&&await creationSlots.first().locator('strong').textContent()===creationSlotName,'custom task reuses the freed stable slot and restores the original draft during isolation');
   check(await p.locator('.creation-task-picks button').first().evaluate(async (element) => {
     let stableFrames = 0;
     let previous = element.getBoundingClientRect();
@@ -783,6 +793,20 @@ try {
   check(await p.locator('.creation-progress').getAttribute('aria-label')==='任务配置进度'&&await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'task-settings progress has an accurate accessible name without visible step numbers');
   await p.getByRole('button',{name:'前往添加',exact:true}).click();
   await p.locator('.wizard-step[data-step="templates"]').waitFor();
+  const activeWorkspaceTemplates=p.locator('.wizard-step:not([aria-hidden="true"])');
+  const workspaceSlots=activeWorkspaceTemplates.locator('.template-card');
+  check(await workspaceSlots.count()===4&&await workspaceSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true'))&&await p.getByRole('button',{name:'自定义任务',exact:true}).count()===0&&await p.getByRole('status').filter({hasText:'移除一项后可添加自定义任务'}).count()===1,'full workspace task slots show the recovery action before custom-task activation');
+  const workspaceSlotName=await workspaceSlots.first().locator('strong').textContent();
+  await workspaceSlots.first().click();
+  const customTaskAction=activeWorkspaceTemplates.locator('.add-task');
+  await customTaskAction.waitFor({state:'visible'});
+  check(await customTaskAction.isVisible(),'workspace custom-task action returns when a stable slot is freed');
+  await customTaskAction.click();
+  await p.locator('.task-editor').waitFor();
+  await p.getByLabel('任务名称',{exact:true}).fill(workspaceSlotName);
+  await p.getByRole('button',{name:'前往添加',exact:true}).click();
+  await p.locator('.wizard-step[data-step="templates"]').waitFor();
+  check(await workspaceSlots.first().getAttribute('aria-pressed')==='true'&&await workspaceSlots.first().locator('strong').textContent()===workspaceSlotName,'workspace custom task reuses the freed slot without changing saved task data');
   await p.getByRole('button',{name:'前往任务',exact:true}).click();
   await p.locator('.workspace-task-list').waitFor();
   check(
@@ -805,6 +829,20 @@ try {
   for(const width of [320,390,430]){await p.setViewportSize({width,height:844});await p.locator('.workspace-task-row>.wizard-choice').first().waitFor();check(await p.locator('.dorm-wizard').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${width}px no horizontal overflow`);}
   await p.locator('.workspace-task-row>.wizard-choice').first().click();
   await p.locator('.task-editor').waitFor();
+  await p.getByRole('button',{name:'使用引导',exact:true}).click();
+  await p.locator('.tour').waitFor();
+  check(await p.locator('.tour').evaluate(el=>el.getAttribute('role')==='dialog'&&el.getAttribute('aria-modal')==='true'&&!!document.getElementById(el.getAttribute('aria-describedby')||'')),'spotlight exposes a named modal dialog and live description');
+  check(await p.evaluate(()=>document.activeElement?.matches('.tour[role="dialog"]')),'spotlight moves initial focus into the modal');
+  check(await p.locator('.wizard-body').evaluate(el=>el.inert),'spotlight makes the underlying wizard content inert');
+  await p.keyboard.press('Shift+Tab');
+  check(await p.evaluate(()=>document.activeElement?.textContent?.trim()==='下一步'),'spotlight wraps Shift+Tab from the dialog to its last action');
+  await p.keyboard.press('Tab');
+  check(await p.evaluate(()=>document.activeElement?.textContent?.trim()==='跳过'),'spotlight wraps Tab from the last action to its first action');
+  await p.keyboard.press('Shift+Tab');
+  check(await p.evaluate(()=>document.activeElement?.textContent?.trim()==='下一步'),'spotlight keeps reverse tab order inside the dialog');
+  await p.keyboard.press('Escape');
+  await p.locator('.tour').waitFor({state:'detached'});
+  check(await p.evaluate(()=>document.activeElement?.matches('button[aria-label="使用引导"]')),'Escape closes spotlight and restores focus to its real trigger');
   await p.getByRole('button',{name:'使用引导',exact:true}).click();
   await p.locator('.tour-light').waitFor();
   check(await p.locator('.tour-light').evaluate(el=>getComputedStyle(el).transitionProperty!=='none'),'spotlight keeps its spatial transition when motion is allowed');
@@ -846,12 +884,12 @@ try {
     const alignment=await spotlightAlignment('.creation-progress, .wizard-steps');
     check(!!alignment&&alignment.max<=8,`spotlight remains aligned at ${width}x${height} CSS viewport${alignment?` (${JSON.stringify(alignment)})`:''}`);
   }
-  await p.getByLabel('任务名称',{exact:true}).focus();
+  await p.locator('.tour').getByRole('button',{name:'下一步',exact:true}).focus();
   await p.evaluate(()=>{document.documentElement.dataset.interaction='keyboard';window.dispatchEvent(new Event('ui-motion-change'));});
   await p.setViewportSize({width:390,height:520});
   await p.evaluate(()=>visualViewport?.dispatchEvent(new Event('resize')));
   const keyboardSpotlight=await spotlightAlignment('.creation-progress, .wizard-steps');
-  check(!!keyboardSpotlight&&keyboardSpotlight.max<=8&&await p.evaluate(()=>document.activeElement?.matches('.task-editor input')),'spotlight remains aligned and preserves the focused field during a simulated keyboard viewport resize');
+  check(!!keyboardSpotlight&&keyboardSpotlight.max<=8&&await p.evaluate(()=>!!document.activeElement?.closest('.tour')),'spotlight remains aligned and keeps focus inside during a simulated keyboard viewport resize');
   await p.setViewportSize({width:430,height:844});
   await p.evaluate(()=>{document.documentElement.dataset.interaction='pointer';window.dispatchEvent(new Event('ui-motion-change'));});
   await p.locator('.tour').getByRole('button',{name:'跳过',exact:true}).click();
