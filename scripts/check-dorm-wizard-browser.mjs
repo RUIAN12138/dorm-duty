@@ -155,6 +155,7 @@ try {
   await p.goto("http://127.0.0.1:8094/guide");
   await p.locator('[data-testid="welcome-guide"]').waitFor();
   check(await p.locator(".guide-page").count() === 4, "welcome tutorial is a standalone four-page route");
+  check(await p.locator(".guide-page .dorm-companion").evaluateAll((els) => els.every((el) => el.getAttribute("data-effects-mode") === "lite")), "welcome tutorial keeps the companion motion while suppressing color ribbons and particles");
   const skipButton = p.getByRole("button", { name: "跳过" });
   const skipBounds = await skipButton.boundingBox();
   await p.mouse.move(skipBounds.x + skipBounds.width / 2, skipBounds.y + skipBounds.height / 2);
@@ -271,6 +272,7 @@ try {
     if (animations.length) await Promise.all(animations.map((animation) => animation.finished.catch(() => {})));
     return true;
   });
+  check(await p.locator(".dorm-wizard .dorm-companion").first().getAttribute("data-effects-mode") === "full", "new-room wizard keeps the companion's existing full visual effects");
   await p.evaluate(() => new Promise(requestAnimationFrame));
   await p.screenshot({path:`data/startup-review/${engine}-local-wizard-open.png`});
   check(await p.locator(".dorm-wizard").count()===1&&await p.getByTestId("email-account-panel").count()===0,"local entry opens the isolated creation experience without the email gate");

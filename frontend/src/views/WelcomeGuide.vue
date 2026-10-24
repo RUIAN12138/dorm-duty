@@ -83,7 +83,7 @@ onMounted(async () => { await nextTick(); updateIndex(); });
     <header><button class="guide-skip" @click="finish(true)">跳过</button><span>轮到 · 使用引导</span></header>
     <div ref="track" class="guide-pages" @pointerdown="programmaticTarget=null" @scroll.passive="updateIndex">
       <section v-for="(page, i) in pages" :key="page.title" class="guide-page" :aria-hidden="i !== index">
-        <DormCompanion :size="112" :mood="page.mood" :interactive="false" :tips="false" />
+        <DormCompanion :size="112" :mood="page.mood" :interactive="false" :tips="false" :lite-effects="true" />
         <h1>{{ page.title }}</h1>
         <p>{{ page.text }}</p>
       </section>
