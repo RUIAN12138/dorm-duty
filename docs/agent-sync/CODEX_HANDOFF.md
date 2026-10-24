@@ -1,29 +1,32 @@
 # Codex → ChatGPT · 最近一次开发交接
 
 - code_branch: `codex/new-dorm-wizard-preview`
-- code_sha: `9e9512b632828e3a7d763ed3027fe14d01c154bf`
-- code_url: https://github.com/RUIAN12138/dorm-duty/commit/9e9512b632828e3a7d763ed3027fe14d01c154bf
-- related_pr: 无（依协作协议推送开发分支；未创建 PR）
-- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮依据 `CHATGPT_REVIEW.md` 中 `reviewed_code_sha=6b7d6761daa80d8f285ca14e96c4ff51620bdbd0` 的 P0 权限评审处理。未修改 ChatGPT 独占维护的评审文件。
+- code_sha: `251e950dca1421f34b7e3aa4bb6af1a461bc2791`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/251e950dca1421f34b7e3aa4bb6af1a461bc2791
+- related_pr: 无（依协议仅推送原开发分支；未创建 PR）
+- requirements: `docs/agent-sync/USER_REQUIREMENTS.md`；本轮对应 `CHATGPT_REVIEW.md` 中 `reviewed_code_sha=9e9512b632828e3a7d763ed3027fe14d01c154bf` 的 P1-A、P1-B、P1-C。未修改 ChatGPT 独占维护的评审文件。
 - changed_files:
-  - `site/worker/chores.mjs`：新增统一的代打卡权限谓词；修正任务视图、工作区列表与实际写入的一致性；撤销查询和事务守卫按实际完成人授权。
-  - `scripts/check-dorm-wizard.mjs`：扩展隔离 SQLite 服务端测试，覆盖软/硬策略、三类轮换、旧宿舍、任务/轮序状态、完成人快照、撤销授权和通知副作用。
+  - `site/worker/chores.mjs`：为完成回执填入实际 `completed_by`；普通撤销回执清除 `completed_by`。
+  - `scripts/check-dorm-wizard.mjs`：增加 API 回执与 SQLite 持久化结果/后续 board GET 对照，并覆盖新版抬水软硬策略、代做交接、提前额度和副作用边界。
+  - `openspec/changes/new-dorm-wizard/tasks.md`：记录 P1-A/C 测试与 P1-B 基线复现任务完成。
+  - `openspec/changes/new-dorm-wizard/verification.md`：记录本轮 P1 验证、先存 Web 回归失败、设备与 CI 限制。
 - implemented:
-  - P0 打卡授权：`schema_version=2` 不再自动授权代打卡。仅新版配置的有效“硬性”任务在执行时间到达后允许代做；软性任务及旧宿舍仍只允许当前负责人完成。服务端 `can_complete` 展示与完成写入使用同一权限判断。
-  - P0 接力轮序：硬性 `completion` 代做时保留原计划负责人，`completed_by` 与历史姓名快照记录实际完成人；下一位仍依据原计划负责人和配置轮序产生，不会因代做者身份跳过成员。
-  - P0 撤销权限：实际完成人可以撤销自己的代做记录，计划负责人不能替代做者撤销；撤销列表查询与写入守卫使用同一实际完成人身份。拒绝的软性/旧宿舍请求不改变任务、版本、轮序、历史、提醒或推送任务。
+  - **P1-A 回执一致性**：完成 API 的即时任务回执现在返回数据库记录的实际完成人；常规撤销回执显式将其置空，与事务写入状态一致。未改变权限判断、任务推进、历史归属或旧宿舍规则。
+  - **P1-C 新版抬水覆盖**：隔离 SQLite/API 测试验证硬性任务允许符合现有规则的代做、保留计划负责人并按其队列推进，代做者可撤销恢复原任务；提前抬水记入本人待抵扣额度，撤回后不改变计划队列；软性任务拒绝跨成员完成且无版本、任务、队列、额度、提醒或推送副作用。
+  - **P1-B 基线归因**：四项失败已在当前提交前的 `9e9512b` 与只读基线 `6b7d6761daa80d8f285ca14e96c4ff51620bdbd0` 使用同一命令复现；一致的旧失败记录如下。本轮未修改这些测试所涉范围外文件。
 - tests:
-  - `node scripts/check-dorm-wizard.mjs`：64 项隔离 SQLite 服务端检查通过；包含 soft/self_round、soft/completion、soft/scheduled 拒绝，hard/scheduled、hard/self_round、hard/completion 受控代做，实际完成者/快照/撤销/轮序，以及 legacy 拒绝后无写入副作用。
+  - `node scripts/check-dorm-wizard.mjs`：88 项隔离 SQLite/API 检查通过。
+  - `node site/scripts/check-water-flex.mjs`：74 项通过；`node site/scripts/check-water-reassign.mjs`：45 项通过；`node site/scripts/check-undo.mjs`：73 项通过。
   - `node --check site/worker/chores.mjs`、`node --check scripts/check-dorm-wizard.mjs`、`git diff --check`：通过。
   - `npm run spec:validate`：18/18 通过。
-  - `npm run spec:scope`：通过，17 个 changes / 363 个登记文件，digest `4e7c35f21446bccf94a7655347eceb48526c65f94cface8c52c4821e645a8d64`。
-  - `npm run web:verify`：前端构建、Worker 构建、邮箱运行时构建通过；完整回归中有 4 项失败，其他列出的回归通过。失败项为：`scripts/check-screen-gesture-check.mjs`（`swipePose.opacity<1` 断言）、`scripts/check-settings-save-lifecycle.mjs`（测试打包器无法导入 `memberNames.css`）、`scripts/check-navigation-components.mjs`（同类 `memberNames.css` 打包夹具错误）、`site/scripts/check-scheduled-reminders.mjs`（旧版本迁移夹具 `/guest/create` 返回 500，期望 201）。这些失败未涉及本提交修改的文件；未据此声称完整 Web 验证全绿。
-- CI: GitHub Commit Status `total_count=0`、`state=pending`；`gh run list` 对该分支为空，没有可报告的 GitHub CI 运行或通过结果。
+  - `npm run spec:scope`：17 个 active changes、363 个登记文件通过；digest `8baf5e08bdba1563cb8e431b218aac2f7e07a41af4b187a982bea43c9969b616`。
+  - `npm run web:verify`：前端、Worker、邮件运行时构建均通过；整套回归有 4 项失败，其余脚本通过：`scripts/check-screen-gesture-check.mjs` 的 `swipePose.opacity<1` 断言失败；`scripts/check-settings-save-lifecycle.mjs` 和 `scripts/check-navigation-components.mjs` 的测试打包夹具无法导入 `memberNames.css`；`site/scripts/check-scheduled-reminders.mjs` 的旧迁移用例 `/guest/create` 返回 500、预期 201（其余 10/11 子用例、177 个断言通过）。上述四项与 `6b7d676` 基线上的错误一致，不能报告全套 Web 回归全绿。
+- CI: GitHub Commit Status 对该 SHA 返回 `state=pending`、`total_count=0`、`statuses=[]`；没有可报告的 CI 运行或通过状态。
 - platform_status:
-  - Web/服务端逻辑：隔离 SQLite 行为测试通过，前端与 Worker 生产构建通过；未连接正式服务器或数据库。
-  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb：未进行真机验证。
+  - 本地隔离 API/SQLite、构建与 OpenSpec 检查结果如上；测试使用脚本创建的临时数据库与合成身份。
+  - iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 均未真机验证。
 - remaining:
-  - 请 ChatGPT 对完整业务代码 SHA `9e9512b632828e3a7d763ed3027fe14d01c154bf` 独立复核并更新评审。
-  - 上述 4 项 `web:verify` 失败仍待分别定位；不属于本轮授权权限修复范围。
-  - 未创建 PR、未合并 `main`、未部署正式网站、未读取或修改正式宿舍数据；未修改 `CHATGPT_REVIEW.md`。
+  - 请 ChatGPT 独立评审完整业务 SHA `251e950dca1421f34b7e3aa4bb6af1a461bc2791`；本轮评审尚未完成。
+  - 四项 Web 回归失败已确认在前一业务基线存在，仍需单独定位和修复；当前协作范围内不扩展到无关测试与产品代码。
+  - 未创建 PR、未合并 `main`、未部署、未连接正式服务或读取/修改正式宿舍数据库；未修改 `CHATGPT_REVIEW.md`。
 - questions: 无。
