@@ -227,3 +227,31 @@
 - platform_status: 本机 macOS 桌面 Chromium/WebKit 隔离浏览器通过；不代表实体 iPhone Safari/PWA、vivo Android WebView 或 HarmonyOS ArkWeb 验收。无实体设备冷启动测试。
 - remaining: 本次修复避免“未验证”被路由误判为“登出”，但不能证明 vivo WebView 的 Cookie/localStorage 在强制停止、系统重启后的持久性问题已解决；仍需目标设备验收。本地原开发工作树预先存在的 `site/runtime/email-runtime.cjs` 23 行修改未触碰、未暂存且不在此提交。未访问正式服务／数据库，未创建 PR、未合并、未部署。最新评审仍为 `reviewed_code_sha=0e29305d01fd291f36a7080db22ef5974fdd70cb`，并非针对本次 SHA。
 - questions: 无需立即决策；如需验证 WebView 关闭后恢复，需在 vivo 真机上用独立测试账号按启动／强停／重启／断网流程实测，不收集凭据。
+# Codex → ChatGPT · PR #85 修正两项后续 CI 浏览器断言
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `4d43772deaf422712cae477f28f0404242285df4`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/4d43772deaf422712cae477f28f0404242285df4
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送）
+- requirements: 用户明确授权“允许，仅修这两项新断言”。只修 `scripts/check-chat-motion-continuity.mjs:293` 与 `scripts/check-companion-chat-browser.mjs:777` 的对应测试检查，并登记 OpenSpec 范围；不改产品运行时代码。
+- changed_files:
+  - `scripts/check-chat-motion-continuity.mjs`
+  - `scripts/check-companion-chat-browser.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`
+- implemented:
+  - 新消息滚动检查现在要求到达最新消息；启用动效时还需观测到至少三个不同 scrollTop 位置且包含中间帧，减少动态效果模式允许即时定位。保留原测试目标，避免因帧数采样门槛过严误报。
+  - 暗色设置骨架断言移到骨架实际显示时，核对仅流光自身降低至 0.12 透明度、骨架本身不透明且仍是透明静态局部层；不再把抽屉背景遮罩/聊天页面 opacity 当作骨架全屏遮罩结果。
+  - 本提交只包含两个授权测试脚本与 OpenSpec 记录；未修改产品源文件。工作树独立存在的 `site/runtime/push-runtime.cjs` 用户改动未暂存、未提交、未包含。
+- tests:
+  - `node scripts/check-chat-motion-continuity.mjs`：桌面 Chromium 23 项检查通过。
+  - `DORM_CONTINUITY_QA=1 node scripts/check-companion-chat-browser.mjs`：桌面 Chromium 45 项检查通过，含这次授权的暗色骨架断言。
+  - 默认 Companion Chat 浏览器脚本：Chromium 67 项、WebKit 65 项检查通过；CI 的 QA 分支另由上述命令单独覆盖。
+  - `npm run web:verify`：退出码 0；前端、Worker、邮件运行模块构建和全套 Web 验证通过。
+  - `npm run spec:check`：退出码 0；OpenSpec 严格校验 19/19、范围门禁 18/18 通过；两脚本 `node --check` 与 `git diff --check` 通过。
+- CI: GitHub Actions run `40183607039`，head=`4d43772deaf422712cae477f28f0404242285df4`。读取 PR 状态时 `spec-contract`、`web-and-business`、`android` 为 `in_progress`，`conversation-motion` 为 `queued`；尚无最终结果。不能将本地结果当成 GitHub CI 通过。
+- platform_status: 仅本机桌面 Chromium/WebKit 自动化与 Android CI job 状态；未进行 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验证。未部署、未访问正式数据库、未执行迁移。
+- remaining: 等待同一 code SHA 的 4 个 CI job 全部成功。若全绿，按用户先前授权先核对 SSH、备份正式数据库并完成部署验证；CI 未全绿不得发布。PR #85 仍 OPEN、未合并 main。
+- review_status: 最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=84fc285ea9f9c90d70207f4e6b5e5b767c318f91`，早于当前代码 SHA；其中 P1-A 创建进度条待办不属于本轮明确授权的两项 CI 测试修复，未修改产品代码。等待 ChatGPT 针对 `4d43772...` 的新评审。
+- questions: 无；当前等待 CI。
+
+# Codex → ChatGPT · PR #85 两项聊天浏览器检查稳定化
