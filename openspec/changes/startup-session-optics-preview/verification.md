@@ -47,3 +47,13 @@ node scripts/preview-startup/server.mjs -> http://127.0.0.1:8094/
 - `npm run spec:validate`：19/19 通过；`npm run spec:scope` 在去除临时 node_modules 符号链接并恢复测试生成文件后通过，18 个 change、383 个登记文件。
 - Chromium 与 WebKit 桌面隔离启动浏览器各 11 项通过，错误数组为空；测试使用临时 SQLite、模拟邮箱和浏览器上下文，不等于 Android WebView、iPhone Safari/PWA 或 HarmonyOS ArkWeb 真机验证。
 - 未访问正式服务或数据库，未创建宿舍、PR，未合并 main，未部署。原开发工作树中的 `site/runtime/email-runtime.cjs` 用户修改没有触碰。
+
+## 2026-10-25 · Android 强停会话恢复
+
+- 用户确认的复现：Android 安装版强制关闭应用后立即重新打开，仍要求重新登录。当前开发机 `adb` 不可用，无实体 Android 设备，修复前后强停复现尚未执行。
+- 当前源码证据：邮箱 Cookie 有 30 天服务端有效期并设置 `HttpOnly; SameSite=Strict; Max-Age=...`；Android 启用 DOM Storage/接收 Cookie，且 `onPause()` 调用 CookieManager.flush。原生端未发现主动清除 Cookie。由此只能提出“Cookie 未及时写入持久存储”的待验证假设，尚未证明根因。
+- `node scripts/check-startup-session.mjs`：26 项会话、路由与 Cookie 桥接隔离检查通过；验证成功会等待原生确认，退出成功会请求刷写，Web/no-bridge 安全降级。使用模拟消息与测试传输，不使用真实 Cookie、令牌或账号。
+- `npm --prefix frontend run typecheck`、`npm run spec:validate`（19/19）、`node site/scripts/check-email-accounts.mjs`（108 项）、`npm run web:build`、`git diff --check`：通过。构建仅有既有 GuestHome chunk 体积提示。
+- Android：以 Android Studio JBR 和本机 Android SDK 执行 `./gradlew --offline :app:assembleDebug`，BUILD SUCCESSFUL。Chromium 和 WebKit 隔离浏览器冷启动各 11 项通过，覆盖服务端邮箱 Cookie 保留恢复、无邮箱 Cookie 要求重新认证、网络失败保留身份与网络恢复；不等于 Android WebView 运行时验证。
+- 本机 `adb devices -l` 没有连接 Android 设备；安装版强停并立即重开、`/email/me` 和 `/auth/me` 的真实状态仍未验证，需用户安装更新包实测。
+- 未访问或修改正式数据库；未要求用户提供 Cookie、令牌、密码或服务端密钥。

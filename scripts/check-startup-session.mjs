@@ -26,6 +26,45 @@ const check = (v, label) => {
   n++;
   console.log("PASS " + label);
 };
+globalThis.window = new EventTarget();
+let nativeFlushMessage = null,
+  nativeFlushOk = true,
+  nativeFlushCount = 0;
+const nativeSessionBridge = {
+  onmessage: null,
+  postMessage(raw) {
+    nativeFlushMessage = JSON.parse(raw);
+    nativeFlushCount++;
+    queueMicrotask(() =>
+      nativeSessionBridge.onmessage?.({
+        data: JSON.stringify({
+          command: "cookiesFlushed",
+          id: nativeFlushMessage.id,
+          ok: nativeFlushOk,
+        }),
+      }),
+    );
+  },
+};
+window.DormNativeSession = nativeSessionBridge;
+check(
+  (await m.flushNativeSessionCookies()) === true &&
+    nativeFlushMessage.command === "flushCookies" &&
+    Object.keys(nativeFlushMessage).sort().join(",") === "command,id",
+  "native cookie persistence bridge sends only a bounded command and request id",
+);
+nativeFlushOk = false;
+check(
+  (await m.flushNativeSessionCookies()) === false,
+  "native cookie persistence failure is reported without throwing",
+);
+delete window.DormNativeSession;
+check(
+  (await m.flushNativeSessionCookies()) === false,
+  "web browser without native cookie bridge degrades safely",
+);
+window.DormNativeSession = nativeSessionBridge;
+nativeFlushOk = true;
 m.persistSessionToken("fixture-only");
 sessionStorage = storage();
 check(
@@ -57,7 +96,6 @@ console.log(
   `${n} persistence checks passed; no native process or actual token used`,
 );
 // Exercise the actual API expiry path with a bounded transport fixture.
-globalThis.window=new EventTarget();
 let failure='network', requestToken='', rejectRace;
 globalThis.fixtureRequest=async(_path,options)=>{
   requestToken=new Headers(options?.headers).get('Authorization')?.replace(/^Bearer /,'')||'';
@@ -229,3 +267,121 @@ check(
   "email-verification transport failure stays on the public recovery surface",
 );
 console.log("7 router recovery checks passed");
+
+// Exercise email verification/logout call sites with an isolated native
+// bridge and request transport. No real cookies, tokens, or account records.
+let emailRequestPath = "",
+  emailRequestComplete = false,
+  flushCountBeforeVerify = nativeFlushCount;
+globalThis.__emailSessionHarness = {
+  async request(path) {
+    emailRequestPath = path;
+    emailRequestComplete = true;
+    return { ok: true };
+  },
+};
+const emailBuild = await build({
+  entryPoints: ["frontend/src/api/email.ts"],
+  bundle: true,
+  write: false,
+  format: "esm",
+  plugins: [
+    {
+      name: "email-session-fixtures",
+      setup(builder) {
+        builder.onResolve({ filter: /^vue$/ }, () => ({
+          path: "vue",
+          namespace: "email-session-fixture",
+        }));
+        builder.onResolve({ filter: /\.\/logout$/ }, () => ({
+          path: "logout",
+          namespace: "email-session-fixture",
+        }));
+        builder.onResolve({ filter: /\.\/chores$/ }, () => ({
+          path: "chores",
+          namespace: "email-session-fixture",
+        }));
+        builder.onResolve({ filter: /\.\/dormHistory$/ }, () => ({
+          path: "dormHistory",
+          namespace: "email-session-fixture",
+        }));
+        builder.onLoad(
+          { filter: /.*/, namespace: "email-session-fixture" },
+          (args) => ({
+            contents:
+              args.path === "vue"
+                ? "export const reactive=value=>value;"
+                : args.path === "logout"
+                  ? "export const logoutEvent='dorm-signed-out'; export const pendingLogout=()=>false; export const logoutAll=async()=>{};"
+                  : args.path === "chores"
+                    ? "export const choreRequest=(path)=>globalThis.__emailSessionHarness.request(path); export const savedChoreToken=()=>''; export const saveChoreToken=()=>{};"
+                    : "export const forgetDorm=()=>{};",
+          }),
+        );
+      },
+    },
+  ],
+});
+const emailModule = await import(
+  "data:text/javascript;base64," +
+    Buffer.from(emailBuild.outputFiles[0].text).toString("base64")
+);
+await emailModule.emailPost("verify", {});
+check(
+  emailRequestPath === "/email/verify" &&
+    emailRequestComplete &&
+    nativeFlushCount === flushCountBeforeVerify + 1,
+  "successful email verification waits for the Android cookie flush acknowledgement",
+);
+await emailModule.emailPost("preferences", {});
+check(
+  nativeFlushCount === flushCountBeforeVerify + 1,
+  "unrelated email mutations do not trigger native cookie flushes",
+);
+
+let logoutFlushCount = nativeFlushCount;
+globalThis.__logoutSessionHarness = {
+  async request(path) {
+    return { path };
+  },
+};
+const logoutBuild = await build({
+  entryPoints: ["frontend/src/api/logout.ts"],
+  bundle: true,
+  write: false,
+  format: "esm",
+  plugins: [
+    {
+      name: "logout-session-fixtures",
+      setup(builder) {
+        builder.onResolve({ filter: /\.\/chores$/ }, () => ({
+          path: "chores",
+          namespace: "logout-session-fixture",
+        }));
+        builder.onResolve({ filter: /interaction\/notice$/ }, () => ({
+          path: "notice",
+          namespace: "logout-session-fixture",
+        }));
+        builder.onLoad(
+          { filter: /.*/, namespace: "logout-session-fixture" },
+          (args) => ({
+            contents:
+              args.path === "chores"
+                ? "export const choreRequest=(path)=>globalThis.__logoutSessionHarness.request(path);"
+                : "export const showToast=()=>{};",
+          }),
+        );
+      },
+    },
+  ],
+});
+const logoutModule = await import(
+  "data:text/javascript;base64," +
+    Buffer.from(logoutBuild.outputFiles[0].text).toString("base64")
+);
+await logoutModule.logoutAll();
+check(
+  nativeFlushCount === logoutFlushCount + 1,
+  "successful email logout flushes the server-cleared Android cookie",
+);
+console.log(`${n} total startup and native-cookie checks passed`);

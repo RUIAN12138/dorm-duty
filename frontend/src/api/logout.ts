@@ -1,4 +1,7 @@
-import { persistentSessionKey } from "../interaction/persistentSession";
+import {
+  flushNativeSessionCookies,
+  persistentSessionKey,
+} from "../interaction/persistentSession";
 import { choreRequest } from "./chores";
 import { showToast } from "../interaction/notice";
 
@@ -63,6 +66,8 @@ export function logoutAll(): Promise<void> {
         body: "{}",
       }),
     ]);
+    if (results.at(-1)?.status === "fulfilled")
+      await flushNativeSessionCookies();
     if (results.some((result) => result.status === "rejected")) {
       showToast("服务端会话未撤销，请联网后重试退出");
       throw new Error("已退出本机，服务端会话未撤销；请联网后重试退出。");

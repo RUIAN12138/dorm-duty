@@ -3,6 +3,65 @@ export const persistentSessionKey = "dorm-auth-token-v1";
 const sessionTokenKey = "dorm-token";
 const emailGrantKey = "dorm-email-admin-grant";
 
+type NativeCookieBridge = {
+  postMessage: (message: string) => void;
+  onmessage?: ((event: { data?: string }) => void) | null;
+};
+
+let nativeCookieBridge: NativeCookieBridge | null = null;
+let nativeCookieRequest = 0;
+const pendingCookieFlushes = new Map<
+  string,
+  { finish: (ok: boolean) => void; timer: ReturnType<typeof setTimeout> }
+>();
+
+function resolveNativeCookieFlush(event: { data?: string }) {
+  try {
+    const response = JSON.parse(event.data || "");
+    if (response?.command !== "cookiesFlushed" || typeof response.id !== "string")
+      return;
+    const pending = pendingCookieFlushes.get(response.id);
+    if (!pending) return;
+    pendingCookieFlushes.delete(response.id);
+    clearTimeout(pending.timer);
+    pending.finish(response.ok === true);
+  } catch {
+    /* Ignore messages unrelated to the cookie persistence request. */
+  }
+}
+
+/** Best-effort Android WebView cookie flush; the bridge never receives credentials. */
+export function flushNativeSessionCookies(): Promise<boolean> {
+  let bridge: NativeCookieBridge | undefined;
+  try {
+    bridge = (globalThis.window as (Window & { DormNativeSession?: NativeCookieBridge }) | undefined)
+      ?.DormNativeSession;
+  } catch {
+    return Promise.resolve(false);
+  }
+  if (!bridge || typeof bridge.postMessage !== "function")
+    return Promise.resolve(false);
+  if (nativeCookieBridge !== bridge) {
+    nativeCookieBridge = bridge;
+    bridge.onmessage = resolveNativeCookieFlush;
+  }
+  const id = `cookie-${Date.now().toString(36)}-${++nativeCookieRequest}`;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingCookieFlushes.delete(id);
+      resolve(false);
+    }, 1500);
+    pendingCookieFlushes.set(id, { finish: resolve, timer });
+    try {
+      bridge?.postMessage(JSON.stringify({ command: "flushCookies", id }));
+    } catch {
+      clearTimeout(timer);
+      pendingCookieFlushes.delete(id);
+      resolve(false);
+    }
+  });
+}
+
 type StorageArea = "local" | "session";
 
 function getStorage(area: StorageArea): Storage | null {

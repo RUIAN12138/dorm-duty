@@ -6,3 +6,10 @@
 已读frontend-design、emil-design-eng、动效契约、React Bits Dock，上游两个仓库。awesome-design-md/KnowledgeBase/本地math-curve-loaders缺失。
 ## Risks
 无vivo/iPhone/鸿蒙真机不得宣称通过；既有HttpOnly邮箱cookie失效不能靠本地令牌绕过。
+
+## 2026-10-25 · Android 邮箱 Cookie 持久化
+- 只在 `dorm_email_session` 被邮箱验证创建或邮箱退出清除后请求原生刷写；不改 `localStorage`、不把身份令牌交给原生、不通过客户端凭证绕过 `/email/me`。
+- Web 与不支持 AndroidX WebMessageListener 的平台静默跳过桥接；Android 既有 `onPause()` 刷写继续保留。
+- 原生监听只接收可信 HTTPS 主框架下的固定 `flushCookies` 命令，后台线程执行 `CookieManager.flush()`，只回传成功状态与随机请求 ID。
+- 回滚只需移除新增桥接调用与监听；Cookie 格式、服务端会话表、有效期、退出和旧宿舍均保持原状。
+- 当前没有 Android ADB/实体设备；成功与否仍由用户安装后的强停重启实测确认。若重启后仍丢登录，再按是否存在 Cookie 以及 `/email/me` 返回结果定位客户端存储或服务端会话拒绝，不采集凭证。
