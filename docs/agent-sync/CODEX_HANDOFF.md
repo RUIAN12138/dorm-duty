@@ -23,9 +23,9 @@
   - `npm --prefix frontend run typecheck`：通过。
   - `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change／389 个文件、范围门禁 18/18 通过；范围摘要 `788ea0c7cb59211d54fd52a992ca74af6dd428c422fb426f3d7498000125158b`。
   - `node --check scripts/check-dorm-wizard-browser.mjs`、本轮文件 `git diff --check`：通过。未运行完整 `npm run web:verify`。
-- CI: 推送后 Actions run `40190721916`（head `1f7dee95fac6015721f1a255e12add34d290703f`）查询时为 `queued`，尚无结论。前一 SHA `60bea9d` 的 run `40189358703` 为 failure：`check-email-experience.mjs:412` 的真实点击被 `.wizard-guide` 拦截。用户尚未回复针对 `DormWizard.vue` 局部命中/层级修复的授权问题；本轮未修改该阻塞。
+- CI: Actions run `40190721916`（head `1f7dee95fac6015721f1a255e12add34d290703f`）查询中：`spec-contract=success`、`android=success`；`conversation-motion=failure`（失败步骤为 `Verify isolated conversation and calendar motion`，run 尚在进行，GitHub 尚未提供完整日志）；`web-and-business=in_progress`，正在 `Verify mobile interaction foundation`。前一 SHA `60bea9d` 的 run `40189358703` 为 failure：`check-email-experience.mjs:412` 的真实点击被 `.wizard-guide` 拦截。用户尚未回复针对 `DormWizard.vue` 局部命中/层级修复的授权问题；本轮未修改该阻塞或聊天检查。
 - platform_status: 本机桌面 Chromium/WebKit 模拟浏览器回归；未连接/验收实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb。未访问正式数据库或发布服务器，未部署。
-- remaining: 等待 SHA `1f7dee9` 的 GitHub CI；若返回按钮遮挡重现，需用户授权后才能改向导局部布局。正式发布尚未通过门禁；`npm run spec:check` 通过不代表接受/发布门禁，禁止绕过缺失或过期的 `adopt-project-guardrails` 接受摘要。未发布网站。
+- remaining: 等待 SHA `1f7dee9` 的主 Web CI 完成并取得对话失败日志；当前 CI 未全绿。若返回按钮遮挡重现，需用户授权后才能改向导局部布局；对话检查若需编辑范围外脚本，也需用户授权。正式发布门禁 `npm run spec:gate -- --gate publish` 明确拒绝：`adopt-project-guardrails` 接受摘要缺失/过期，当前摘要 `788ea0c7cb59211d54fd52a992ca74af6dd428c422fb426f3d7498000125158b`。不得绕过门禁；未发布网站。
 - questions: 无新增问题。此前“PR #85 当前头是否已验收以发布网站”的确认仍未获得明确答复；CI 全绿且接受/发布摘要有效后再继续相关动作。
 
 ---
