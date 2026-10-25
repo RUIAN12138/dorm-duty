@@ -417,3 +417,29 @@
 - platform_status: 仅本机桌面 Chromium 与 WebKit 自动化；无 ADB、无连接的 Android 安装设备，未完成 Android force-stop/relaunch 实测，也未进行 iPhone Safari/PWA 或 HarmonyOS ArkWeb 真机验收。未访问正式数据库、未合并 main、未部署。
 - remaining: PR #85 CI 待 run `40194879674` 结束；网站未部署，发布门禁未绕过。Android 安装版的登录恢复仍待设备复现；源代码与浏览器 storage fixture 尚不能证明真机持久性。协调分支上一份 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=1f7dee95fac6015721f1a255e12add34d290703f`，早于本提交；请对本 SHA 复评。业务工作树预存未提交 `site/runtime/push-runtime.cjs` 用户修改仍未触碰、未暂存、未包含。
 - questions: 若 Android 设备短时强停后仍要求重新登录，需要在用户设备上复现并观察 `/email/me`、`/auth/me` 返回状态与本地存储是否存在；若需修改 session/auth 前端代码，当前 `USER_REQUIREMENTS.md` 将本轮范围限定为后端与新版创建页，需用户明确扩展范围。不要要求用户发送 Cookie、token 或 API 凭据。
+
+# Codex → ChatGPT · PR #85 保留创建向导入口返回历史
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `ddf9a99ef86b63c36b88e7666a7f96fc7c8f8c7a`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ddf9a99ef86b63c36b88e7666a7f96fc7c8f8c7a
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；head 已更新至本 SHA）
+- requirements: 延续用户授权的新宿舍向导返回修复。用户补充 Android 安装版强制关闭后再打开会丢登录；本次将其记录为未解决复现，不修改 auth/session 范围外代码。
+- changed_files:
+  - `frontend/src/views/GuestHome.vue`
+  - `openspec/changes/new-dorm-wizard/tasks.md`
+- implemented:
+  - 向导首步取消现在调用现有的 `entryBack()` 路由历史；创建路由已存在时回到之前的宿舍选择入口，而不是只清本地 `creatingRoom` 状态后让路由历史仍处于 create。无可退路由历史时维持原有取消回退。
+  - OpenSpec 新增任务 54，待同 SHA 的邮箱入口 CI 回归确认后再标记完成。
+  - Android 重新登录仍未修复：之前只读源码检查见 Android WebView 启用 DOM Storage、接受 Cookie、onPause flush Cookie；服务端普通管理员 session 为 7 天、邮箱 session/Cookie 为 30 天。无 ADB/设备，强制停止重启场景未复现；当前协调需求限定代码范围，本提交不碰会话模块。
+- tests:
+  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）：完整隔离向导回归通过，输出 `PASS []`。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）：完整隔离向导回归通过，输出 `PASS []`。
+  - `npm --prefix frontend run typecheck`：通过。
+  - `npm run web:build`：通过，Vite/PWA/Worker 产物生成；保留既有 GuestHome chunk >500KB 提示。
+  - `npm run spec:validate`：19/19；`npm run spec:scope`：18 个 change / 389 个文件，digest `affb82279d84818d8be969a8a2d13ebe7c734c4dfb7881ef48911f6feb33106a`；`git diff --check`：通过。
+  - 本机 `scripts/check-email-experience.mjs` 在 Node v26.4.0 的 fixture 初始化阶段此前报 `ERR_HTTP_HEADERS_SENT`，没有在本机验证这个完整邮箱返回链；没有修改该范围外脚本。由当前 SHA 的 CI 作权威验证。
+- CI: GitHub Actions run https://github.com/RUIAN12138/dorm-duty/actions/runs/40196529423，head=`ddf9a99ef86b63c36b88e7666a7f96fc7c8f8c7a`，最新查看为 `in_progress`，没有全绿结论。
+- platform_status: 仅 macOS 桌面 Chromium/WebKit 移动视口模拟；无 Android 设备/ADB，强制停止后重启未真机验证；iPhone Safari/PWA、HarmonyOS ArkWeb 未验证。未访问或修改正式宿舍数据。
+- remaining: 等待 CI run 40196529423；PR #85 未合并。正式发布门禁在本地先前因 `adopt-project-guardrails` 的用户接受摘要过期而关闭；代码 scope digest 更新后必须重新获得与当前 SHA 匹配的明确确认，不能更新旧摘要或绕过门禁。未部署网站；主工作树预存 `site/runtime/push-runtime.cjs` 用户修改保持未触碰、未暂存、未提交。
+- questions: 暂无。若 Android 设备仍在短时强停后丢登录，需要另行授权并提供真机复现范围，先观察同源存储与 `/auth/me`、`/email/me` 状态，不收集密钥或令牌。
