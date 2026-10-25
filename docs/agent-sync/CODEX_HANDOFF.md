@@ -23,10 +23,10 @@
   - `npm --prefix frontend run typecheck`：通过。
   - `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change／389 个文件、范围门禁 18/18 通过；范围摘要 `788ea0c7cb59211d54fd52a992ca74af6dd428c422fb426f3d7498000125158b`。
   - `node --check scripts/check-dorm-wizard-browser.mjs`、本轮文件 `git diff --check`：通过。未运行完整 `npm run web:verify`。
-- CI: Actions run `40190721916`（head `1f7dee95fac6015721f1a255e12add34d290703f`）查询中：`spec-contract=success`、`android=success`；`conversation-motion=failure`（失败步骤为 `Verify isolated conversation and calendar motion`，run 尚在进行，GitHub 尚未提供完整日志）；`web-and-business=in_progress`，正在 `Verify mobile interaction foundation`。前一 SHA `60bea9d` 的 run `40189358703` 为 failure：`check-email-experience.mjs:412` 的真实点击被 `.wizard-guide` 拦截。用户尚未回复针对 `DormWizard.vue` 局部命中/层级修复的授权问题；本轮未修改该阻塞或聊天检查。
+- CI: Actions run `40190721916`（head `1f7dee95fac6015721f1a255e12add34d290703f`）查询中：`spec-contract=success`、`android=success`；`conversation-motion=failure`，原始 job 日志定位到 `scripts/check-companion-tap-arbitration.mjs:190`（斜向触屏双击断言检测到聊天请求）。本机 Chromium 全量重跑该脚本通过，故目前不能断定为产品问题还是 CI 时序波动；该范围外脚本尚未编辑，用户授权问题 pending。`web-and-business=in_progress`，停留在 `Verify mobile interaction foundation`。前一 SHA `60bea9d` 的 run `40189358703` 为 failure：`check-email-experience.mjs:412` 的真实点击被 `.wizard-guide` 拦截。用户尚未回复针对 `DormWizard.vue` 局部命中/层级修复的授权问题；本轮未修改该阻塞或聊天代码。
 - platform_status: 本机桌面 Chromium/WebKit 模拟浏览器回归；未连接/验收实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb。未访问正式数据库或发布服务器，未部署。
-- remaining: 等待 SHA `1f7dee9` 的主 Web CI 完成并取得对话失败日志；当前 CI 未全绿。若返回按钮遮挡重现，需用户授权后才能改向导局部布局；对话检查若需编辑范围外脚本，也需用户授权。正式发布门禁 `npm run spec:gate -- --gate publish` 明确拒绝：`adopt-project-guardrails` 接受摘要缺失/过期，当前摘要 `788ea0c7cb59211d54fd52a992ca74af6dd428c422fb426f3d7498000125158b`。不得绕过门禁；未发布网站。
-- questions: 无新增问题。此前“PR #85 当前头是否已验收以发布网站”的确认仍未获得明确答复；CI 全绿且接受/发布摘要有效后再继续相关动作。
+- remaining: 当前 CI 未全绿，主 Web job仍在 `Verify mobile interaction foundation`；对话 job 的 `check-companion-tap-arbitration.mjs:190` 在 CI 失败、本机全量重跑通过。用户对“仅诊断并修该测试”授权问题 pending；不得改该范围外脚本或球球正式代码，除非用户授权。若返回按钮遮挡重现，仍需用户授权后才能改向导局部布局。正式发布门禁 `npm run spec:gate -- --gate publish` 明确拒绝：`adopt-project-guardrails` 接受摘要缺失/过期，当前摘要 `788ea0c7cb59211d54fd52a992ca74af6dd428c422fb426f3d7498000125158b`。不得绕过门禁；未发布网站。
+- questions: 仅待用户决定是否授权诊断/修复 `scripts/check-companion-tap-arbitration.mjs` 中 CI 失败且本机通过的斜向双击断言；此前向导返回按钮局部修复授权问题也仍待答复。未得到针对当前内容摘要的 PR/发布验收记录，不发布网站。
 
 ---
 
