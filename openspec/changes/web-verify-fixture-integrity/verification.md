@@ -79,4 +79,15 @@
 
 限制：只调整两项用户授权的测试检查及其 OpenSpec 范围记录，不修改产品运行时代码；本地桌面浏览器结果不代表实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 真机验收。
 
+## 用户授权的轮序布局检查
+
+- `scripts/check-entry-layout.mjs` 原断言仍要求八个 `.inline-mark path`；当前轮序组件不渲染成员标记，导致 CI 在已移除标记的成员列表处失败。
+- 本次仅将断言更新为检查成员名和现有名次／姓名／状态布局，并确认没有旧成员标记或空占位；不修改产品代码。
+- Chromium：在 320/390/430px 三种宽度下共 50 项检查通过，无浏览器错误。
+- WebKit：在 320/390/430px 三种宽度下共 50 项检查通过，无浏览器错误。
+- `npm run web:verify`：退出码 0，前端／Worker／邮件运行模块构建与完整 Web 回归清单通过。
+- `npm run spec:check`：严格校验 19/19、范围登记 18 个 change／389 个文件、临时范围门禁 18/18 通过。
+- `node --check scripts/check-entry-layout.mjs` 与 `git diff --check`：通过。
+- GitHub Actions 对应的新业务 SHA 结果待提交推送后确认；本地 Node v26.4.0 桌面浏览器结果不代表 iPhone、Android 或 HarmonyOS 真机验收。
+
 限制：以上是本机 Node v26.4.0 与桌面 Chromium/WebKit 自动化；GitHub Actions 对新 SHA 的结果仍待确认，未连接 iPhone、Android 或 HarmonyOS 真机。本轮没有修改运行时产品代码。

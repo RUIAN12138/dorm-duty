@@ -106,8 +106,23 @@ const categories=['floor','toilet','sink','water'].map((key,i)=>({key,name:['地
     const after=await ring.boundingBox();
     check(after.width<before.width*.6,true,`${width}px ring contracts while roster gains room`);
     check(await list.evaluate(el=>el.scrollTop>0),true,`${width}px roster has its own usable scroll area`);
-    check(await list.locator('svg.member-mark path').count(),8,'every member renders inline including invalid marker fallback');
-    check(await list.locator('svg.member-mark path').evaluateAll(paths=>paths.every(p=>!!p.getAttribute('d'))),true,'all marker paths contain drawing data');
+    const rosterRows = await list.locator('li').evaluateAll(rows => rows.map(row => {
+      const children = [...row.children];
+      return {
+        name: row.querySelector(':scope > strong')?.textContent?.trim() || '',
+        hasLegacyMark: !!row.querySelector('.member-mark, .inline-mark'),
+        keepsNameBetweenRankAndStatus: children.length === 3 &&
+          children[0].matches('.rank-number') &&
+          children[1].matches('strong') &&
+          children[2].matches('.van-icon'),
+      };
+    }));
+    check(rosterRows.length,8,'all eight roster members remain rendered');
+    check(rosterRows.every((row,index) =>
+      row.name === `室友${index + 1}` &&
+      !row.hasLegacyMark &&
+      row.keepsNameBetweenRankAndStatus
+    ),true,'roster names keep rank/status layout without legacy marks or blank slots');
     const last=await list.locator('li').last().boundingBox(), bounds=await list.boundingBox();
     check(last.y+last.height<=bounds.y+bounds.height+1,true,'last person is reachable inside list');
     await page.waitForTimeout(280);
