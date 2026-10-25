@@ -443,3 +443,29 @@
 - platform_status: 仅 macOS 桌面 Chromium/WebKit 移动视口模拟；无 Android 设备/ADB，强制停止后重启未真机验证；iPhone Safari/PWA、HarmonyOS ArkWeb 未验证。未访问或修改正式宿舍数据。
 - remaining: 等待 CI run 40196529423；PR #85 未合并。正式发布门禁在本地先前因 `adopt-project-guardrails` 的用户接受摘要过期而关闭；代码 scope digest 更新后必须重新获得与当前 SHA 匹配的明确确认，不能更新旧摘要或绕过门禁。未部署网站；主工作树预存 `site/runtime/push-runtime.cjs` 用户修改保持未触碰、未暂存、未提交。
 - questions: 暂无。若 Android 设备仍在短时强停后丢登录，需要另行授权并提供真机复现范围，先观察同源存储与 `/auth/me`、`/email/me` 状态，不收集密钥或令牌。
+
+# Codex → ChatGPT · PR #85 CI 结果与 Android 强停复现补充
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `ddf9a99ef86b63c36b88e7666a7f96fc7c8f8c7a`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ddf9a99ef86b63c36b88e7666a7f96fc7c8f8c7a
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；head 与本 SHA 一致）
+- requirements: 记录 PR #85 的完整远端 CI；用户明确复现 Android 安装版强制关闭后立即重开即要求重新登录。继续遵守仅改后端及新版创建页的业务范围；未修改认证/session 模块。
+- changed_files: 本次无业务代码修改；仅更新本交接文档。
+- implemented:
+  - CI run `40196529423` 完成但总体 FAILURE。`spec-contract=success`、`android=success`；`web-and-business=failure`、`conversation-motion=failure`。
+  - Web 的创建向导回退路径现能通过此前 `entry-back` 步骤，失败推进到 `scripts/check-email-experience.mjs:441`：点击 `guest-create-dorm` 后测试等待旧表单的 `guest-create-name`，超时。当前源码在 `creatingRoom` 时挂载新版 `DormWizard`，不是旧表单；这是测试期望与目前产品入口不一致的强证据，但尚未在该完整 HTTPS 邮箱流程中复测，需授权后仅更新该测试流程或另行定位。
+  - `conversation-motion` 仍在协调评审明确限制的范围外 `scripts/check-companion-tap-arbitration.mjs:184` 等待 `.companion-chat` detached 超时；本轮未修改正式球球/聊天模块及该测试。
+  - Android auth 只读核对：`MainActivity` 启用 DOM Storage、接受 Cookie、暂停时调用 `CookieManager.flush()`，未发现主动清理 WebView 存储；前端邮箱状态依赖同源 `/email/me` HttpOnly Cookie，普通 session token 使用 localStorage 持久键；服务端两种有效期分别是 7 天与 30 天。用户确认“强停后马上重开都会重新登录”，不是正常有效期到期的预期表现。没有 Android 设备、日志或响应状态，不能确定是 WebView 凭证未恢复还是服务端判定失效，也未称已修复。
+- tests:
+  - 本 SHA 本地 Chromium 与 WebKit 创建向导整套浏览器回归、前端 typecheck、`web:build`、OpenSpec validate/scope 均通过，详见上一条交接；CI 已在独立 job 确认 Android 构建和 OpenSpec contract 成功。
+  - CI 的 `web-and-business` 交互基础脚本全通过；其后邮件/HTTPS流程到旧 `guest-create-name` 选择器时超时。
+  - 当前工作树预先存在的 `site/runtime/push-runtime.cjs` 修改保持未触碰且未提交。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40196529423；head=`ddf9a99ef86b63c36b88e7666a7f96fc7c8f8c7a`；completed / FAILURE。不得报告全绿。
+- platform_status: Android CI 仅构建与 lint；未在 Android 真机验证强制停止重启。桌面 Chromium/WebKit 回归通过不等于 Android WebView、iPhone Safari/PWA 或 HarmonyOS ArkWeb 真机通过。未修改正式宿舍数据。
+- remaining:
+  - PR #85 保持 OPEN；`conversation-motion` 的已知范围外失败仍阻止全绿和发布。本轮不改该脚本或聊天功能。
+  - 邮箱体验测试行 441 依赖旧创建表单字段，当前主入口已使用 `DormWizard`；需用户明确授权修改该范围外测试文件后，才可把检查改为实际新版向导流程并重跑。
+  - 正式网站未部署。`npm run spec:gate -- --gate publish` 对当前 digest `affb82279d84818d8be969a8a2d13ebe7c734c4dfb7881ef48911f6feb33106a` 拒绝：`adopt-project-guardrails` 的用户接受摘要缺失/过期；不能绕过或复用旧摘要。
+  - Android 立即强停重开掉登录需设备侧检查 Cookie/本地存储是否恢复，以及 `/email/me`、`/auth/me` 的状态；不收集凭证。修复认证代码需用户明确扩展当前协调修改范围。
+- questions: 是否授权只修改 `scripts/check-email-experience.mjs`，把第 441 行后的旧表单检查改为实际创建向导流程？若要处理 Android 登录恢复，是否将 auth/session 前端模块加入本轮授权范围并安排设备复测？
