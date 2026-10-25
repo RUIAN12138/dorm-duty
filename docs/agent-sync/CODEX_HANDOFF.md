@@ -1,3 +1,28 @@
+# Codex → ChatGPT · PR #85 新宿舍向导与站点发布准备
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `ff96eb9a2cc2b9ad6c62beb308aca9f598fa45c9`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ff96eb9a2cc2b9ad6c62beb308aca9f598fa45c9
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；未合并）
+- requirements: 用户明确要求“先把最近的更新提交成一个 pr 然后更新网站”。OpenSpec `new-dorm-wizard` 的授权摘要为 `85f8023d23d6b3a4f7ad6c9516a020f9e76781edd0916d7ecb22710baf121663`。本报告只更新协作交接，不合并 `main`，不触碰正式数据库。
+- changed_files:
+  - PR #85 共 193 个文件；完整文件清单与逐文件 diff 以关联 PR 为准。
+  - 主要范围：`frontend/src/components/onboarding/**`、`frontend/src/interaction/dormDraft.ts`、新版任务预览与正式任务视图适配；`site/worker/{backend,chores,calendar}.mjs`、`site/shared/**`、`site/drizzle/0019_dorm_configuration.sql`、`site/drizzle/0020_dynamic_task_keys.sql`；启动恢复、图标资源、OpenSpec 和相关隔离检查。
+- implemented:
+  - 新版宿舍创建向导、任务工作台、草稿预览及启动恢复改动已提交并推送；动态任务 schema-v2 以稳定任务 ID 表示，旧宿舍继续沿用原路径。具体能力以 PR diff 和对应测试为准。
+  - 创建 PR #85，未合并。
+  - 发布包 `20261025-new-dorm-wizard-v81.tar.gz` 已生成，内含代码及迁移、不含数据库或凭据。SHA-256：`f4563679ee7740757a70304d37ec19bee6f0082576eba6d953cdfd77047106a3`；包内 `site/release.json` 指向上述完整 code SHA。
+- tests:
+  - 前序本地报告：`node scripts/check-dorm-wizard.mjs` 108 项通过；`node site/scripts/check-dynamic-task-migration.mjs` 通过；`npm --prefix frontend run typecheck` 通过；Chromium 与 WebKit 向导隔离检查各 191 项通过；`npm run spec:validate` 19/19、`npm run spec:scope` 通过。
+  - 本次重新运行 `node site/scripts/check-calendar-subscription.mjs`：10 项中 9 项通过；“migration from 0007 and file database restart preserve records and subscription credentials”失败，`/guest/create` 返回 500。原因是该夹具只创建到 migration 0007，却在不调用本地迁移器的情况下直接调用当前 Worker；当前代码依赖更新后的数据库 schema。需要先修正夹具/迁移测试设计，再作为最终 Web 验收。
+  - `git diff --check`、`node --check site/worker/backend.mjs`、`node --check site/worker/chores.mjs` 在诊断期间通过；临时诊断输出已移除，没有提交任何诊断改动。
+- CI: PR head `ff96eb9a2cc2b9ad6c62beb308aca9f598fa45c9` 的 GitHub Actions run `40178179610` 已重跑，结论仍为 `android=pass`、`spec-contract=pass`、`web-and-business=fail`、`conversation-motion=fail`。Web 失败与上述 `check-calendar-subscription.mjs` 迁移夹具一致；聊天检查在 `scripts/check-companion-tap-arbitration.mjs:184` 等待 `.companion-chat` detached 超时，属于正式聊天模块，当前 USER_REQUIREMENTS 明确不允许本轮修改。未经用户另外授权不改聊天实现或该范围外检查。
+- platform_status: 仅有本地隔离 Chromium/WebKit 向导检查及 GitHub Android 构建结果；未做实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 验收。服务器控制套接字 `/Users/apple/project/dorm-duty/data/server-deploy/ssh-control` 当前不存在，免交互 SSH 不可用；网站未更新、线上迁移未运行、生产数据未访问。
+- remaining: 用户已授权创建 PR 和部署，但服务器尚未连接。发布必须在 SSH 恢复后先对 `/var/lib/dorm-duty/dorm.sqlite` 在线备份及完整性/外键检查，再按 `deploy/prepare-release.py` / `deploy/install-release.py` 的现有流程切换并核对 `/health`、release SHA 和公网静态资源；切换前不得跳过备份。Web CI 需要先解决旧 schema 迁移测试夹具，聊天 CI 失败保持范围外待处理。OpenSpec acceptance 仍为 pending。工作区中另有未提交 `site/runtime/push-runtime.cjs` 路径差异，未包含在 PR/发布包且未触碰。
+- questions: 请用户另行授权是否可仅修 `site/scripts/check-calendar-subscription.mjs` 的旧 schema 迁移夹具（该文件在当前变更范围外）；请用户恢复 SSH 控制连接后继续线上备份与发布。
+
+---
+
 # Codex → ChatGPT · schema-v2 自定义任务容量扩展
 
 - code_branch: `codex/new-dorm-wizard-preview`
