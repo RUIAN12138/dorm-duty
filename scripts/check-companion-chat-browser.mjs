@@ -631,6 +631,37 @@ try {
       }),
       "slow notification request shows a matching title, description, action and rows with shimmer",
     );
+    const darkSkeletonState = await page
+      .getByTestId("settings-skeleton")
+      .evaluate((el) => {
+        const root = document.documentElement,
+          previousTheme = root.dataset.theme;
+        root.dataset.theme = "dark";
+        const shimmerOpacity = Number.parseFloat(
+            getComputedStyle(el.querySelector(".placeholder"), "::after")
+              .opacity,
+          ),
+          skeletonStyle = getComputedStyle(el),
+          isLocalLayer =
+            skeletonStyle.position === "static" &&
+            skeletonStyle.zIndex === "auto" &&
+            skeletonStyle.backgroundColor === "rgba(0, 0, 0, 0)";
+        if (previousTheme) root.dataset.theme = previousTheme;
+        else delete root.dataset.theme;
+        return {
+          shimmerOpacity,
+          skeletonOpacity: skeletonStyle.opacity,
+          skeletonFilter: skeletonStyle.filter,
+          isLocalLayer,
+        };
+      });
+    check(
+      darkSkeletonState.shimmerOpacity <= 0.12 &&
+        darkSkeletonState.skeletonOpacity === "1" &&
+        darkSkeletonState.skeletonFilter === "none" &&
+        darkSkeletonState.isLocalLayer,
+      "dark skeleton limits the veil to its shimmer without adding a full-screen dim layer",
+    );
     check(
       await page.locator(".sheet-content").evaluate((el) => el.scrollTop < 2),
       "new settings page starts at its own top",
@@ -773,12 +804,6 @@ try {
     check(
       await page.locator(".chat-ball .companion-bubble").isVisible(),
       "chat ball offers a small automatic tip",
-    );
-    check(
-      await page.evaluate(
-        () => Number(getComputedStyle(document.documentElement).opacity) === 1,
-      ),
-      "settings skeleton dark styling never dims the rest of the application",
     );
     await page.screenshot({
       path: path.join(

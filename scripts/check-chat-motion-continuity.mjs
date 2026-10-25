@@ -290,8 +290,27 @@ try {
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await page.waitForTimeout(1000);
   metrics.scroll = await page.evaluate(() => window.scrollFrames);
+  const scrollStart = metrics.scroll[0],
+    scrollEnd = metrics.scroll.at(-1),
+    distinctScrollPositions = new Set(
+      metrics.scroll.map((frame) => Math.round(frame.y)),
+    ),
+    reachedLatestMessage =
+      scrollEnd && Math.abs(scrollEnd.max - scrollEnd.y) <= 3,
+    observedIntermediateScroll =
+      scrollStart &&
+      scrollEnd &&
+      distinctScrollPositions.size > 2 &&
+      metrics.scroll.some(
+        (frame) =>
+          frame.y > scrollStart.y + 2 &&
+          frame.y < scrollEnd.y - 2,
+      );
   check(
-    new Set(metrics.scroll.map((f) => Math.round(f.y))).size > 6,
+    Boolean(
+      reachedLatestMessage &&
+        (reducedMotion || observedIntermediateScroll),
+    ),
     "new messages retarget through multiple scroll positions rather than jumping to the end",
   );
   await page.route(

@@ -47,3 +47,14 @@
 - `node --check`（两项脚本）、`git diff --check`：通过。
 
 限制：自动化运行使用本机 Node v26.4.0 与 Chromium；未验证 CI Node v22 运行结果前，不声称其环境已通过。未连接 iPhone、Android 或 HarmonyOS 真机。本轮没有修改任何运行时产品代码。
+
+## 用户授权的两项后续 CI 断言
+
+- `scripts/check-chat-motion-continuity.mjs`：滚动检查要求最新消息到达视口底部；正常动效模式还须观察到超过两个位置且包含中间帧，减少动态效果模式允许即时到达。
+- `scripts/check-companion-chat-browser.mjs`：暗色骨架断言在骨架可见期间检查局部流光透明度、骨架层不透明度及其静态、透明的局部层级，避免将设置抽屉自带的背景遮罩误判为骨架样式。
+- 本机 Node v26.4.0 / Chromium：聊天连续滚动脚本 23 项检查通过；`DORM_CONTINUITY_QA=1 node scripts/check-companion-chat-browser.mjs` 的 45 项检查通过。
+- 本机默认 Companion Chat 浏览器脚本 Chromium 67 项、WebKit 65 项检查通过；暗色骨架专项位于 CI 的 QA 分支，因此单独以 `DORM_CONTINUITY_QA=1` 运行并通过。
+- `npm run web:verify`：退出码 0，前端、Worker、邮件运行模块构建和全套 Web 回归检查通过。
+- `npm run spec:check`：退出码 0，OpenSpec 严格校验 19/19、范围门禁 18/18 通过；两脚本 `node --check` 与 `git diff --check` 通过。
+
+限制：以上是本机 Node v26.4.0 与桌面 Chromium/WebKit 自动化；GitHub Actions 对新 SHA 的结果仍待确认，未连接 iPhone、Android 或 HarmonyOS 真机。本轮没有修改运行时产品代码。
