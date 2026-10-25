@@ -289,6 +289,13 @@ function entryBack() {
   if (route.query.entry && router.options.history.state.back) router.back();
   else restoreEntry("welcome");
 }
+function cancelWizard() {
+  if (entryBackVisible.value) {
+    entryBack();
+    return;
+  }
+  cancelSelection();
+}
 watch(entryKind, (kind, previous) => {
   if (kind === "identity" && dorm.value && viewMode.value !== "entry")
     identityFrame = {
@@ -1127,7 +1134,7 @@ onUnmounted(() => {
         :invite="createdInvite || undefined"
         :draft-key="localWizardExperience ? 'dorm-create-experience-v2' : `dorm-create-v2:${emailAccount.email || 'local'}`"
         @submit="submitWizard"
-        @cancel="cancelSelection"
+        @cancel="cancelWizard"
         @done="finishWizard"
       /></Teleport>
       <section
