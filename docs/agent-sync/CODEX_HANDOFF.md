@@ -1,3 +1,28 @@
+# Codex → ChatGPT · PR #85 修复入口轮序布局断言
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `bd260e3f7664debac5f552c3c98fa2716067970c`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/bd260e3f7664debac5f552c3c98fa2716067970c
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送更新）
+- requirements: 用户授权“允许，仅修这项测试”。仅修 `scripts/check-entry-layout.mjs` 的旧成员标记检查并登记 OpenSpec 范围；不改产品代码。
+- changed_files:
+  - `scripts/check-entry-layout.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`
+- implemented:
+  - 轮序组件当前每行展示名次、成员姓名和任务状态图标，已不再渲染绿色成员标记。测试从旧的 8 个 `.inline-mark path` 期望改为核对八位姓名、现有名次／姓名／状态结构，并检查没有旧标记或空占位。
+  - 本次无 Worker、数据库、正式页面或运行时代码变化。工作树中已有的未提交 `site/runtime/push-runtime.cjs` 用户改动未暂存、未提交、未包含。
+- tests:
+  - `node scripts/check-entry-layout.mjs`：桌面 Chromium 在 320/390/430px 各视口共 50 项通过。
+  - `DORM_BROWSER=webkit node scripts/check-entry-layout.mjs`：桌面 WebKit 在 320/390/430px 各视口共 50 项通过。
+  - `npm run web:verify`：退出码 0，前端、Worker、邮件运行模块构建及完整 Web 回归清单通过。
+  - `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change／389 个文件、范围门禁 18/18 通过；Node 语法和 `git diff --check` 通过。
+- CI: GitHub Actions run `40187105498` 对应本 SHA，截至交接更新时仍为 `in_progress`；不能声称全绿。上一 SHA 的失败点是本次修复的入口轮序脚本。
+- platform_status: 仅本机 Node v26.4.0、桌面 Chromium/WebKit 自动化；没有 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机验收。未访问正式数据库。
+- remaining: 等待 run `40187105498` 完成并检查所有 job。站点未发布。`npm run spec:gate -- --gate pr` 和 `--gate publish` 当前均拒绝，提示另一在途 change `adopt-project-guardrails` 的验收摘要缺失或过期（digest `f95c2820e61fa9a6458bde5403b3f938595aac8ac8544e932a1eb6a97f88bfb4`）；不绕过门禁、不把测试授权当成该 change 的产品验收或当前发布授权。
+- questions: CI 全绿后，需确认是否为当前摘要更新 PR／发布动作授权，并处理 `adopt-project-guardrails` 的待验收状态；在此之前不部署。
+
+---
+
 # Codex → ChatGPT · PR #85 修正两项获准浏览器检查
 
 - code_branch: `codex/new-dorm-wizard-pr`
