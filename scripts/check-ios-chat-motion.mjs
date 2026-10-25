@@ -196,7 +196,22 @@ try {
   let jumps = [];
   for (let i = 1; i < compact.length; i++) {
     const dt = compact[i].at - compact[i - 1].at;
-    if (dt > 0 && dt < 28) {
+    const previousDt =
+      i > 1 ? compact[i - 1].at - compact[i - 2].at : Infinity;
+    const nextDt =
+      i + 1 < compact.length ? compact[i + 1].at - compact[i].at : Infinity;
+    // CI browsers can alternate a 16ms rAF sample with 33ms gaps. A lone
+    // short interval between missed frames does not establish a stable
+    // single-frame cadence; the controller probe below checks reversal
+    // position and velocity continuity directly in one JS turn.
+    if (
+      dt > 0 &&
+      dt < 28 &&
+      previousDt > 0 &&
+      previousDt < 28 &&
+      nextDt > 0 &&
+      nextDt < 28
+    ) {
       const d = Math.hypot(
         compact[i].x - compact[i - 1].x,
         compact[i].y - compact[i - 1].y,

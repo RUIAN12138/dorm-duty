@@ -57,4 +57,16 @@
 - `npm run web:verify`：退出码 0，前端、Worker、邮件运行模块构建和全套 Web 回归检查通过。
 - `npm run spec:check`：退出码 0，OpenSpec 严格校验 19/19、范围门禁 18/18 通过；两脚本 `node --check` 与 `git diff --check` 通过。
 
+## 用户授权的两项 CI 检查
+
+- `scripts/check-ios-chat-motion.mjs`：仅在连续、稳定的 rAF 采样间隔下检查单帧空间跳变；浏览器漏帧时不从孤立短间隔推断跳变。另有同一 JS turn 的控制器探针继续核对反向时位置与速度连续性。
+- `scripts/check-focus-compact.mjs`：保留无成员标记图片请求的断言，并核对 7 条记录仍各自显示内联任务类型图标；不再期待已移除的绿色成员标记。
+- `DORM_IOS_BASELINE=1 node scripts/check-ios-chat-motion.mjs` 与 `DORM_BROWSER=webkit DORM_IOS_BASELINE=1 node scripts/check-ios-chat-motion.mjs`：桌面 Chromium、WebKit 各 19/19 项通过，包含反向控制器探针、滚动和减少动态效果检查。
+- `node scripts/check-focus-compact.mjs` 与 `DORM_BROWSER=webkit node scripts/check-focus-compact.mjs`：桌面 Chromium、WebKit 各 93 项通过，七条历史记录的行内任务图标均可见。
+- `npm run web:verify`：退出码 0；前端、Worker、邮箱运行模块构建及完整 Web 回归通过。大 chunk 警告为既有项；SMTP 失败事件来自隔离注入测试。
+- `npm run spec:check`：OpenSpec 严格校验 19/19、范围登记 18 个变更/387 个文件、范围门禁 18/18 通过；两个脚本 `node --check` 与 `git diff --check` 通过。
+- GitHub Actions 新 SHA 结果待推送后确认；在远程 CI 全绿前不发布。
+
+限制：仅改测试脚本和 OpenSpec 记录；不修改产品运行时代码，也不表示 iPhone、Android WebView 或 HarmonyOS ArkWeb 真机验收。
+
 限制：以上是本机 Node v26.4.0 与桌面 Chromium/WebKit 自动化；GitHub Actions 对新 SHA 的结果仍待确认，未连接 iPhone、Android 或 HarmonyOS 真机。本轮没有修改运行时产品代码。

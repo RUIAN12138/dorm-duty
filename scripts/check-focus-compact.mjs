@@ -467,9 +467,9 @@ try {
     "record markers never depend on image loads",
   );
   check(
-    await detail.locator("svg.member-mark path").count(),
+    await detail.locator(".record-description .chore-type-icon").count(),
     7,
-    "all markers survive deliberately blocked image requests",
+    "all seven inline task icons remain visible without marker image requests",
   );
   check(
     await finalRecord.evaluate((el) => {

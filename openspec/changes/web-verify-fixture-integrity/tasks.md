@@ -5,6 +5,7 @@
 - [x] 按用户单独授权，修正 `check-task-detail.mjs` 的旧成员标记断言与 `check-ios-chat-motion.mjs` 的键盘紧凑态关闭操作；不改产品组件。
 - [x] 按用户单独授权，修正聊天退场帧与快捷留言测试的异步状态检查；不改产品组件。
 - [x] 按用户单独授权，修正聊天滚动路径与暗色骨架样式的 CI 断言；不改产品组件。
+- [x] 按用户单独授权，修正 `check-ios-chat-motion.mjs` 的稳定帧率空间跳变断言与 `check-focus-compact.mjs` 的内联任务图标断言；不改产品代码。
 - [x] 重跑五个目标脚本和完整 `npm run web:verify`，记录退出结果。
 - [x] 记录未覆盖的平台与 CI 限制。
 

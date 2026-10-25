@@ -10,6 +10,7 @@
     "scripts/check-chat-motion-continuity.mjs",
     "scripts/check-companion-browser.mjs",
     "scripts/check-companion-chat-browser.mjs",
+    "scripts/check-focus-compact.mjs",
     "site/scripts/check-scheduled-reminders.mjs",
     "site/scripts/check-calendar-subscription.mjs",
     "openspec/changes/web-verify-fixture-integrity/"
