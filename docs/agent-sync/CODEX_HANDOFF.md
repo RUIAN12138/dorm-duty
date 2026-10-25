@@ -16,10 +16,10 @@
   - `DORM_BROWSER=webkit node scripts/check-entry-layout.mjs`：桌面 WebKit 在 320/390/430px 各视口共 50 项通过。
   - `npm run web:verify`：退出码 0，前端、Worker、邮件运行模块构建及完整 Web 回归清单通过。
   - `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change／389 个文件、范围门禁 18/18 通过；Node 语法和 `git diff --check` 通过。
-- CI: GitHub Actions run `40187105498` 对应本 SHA，截至交接更新时仍为 `in_progress`；不能声称全绿。上一 SHA 的失败点是本次修复的入口轮序脚本。
+- CI: GitHub Actions run `40187105498` 对应本 SHA，已完成但结论 `failure`：`spec-contract=success`、`android=success`、`conversation-motion=success`；`web-and-business=failure`。本次获准修复的 `check-entry-layout.mjs` 及前序移动交互检查均已通过；新失败在未获授权修改的 `scripts/check-email-experience.mjs:412`，Playwright 点击已定位的 `entry-back` 时被 `.wizard-guide` header 拦截并超时。该日志指出实际命中遮挡，不足以认定只是测试过时。
 - platform_status: 仅本机 Node v26.4.0、桌面 Chromium/WebKit 自动化；没有 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机验收。未访问正式数据库。
-- remaining: 等待 run `40187105498` 完成并检查所有 job。站点未发布。`npm run spec:gate -- --gate pr` 和 `--gate publish` 当前均拒绝，提示另一在途 change `adopt-project-guardrails` 的验收摘要缺失或过期（digest `f95c2820e61fa9a6458bde5403b3f938595aac8ac8544e932a1eb6a97f88bfb4`）；不绕过门禁、不把测试授权当成该 change 的产品验收或当前发布授权。
-- questions: CI 全绿后，需确认是否为当前摘要更新 PR／发布动作授权，并处理 `adopt-project-guardrails` 的待验收状态；在此之前不部署。
+- remaining: CI 未全绿，`check-email-experience.mjs` 的新问题在本轮授权范围之外；本机 Node v26 重跑该脚本时，夹具服务在 `scripts/check-email-experience.mjs:100` 先报 `ERR_HTTP_HEADERS_SENT`，未到浏览器步骤，故无法本机复现 CI 遮挡。站点未发布。`npm run spec:gate -- --gate pr` 和 `--gate publish` 均拒绝，提示另一在途 change `adopt-project-guardrails` 的验收摘要缺失或过期（digest `f95c2820e61fa9a6458bde5403b3f938595aac8ac8544e932a1eb6a97f88bfb4`）；不绕过门禁。
+- questions: 是否另行授权检查/修复新向导返回按钮被引导头部遮挡的问题（如属测试则仅改 `check-email-experience.mjs`；若属产品 UI，需明确授权 `DormWizard.vue`）；以及当前摘要对应的 PR／发布动作授权与 `adopt-project-guardrails` 待验收处理。在此之前不部署。
 
 ---
 
