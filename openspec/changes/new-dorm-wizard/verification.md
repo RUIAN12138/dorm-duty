@@ -333,3 +333,11 @@
 - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）通过；覆盖节点数量、无文字标签、空闲隐藏、按压显现、松手吸附后隐藏及原有向导/预览流程。
 - `node scripts/check-entry-layout.mjs` 通过；`npm run spec:validate` 19/19、`npm --prefix frontend run typecheck`、`git diff --check` 通过。
 - 浏览器测试为隔离预览中的桌面引擎与移动视口模拟；实体 iPhone、vivo Android 与 HarmonyOS 设备仍未验收。
+
+## 2026-10-25 · 创建进度模式隔离与手势收尾
+
+- 将五节点、空闲隐藏滑块限制在 `workspace=false` 的新建宿舍流程；任务设置工作台仍显示原有常驻玻璃滑块和全部可变步骤目标。
+- 修复纵向 pointerup 取消和快速重复点按时可能遗留滑块的路径，并补充真实触摸点击、键盘 Home/End、pointercancel/lostpointercapture 及工作台 >5 步位置回归。
+- `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）均通过。新增断言覆盖真实触摸重复点按、键盘 Home/End、prefers-reduced-motion、纵向 pointerup、pointercancel/lostcapture、五节点与触控目标对齐，以及工作台可变步骤超过五项时保留常驻玻璃和完整步骤。
+- `npm --prefix frontend run typecheck`、`git diff --check`、`node --check scripts/check-dorm-wizard-browser.mjs` 通过；OpenSpec 19项严格验证通过。范围门禁摘要随后复验并补记。
+- CI 的 `web-and-business` 状态待最终确认；这些是隔离浏览器桌面引擎移动视口模拟，不等于实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 验收。

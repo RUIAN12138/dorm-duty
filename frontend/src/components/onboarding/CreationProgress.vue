@@ -4,7 +4,12 @@ import { animate } from 'motion-v';
 import { motionAllowed, motionTokens } from '../../interaction/motion';
 import { observeElementSize } from './observeElementSize.mjs';
 
-const props = defineProps<{ modelValue: number; labels: string[]; navLabel?: string }>();
+const props = withDefaults(defineProps<{
+  modelValue: number;
+  labels: string[];
+  navLabel?: string;
+  creationMode?: boolean;
+}>(), { creationMode: false });
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>();
 
 const host = ref<HTMLElement>();
@@ -60,7 +65,7 @@ function paint(value: number) {
 
 function settle(value: number, hide = false) {
   const target = bound(value);
-  hideAfterSettle = hide;
+  hideAfterSettle = props.creationMode && hide;
   if (flight && targetPosition === target) return;
   flight?.stop();
   flight = undefined;
@@ -75,9 +80,10 @@ function settle(value: number, hide = false) {
     ...motionTokens.selection,
     onUpdate: paint,
     onComplete: () => {
-      if (revision !== flightRevision || gesture) return;
-      if (hideAfterSettle) thumbVisible.value = false;
+      if (revision !== flightRevision) return;
       flight = undefined;
+      if (gesture) return;
+      if (hideAfterSettle) thumbVisible.value = false;
     },
   });
 }
@@ -183,7 +189,7 @@ function up(event: PointerEvent) {
     pressed.value = false;
     dragging.value = false;
     stretch.value = 0;
-    settle(props.modelValue);
+    settle(props.modelValue, props.creationMode);
     return;
   }
   if (!active.dragging && Math.abs(dx) >= 5) {
@@ -207,9 +213,10 @@ function up(event: PointerEvent) {
     }
     settle(target, true);
   } else {
-    // The subsequent click selects the hit target or track coordinate. Keep
-    // the thumb visible until that event has resolved the tap.
-    settle(props.modelValue);
+    // A native click normally follows this release and re-shows the thumb
+    // while it resolves the target. Hiding here also covers touch stacks that
+    // cancel the synthesized click after a vertical gesture.
+    settle(props.modelValue, props.creationMode);
   }
 }
 
@@ -219,20 +226,18 @@ function cancel(event?: PointerEvent) {
   pressed.value = false;
   dragging.value = false;
   stretch.value = 0;
-  settle(props.modelValue, true);
+  settle(props.modelValue, props.creationMode);
 }
 
 function select(index: number) {
   if (performance.now() < clickSuppressedUntil) return;
   const next = bound(index);
-  flightRevision++;
-  hideAfterSettle = true;
-  thumbVisible.value = true;
+  if (props.creationMode) thumbVisible.value = true;
   if (next !== props.modelValue) {
     emit('update:modelValue', next);
     vibrateForStep();
   }
-  settle(next, true);
+  settle(next, props.creationMode);
 }
 
 function tapTrack(event: MouseEvent) {
@@ -278,6 +283,7 @@ onBeforeUnmount(() => {
   <nav
     ref="host"
     class="creation-progress"
+    :class="{ 'is-create-mode': creationMode }"
     :aria-label="navLabel || '新宿舍创建进度'"
     @pointerdown="down"
     @pointermove="move"
@@ -287,18 +293,20 @@ onBeforeUnmount(() => {
     @click="tapTrack"
   >
     <div class="progress-track" aria-hidden="true"><i ref="fill" /></div>
-    <i
-      v-for="node in progressNodes"
-      :key="`node-${node.index}`"
-      class="progress-node"
-      :class="{ 'is-complete': node.complete, 'is-current': node.current }"
-      :style="{ left: `${node.left}px` }"
-      aria-hidden="true"
-    />
+    <template v-if="creationMode">
+      <i
+        v-for="node in progressNodes"
+        :key="`node-${node.index}`"
+        class="progress-node"
+        :class="{ 'is-complete': node.complete, 'is-current': node.current }"
+        :style="{ left: `${node.left}px` }"
+        aria-hidden="true"
+      />
+    </template>
     <div
       ref="thumb"
       class="progress-glass"
-      :class="{ 'is-visible': thumbVisible, 'is-pressed': pressed, 'is-dragging': dragging }"
+      :class="{ 'is-visible': !creationMode || thumbVisible, 'is-pressed': pressed, 'is-dragging': dragging }"
       :style="{ '--thumb-stretch': stretch }"
       aria-hidden="true"
     ><span class="progress-glass-surface" /></div>
@@ -395,15 +403,14 @@ onBeforeUnmount(() => {
   -webkit-backdrop-filter: blur(10px) saturate(1.06);
   backdrop-filter: blur(10px) saturate(1.06);
   transform: scaleX(calc(1 + var(--thumb-stretch, 0) * .65)) scaleY(calc(1 - var(--thumb-stretch, 0)));
-  opacity: 0;
   transition: transform 220ms cubic-bezier(.22,1,.36,1), opacity 160ms cubic-bezier(.22,1,.36,1);
   will-change: transform;
   pointer-events: none;
 }
-.progress-glass:not(.is-visible) .progress-glass-surface {
+.is-create-mode .progress-glass:not(.is-visible) .progress-glass-surface {
   opacity: 0;
 }
-.progress-glass.is-visible .progress-glass-surface {
+.is-create-mode .progress-glass.is-visible .progress-glass-surface {
   opacity: 1;
 }
 .progress-glass.is-dragging .progress-glass-surface {

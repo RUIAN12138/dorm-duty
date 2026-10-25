@@ -352,9 +352,16 @@ try {
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===1,'dorm name screen asks only one question');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0,"dorm name screen has no duplicate label or helper text");
   check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');
+  check(await p.locator('.creation-progress.is-create-mode').count()===1,'five-node progress appearance is isolated to new dorm creation');
   check(await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'progress bar has no visible numeric or symbol labels');
   check(await p.locator('.progress-node').count()===5&&await p.locator('.progress-node').allTextContents().then(xs=>xs.every(x=>!x.trim())),'creation progress shows five minimal shape-only nodes');
   const progressTargets=await p.locator('.progress-hit').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height};}));
+  const creationNodeAlignment=await p.locator('.creation-progress').evaluate(host=>{
+    const nodes=[...host.querySelectorAll('.progress-node')].map(node=>node.getBoundingClientRect());
+    const targets=[...host.querySelectorAll('.progress-hit')].map(node=>node.getBoundingClientRect());
+    return nodes.length===targets.length&&nodes.every((node,index)=>Math.abs(node.left+node.width/2-(targets[index].left+targets[index].width/2))<1);
+  });
+  check(creationNodeAlignment,'five creation nodes align with their real step hit targets');
   const progressGlass=await p.locator('.progress-glass-surface').boundingBox();
   const progressTrack=await p.locator('.progress-track').boundingBox();
   check(progressTargets.every(r=>r.width>=44&&r.height===64)&&progressGlass?.width===36&&progressGlass?.height===36,'progress has 44px+ touch targets around a 36px glass thumb');
@@ -363,6 +370,22 @@ try {
   await p.evaluate(()=>{let count=0;Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{count++;return true}});Object.defineProperty(window,'__wizardHaptics',{configurable:true,get:()=>count});});
   await p.waitForTimeout(450);
   await p.screenshot({path:`data/startup-review/${engine}-wizard-name-after.png`});
+  const activeProgressTarget=p.locator('.progress-hit[aria-current="step"]');
+  await activeProgressTarget.tap();
+  await activeProgressTarget.tap();
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('.progress-glass-surface')).opacity==='0');
+  check(await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','real touch taps, including a rapid repeat on the current step, leave no visible thumb');
+  await p.locator('.progress-hit').nth(0).focus();
+  await p.keyboard.press('End');
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往预览确认','keyboard End moves to the final creation step');
+  await p.keyboard.press('Home');
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往宿舍名称','keyboard Home returns to the first creation step');
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('.progress-glass-surface')).opacity==='0');
+  await p.emulateMedia({reducedMotion:'reduce'});
+  await p.locator('.progress-hit').nth(2).tap();
+  check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往页面安排'&&await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','reduced motion keeps creation progress selection usable and instantly hidden');
+  await p.locator('.progress-hit').nth(0).tap();
+  await p.emulateMedia({reducedMotion:'no-preference'});
   await p.locator('.creation-progress').evaluate((host) => {
     const rect = host.getBoundingClientRect();
     const stepX = (index) => rect.left + 24 + (rect.width - 48) * index / 4;
@@ -401,6 +424,8 @@ try {
     }));
   });
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','vertical pointer-up cancels progress dragging and leaves the page selection unchanged');
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('.progress-glass-surface')).opacity==='0');
+  check(await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','vertical scroll intent ending at pointerup also hides the creation thumb');
   await p.locator('.creation-progress').evaluate((host) => {
     const rect = host.getBoundingClientRect();
     const x = rect.left + 24 + (rect.width - 48) / 4;
@@ -420,6 +445,8 @@ try {
     return thumb&&!thumb.classList.contains('is-pressed')&&!thumb.classList.contains('is-dragging');
   });
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','pointercancel and lostpointercapture release the progress control without changing the step');
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('.progress-glass-surface')).opacity==='0');
+  check(await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','pointer cancellation and capture loss leave no visible creation thumb');
   const reverseProgress=await p.locator('.creation-progress').boundingBox();
   const reverseStepX=(index)=>reverseProgress.x+24+(reverseProgress.width-48)*index/4;
   const reverseY=reverseProgress.y+reverseProgress.height/2;
@@ -846,6 +873,7 @@ try {
   await p.getByTestId("open-chore-settings").click();
   await p.getByRole("dialog", { name: "任务配置工作台" }).waitFor();
   check(await p.locator('.creation-progress').count()===1&&await p.locator('.wizard-steps,.step-caption').count()===0,'version-2 task settings reuse the number-free creation progress control');
+  check(await p.locator('.creation-progress.is-create-mode').count()===0&&await p.locator('.progress-node').count()===0&&await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='1','task-settings workspace keeps its existing glass progress without creation-only nodes or idle hiding');
   check(await p.locator('.creation-progress').getAttribute('aria-label')==='任务配置进度'&&await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'task-settings progress has an accurate accessible name without visible step numbers');
   await p.getByRole('button',{name:'前往添加',exact:true}).click();
   await p.locator('.wizard-step[data-step="templates"]').waitFor();
@@ -873,6 +901,19 @@ try {
   await p.locator('.workspace-task-row>.wizard-choice').first().click();
   await p.locator('.wizard-step:not([aria-hidden="true"]) .task-editor').waitFor();
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往地面清洁'&&await p.locator('.wizard-steps,.step-caption').count()===0,'task editor stays synchronized to the shared number-free progress control');
+  check(await p.locator('.progress-hit').count()>5&&await p.locator('.progress-node').count()===0,'workspace retains all of its variable task-editing steps without projecting five creation nodes');
+  await p.waitForFunction(()=>{
+    const host=document.querySelector('.creation-progress');
+    const active=host?.querySelector('.progress-hit[aria-current="step"]')?.getBoundingClientRect();
+    const thumb=host?.querySelector('.progress-glass')?.getBoundingClientRect();
+    return !!active&&!!thumb&&Math.abs((active.left+active.width/2)-(thumb.left+thumb.width/2))<2;
+  });
+  const workspaceProgressAlignment=await p.locator('.creation-progress').evaluate(host=>{
+    const active=host.querySelector('.progress-hit[aria-current="step"]')?.getBoundingClientRect();
+    const thumb=host.querySelector('.progress-glass')?.getBoundingClientRect();
+    return active&&thumb?Math.abs((active.left+active.width/2)-(thumb.left+thumb.width/2)):Infinity;
+  });
+  check(workspaceProgressAlignment<2,'workspace glass thumb remains aligned to its selected variable step');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'workspace edits at most two fields per screen');
   await p.screenshot({ path: `data/startup-review/${engine}-workspace.png` });
   await p.getByRole("button", { name: "预览", exact: true }).click();
