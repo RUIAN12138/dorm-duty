@@ -1,3 +1,28 @@
+# Codex → ChatGPT · PR #85 两项移动端浏览器检查修复
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `ca54403d48d5005bc95f5b5b7f85e158926e7082`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ca54403d48d5005bc95f5b5b7f85e158926e7082
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送新提交）
+- requirements: 用户明确授权“允许只修这两个测试”。只改 `scripts/check-task-detail.mjs`、`scripts/check-ios-chat-motion.mjs` 两项检查及其 OpenSpec 范围/验证记录；不改产品运行时，不接触正式数据。
+- changed_files:
+  - `scripts/check-task-detail.mjs`
+  - `scripts/check-ios-chat-motion.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`
+- implemented:
+  - 任务详情检查改为确认旧成员标识不存在，且负责人行只有姓名与状态两项，防止旧图标移除后残留占位；匹配当前产品组件，不调整组件代码。
+  - 聊天键盘紧凑态的返回按钮按设计会隐藏并禁用；检查改为通过真实 Escape 关闭路径发起关闭，恢复模拟 Visual Viewport 后验证面板收起、共享球球归位。
+  - 帧运动采样使用 requestAnimationFrame 提供的时间戳，只比较实际渲染帧，避免同一帧内非同步采样被误报为瞬移。OpenSpec 仅把获准的两条脚本加入已有精确范围。
+- tests:
+  - `node scripts/check-task-detail.mjs`：Chromium 14/14；`DORM_BROWSER=webkit node scripts/check-task-detail.mjs`：WebKit 14/14。
+  - `node scripts/check-ios-chat-motion.mjs`：Chromium 19/19；`DORM_BROWSER=webkit node scripts/check-ios-chat-motion.mjs`：WebKit 19/19。两引擎无运行时错误；键盘前后可见消息锚点均为 y=242。聊天动效测试帧样本：Chromium p95=9.1ms、最大16.7ms；WebKit p95=18ms、最大34ms（1个间隔超过32ms）。
+  - `npm run web:verify`：退出码0，Web 构建和完整回归清单通过。
+  - `npm run spec:check`：通过；OpenSpec 19/19、范围检查386项、范围门禁18项通过。两个脚本 `node --check` 与 `git diff --check` 通过。
+- CI: 新 SHA `ca54403d48d5005bc95f5b5b7f85e158926e7082` 已推送到 PR #85；GitHub Actions run `40181083070` 正在运行。先前 `40180088090` 对应父 SHA `4cc4e625986285fd4d2eefa47693499484763a10`，其 `spec-contract`、`android` 通过，`web-and-business` 与 `conversation-motion` 失败；本提交仅修复获准的两项检查，需以新 SHA 的 CI 结果验收。
+- platform_status: 本地桌面 Chromium 与 WebKit 自动化通过；不是实体 iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机验收。网站未更新，未运行线上迁移，未访问正式数据库。
+- remaining: 等待 PR #85 的新 SHA CI 完成。只有 CI 通过且服务器 SSH 控制套接字真实可用后，才按既有明确授权备份、执行发布和健康检查。工作树中用户既有未提交 `site/runtime/push-runtime.cjs` 修改未暂存、未提交、未包含在该 SHA。
+- questions: 当前没有新增产品决策；部署仍受新 SHA CI 与有效 SSH 连接门禁约束。
+
 # Codex → ChatGPT · 日历订阅迁移测试夹具修复
 
 - code_branch: `codex/new-dorm-wizard-pr`
