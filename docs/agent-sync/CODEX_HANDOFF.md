@@ -1,3 +1,29 @@
+# Codex → ChatGPT · PR #85 修正两项获准浏览器检查
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `02b579acf22d5a675c17cf810fff7b11940c407e`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/02b579acf22d5a675c17cf810fff7b11940c407e
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送）
+- requirements: 用户明确授权“允许仅修这两项测试（推荐）”。仅修改 `scripts/check-conversation-preview.mjs`、`scripts/check-order-boundaries.mjs` 两项测试及其 OpenSpec 登记；不修改产品运行时代码。
+- changed_files:
+  - `scripts/check-conversation-preview.mjs`
+  - `scripts/check-order-boundaries.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`
+- implemented:
+  - 对话玻璃检查继续验证真实消息位于半透明输入玻璃后、玻璃透明度与模糊有效、输入区域可交互；留言确认按钮按当前共享 dock 架构检查其完整位于 dock／视口内，并通过中心命中测试确认可达。旧断言错误要求确认按钮位于 footer 顶边以上，与其实际承载位置矛盾。
+  - 轮序成员行检查改为匹配当前展示：姓名逐一显示，旧成员标记不存在，姓名容器没有遗留标记占位。此前检查仍要求每行存在绿色标记，但产品行已按既有需求移除该标记。
+  - 只改授权的两项测试与 OpenSpec 记录；未修改产品页面、后端或运行时代码。
+- tests:
+  - `node scripts/check-conversation-preview.mjs`：桌面 Chromium 全部检查通过。
+  - `DORM_BROWSER=webkit node scripts/check-conversation-preview.mjs`：桌面 WebKit 全部交互与布局检查通过；该运行器及其独立校准页不渲染 backdrop blur，因此折射截图视觉结果标记为未验证。
+  - `node scripts/check-order-boundaries.mjs` 与 `DORM_BROWSER=webkit node scripts/check-order-boundaries.mjs`：桌面 Chromium、WebKit 各 36 项通过。
+  - `npm run spec:check`：OpenSpec 严格校验 19/19；范围登记 18 个变更、388 个文件；范围门禁 18/18 通过。
+  - 两脚本 `node --check`、`git diff --check` 通过。没有重跑完整 `npm run web:verify`；同一基线 SHA 先前该 job 仅上述两项检查失败，远程新 SHA CI 正在重新执行。
+- CI: GitHub Actions run `40186088760` 对应本 SHA，查询时 `in_progress`。上一 SHA `ee575bfa2a2a7b2c234c47f6b6f3f3d8dd3ba772` 的四项 job 中 `android`、`spec-contract` 成功，`conversation-motion`、`web-and-business` 仅分别因本次修正的两项检查失败；本 SHA 新结果尚待确认。
+- platform_status: 仅本机桌面 Chromium／WebKit 自动化；未做实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。未接触正式数据库或发布服务器，未部署。业务工作树中预存的未提交 `site/runtime/push-runtime.cjs` 用户改动未修改、未暂存、未包含。
+- remaining: 等待同一 SHA 的 GitHub Actions 完成并核对全部检查。CI 全绿前不发布；当前远程评审文档的 `reviewed_code_sha=84fc285ea9f9c90d70207f4e6b5e5b767c318f91`，早于本代码 SHA，不能视为对本提交的评审。
+- questions: 无。
+
 # Codex → ChatGPT · PR #85 修复最后两项获准 CI 检查
 
 - code_branch: `codex/new-dorm-wizard-pr`
