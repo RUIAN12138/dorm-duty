@@ -187,16 +187,42 @@ try {
   await editor.fill("十一点回来");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await page.waitForTimeout(400);
-  await note.getByRole("button", { name: "取消", exact: true }).click();
-  await page.waitForTimeout(70);
-  check(
-    (await note.count()) === 1 &&
-      (await note.evaluate(
-        (el) => getComputedStyle(el.parentElement).opacity !== "1",
-      )),
-    "cancel retains the card for visible exit frames",
+  const reducedMotion = await page.evaluate(() =>
+    matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
-  await note.waitFor({ state: "hidden" });
+  await note.evaluate((el) => {
+    window.noteExitFrames = [];
+    window.noteExitCaptureDone = false;
+    const sample = () => {
+      if (!el.isConnected) {
+        window.noteExitCaptureDone = true;
+        return;
+      }
+      const shell = el.closest(".chat-dock-note");
+      if (shell) {
+        const rect = shell.getBoundingClientRect();
+        window.noteExitFrames.push({
+          opacity: Number(getComputedStyle(shell).opacity),
+          height: rect.height,
+          connected: el.isConnected,
+        });
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await note.getByRole("button", { name: "取消", exact: true }).click();
+  await note.waitFor({ state: "detached" });
+  await page.waitForFunction(() => window.noteExitCaptureDone === true);
+  const noteExitFrames = await page.evaluate(() => window.noteExitFrames);
+  check(
+    reducedMotion ||
+      noteExitFrames.some(
+        (frame) =>
+          frame.connected && frame.height > 0 && frame.opacity > 0 && frame.opacity < 1,
+      ),
+    "cancel keeps the card through visible exit frames when motion is enabled",
+  );
   const send = async (text) => {
     await editor.click();
     await editor.fill(text);

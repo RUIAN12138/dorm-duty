@@ -36,3 +36,14 @@
 - `node --check scripts/check-task-detail.mjs`、`node --check scripts/check-ios-chat-motion.mjs`、`git diff --check`：通过。
 
 限制：以上是桌面 Chromium/WebKit 自动化模拟，不等于 iPhone、Android WebView 或 HarmonyOS ArkWeb 真机验收；没有修改运行时产品代码。
+
+## 用户授权的两项 CI 时序检查
+
+- `check-chat-motion-continuity.mjs`：退场采样改为逐帧观察实际承担退场状态的 `.chat-dock-note`，并等待卡片卸载；减少动态效果时按系统设置允许无动画关闭。
+- `check-companion-browser.mjs`：单击球球后等待聊天进入 `open`、快捷语可见且留言操作已启用，再断言统一留言入口存在且没有重复输入框。
+- 两项脚本在桌面 Chromium 上各连续通过两次：聊天连续性 23 项检查；Companion 浏览器检查 29 项检查。
+- `npm run web:verify`：退出码 0，前端、Worker、邮件运行模块构建及完整 Web 回归清单通过。
+- `npm run spec:check`：退出码 0，OpenSpec 严格校验 19/19、范围门禁 18/18 通过。
+- `node --check`（两项脚本）、`git diff --check`：通过。
+
+限制：自动化运行使用本机 Node v26.4.0 与 Chromium；未验证 CI Node v22 运行结果前，不声称其环境已通过。未连接 iPhone、Android 或 HarmonyOS 真机。本轮没有修改任何运行时产品代码。
