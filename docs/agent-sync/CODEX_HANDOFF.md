@@ -1,3 +1,28 @@
+# Codex → ChatGPT · PR #85 修复最后两项获准 CI 检查
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `ee575bfa2a2a7b2c234c47f6b6f3f3d8dd3ba772`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ee575bfa2a2a7b2c234c47f6b6f3f3d8dd3ba772
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送）
+- requirements: 用户明确授权“允许仅修这两项测试”。仅修 `scripts/check-ios-chat-motion.mjs` 与 `scripts/check-focus-compact.mjs` 这两项检查，并更新其 OpenSpec 记录；不修改产品运行时代码。
+- changed_files:
+  - `scripts/check-ios-chat-motion.mjs`
+  - `scripts/check-focus-compact.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`
+- implemented:
+  - 聊天球空间跳变断言现在要求目标帧前后及其相邻帧都处于稳定连续的 rAF 间隔，避免把 30Hz CI 漏帧前后的孤立短采样误认为连续帧轨迹。独立控制器探针仍在同一 JS turn 中验证反向时位置和速度连续性。
+  - 紧凑日历记录测试保留“无需成员标记图片”的检查，并改为验证 7 条记录各自保留行内任务类型 SVG；不恢复已移除的旧成员标记。
+  - 本提交只含两项授权测试与 OpenSpec 登记；未改产品代码。工作树既有未提交 `site/runtime/push-runtime.cjs` 修改未暂存、未提交、未包含。
+- tests:
+  - Chromium：`DORM_IOS_BASELINE=1 node scripts/check-ios-chat-motion.mjs` 19/19；`node scripts/check-focus-compact.mjs` 93 项通过。
+  - WebKit：`DORM_BROWSER=webkit DORM_IOS_BASELINE=1 node scripts/check-ios-chat-motion.mjs` 19/19；`DORM_BROWSER=webkit node scripts/check-focus-compact.mjs` 93 项通过。
+  - `npm run web:verify`：退出码 0，前端、Worker、邮件运行模块构建及完整 Web 回归通过。包含对工作树现有 `site/runtime/push-runtime.cjs` 修改的本地运行环境；此未提交修改不在本代码 SHA，需以 CI 对推送 SHA 的结果确认。
+  - `npm run spec:check`：OpenSpec 严格校验 19/19，范围登记 18 个变更 / 387 个文件，范围门禁 18/18；两脚本 `node --check`、`git diff --check` 通过。
+- CI: Actions run `40184930837` 对应本 SHA；查询时 `spec-contract=success`，`android`、`web-and-business`、`conversation-motion` 仍在运行。远程检查未全绿前不发布。
+- platform_status: 本机 macOS 桌面 Chromium/WebKit 自动化；未做实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。未访问正式数据库，未部署。
+- remaining: 等待同一 SHA 的 4 个 GitHub Actions jobs 完成。全绿后按用户此前要求继续备份与发布；若发布门禁提示本 SHA 授权失效，先请求用户确认，不绕过门禁。保留未提交的 `site/runtime/push-runtime.cjs` 用户改动。
+- questions: 无；等待 GitHub Actions 结果。
+
 # Codex → ChatGPT · PR #85 两项聊天浏览器检查稳定化
 
 - code_branch: `codex/new-dorm-wizard-pr`
