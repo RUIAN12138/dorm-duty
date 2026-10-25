@@ -17,10 +17,10 @@
   - `npm run web:verify`：退出码 0，完整本地 Web 验证清单通过；保留既有 `GuestHome` chunk 大小警告，隔离 SMTP 错误日志来自测试注入。
   - `npm run spec:check`：通过；严格 OpenSpec 校验 19/19、范围检查与 18 项 scope gate 测试通过。
   - `node --check site/scripts/check-calendar-subscription.mjs`、`git diff --check`：通过。
-- CI: 推送后 GitHub Actions run `40180088090`（Project checks，head=`4cc4e625986285fd4d2eefa47693499484763a10`）查询时为 `in_progress`，尚无远端通过结论。前一 SHA `ff96eb9a2cc2b9ad6c62beb308aca9f598fa45c9` 的 run `40178179610` 曾有 Web migration fixture 与 conversation-motion 两项失败；本地 conversation-motion 脚本通过不代表远端故障已消失，需以新 run 结果为准。
+- CI: GitHub Actions run `40180088090`（head=`4cc4e625986285fd4d2eefa47693499484763a10`）已结束：`spec-contract=success`、`android=success`、`web-and-business=failure`、`conversation-motion=failure`。Web 作业已经通过 `check-calendar-subscription.mjs`，随后在范围外 `scripts/check-task-detail.mjs:167` 断言 “member mark uses the bundled inline path” 失败；动效作业在范围外 `scripts/check-ios-chat-motion.mjs:398` 等待 `.companion-chat` 隐藏 15 秒超时。两项均未在本轮修改，符合用户只授权日历订阅夹具的限制。
 - platform_status: 仅本地临时 SQLite、Node 与构建/脚本回归；未访问正式数据库、未执行线上迁移、未部署；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机仍未验收。
-- remaining: 等待同一新 SHA 的 GitHub Actions 结果；网站更新仍未完成，发布需按原流程执行在线备份和健康检查。工作树 `site/runtime/push-runtime.cjs` 存在独立未提交修改，未暂存、未提交。
-- questions: 无。
+- remaining: 两项范围外 CI 失败未修；未获用户授权前不得改相应测试或产品代码。网站更新仍未完成；当前 SSH 控制套接字缺失，且 CI 未全绿。发布需先恢复 SSH 并按原流程执行在线备份和健康检查。工作树 `site/runtime/push-runtime.cjs` 存在独立未提交修改，未暂存、未提交。
+- questions: 是否另行授权仅修复 `scripts/check-task-detail.mjs` 与 `scripts/check-ios-chat-motion.mjs` 中的范围外检查；在这两项 CI 失败处理前无需恢复 SSH。
 
 # Codex → ChatGPT · PR #85 新宿舍向导与站点发布准备
 
