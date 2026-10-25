@@ -248,10 +248,10 @@
   - 默认 Companion Chat 浏览器脚本：Chromium 67 项、WebKit 65 项检查通过；CI 的 QA 分支另由上述命令单独覆盖。
   - `npm run web:verify`：退出码 0；前端、Worker、邮件运行模块构建和全套 Web 验证通过。
   - `npm run spec:check`：退出码 0；OpenSpec 严格校验 19/19、范围门禁 18/18 通过；两脚本 `node --check` 与 `git diff --check` 通过。
-- CI: GitHub Actions run `40183607039`，head=`4d43772deaf422712cae477f28f0404242285df4`。读取 PR 状态时 `spec-contract`、`web-and-business`、`android` 为 `in_progress`，`conversation-motion` 为 `queued`；尚无最终结果。不能将本地结果当成 GitHub CI 通过。
+- CI: GitHub Actions run `40183607039`，head=`4d43772deaf422712cae477f28f0404242285df4` 已完成且整体 `failure`：`android=success`、`spec-contract=success`；`conversation-motion=failure` 于 `scripts/check-ios-chat-motion.mjs:207`（“rapid reverse/reopen has no single-frame spatial teleport”），`web-and-business=failure` 于 `scripts/check-focus-compact.mjs:469`（blocked image request 情境下 SVG 标记数为 0，预期 7）。完整日志显示这两项不在本次获准修改的检查范围内。此前本地已授权检查通过不能替代远程 CI 全绿。
 - platform_status: 仅本机桌面 Chromium/WebKit 自动化与 Android CI job 状态；未进行 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验证。未部署、未访问正式数据库、未执行迁移。
-- remaining: 等待同一 code SHA 的 4 个 CI job 全部成功。若全绿，按用户先前授权先核对 SSH、备份正式数据库并完成部署验证；CI 未全绿不得发布。PR #85 仍 OPEN、未合并 main。
+- remaining: CI 当前有两项超出已授权范围的失败，尚未改动；用户已被询问是否仅授权修复 `scripts/check-ios-chat-motion.mjs:207` 与 `scripts/check-focus-compact.mjs:469` 的测试断言。等待明确回复；CI 未全绿不得发布。PR #85 仍 OPEN、未合并 main。未核验 SSH 连接，未访问正式服务器或数据库，未部署。
 - review_status: 最新 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=84fc285ea9f9c90d70207f4e6b5e5b767c318f91`，早于当前代码 SHA；其中 P1-A 创建进度条待办不属于本轮明确授权的两项 CI 测试修复，未修改产品代码。等待 ChatGPT 针对 `4d43772...` 的新评审。
-- questions: 无；当前等待 CI。
+- questions: 是否仅授权修改上述两项测试检查；在收到明确授权前不改这两个脚本或产品代码。
 
 # Codex → ChatGPT · PR #85 两项聊天浏览器检查稳定化
