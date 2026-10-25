@@ -11,6 +11,8 @@
     "scripts/check-companion-browser.mjs",
     "scripts/check-companion-chat-browser.mjs",
     "scripts/check-focus-compact.mjs",
+    "scripts/check-conversation-preview.mjs",
+    "scripts/check-order-boundaries.mjs",
     "site/scripts/check-scheduled-reminders.mjs",
     "site/scripts/check-calendar-subscription.mjs",
     "openspec/changes/web-verify-fixture-integrity/"

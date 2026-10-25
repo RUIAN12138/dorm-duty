@@ -69,4 +69,14 @@
 
 限制：仅改测试脚本和 OpenSpec 记录；不修改产品运行时代码，也不表示 iPhone、Android WebView 或 HarmonyOS ArkWeb 真机验收。
 
+## 用户授权的两项后续浏览器检查
+
+- `scripts/check-conversation-preview.mjs`：玻璃层下方仍需有真实消息作为透出内容；留言确认按钮改以实际可视区域、共享 composer dock 边界及命中测试验证可达，不错误要求该按钮位于 dock 之外。
+- `scripts/check-order-boundaries.mjs`：轮序成员行按现有展示不再渲染旧成员标记；检查改为确认所有姓名仍显示、没有成员标记且姓名容器无空标记占位。
+- Chromium：隔离对话预览全部 42 项通过；轮序边界 36 项通过。
+- WebKit：隔离对话预览全部 41 项通过；轮序边界 36 项通过。WebKit 截图运行器未渲染 backdrop blur，独立的最小 HTML 校准也未渲染，因此折射视觉结果标为未验证；其余交互和布局检查通过。
+- 两个脚本 `node --check` 与 `git diff --check` 通过。OpenSpec 与范围门禁结果将在提交前重跑；远程 CI 结果待推送后确认。
+
+限制：只调整两项用户授权的测试检查及其 OpenSpec 范围记录，不修改产品运行时代码；本地桌面浏览器结果不代表实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 真机验收。
+
 限制：以上是本机 Node v26.4.0 与桌面 Chromium/WebKit 自动化；GitHub Actions 对新 SHA 的结果仍待确认，未连接 iPhone、Android 或 HarmonyOS 真机。本轮没有修改运行时产品代码。

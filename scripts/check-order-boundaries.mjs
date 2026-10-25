@@ -111,10 +111,37 @@ const categories=computed(()=>['floor','toilet','sink','water'].map((key,i)=>({k
       checks.push(
         `${width}x${height}/${total}: list clips above separate footer; help stays in title row`,
       );
+      const memberRows = await page.locator(".sort-row").evaluateAll((rows) =>
+        rows.map((row) => {
+          const person = row.querySelector(".sort-person");
+          const name = person?.querySelector(
+            ".rounded-member-name > span",
+          );
+          return {
+            name: name?.textContent?.trim() || "",
+            hasMark: !!person?.querySelector(".member-mark, .inline-mark"),
+            hasEmptyMarkSlot:
+              !!person &&
+              [...person.children].some(
+                (child) => !child.classList.contains("rounded-member-name"),
+              ),
+          };
+        }),
+      );
       check(
-        await page.locator(".sort-row .inline-mark path").count(),
+        memberRows.length,
         total,
-        `${width}/${total}: every member mark is inline and available`,
+        `${width}/${total}: every member row remains rendered`,
+      );
+      check(
+        memberRows.every(
+          (member, index) =>
+            member.name === `室友${index + 1}` &&
+            !member.hasMark &&
+            !member.hasEmptyMarkSlot,
+        ),
+        true,
+        `${width}/${total}: member names render without legacy green marks or blank slots`,
       );
       await page
         .getByTestId(`order-person-water-${total}`)

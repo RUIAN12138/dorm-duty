@@ -378,13 +378,25 @@ try {
       const confirm = document
         .querySelector('[data-testid="note-confirm"]')
         .getBoundingClientRect();
+      const confirmButton = document.querySelector(
+        '[data-testid="note-confirm"]',
+      );
+      const confirmTarget = document.elementFromPoint(
+        confirm.left + confirm.width / 2,
+        confirm.top + confirm.height / 2,
+      );
       return {
         underlay,
         panelAlpha: alpha(css.backgroundColor),
         backAlpha: alpha(back.backgroundColor),
         blur: css.backdropFilter || css.webkitBackdropFilter,
         inputReceives: centerTarget === editor,
-        clearAtEnd: confirm.bottom <= rect.top + 1,
+        confirmationReachable:
+          confirm.top >= rect.top &&
+          confirm.bottom <= rect.bottom &&
+          confirm.top >= 0 &&
+          confirm.bottom <= window.innerHeight &&
+          confirmButton.contains(confirmTarget),
         edgeBottom: history.getBoundingClientRect().bottom,
       };
     });
@@ -395,8 +407,8 @@ try {
       glassLayers.backAlpha < 0.5 &&
       glassLayers.blur.includes("blur") &&
       glassLayers.inputReceives &&
-      glassLayers.clearAtEnd,
-    "real messages scroll behind translucent input glass while final confirmation remains reachable above it",
+      glassLayers.confirmationReachable,
+    "real messages scroll behind translucent input glass while final confirmation remains reachable inside the shared composer dock",
   );
   await page.screenshot({
     path: new URL(`${engine}-glass-latest.png`, evidence).pathname,
