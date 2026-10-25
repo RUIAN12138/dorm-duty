@@ -353,11 +353,13 @@ try {
   check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0,"dorm name screen has no duplicate label or helper text");
   check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');
   check(await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'progress bar has no visible numeric or symbol labels');
+  check(await p.locator('.progress-node').count()===5&&await p.locator('.progress-node').allTextContents().then(xs=>xs.every(x=>!x.trim())),'creation progress shows five minimal shape-only nodes');
   const progressTargets=await p.locator('.progress-hit').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height};}));
   const progressGlass=await p.locator('.progress-glass-surface').boundingBox();
   const progressTrack=await p.locator('.progress-track').boundingBox();
   check(progressTargets.every(r=>r.width>=44&&r.height===64)&&progressGlass?.width===36&&progressGlass?.height===36,'progress has 44px+ touch targets around a 36px glass thumb');
   check(progressTrack?.height===20,'progress track has the stronger 20px black-and-gray treatment');
+  check(await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','glass thumb is visually hidden while progress is idle');
   await p.evaluate(()=>{let count=0;Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{count++;return true}});Object.defineProperty(window,'__wizardHaptics',{configurable:true,get:()=>count});});
   await p.waitForTimeout(450);
   await p.screenshot({path:`data/startup-review/${engine}-wizard-name-after.png`});
@@ -368,6 +370,12 @@ try {
       bubbles: true, pointerId: 91, pointerType: 'touch', button: 0,
       clientX: stepX(0), clientY: rect.top + rect.height / 2,
     }));
+  });
+  check(await p.locator('.progress-glass').evaluate(el=>el.classList.contains('is-visible')),'glass thumb enters its visible state on press');
+  await p.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.progress-glass-surface')).opacity)>0);
+  await p.locator('.creation-progress').evaluate((host) => {
+    const rect = host.getBoundingClientRect();
+    const stepX = (index) => rect.left + 24 + (rect.width - 48) * index / 4;
     // Simulate a touch platform that coalesces the final pointermove and only
     // delivers the release at the new step.
     host.dispatchEvent(new PointerEvent('pointerup', {
@@ -378,6 +386,8 @@ try {
   await p.locator('[data-step="tasks"]').waitFor();
   check(await p.locator('.progress-hit[aria-current="step"]').getAttribute('aria-label')==='前往任务','progress drag applies the final pointer-up coordinate when the last move is coalesced');
   check(await p.evaluate(()=>window.__wizardHaptics)>0,'release onto a new step requests one light haptic');
+  await p.waitForFunction(()=>getComputedStyle(document.querySelector('.progress-glass-surface')).opacity==='0');
+  check(await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','glass thumb gently hides after the release settles');
   await p.locator('.creation-progress').evaluate((host) => {
     const rect = host.getBoundingClientRect();
     const x = rect.left + 24 + (rect.width - 48) / 4;

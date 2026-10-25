@@ -325,3 +325,11 @@
 - `npm --prefix frontend run typecheck` 与 `npm run spec:validate` 通过（19/19）。
 - 修改后截图：`data/startup-review/chromium-wizard-rules-default.png`、`data/startup-review/chromium-wizard-rules-scheduled.png`、`data/startup-review/webkit-wizard-rules-scheduled.png`；对照基线：`data/startup-review/before-chromium-wizard-rules-default.png`、`data/startup-review/before-chromium-wizard-rules-scheduled.png`。
 - 自动化浏览器运行于隔离本地预览与模拟移动视口，不等于实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收；旧宿舍业务数据未触碰，未创建 PR、未合并或部署。
+
+## 2026-10-25 · 创建进度静止与按压状态
+
+- `CreationProgress.vue` 保留 20px 轨道、触控命中区及实时进度状态；最多显示五个无文字圆形节点，静止时玻璃滑块透明隐藏，按压/拖动时显现，吸附结束后沿 opacity/scale 过渡收起。
+- `scripts/check-dorm-wizard-browser.mjs` 增加五个纯形状节点、空闲隐藏、按压显现、释放后隐藏断言；不改变已有草稿与页面联动断言。
+- `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）通过；覆盖节点数量、无文字标签、空闲隐藏、按压显现、松手吸附后隐藏及原有向导/预览流程。
+- `node scripts/check-entry-layout.mjs` 通过；`npm run spec:validate` 19/19、`npm --prefix frontend run typecheck`、`git diff --check` 通过。
+- 浏览器测试为隔离预览中的桌面引擎与移动视口模拟；实体 iPhone、vivo Android 与 HarmonyOS 设备仍未验收。

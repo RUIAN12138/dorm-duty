@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { animate } from 'motion-v';
 import { motionAllowed, motionTokens } from '../../interaction/motion';
 import { observeElementSize } from './observeElementSize.mjs';
@@ -13,10 +13,13 @@ const fill = ref<HTMLElement>();
 const hostWidth = ref(0);
 const pressed = ref(false);
 const dragging = ref(false);
+const thumbVisible = ref(false);
 const stretch = ref(0);
 let position = props.modelValue;
 let flight: ReturnType<typeof animate> | undefined;
 let targetPosition = 0;
+let flightRevision = 0;
+let hideAfterSettle = false;
 let stopObservingSize: (() => void) | undefined;
 let clickSuppressedUntil = 0;
 let gesture: {
@@ -33,6 +36,19 @@ let gesture: {
 const lastIndex = () => Math.max(0, props.labels.length - 1);
 const bound = (value: number) => Math.max(0, Math.min(lastIndex(), value));
 const hitWidth = () => Math.max(44, Math.min(64, (hostWidth.value - 48) / Math.max(1, lastIndex())));
+const progressNodes = computed(() => {
+  const count = Math.min(5, props.labels.length);
+  return Array.from({ length: count }, (_, index) => {
+    const position = count <= 1 ? 0 : index * lastIndex() / (count - 1);
+    return {
+      index,
+      position,
+      left: 24 + Math.max(0, hostWidth.value - 48) * (count <= 1 ? 0 : index / (count - 1)),
+      complete: position <= props.modelValue + 0.001,
+      current: Math.abs(position - props.modelValue) < 0.5,
+    };
+  });
+});
 
 function paint(value: number) {
   position = bound(value);
@@ -42,18 +58,27 @@ function paint(value: number) {
   if (fill.value) fill.value.style.transform = `scaleX(${fraction})`;
 }
 
-function settle(value: number) {
+function settle(value: number, hide = false) {
   const target = bound(value);
+  hideAfterSettle = hide;
   if (flight && targetPosition === target) return;
   flight?.stop();
+  flight = undefined;
   targetPosition = target;
+  const revision = ++flightRevision;
   if (!motionAllowed()) {
     paint(target);
+    if (hideAfterSettle) thumbVisible.value = false;
     return;
   }
   flight = animate(position, target, {
     ...motionTokens.selection,
     onUpdate: paint,
+    onComplete: () => {
+      if (revision !== flightRevision || gesture) return;
+      if (hideAfterSettle) thumbVisible.value = false;
+      flight = undefined;
+    },
   });
 }
 
@@ -101,6 +126,9 @@ function down(event: PointerEvent) {
   if (event.button !== 0 || gesture || props.labels.length < 2) return;
   flight?.stop();
   flight = undefined;
+  flightRevision++;
+  hideAfterSettle = false;
+  thumbVisible.value = true;
   pressed.value = true;
   stretch.value = 0.045;
   gesture = {
@@ -126,7 +154,7 @@ function move(event: PointerEvent) {
     pressed.value = false;
     dragging.value = false;
     stretch.value = 0;
-    settle(props.modelValue);
+    settle(props.modelValue, true);
     return;
   }
   if (!active.dragging && Math.abs(dx) < 5) return;
@@ -177,8 +205,10 @@ function up(event: PointerEvent) {
       emit('update:modelValue', target);
       for (let step = 0; step < Math.abs(target - active.index); step++) vibrateForStep();
     }
-    settle(target);
+    settle(target, true);
   } else {
+    // The subsequent click selects the hit target or track coordinate. Keep
+    // the thumb visible until that event has resolved the tap.
     settle(props.modelValue);
   }
 }
@@ -189,17 +219,20 @@ function cancel(event?: PointerEvent) {
   pressed.value = false;
   dragging.value = false;
   stretch.value = 0;
-  settle(props.modelValue);
+  settle(props.modelValue, true);
 }
 
 function select(index: number) {
   if (performance.now() < clickSuppressedUntil) return;
   const next = bound(index);
+  flightRevision++;
+  hideAfterSettle = true;
+  thumbVisible.value = true;
   if (next !== props.modelValue) {
     emit('update:modelValue', next);
     vibrateForStep();
   }
-  settle(next);
+  settle(next, true);
 }
 
 function tapTrack(event: MouseEvent) {
@@ -223,7 +256,7 @@ async function keydown(event: KeyboardEvent, index: number) {
 }
 
 watch(() => [props.modelValue, props.labels.length], () => {
-  if (!gesture?.dragging) settle(props.modelValue);
+  if (!gesture?.dragging) settle(props.modelValue, thumbVisible.value && hideAfterSettle);
 });
 
 onMounted(() => {
@@ -254,10 +287,18 @@ onBeforeUnmount(() => {
     @click="tapTrack"
   >
     <div class="progress-track" aria-hidden="true"><i ref="fill" /></div>
+    <i
+      v-for="node in progressNodes"
+      :key="`node-${node.index}`"
+      class="progress-node"
+      :class="{ 'is-complete': node.complete, 'is-current': node.current }"
+      :style="{ left: `${node.left}px` }"
+      aria-hidden="true"
+    />
     <div
       ref="thumb"
       class="progress-glass"
-      :class="{ 'is-pressed': pressed, 'is-dragging': dragging }"
+      :class="{ 'is-visible': thumbVisible, 'is-pressed': pressed, 'is-dragging': dragging }"
       :style="{ '--thumb-stretch': stretch }"
       aria-hidden="true"
     ><span class="progress-glass-surface" /></div>
@@ -307,6 +348,29 @@ onBeforeUnmount(() => {
   transform-origin: left center;
   will-change: transform;
 }
+.progress-node {
+  position: absolute;
+  z-index: -1;
+  top: 28px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--canvas));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 20%, var(--canvas));
+  pointer-events: none;
+}
+.progress-node.is-complete {
+  border-color: color-mix(in srgb, var(--canvas) 76%, var(--ink));
+  background: var(--ink);
+}
+.progress-node.is-current {
+  width: 10px;
+  height: 10px;
+  top: 27px;
+  margin-left: -5px;
+}
 .progress-glass {
   position: absolute;
   z-index: -1;
@@ -331,9 +395,16 @@ onBeforeUnmount(() => {
   -webkit-backdrop-filter: blur(10px) saturate(1.06);
   backdrop-filter: blur(10px) saturate(1.06);
   transform: scaleX(calc(1 + var(--thumb-stretch, 0) * .65)) scaleY(calc(1 - var(--thumb-stretch, 0)));
-  transition: transform 220ms cubic-bezier(.22,1,.36,1);
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(.22,1,.36,1), opacity 160ms cubic-bezier(.22,1,.36,1);
   will-change: transform;
   pointer-events: none;
+}
+.progress-glass:not(.is-visible) .progress-glass-surface {
+  opacity: 0;
+}
+.progress-glass.is-visible .progress-glass-surface {
+  opacity: 1;
 }
 .progress-glass.is-dragging .progress-glass-surface {
   transition: none;
@@ -366,6 +437,10 @@ onBeforeUnmount(() => {
 .progress-hit:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -3px;
+}
+:global(html[data-theme="dark"]) .progress-node:not(.is-complete) {
+  border-color: rgb(255 255 255 / 22%);
+  background: color-mix(in srgb, var(--canvas) 76%, var(--ink));
 }
 :global(html[data-theme="dark"]) .progress-glass-surface {
   border-color: rgb(255 255 255 / 13%);
