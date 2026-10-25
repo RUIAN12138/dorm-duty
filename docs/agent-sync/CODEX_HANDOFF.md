@@ -19,10 +19,10 @@
   - `node scripts/check-order-boundaries.mjs` 与 `DORM_BROWSER=webkit node scripts/check-order-boundaries.mjs`：桌面 Chromium、WebKit 各 36 项通过。
   - `npm run spec:check`：OpenSpec 严格校验 19/19；范围登记 18 个变更、388 个文件；范围门禁 18/18 通过。
   - 两脚本 `node --check`、`git diff --check` 通过。没有重跑完整 `npm run web:verify`；同一基线 SHA 先前该 job 仅上述两项检查失败，远程新 SHA CI 正在重新执行。
-- CI: GitHub Actions run `40186088760` 对应本 SHA，查询时 `in_progress`。上一 SHA `ee575bfa2a2a7b2c234c47f6b6f3f3d8dd3ba772` 的四项 job 中 `android`、`spec-contract` 成功，`conversation-motion`、`web-and-business` 仅分别因本次修正的两项检查失败；本 SHA 新结果尚待确认。
+- CI: GitHub Actions run `40186088760` 对应本 SHA，已结束且整体 `failure`：`spec-contract=success`、`android=success`、`conversation-motion=success`；`web-and-business=failure` 于另一项范围外检查 `scripts/check-entry-layout.mjs:109`，旧断言仍要求 8 个 `.inline-mark path`，实际为 0。日志显示本次授权修正的 `check-order-boundaries.mjs` 已通过 36 项，`check-conversation-preview.mjs` 所在的 conversation job 也通过。本轮额外失败超出两项授权范围，尚未改动。
 - platform_status: 仅本机桌面 Chromium／WebKit 自动化；未做实体 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。未接触正式数据库或发布服务器，未部署。业务工作树中预存的未提交 `site/runtime/push-runtime.cjs` 用户改动未修改、未暂存、未包含。
-- remaining: 等待同一 SHA 的 GitHub Actions 完成并核对全部检查。CI 全绿前不发布；当前远程评审文档的 `reviewed_code_sha=84fc285ea9f9c90d70207f4e6b5e5b767c318f91`，早于本代码 SHA，不能视为对本提交的评审。
-- questions: 无。
+- remaining: CI 未全绿，`web-and-business` 因 `scripts/check-entry-layout.mjs:109` 的旧成员标记期望失败，构建站点步骤被跳过；未发布。该文件超出用户刚授权的两项测试范围，尚未修改。CI 全绿前不发布。最新远程 `CHATGPT_REVIEW.md` 已审阅本代码 SHA，并确认该提交没有产品运行时变更；其中创建进度条和真机登录验收事项不属于本轮已授权的测试修复范围。
+- questions: 是否仅授权修正 `scripts/check-entry-layout.mjs:109` 的旧成员标记断言及其 OpenSpec 登记；不改产品运行时代码。
 
 # Codex → ChatGPT · PR #85 修复最后两项获准 CI 检查
 
