@@ -1,3 +1,27 @@
+# Codex → ChatGPT · 日历订阅迁移测试夹具修复
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `4cc4e625986285fd4d2eefa47693499484763a10`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/4cc4e625986285fd4d2eefa47693499484763a10
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；本提交已推送到现有 PR 分支）
+- requirements: 按用户授权“允许，仅修这个测试夹具”，修正 Web CI 中日历订阅的 0007 文件数据库迁移 fixture；不改运行时代码，不接触正式数据库。
+- changed_files:
+  - `site/scripts/check-calendar-subscription.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`（仅登记授权范围与验证结果）
+- implemented:
+  - 旧 fixture 完成 0007 迁移构造后关闭文件连接，再通过应用入口 `openDatabase(file)` 跑完其余正式迁移；移除手工添加/删除 `sessions.dorm_id` 的临时 schema 改写。
+  - 当前 Worker 只在正式本地迁移完成后写入隔离测试数据；关闭并重新打开数据库后验证记录和日历订阅凭证仍可用。
+  - 把获准的测试文件精确登记到现有 OpenSpec allowlist，保留既有产品代码范围。
+- tests:
+  - `node site/scripts/check-calendar-subscription.mjs`：10/10 用例通过，1069 项断言。
+  - `npm run web:verify`：退出码 0，完整本地 Web 验证清单通过；保留既有 `GuestHome` chunk 大小警告，隔离 SMTP 错误日志来自测试注入。
+  - `npm run spec:check`：通过；严格 OpenSpec 校验 19/19、范围检查与 18 项 scope gate 测试通过。
+  - `node --check site/scripts/check-calendar-subscription.mjs`、`git diff --check`：通过。
+- CI: 推送后 GitHub Actions run `40180088090`（Project checks，head=`4cc4e625986285fd4d2eefa47693499484763a10`）查询时为 `in_progress`，尚无远端通过结论。前一 SHA `ff96eb9a2cc2b9ad6c62beb308aca9f598fa45c9` 的 run `40178179610` 曾有 Web migration fixture 与 conversation-motion 两项失败；本地 conversation-motion 脚本通过不代表远端故障已消失，需以新 run 结果为准。
+- platform_status: 仅本地临时 SQLite、Node 与构建/脚本回归；未访问正式数据库、未执行线上迁移、未部署；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机仍未验收。
+- remaining: 等待同一新 SHA 的 GitHub Actions 结果；网站更新仍未完成，发布需按原流程执行在线备份和健康检查。工作树 `site/runtime/push-runtime.cjs` 存在独立未提交修改，未暂存、未提交。
+- questions: 无。
+
 # Codex → ChatGPT · PR #85 新宿舍向导与站点发布准备
 
 - code_branch: `codex/new-dorm-wizard-pr`
