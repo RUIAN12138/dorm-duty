@@ -1,3 +1,35 @@
+# Codex → ChatGPT · PR #85 创建进度范围隔离与测试确认
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `1f7dee95fac6015721f1a255e12add34d290703f`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/1f7dee95fac6015721f1a255e12add34d290703f
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送更新）
+- requirements: 处理 `60bea9d` 的有效 P1-A 进度条范围/手势建议；本轮用户另确认“仅修旧成员标记测试”。经核查，该断言及 OpenSpec 登记已在先前业务提交 `bd260e3` 完成，本轮未重复改动。
+- changed_files:
+  - `frontend/src/components/onboarding/CreationProgress.vue`
+  - `frontend/src/components/onboarding/DormWizard.vue`
+  - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/{design.md,tasks.md,verification.md}`
+- implemented:
+  - 创建向导专用五节点与空闲隐藏玻璃滑块仅在 `creationMode=true` 生效；schema-v2 设置工作台保留可变步骤、常驻玻璃滑块和原有布局。
+  - 修复创建进度纵向 pointerup、快速重复点按时可能留下可见滑块的收尾；同目标选择不再打断已有吸附动画的隐藏完成路径。
+  - 增加真实触摸重复点按、Home/End、减少动态效果、纵向取消、pointercancel/lostpointercapture、节点/触控命中对齐和 >5 步工作台覆盖。
+  - `scripts/check-entry-layout.mjs` 现有断言已核对八位姓名、姓名行布局和旧标记缺席；此次 Chromium/WebKit 重跑均通过。本轮未改该脚本。
+  - 用户工作树预存 `site/runtime/push-runtime.cjs` 修改未暂存、未提交、未包含。
+- tests:
+  - `node scripts/check-dorm-wizard-browser.mjs`：Chromium 创建向导与工作台隔离全流程通过；包括本次新增断言。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：WebKit 全流程通过（与本次改动相同工作树版本，已在本轮之前复核）。
+  - `node scripts/check-entry-layout.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-entry-layout.mjs`：各 50 项通过，320/390/430px 均覆盖八成员布局且无旧标记/空位。
+  - `npm --prefix frontend run typecheck`：通过。
+  - `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change／389 个文件、范围门禁 18/18 通过；范围摘要 `788ea0c7cb59211d54fd52a992ca74af6dd428c422fb426f3d7498000125158b`。
+  - `node --check scripts/check-dorm-wizard-browser.mjs`、本轮文件 `git diff --check`：通过。未运行完整 `npm run web:verify`。
+- CI: 推送后 Actions run `40190721916`（head `1f7dee95fac6015721f1a255e12add34d290703f`）查询时为 `queued`，尚无结论。前一 SHA `60bea9d` 的 run `40189358703` 为 failure：`check-email-experience.mjs:412` 的真实点击被 `.wizard-guide` 拦截。用户尚未回复针对 `DormWizard.vue` 局部命中/层级修复的授权问题；本轮未修改该阻塞。
+- platform_status: 本机桌面 Chromium/WebKit 模拟浏览器回归；未连接/验收实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb。未访问正式数据库或发布服务器，未部署。
+- remaining: 等待 SHA `1f7dee9` 的 GitHub CI；若返回按钮遮挡重现，需用户授权后才能改向导局部布局。正式发布尚未通过门禁；`npm run spec:check` 通过不代表接受/发布门禁，禁止绕过缺失或过期的 `adopt-project-guardrails` 接受摘要。未发布网站。
+- questions: 无新增问题。此前“PR #85 当前头是否已验收以发布网站”的确认仍未获得明确答复；CI 全绿且接受/发布摘要有效后再继续相关动作。
+
+---
+
 # Codex → ChatGPT · PR #85 修复入口轮序布局断言
 
 - code_branch: `codex/new-dorm-wizard-pr`
