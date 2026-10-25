@@ -18,10 +18,10 @@
   - `node scripts/check-ios-chat-motion.mjs`：Chromium 19/19；`DORM_BROWSER=webkit node scripts/check-ios-chat-motion.mjs`：WebKit 19/19。两引擎无运行时错误；键盘前后可见消息锚点均为 y=242。聊天动效测试帧样本：Chromium p95=9.1ms、最大16.7ms；WebKit p95=18ms、最大34ms（1个间隔超过32ms）。
   - `npm run web:verify`：退出码0，Web 构建和完整回归清单通过。
   - `npm run spec:check`：通过；OpenSpec 19/19、范围检查386项、范围门禁18项通过。两个脚本 `node --check` 与 `git diff --check` 通过。
-- CI: 新 SHA `ca54403d48d5005bc95f5b5b7f85e158926e7082` 已推送到 PR #85；GitHub Actions run `40181083070` 正在运行。先前 `40180088090` 对应父 SHA `4cc4e625986285fd4d2eefa47693499484763a10`，其 `spec-contract`、`android` 通过，`web-and-business` 与 `conversation-motion` 失败；本提交仅修复获准的两项检查，需以新 SHA 的 CI 结果验收。
+- CI: 新 SHA `ca54403d48d5005bc95f5b5b7f85e158926e7082` 的 GitHub Actions run `40181083070` 已完成但结论为 failure：`android`、`spec-contract` 成功；`web-and-business` 在范围外 `scripts/check-companion-browser.mjs:232` 失败（快捷留言可见性断言）；`conversation-motion` 在范围外 `scripts/check-chat-motion-continuity.mjs:192` 失败（取消后的卡片退场帧断言）。该工作流的 `scripts/check-ios-chat-motion.mjs` 通过并生成19项 Chromium 结果；本地获准的任务详情与聊天动效检查也分别在 Chromium/WebKit 通过。上述两项新增失败尚未获准修改。
 - platform_status: 本地桌面 Chromium 与 WebKit 自动化通过；不是实体 iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机验收。网站未更新，未运行线上迁移，未访问正式数据库。
-- remaining: 等待 PR #85 的新 SHA CI 完成。只有 CI 通过且服务器 SSH 控制套接字真实可用后，才按既有明确授权备份、执行发布和健康检查。工作树中用户既有未提交 `site/runtime/push-runtime.cjs` 修改未暂存、未提交、未包含在该 SHA。
-- questions: 当前没有新增产品决策；部署仍受新 SHA CI 与有效 SSH 连接门禁约束。
+- remaining: PR #85 仍未全绿；等待用户是否授权只修以上两个额外浏览器检查。网站未发布。SSH 控制套接字当前存在，但只有 CI 通过后才按既有明确授权备份、执行发布和健康检查。工作树中用户既有未提交 `site/runtime/push-runtime.cjs` 修改未暂存、未提交、未包含在该 SHA。
+- questions: 是否允许仅修改 `scripts/check-chat-motion-continuity.mjs` 与 `scripts/check-companion-browser.mjs` 中的两项测试检查；未收到明确授权前保持不改。CHATGPT_REVIEW 当前 `reviewed_code_sha=1cb5c33b5534bf477e50caaee5809efbb57f24f4`，早于本交接 SHA，不能视为对本次代码的评审。
 
 # Codex → ChatGPT · 日历订阅迁移测试夹具修复
 
