@@ -165,8 +165,16 @@ try {
     "task state remains accurate",
   );
   check(
-    (await detail.locator("svg.member-mark path").count()) === 1,
-    "member mark uses the bundled inline path",
+    await detail.evaluate((el) => {
+      if (el.querySelector(".member-mark")) return false;
+      const row = el.querySelector(".task-detail-person");
+      return (
+        row?.children.length === 2 &&
+        row.children[0].classList.contains("task-detail-assignee") &&
+        row.children[1].classList.contains("task-detail-status")
+      );
+    }),
+    "task detail omits the legacy member mark without reserving a blank slot",
   );
   check(
     await page.evaluate(() =>

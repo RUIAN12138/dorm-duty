@@ -24,3 +24,15 @@
 - `npm run spec:check`：通过；包含 OpenSpec 严格校验、当前批次范围检查及 18 项范围门禁测试。
 
 限制：自动化夹具验证不等于 WebKit/iOS、Android WebView 或 HarmonyOS ArkWeb 真机验收；本变更没有运行时产品代码差异。
+
+## 用户另行授权的两个浏览器检查
+
+- `scripts/check-task-detail.mjs`：断言详情不渲染旧成员标记，且负责人行只包含姓名与任务状态，避免旧图标移除后留下空位；没有修改产品展示代码。
+- `scripts/check-ios-chat-motion.mjs`：键盘紧凑布局中返回按钮有意隐藏且不可交互，检查改用真实 Escape 关闭路径；之后恢复模拟的 Visual Viewport，验证面板完成收起及共享球球返回。
+- Chromium：任务详情 14/14；聊天动效 19/19，通过且无运行时错误。
+- WebKit：任务详情 14/14；聊天动效 19/19，通过且无运行时错误。聊天历史锚点模拟键盘前后均为 y=242；Chromium 帧间隔 p95=9.1ms、最大16.7ms，WebKit p95=18ms、最大34ms，WebKit 有1个采样间隔超过32ms。
+- `npm run web:verify`：退出码0，完整 Web 构建和回归清单通过。
+- `npm run spec:check`：通过；严格 OpenSpec 19/19、范围登记386项文件以及18项范围门禁检查通过。
+- `node --check scripts/check-task-detail.mjs`、`node --check scripts/check-ios-chat-motion.mjs`、`git diff --check`：通过。
+
+限制：以上是桌面 Chromium/WebKit 自动化模拟，不等于 iPhone、Android WebView 或 HarmonyOS ArkWeb 真机验收；没有修改运行时产品代码。
