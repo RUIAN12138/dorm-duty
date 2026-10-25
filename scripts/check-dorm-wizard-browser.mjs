@@ -327,6 +327,11 @@ try {
   await p.locator(".dorm-wizard").waitFor();
   check(!new URL(p.url()).searchParams.has("preview"), "local preview shortcut opens the wizard and cleans its query flag");
   check(await p.getByLabel("宿舍名称",{exact:true}).isVisible(),"reopened local wizard retains the direct first-question entry");
+  await p.getByTestId("entry-back").click();
+  await p.locator(".dorm-wizard").waitFor({state:"detached"});
+  check(await p.locator(".dorm-wizard").count()===0,"creation back control exits the first step to the prior entry surface");
+  await p.goto(origin + "/?preview=new-dorm");
+  await p.locator(".dorm-wizard").waitFor();
   await p.getByRole("button",{name:"退出配置",exact:true}).click();
   await p.locator(".dorm-wizard").waitFor({state:"detached"});
   await p.getByTestId("open-tools").click();

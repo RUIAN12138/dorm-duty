@@ -341,3 +341,10 @@
 - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）均通过。新增断言覆盖真实触摸重复点按、键盘 Home/End、prefers-reduced-motion、纵向 pointerup、pointercancel/lostcapture、五节点与触控目标对齐，以及工作台可变步骤超过五项时保留常驻玻璃和完整步骤。
 - `npm --prefix frontend run typecheck`、`git diff --check`、`node --check scripts/check-dorm-wizard-browser.mjs` 通过；OpenSpec 19项严格验证通过。范围门禁摘要随后复验并补记。
 - CI 的 `web-and-business` 状态待最终确认；这些是隔离浏览器桌面引擎移动视口模拟，不等于实体 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 验收。
+
+## 2026-10-25 · 创建向导返回操作命中修复
+
+- GitHub Actions 原始日志显示邮件准入流程中的 `entry-back` 虽可见，但被向导头部 `.wizard-guide` 截获点击。现在创建向导头部提供专属返回按钮；中间步骤返回前一步，第一步回到宿舍入口。向导打开时不再挂载底层 `EntryBack`，避免两个层级重叠。
+- `scripts/check-dorm-wizard-browser.mjs` 增加首步返回后离开本地创建向导的回归断言；`node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）均以退出码 0 完成，新增返回断言通过。`npm --prefix frontend run typecheck`、`npm run spec:validate`（19/19）、脚本语法检查及 `git diff --check` 通过。
+- 本机 `node scripts/check-email-experience.mjs` 在进入浏览器步骤前由 Node v26.4.0 的隔离 HTTP fixture 抛出 `ERR_HTTP_HEADERS_SENT`（`scripts/check-email-experience.mjs:100`），因此未能本机复测该脚本；原 GitHub run `40190721916` 确认旧的 `entry-back` 点击命中了向导头部。本修复等待新提交 CI 验证。
+- 仅修改新版创建流程与创建专属回归，未改旧宿舍业务或正式数据库；移动端真机状态待设备验收。

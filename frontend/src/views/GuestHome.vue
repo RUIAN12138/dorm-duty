@@ -1103,7 +1103,7 @@ onUnmounted(() => {
       }"
     >
       <EntryBack
-        v-if="entryBackVisible && !emailOpen && !recoveryOpen"
+        v-if="entryBackVisible && !creatingRoom && !emailOpen && !recoveryOpen"
         :target="entrySurface"
         :disabled="loading || !!entryEmail?.busy"
         @back="entryBack"
