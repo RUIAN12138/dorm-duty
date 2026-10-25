@@ -14,6 +14,13 @@
 - `npm run web:verify`：退出码 0；前端、Worker、邮件运行模块构建通过，完整 Web 验证清单全部通过。构建保留既有 GuestHome 大于 500KB 的 chunk 提示；测试输出的 SMTP 失败事件来自隔离注入场景，不代表真实邮件已发送。
 - `npm run spec:validate`：19/19 通过。
 - `git diff --check`：通过。
-- `npm run spec:scope`：被工作树中独立的用户本地修改 `site/runtime/email-runtime.cjs` 阻断；该文件不属于本变更且未读取、修改、暂存或提交。本变更所需代码路径均在本变更的显式范围中。
+- 后续用户授权的日历订阅迁移夹具修复单独登记在 `scope.json`，不包含运行时代码或正式数据库操作。
+
+## 用户授权的日历订阅迁移夹具修复
+
+- `node site/scripts/check-calendar-subscription.mjs`：10/10 用例、1069 项断言通过。迁移用例先构造旧版 0007 数据库，再关闭并通过正式 `openDatabase()` 跑完剩余迁移，然后才调用当前 Worker；关闭并重开文件数据库后验证既有记录与订阅凭证持久性。
+- `npm run web:verify`：退出码 0，前端、Worker、运行模块构建与完整 Web 验证清单全部通过；保留既有 `GuestHome` 大 chunk 警告。隔离 SMTP 错误事件为注入测试输出，不代表真实邮件投递。
+- `npm run spec:validate`：19/19 通过。
+- `npm run spec:check`：通过；包含 OpenSpec 严格校验、当前批次范围检查及 18 项范围门禁测试。
 
 限制：自动化夹具验证不等于 WebKit/iOS、Android WebView 或 HarmonyOS ArkWeb 真机验收；本变更没有运行时产品代码差异。

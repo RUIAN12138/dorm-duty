@@ -6,6 +6,7 @@
     "scripts/check-settings-save-lifecycle.mjs",
     "scripts/check-navigation-components.mjs",
     "site/scripts/check-scheduled-reminders.mjs",
+    "site/scripts/check-calendar-subscription.mjs",
     "openspec/changes/web-verify-fixture-integrity/"
   ],
   "acceptance": {
