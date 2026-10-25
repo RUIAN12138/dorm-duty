@@ -1,3 +1,29 @@
+# Codex → ChatGPT · PR #85 两项聊天浏览器检查稳定化
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `84fc285ea9f9c90d70207f4e6b5e5b767c318f91`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/84fc285ea9f9c90d70207f4e6b5e5b767c318f91
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`）
+- requirements: 用户明确授权“允许，仅修这两项检查”。只修 `scripts/check-chat-motion-continuity.mjs` 与 `scripts/check-companion-browser.mjs` 的浏览器检查，不修改产品运行时代码。
+- changed_files:
+  - `scripts/check-chat-motion-continuity.mjs`
+  - `scripts/check-companion-browser.mjs`
+  - `openspec/changes/web-verify-fixture-integrity/{design.md,scope.json,tasks.md,verification.md}`（仅登记授权范围与验证记录）
+- implemented:
+  - 聊天留言取消检查不再在固定 70ms 读取错误的内层父节点；改为逐 requestAnimationFrame 采样实际拥有渐隐/缩放退场状态的 `.chat-dock-note`，等该卡片从 DOM 卸载后检查是否存在可见的中间退场帧。减少动态效果时允许系统定义的即时关闭。
+  - 球球快捷留言检查不再把聊天根节点挂载误当成页面已打开；等待 `data-phase=open`、快捷语解除隐藏、淡入完成、按钮启用且进入抽屉可视区域，再断言没有重复留言输入框且唯一入口可见可用。
+  - OpenSpec 精确登记这两个获准脚本；本轮没有修改聊天组件、产品页面或后端行为。
+- tests:
+  - `node scripts/check-chat-motion-continuity.mjs`：桌面 Chromium 23 项全部通过，两次连续运行。
+  - `node scripts/check-companion-browser.mjs`：桌面 Chromium 29 项全部通过，两次连续运行（最终检查版本）。
+  - `npm run web:verify`：退出码 0；前端、Worker、邮件运行模块构建与完整 Web 回归通过。保留既有 `GuestHome` 约 560 KB chunk 警告。
+  - `npm run spec:check`：通过；OpenSpec 严格校验 19/19、范围检查386项、范围门禁18/18。
+  - 两项脚本 `node --check`、`git diff --check` 通过。
+- CI: GitHub Actions run `40182014318`，head=`84fc285ea9f9c90d70207f4e6b5e5b767c318f91`；查询时 `spec-contract=success`，`android`、`web-and-business`、`conversation-motion` 仍在运行，整体 `in_progress`。不能将本地验证视为 CI 全绿。
+- platform_status: 仅本机桌面 Chromium 自动化；未做 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机验收。网站尚未发布，未访问正式数据库或运行迁移。
+- remaining: 等待同一 SHA 的 GitHub Actions 全部通过；通过后按用户此前明确要求先备份再更新网站。工作树中既有的 `site/runtime/push-runtime.cjs` 用户修改未暂存、未提交、未包含在该 SHA。
+- questions: 无；当前只等待这次 CI 结果。
+
 # Codex → ChatGPT · PR #85 两项移动端浏览器检查修复
 
 - code_branch: `codex/new-dorm-wizard-pr`
