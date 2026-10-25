@@ -389,3 +389,31 @@
 - platform_status: 仅隔离桌面 Chromium/WebKit 移动视口模拟；未做 iPhone Safari/PWA、vivo Android WebView 或 HarmonyOS ArkWeb 真机验收。未部署、未连接生产数据库。
 - remaining: CI 仍待完成。`check-email-experience.mjs:412` 指向新建向导返回按钮与引导头部的真实指针拦截；虽位于允许的创建页范围，但尚未收到对此产品代码修复的明确授权，因此未修改。网站尚未更新；不绕过 CI 或发布门禁。
 - questions: 是否授权仅在新版创建向导调整 `.wizard-guide` 与入口返回按钮的遮挡关系，并补充回归后重跑 CI？
+
+# Codex → ChatGPT · PR #85 修复新宿舍向导返回遮挡
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `cf2fdb5971d17e6fbd1d7deca99e31a6c79bbd15`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/cf2fdb5971d17e6fbd1d7deca99e31a6c79bbd15
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送）
+- requirements: 修复 PR #85 既有创建向导入口返回按钮被向导头部截获的问题；保持创建草稿与旧宿舍业务不变。用户同时澄清登录恢复场景为 Android 安装版强制停止后重新启动，本轮只读排查该场景，没有改 auth/session 模块。
+- changed_files:
+  - `frontend/src/components/onboarding/DormWizard.vue`
+  - `frontend/src/views/GuestHome.vue`
+  - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/{tasks.md,verification.md}`
+- implemented:
+  - 新建向导头部现在提供创建流程专属返回按钮：中间步骤回前一步，首步退出向导返回入口；向导可见期间不再挂载底层 `EntryBack`，避免重叠命中。
+  - 创建专属隔离浏览器回归新增首步返回测试；未更改范围外的 `check-email-experience.mjs`，未改正式聊天/球球组件。
+  - Android 只读源码核对：`MainActivity` 启用 WebView DOM Storage、接受 Cookie，在 `onPause()` flush Cookie；未发现 force-stop 时主动清理 WebView 数据的调用。普通账号 `/auth/login` bearer session 有效期 7 天；邮箱会话服务端和 Cookie 为 30 天。此源码现象表示短时间 force-stop 本身不应删掉同源凭证，但无法解释用户设备上的实际重新登录原因。
+- tests:
+  - `node scripts/check-dorm-wizard-browser.mjs`（Chromium）：完整隔离向导回归退出码 0，新增首步返回断言通过。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）：完整隔离向导回归退出码 0，新增首步返回断言通过。
+  - `npm --prefix frontend run typecheck`：通过。
+  - `npm run spec:validate`：19/19 通过；`npm run spec:scope`：18 changes / 389 files，digest `d95ae891665784d8b82051f240300c68f8ddb5f540c7dc091e81ee4d81c40cda`；`node --check scripts/check-dorm-wizard-browser.mjs`、`git diff --check`：通过。
+  - `node scripts/check-startup-session.mjs`：13 项会话/API 与 7 项路由恢复检查通过；这使用浏览器 storage fixture，不是 Android WebView 进程重启测试。
+  - 本机 `node scripts/check-email-experience.mjs` 在浏览器步骤前由 Node v26.4.0 fixture 在 `scripts/check-email-experience.mjs:100` 报 `ERR_HTTP_HEADERS_SENT`，本机无法复测；旧 CI run `40190721916` 的原始日志确认 `entry-back` 命中 `.wizard-guide`。未用 force click 或改测试掩盖。
+- CI: 新 GitHub Actions run `40194879674`，head=`cf2fdb5971d17e6fbd1d7deca99e31a6c79bbd15`，最后查询为 `in_progress`；不能报告全绿。旧 SHA `1f7dee9` 的 conversation job 曾在范围外 `scripts/check-companion-tap-arbitration.mjs:184` 等待聊天关闭超时，本轮未动该正式聊天模块或检查。
+- platform_status: 仅本机桌面 Chromium 与 WebKit 自动化；无 ADB、无连接的 Android 安装设备，未完成 Android force-stop/relaunch 实测，也未进行 iPhone Safari/PWA 或 HarmonyOS ArkWeb 真机验收。未访问正式数据库、未合并 main、未部署。
+- remaining: PR #85 CI 待 run `40194879674` 结束；网站未部署，发布门禁未绕过。Android 安装版的登录恢复仍待设备复现；源代码与浏览器 storage fixture 尚不能证明真机持久性。协调分支上一份 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=1f7dee95fac6015721f1a255e12add34d290703f`，早于本提交；请对本 SHA 复评。业务工作树预存未提交 `site/runtime/push-runtime.cjs` 用户修改仍未触碰、未暂存、未包含。
+- questions: 若 Android 设备短时强停后仍要求重新登录，需要在用户设备上复现并观察 `/email/me`、`/auth/me` 返回状态与本地存储是否存在；若需修改 session/auth 前端代码，当前 `USER_REQUIREMENTS.md` 将本轮范围限定为后端与新版创建页，需用户明确扩展范围。不要要求用户发送 Cookie、token 或 API 凭据。
