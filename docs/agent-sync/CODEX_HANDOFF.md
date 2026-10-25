@@ -331,3 +331,29 @@
 - questions: 是否仅授权修改上述两项测试检查；在收到明确授权前不改这两个脚本或产品代码。
 
 # Codex → ChatGPT · PR #85 两项聊天浏览器检查稳定化
+
+# Codex → ChatGPT · PR #85 创建进度空闲状态精修
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `60bea9d021a09811ad86009ecf23c77cabbfd06c`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/60bea9d021a09811ad86009ecf23c77cabbfd06c
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；已推送更新）
+- requirements: 处理最新可用评审 `reviewed_code_sha=02b579acf22d5a675c17cf810fff7b11940c407e` 的 P1-A，并遵循用户创建页最多五步、黑白节点、静止隐藏玻璃滑块的要求；同时包含先前已单独授权并在 `bd260e3` 完成的轮序测试断言修复。仅改新版创建专属组件、对应浏览器测试和 OpenSpec。
+- changed_files:
+  - `frontend/src/components/onboarding/CreationProgress.vue`
+  - `scripts/check-dorm-wizard-browser.mjs`
+  - `openspec/changes/new-dorm-wizard/{design.md,tasks.md,verification.md}`
+- implemented:
+  - 进度轨道静止时隐藏玻璃滑块；用户按压/点按时显现，拖动仍实时跟随并联动页面，释放后吸附并柔和隐藏。
+  - 进度轨道上最多显示五个黑白极简圆点节点，无数字、文字或图标；保持 20px 轨道与 36px 滑块视觉尺寸及 44px 以上触控区域。
+  - 增加创建专属 Chromium/WebKit 自动化检查并在 OpenSpec 记录；没有修改正式页面、公共组件、旧宿舍数据、后端或生产数据库。
+  - 工作树中既有未提交 `site/runtime/push-runtime.cjs` 用户改动未触碰、未暂存、未包含。
+- tests:
+  - `node scripts/check-dorm-wizard-browser.mjs`：隔离 Chromium 移动视口的向导全套浏览器回归通过，包含五节点、空闲隐藏、按压显现、释放吸附后隐藏及既有草稿/预览隔离流程。
+  - `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：隔离 macOS WebKit 移动视口同套回归通过。
+  - `node scripts/check-entry-layout.mjs`：50 项 Chromium 检查通过，覆盖 320/390/430px；包括先前授权修复的 8 名成员布局断言。
+  - `npm run spec:validate`：19/19；`npm run spec:scope`：18 个 change、389 个文件，digest `a4e4ba5e38e749683469cb81221169c20b918ebac36cab6f033d2252df1ff5c7`；`npm --prefix frontend run typecheck`、`git diff --check` 通过。
+- CI: Actions run `40189358703` 对应 `60bea9d021a09811ad86009ecf23c77cabbfd06c`；最后查询时 `spec-contract`、`web-and-business`、`conversation-motion`、`android` 均为 `IN_PROGRESS`，没有全绿结论。此前 `bd260e3` 的 `web-and-business` 在 `scripts/check-email-experience.mjs:412` 失败：真实入口返回按钮被 `.wizard-guide` 遮挡并导致 Playwright 点击超时；该缺陷未在本轮修改。
+- platform_status: 仅隔离桌面 Chromium/WebKit 移动视口模拟；未做 iPhone Safari/PWA、vivo Android WebView 或 HarmonyOS ArkWeb 真机验收。未部署、未连接生产数据库。
+- remaining: CI 仍待完成。`check-email-experience.mjs:412` 指向新建向导返回按钮与引导头部的真实指针拦截；虽位于允许的创建页范围，但尚未收到对此产品代码修复的明确授权，因此未修改。网站尚未更新；不绕过 CI 或发布门禁。
+- questions: 是否授权仅在新版创建向导调整 `.wizard-guide` 与入口返回按钮的遮挡关系，并补充回归后重跑 CI？
