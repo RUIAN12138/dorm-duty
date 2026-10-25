@@ -469,3 +469,34 @@
   - 正式网站未部署。`npm run spec:gate -- --gate publish` 对当前 digest `affb82279d84818d8be969a8a2d13ebe7c734c4dfb7881ef48911f6feb33106a` 拒绝：`adopt-project-guardrails` 的用户接受摘要缺失/过期；不能绕过或复用旧摘要。
   - Android 立即强停重开掉登录需设备侧检查 Cookie/本地存储是否恢复，以及 `/email/me`、`/auth/me` 的状态；不收集凭证。修复认证代码需用户明确扩展当前协调修改范围。
 - questions: 是否授权只修改 `scripts/check-email-experience.mjs`，把第 441 行后的旧表单检查改为实际创建向导流程？若要处理 Android 登录恢复，是否将 auth/session 前端模块加入本轮授权范围并安排设备复测？
+
+# Codex → ChatGPT · Android 邮箱会话 Cookie 强停恢复候选修复
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `856165d83ba2ad8a0f4909c97f2160c4b53cb1dd`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/856165d83ba2ad8a0f4909c97f2160c4b53cb1dd
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85（OPEN；base `codex/refine-card-feedback`；head 已更新至本 SHA）
+- requirements: 用户明确要求解决 Android 安装版强制关闭后立即重新打开仍要求登录；已澄清登录方式为邮箱验证码。该直接用户要求扩展本轮到邮箱会话恢复所需的前端与原生 Android 桥接，不涉及正式数据或会话授权策略。
+- changed_files:
+  - `frontend/src/api/email.ts`
+  - `frontend/src/api/logout.ts`
+  - `frontend/src/interaction/persistentSession.ts`
+  - `native/android/app/src/main/java/cn/lundao/dorm/MainActivity.java`
+  - `scripts/check-startup-session.mjs`
+  - `openspec/changes/startup-session-optics-preview/{design.md,proposal.md,tasks.md,verification.md}`
+- implemented:
+  - 前端新增可选 AndroidX WebMessageListener Cookie flush 桥接；邮箱验证码 `/email/verify` 成功收到 Set-Cookie 后请求原生 `CookieManager.flush()`，显式邮箱退出清 Cookie 成功后也刷写。桥接只传固定命令和请求 ID，不向 JS 暴露 Cookie、邮箱或 token；Web/旧 Android WebView 无桥接时安全降级；保留 `onPause()` 既有刷新。
+  - 核对同源请求使用 `credentials: same-origin`，服务端邮箱 cookie/server session 有效期均为 30 天。`email_entry_policy` 的旧 session 删除只在 required 由 0 转 1 的单次切换执行；隔离 runtime 重启后账号仍登录。未发现 app 普通强停路径主动触发邮箱退出；仅显式登出或有未完成撤销标记会撤销邮箱会话。
+  - 该桥接位于原生 APK；只发布网站不会把 `DormNativeSession` 加进用户已安装 APK，所以候选修复必须随新版签名 Android 安装包提供并在 vivo 实测。
+  - 提交只包含上述 9 个文件。`site/runtime/push-runtime.cjs` 既有用户修改未暂存、未提交、未触碰。
+- tests:
+  - `npm run web:verify`：退出码 0；前端、Worker、邮件运行时构建及 web 验证全部通过。
+  - `npm --prefix frontend run typecheck`：通过。
+  - `npm run spec:validate`：19/19；`npm run spec:scope`：18 changes / 389 files，digest `91b99b1efce3d3ebb0ff46b4bc3448ccb39d34acf7b2a134907e6a3ffb838949`。
+  - `node scripts/check-startup-session.mjs`：26 项，覆盖有限桥接消息、桥接失败安全降级、验证码后等待刷写确认和显式退出后刷写；使用模拟桥，不是真实 WebView。
+  - `node site/scripts/check-email-accounts.mjs`：108 项；`node site/scripts/check-email-entry-policy.mjs`：39 项；`node site/scripts/check-auth-boundaries.mjs`：89 项，均使用隔离数据库/模拟邮件；包含运行时重启保留服务端邮箱会话。
+  - Android Studio JBR + 本机 SDK：`./gradlew --offline :app:assembleDebug` BUILD SUCCESSFUL；仅构建，不是 vivo 运行验证。`adb devices -l` 无连接设备。`git diff --check` 通过。
+- CI: 新 Actions run `40202125914`，head=`856165d83ba2ad8a0f4909c97f2160c4b53cb1dd`；查询时 `spec-contract=success`，`web-and-business`、`conversation-motion`、`android` 仍 pending，不可报告全绿。前一个 SHA `ddf9a99...` 的 CI 已完成 failure，失败项分别为 `scripts/check-email-experience.mjs:441` 旧表单 selector 与 `scripts/check-companion-tap-arbitration.mjs:184` 等待 `.companion-chat` detach；未修改这两个未获授权的范围外测试/产品模块。
+- platform_status: 本机桌面 Chromium/WebKit/隔离服务测试与 Android Debug 编译；没有连接 vivo/Android 设备，邮箱验证→强停→重开→`/email/me` 实测未完成。iPhone PWA 与 HarmonyOS 未验证。未访问正式服务器或数据库；未部署。
+- remaining: 根因仍未通过目标设备证实。需安装含新原生桥接的签名 APK，在用户测试账号上完成邮箱验证码登录、强制停止、立即重开，并仅记录 `/email/me` 是否登录（不得采集 Cookie/token）；随后验证显式登出仍会撤销。当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=1f7dee95fac6015721f1a255e12add34d290703f` 早于当前 SHA。PR CI 未全部完成，不合并、不部署。
+- questions: 若要确认真实故障已解决，需要 vivo 设备/安装测试签名版本或通过现有正式签名渠道更新本机 APK；不需要用户提供任何凭证。
