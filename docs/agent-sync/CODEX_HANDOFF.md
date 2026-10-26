@@ -625,3 +625,19 @@
 - platform_status: 桌面Chromium/WebKit、移动视口与隔离SQLite；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未验证。没有真实AI/通知调用，不触及生产数据。
 - remaining: 用户对轻量刻线及第二页单任务切换的视觉验收、真实设备触摸/键盘；CI最终结果待确认。CHATGPT_REVIEW仍针对1f7dee95fac6015721f1a255e12add34d290703f，请按本次新SHA审查。
 - questions: 暂无。只提交推送受控开发分支及此报告，未创建PR、合并或部署。
+
+
+# Codex → ChatGPT · bbbfcfa 最终 CI 与范围外测试定位（2026-10-26）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `bbbfcfadca98690585f3a3dffd906808a99fbb95`（业务代码无新增提交，本轮仅只读定位及交接同步）
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/bbbfcfadca98690585f3a3dffd906808a99fbb95
+- related_pr: 无；未创建/更新PR、未合并main、未部署或访问生产数据库。
+- requirements: 用户“继续”，先完成当前远端CI核对，不扩大上一轮创建向导/预览/第二页切换范围。
+- changed_files: 仅协调分支此交接文件。业务工作树保持干净；未修改任何测试断言。
+- implemented: 本轮没有新产品实现。已核对远端业务SHA与交接一致；最新评审仍针对旧SHA `1f7dee95fac6015721f1a255e12add34d290703f`，没有针对当前代码的新评审。
+- tests: 本地直接调用现有 `companionFactReply()`，仅使用合成身份“甲”和一项合成任务。断言“今天做什么？”返回认证事实且不含模拟模型固定回复；“怎么改轮序？”返回null，走后续模型路径。两项断言通过，无网络、无数据库读写。已对照CI失败时真实UI输出和测试夹具源码。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40297209216 已completed/failure，head SHA精确为本节code_sha。android、spec-contract、conversation-motion成功；web-and-business失败于 `scripts/check-companion-chat-browser.mjs:1649` 等待“有事就问我吧。”30秒超时。该段随机选“今天做什么”或“怎么改轮序”，但无论选中哪个都等待模拟模型固定回复。现有 `scripts/companion-ai.mjs:76` 起对当前任务窄意图使用认证事实，故选中前者不会返回该固定句。CI现场已展示“甲，这是你的当前任务。”与地板/洗手池/厕所/抬水状态，属于测试预期未覆盖合法事实回复，不应删除事实回答或靠重跑赌随机通过。前一SHA聊天关闭超时未在本次conversation-motion复现，不称其根因已修复。
+- platform_status: 本轮仅GitHub CI日志、源码及本地纯函数验证；未新增真机验证。既有桌面浏览器证据不变。
+- remaining: 产品视觉/触摸验收仍待。建议只修上述快捷语用例的回复断言，使其按所选问题验证事实回复或模型回复，并继续核对用户消息一次发送；不修改其他等待点、产品代码或通知/权限规则，随后跑相关浏览器测试与最终SHA的CI。
+- questions: `USER_REQUIREMENTS.md:11` 明确既有范围外测试只能只读/运行，编辑须用户另行授权；上述聊天脚本不在本轮scope内，当前没有对此新断言的单独授权。待用户确认仅修该断言及其专属OpenSpec范围登记。未擅自编辑 `CHATGPT_REVIEW.md`。
