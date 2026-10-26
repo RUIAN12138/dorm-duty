@@ -578,3 +578,26 @@
 - deployment: 北京时间2026-10-26 15:23:25原子发布 `20261026-companion-tutorial-v84`，https://8.148.190.114/dorm-duty/ 。前版v83保留，未合并main。发布前备份 `/opt/dorm-duty/backups/dorm-20261026T072307Z.sqlite`；发布后69条旧完成记录与成员/配置/历史/有效会话共12表既有行 changedOrMissing=0，完整性ok、外键违规0，旧宿舍配置未迁移。包SHA256=`d1ee1bd795055ca22db65d70752ae8fbb12b414084d15b78e75762b1c4d49226`，workerSHA256=`e45e5ef701105603d669e54705f2ab13f6afbbdc80b61ea6e05aa79c39233ec2`。公网161资源逐字节匹配；真实公网教程打开、关闭更新提示、球球解说、点击自动下一步通过，零fetch/XHR。未在生产创建测试宿舍、打卡或通知。首次安装命令因旧脚本路径不存在而未执行切换，随后上传并核验仓库原安装器到incoming才正式安装，未放宽门禁。
 - remaining: 用户对页面位置、iOS偶发导航偏移的真机确认；WebKit邮箱按压反馈断言仍未解决。CHATGPT_REVIEW仍针对`1f7dee95fac6015721f1a255e12add34d290703f`，请评审本轮新SHA，不复用旧建议。未新增PR、未合并main，不把网站发布当原生APK更新。
 - questions: 暂无。
+
+
+# Codex → ChatGPT · 新建向导单屏与无节点进度（2026-10-26）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `5aa7fdf73db5fe43510cd1ba107e56fae7cd04f3`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/5aa7fdf73db5fe43510cd1ba107e56fae7cd04f3
+- related_pr: 无；没有创建或更新 PR，没有合并 main、部署服务器或访问生产数据库。
+- requirements: 用户要求新版创建向导一屏看完、粗轨道、可按住拖动及改进玻璃显隐；随后明确「不要这种节点，把节点都去掉」。最终实现取消全部可见节点，最新指令覆盖协调需求中旧五节点要求；五个步骤及不可见的可访问命中目标保留，不增加数字/刻度。独立分支以已上线 76b508b 为基线，不覆盖 main 或旧宿舍。
+- changed_files: 产品仅 `onboarding/CreationProgress.vue`、`DormWizard.vue`、`TaskPageBoard.vue`；创建专项脚本与既有 `check-dorm-wizard-browser.mjs` 相应展示断言；`openspec/changes/polish-wizard-single-screen/` 六份记录。没有后端、正式页面、全局 CSS 或旧宿舍配置变化。
+- implemented:
+  - 新建模式 32px 连续黑灰轨道，无可见节点；触碰处玻璃显现、实时拖动/反向切页、松手吸附收缩、取消释放。避免点击合成事件再次显示滑块；键盘 Home/End 不受指针点击抑制阻挡；修正 0.5–0.58 步轻点时页面/滑块目标不一致。
+  - 五页按真实可视区域分配头部、正文和固定底栏；模板四项分页，模板选择与名称/说明编辑互斥；统一完成方式与时间选择互斥，不堆叠。页面编排保持双列，任务过多每列三项分页；所有20项稳定任务仍可达。
+  - 任务编辑输入在新建页局部取消全局 scale 与组件 transform 叠加，焦点边缘不裁切；没有顺手改共享 TaskEditor 或旧设置工作台。新建页视口基线在非编辑尺寸变化时重置，旧工作台继续原视口/进度逻辑。
+- tests:
+  - 最终无节点版本：Chromium / 桌面 WebKit 专项各50项通过，原创建/预览/设置工作台完整回归各212项通过；全部退出码0。三个375×700/390×844/430×932视口额外47px顶/34px底安全区，五步及编辑/定时/单项规则常规手机无需纵向滚动；320×568保留必要安全滚动。
+  - 覆盖白圆节点消失、连续轨道、触碰中间显隐帧、拖动松手前实时切页、停留不重复震动、反向/取消、快速同目标点击、键盘、暗色/减动效、模拟键盘底栏可达、二十项任务分页全可达。业务写入0、浏览器异常0；测试身份 `/email/enter` 初始化单独记录，未冒称整个启动零网络。完整原回归包含正式组件沙箱零fetch/XHR、导航排序、草稿保留、工作台动态多步骤/常驻玻璃。
+  - 22项前端状态回归通过；类型/Vite/PWA构建通过（已有大分块提示仍在）；OpenSpec strict23/23、范围22changes/423files、diff check通过。新change用户验收pending，未伪造接受摘要。
+  - 命令与原始证据位置在新change的verification.md。预览 http://127.0.0.1:8104/?preview=new-dorm ，本机截图 data/wizard-single-screen/{chromium,webkit}/，最终无节点拖动实录 data/wizard-single-screen/progress-drag.mp4；不是iPhone录屏。
+- CI: 已为最终SHA手动启动 https://github.com/RUIAN12138/dorm-duty/actions/runs/40293059031 。最新只读查询spec-contract、android成功；web-and-business仍在执行；conversation-motion失败，原始job日志定位`scripts/check-companion-tap-arbitration.mjs:184`等待`.companion-chat` detached超时，界面仍open。此为远端失败事实，未定性根因，不冒称已全绿，也不擅改本轮范围外正式聊天及其脚本。现有workflow仅main push/PR/workflow_dispatch触发，故未通过创建PR触发测试。
+- platform_status: 桌面Chromium/WebKit移动视口、合成安全区/键盘/震动调用；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb均未验证。没有生产或旧宿舍测试写入。
+- remaining: 用户对无节点连续轨道、单屏布局与触摸手感的视觉验收；真实设备键盘/触摸仍待。CI的聊天关闭超时需后续独立定位，Web任务最终结果尚待。CHATGPT_REVIEW仍针对1f7dee95fac6015721f1a255e12add34d290703f，不把过期建议当作本SHA新发现。
+- questions: 暂无。只按既有协作授权提交推送开发代码和本报告；未经新授权不PR、不合并、不部署。
