@@ -696,3 +696,24 @@
 - platform_status: 桌面Chromium/WebKit自动化及隔离SQLite；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb实体设备未测。没有用Android构建结果代替真机。
 - remaining: 等待精确SHA完整CI成功；随后执行已准备的在线备份、原子安装、健康版本检查、旧数据只读保留对比和公网资产逐字节/教程检查。服务器尚v84，v85尚未安装。SSH已恢复。最终结果会另附实际收据。CHATGPT_REVIEW仍旧SHA，不把其视为本提交已评审。
 - questions: 暂无新的用户决策需求。未修改CHATGPT_REVIEW，不触发额外产品改动。
+
+
+# Codex → ChatGPT · v85 已发布与公网核验完成（2026-10-26 21:09 CST）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `e6ebb745cf51aa6d0f2e3e6cb9fbaca546f41cf2`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e6ebb745cf51aa6d0f2e3e6cb9fbaca546f41cf2
+- related_pr: 本轮没有创建/更新PR，没有合并main；用户当前授权网站发布及两项限定CI修正，不扩大到PR。
+- requirements: 履行用户“更新到网站”“允许，仅修这处断言并继续发布”“允许，仅调整 Web CI 时限”的明确授权；不是将“继续”或SSH连接成功解释为发布权限。
+- changed_files: 本次发布相对b19ed0f产品代码无变化；只改Web CI总时限和对应OpenSpec/授权摘要。产品批次包含已交接的创建向导单屏/轨道内部短槽/玻璃触碰显隐、正式组件预览与第二页多任务切换；不会对旧宿舍执行配置迁移。原始产品/测试文件清单见前述各SHA交接。
+- implemented: 2026-10-26T13:08:44.866Z（21:08:44 CST）原子切换至 `/opt/dorm-duty/releases/20261026-wizard-progress-v85`，精确SHA为本节code_sha；上版 `/opt/dorm-duty/releases/20261026-companion-tutorial-v84` 保留供回退。发布包SHA256 `cd42853d7b084740c2b5d7efc3f1cbd48bdc8092aa4e09c4e106cb359a76702a`，本地与incoming一致。正常版本，不带开发入口或预览测试数据。
+- tests:
+  - 发布前在线备份 `dorm-20261026T130843Z.sqlite`（仅服务器保存，未下载真实数据）；备份完整性/外键检查通过。安装后服务器健康正常，Node/SQLite、/dorm-duty/和release SHA正确。
+  - 安装后只读对比备份与当前数据库：12表全部840条既有记录逐行哈希一致，changedOrMissing均0，integrity=ok、foreignKeyViolations=0；包括任务、历史、成员、宿舍、邮箱/成员会话。仅输出统计，不输出身份或凭证内容。无新迁移或预览业务写入。
+  - 公网 https://8.148.190.114/dorm-duty/ 的157项内嵌资源加首页/抬水/日历/教程路由共161项，HTTP状态/类型/字节均与发布包一致。health精确为v85/e6ebb74。
+  - 公网桌面Chromium390×844实际点击练习：关闭版本提示、选值日、点击任务后自动从duty-select进入duty-detail、球球讲解存在、无额外“下一步”；返回练习目录正常。fetch/XHR=[]、browser errors=[]，没有操作真实成员任务。manifest与apple-touch-icon路由200。
+  - 正常包本地隔离新建向导：生产域名条件下无开发入口，五个6×4px内部停靠位、拖动释放前切页、松手隐藏通过；业务写入0。既有创建与正式预览专项两引擎证据见前文。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40326434709 ，head精确本节SHA，completed/success。web-and-business=success（10m51s）、spec-contract=success、conversation-motion=success、android=success。保留全部检查；旧SHA超时不再当作本版结果。发布前再次执行publish gate通过，摘要 `0613d665f9c990c9a9dfd8879a50b881bcb6bf08ee6ff00708e32dd5a2133866`。
+- platform_status: Web正常构建、桌面Chromium公网及Chromium/WebKit隔离自动化已测；Android CI构建/单测/lint通过。实体iPhone Safari/PWA、vivo Android WebView、HarmonyOS ArkWeb未测；不得称各端真机验收完成。旧PWA客户端是否已激活更新仍取决于其更新操作，公网字节核验不证明每台设备缓存已刷新。
+- remaining: 用户对新建向导视觉/拖动、正式预览和多任务切换的实际验收，以及各端真实触摸/键盘验收。产品acceptance仍pending。最新GPT评审仍针对旧1f7dee95；请按本新SHA审查，不重复旧意见或声称本SHA已审。
+- questions: 暂无发布阻塞。当前业务工作树干净；原始本地收据 `data/v85-{final-ci,deployment-receipt,data-retention,public-assets,public-smoke}.json` 与 `v85-publish.log`，仅协调交接文档推送，不提交真实数据/备份/凭证，不修改CHATGPT_REVIEW。
