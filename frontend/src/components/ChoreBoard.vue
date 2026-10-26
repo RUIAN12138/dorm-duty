@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import "../interaction/memberNames.css";
 import { tutorialPracticeKey } from "../interaction/tutorialPractice";
+import TaskSelector from "./TaskSelector.vue";
 import NewTaskPane from "./onboarding/NewTaskPane.vue";
 import TaskWorkspace from "./onboarding/TaskWorkspace.vue";
 import SpotlightTour from "./onboarding/SpotlightTour.vue";
@@ -674,6 +675,7 @@ const personalNext = computed(() =>
 const personalTasks = computed(() =>
   personalToday.value.length ? personalToday.value : personalNext.value,
 );
+const selectedSecondTaskKey = ref<string>();
 const completedOpen = ref(false);
 const completedTasks = computed(() => {
   const own = [
@@ -1795,6 +1797,8 @@ onUnmounted(() => {
               :board="board"
               :scope="`${invite}:${memberId}`"
               :section="section"
+              :selected-key="selectedSecondTaskKey"
+              @select="selectedSecondTaskKey = $event"
               :busy="!!busy || completionSyncPending"
               :receipt="completionReceipt"
               :nudge-status="nudgeStatus"
@@ -1826,26 +1830,13 @@ onUnmounted(() => {
               >
                 {{ dutyCaption }}
               </h1>
-              <div
+              <TaskSelector
                 v-if="personalTasks.length > 1"
-                class="task-selector"
-                aria-label="选择值日任务"
-              >
-                <button
-                  v-for="task in personalTasks"
-                  :key="task.id"
-                  :aria-pressed="activeDutyTask?.id === task.id"
-                  @click="chooseDutyTask(task.id, $event)"
-                >
-                  <span class="task-option-name">{{ task.name }}</span>
-                  <van-icon
-                    name="success"
-                    class="task-option-state"
-                    :class="{ 'is-complete': task.status === 'completed' }"
-                    aria-hidden="true"
-                  />
-                </button>
-              </div>
+                :items="personalTasks.map(task => ({ id: String(task.id), name: task.name, completed: task.status === 'completed' }))"
+                :selected="activeDutyTask ? String(activeDutyTask.id) : undefined"
+                label="选择值日任务"
+                @select="(id, event) => chooseDutyTask(Number(id), event)"
+              />
               <article
                 v-if="activeDutyTask"
                 class="chore-task focus-hero"
@@ -2679,33 +2670,6 @@ onUnmounted(() => {
   margin: 0;
   text-align: center;
 }
-.task-selector {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-.task-selector button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 10px;
-  min-height: 44px;
-  padding: 8px 18px;
-  font-size: 16px;
-  color: var(--app-tone-h666, #666);
-  background: var(--app-tone-hfff, #fff);
-  transition:
-    background-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
-}
-.task-selector button[aria-pressed="true"] {
-  color: var(--app-tone-h111, #111);
-  background: var(--app-tone-hf0f0f0, #f0f0f0);
-}
 .water-empty {
   text-align: center;
 }
@@ -3025,8 +2989,7 @@ onUnmounted(() => {
 .round-save {
   margin-top: 18px;
 }
-.round-save:active,
-.task-selector button:active {
+.round-save:active {
   transform: scaleX(1.02) scaleY(0.94);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -3445,39 +3408,7 @@ onUnmounted(() => {
 }
 </style>
 
-<style scoped>
-/* Reserve each success icon before the first check-in. No task row rewrap. */
-.task-selector {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: min(100%, 350px);
-}
-.task-selector button {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 16px;
-  min-width: 0;
-  gap: 4px;
-  padding: 8px 7px;
-}
-.task-option-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.task-option-state {
-  width: 16px;
-  opacity: 0;
-  transform: scale(0.7);
-  transition:
-    opacity 180ms var(--ui-ease-out),
-    transform 220ms var(--ui-ease-overshoot);
-}
-.task-option-state.is-complete {
-  opacity: 1;
-  transform: scale(1);
-}
-</style>
+
 
 <style scoped>
 /* Status rows and a second eligible receipt must never recenter the title. */

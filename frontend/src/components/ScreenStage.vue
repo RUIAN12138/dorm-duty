@@ -11,6 +11,8 @@ const props = defineProps<{
   signedIn: boolean;
   /** Live pages retain their own sizing; the wizard keeps its screen canvas. */
   preserveContentLayout?: boolean;
+  /** A fixed full-screen preview uses its own native scroll viewport. */
+  scrollRoot?: HTMLElement;
 }>();
 const surface = ref<HTMLElement>();
 const height = ref(0),
@@ -154,7 +156,7 @@ function click(event: MouseEvent) {
   }
 }
 function canScrollDocument(delta: number) {
-  const root = document.scrollingElement;
+  const root = props.scrollRoot || document.scrollingElement;
   if (!root) return false;
   const remaining = root.scrollHeight - root.clientHeight - root.scrollTop;
   return delta < 0 ? remaining > 2 : root.scrollTop > 2;

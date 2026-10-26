@@ -122,12 +122,13 @@ try {
     return {
       track: track.height,
       nodes: el.querySelectorAll(".progress-node").length,
+      marks: el.querySelectorAll(".progress-step-mark").length,
       text: el.innerText,
     };
   });
   check(
-    sizes.track >= 28 && sizes.nodes === 0 && !sizes.text.trim(),
-    "continuous thick track has no visible nodes, numbers or symbols",
+    sizes.track >= 28 && sizes.nodes === 0 && sizes.marks === 5 && !sizes.text.trim(),
+    "thick track has five subtle marks without large circular nodes or labels",
   );
   for (const [width, height] of [
     [375, 700],

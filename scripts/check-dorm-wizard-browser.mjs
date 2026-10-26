@@ -362,7 +362,7 @@ try {
   check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');
   check(await p.locator('.creation-progress.is-create-mode').count()===1,'creation progress appearance is isolated to new dorm creation');
   check(await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'progress bar has no visible numeric or symbol labels');
-  check(await p.locator('.progress-node').count()===0,'creation progress has no visible step nodes');
+  check(await p.locator('.progress-node').count()===0&&await p.locator('.progress-step-mark').count()===5,'creation progress has subtle internal step marks instead of large circles');
   const progressTargets=await p.locator('.progress-hit').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height};}));
   const creationTargetAlignment=await p.locator('.creation-progress').evaluate(host=>{
     const bounds=host.getBoundingClientRect();
@@ -895,7 +895,7 @@ try {
   await p.getByTestId("open-chore-settings").click();
   await p.getByRole("dialog", { name: "任务配置工作台" }).waitFor();
   check(await p.locator('.creation-progress').count()===1&&await p.locator('.wizard-steps,.step-caption').count()===0,'version-2 task settings reuse the number-free creation progress control');
-  check(await p.locator('.creation-progress.is-create-mode').count()===0&&await p.locator('.progress-node').count()===0&&await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='1','task-settings workspace keeps its existing glass progress without creation-only nodes or idle hiding');
+  check(await p.locator('.creation-progress.is-create-mode').count()===0&&await p.locator('.progress-node').count()===0&&await p.locator('.progress-step-mark').count()===0&&await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='1','task-settings workspace keeps its existing glass progress without creation-only nodes or idle hiding');
   check(await p.locator('.creation-progress').getAttribute('aria-label')==='任务配置进度'&&await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'task-settings progress has an accurate accessible name without visible step numbers');
   await p.getByRole('button',{name:'前往添加',exact:true}).click();
   await p.locator('.wizard-step[data-step="templates"]').waitFor();

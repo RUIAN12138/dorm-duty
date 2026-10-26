@@ -291,6 +291,7 @@ onBeforeUnmount(() => {
     @click="tapTrack"
   >
     <div class="progress-track" aria-hidden="true"><i ref="fill" /></div>
+    <i v-for="(_, index) in creationMode ? labels : []" :key="`mark-${index}`" class="progress-step-mark" :class="{ 'is-passed': index <= modelValue }" :style="{ left: `${24 + Math.max(0, hostWidth - 48) * index / Math.max(1, labels.length - 1)}px` }" aria-hidden="true" />
     <div
       ref="thumb"
       class="progress-glass"
@@ -426,6 +427,8 @@ onBeforeUnmount(() => {
 .is-create-mode { --creation-track-size: 32px; height: 60px; flex-basis: 60px; }
 .is-create-mode .progress-track { left: 8px; right: 8px; top: 14px; height: var(--creation-track-size); }
 
+.progress-step-mark { position:absolute; z-index:-1; top:25px; width:2px; height:10px; margin-left:-1px; border-radius:1px; background:color-mix(in srgb,var(--ink) 28%,transparent); pointer-events:none; transition:background-color 160ms ease-out; }
+.progress-step-mark.is-passed { background:color-mix(in srgb,var(--canvas) 70%,transparent); }
 .is-create-mode .progress-glass { z-index: 0; top: 8px; }
 .is-create-mode .progress-glass-surface {
   inset: 2px; border-radius: 50%;

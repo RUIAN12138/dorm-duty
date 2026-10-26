@@ -1,0 +1,21 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "5aa7fdf73db5fe43510cd1ba107e56fae7cd04f3",
+  "allowed": [
+    "frontend/src/components/onboarding/CreationProgress.vue",
+    "frontend/src/components/onboarding/LiveDraftPreview.vue",
+    "frontend/src/components/onboarding/NewTaskPane.vue",
+    "frontend/src/components/TaskSelector.vue",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/ScreenStage.vue",
+    "scripts/check-dorm-wizard-browser.mjs",
+    "scripts/check-wizard-single-screen.mjs",
+    "scripts/check-preview-task-navigation.mjs",
+    "openspec/changes/align-preview-task-navigation/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

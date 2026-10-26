@@ -1,0 +1,5 @@
+# Design
+创建节点使用轨道内的低对比度短刻线，无数字、符号或大白圆，仍以原位置驱动拖动吸附。
+预览复用正式ChoreBoard/ChoreBottomNav/ScreenStage以及guest-page布局；ScreenStage可选scrollRoot仅供固定全屏预览滚动容器使用，正式默认document不变。不复制任务UI。
+将正式值日页现有选择器原样抽为TaskSelector，根类/结构/尺寸/完成标记/按压保留；NewTaskPane在多任务时复用该组件，按稳定key记住选中任务与代做对象，使用现有TaskTitle/taskSwipe。单任务不显示选择器，缺任务时回退至有效第一项，任务切换不触发写入，完整保留权限校验与现有事件。
+测试对照真实正式页面和预览的几何/字号，隔离SQLite与请求拦截；创建及旧值日/完成反馈继续回归。真机单独报告。
