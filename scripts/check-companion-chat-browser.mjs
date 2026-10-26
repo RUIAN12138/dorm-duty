@@ -1646,7 +1646,11 @@ try {
       .first();
     const chosenQuick = (await sampledQuestion.innerText()).trim();
     await sampledQuestion.click();
-    await page.getByText("有事就问我吧。", { exact: true }).waitFor();
+    // Task questions use authenticated facts; usage questions use the mock model.
+    const expectedQuickReply = chosenQuick.startsWith("今天做什么")
+      ? `${room.dorm.members.find((m) => m.user_id === room.member_id).nickname}，这是你的当前任务。`
+      : "有事就问我吧。";
+    await page.getByText(expectedQuickReply, { exact: true }).waitFor();
     check(
       (await page.locator(".chat-bubble.user").count()) === 1 &&
         (await page.locator(".chat-bubble.user").innerText()) === chosenQuick,

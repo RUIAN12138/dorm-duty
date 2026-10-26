@@ -1,0 +1,18 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "60cc33fe3e1e28c5d3ebf965cc416859663f91bd",
+  "allowed": [
+    "scripts/check-companion-chat-browser.mjs",
+    "openspec/changes/fix-quick-prompt-reply-check/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站；允许，仅修这处断言并继续发布",
+    "authorizedDigest": "34c5767fe9a52978ac0c304b0b0f98e09ffce3de7e476688aa04045d597a6dd8"
+  }
+}

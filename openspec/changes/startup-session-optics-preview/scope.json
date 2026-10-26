@@ -62,7 +62,7 @@
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "更新到网站",
-    "authorizedDigest": "cc28ae1a61c9e9a5f295cbc411324156ccb894fc9d7c313ce1f6995812ea6cd7"
+    "userStatement": "更新到网站；允许，仅修这处断言并继续发布",
+    "authorizedDigest": "34c5767fe9a52978ac0c304b0b0f98e09ffce3de7e476688aa04045d597a6dd8"
   }
 }
