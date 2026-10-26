@@ -500,16 +500,27 @@ try {
       await page.evaluate(() => {
         const stage = document.querySelector(".content-stage.is-signed-in"),
           nav = document.querySelector(".chore-bottom-nav");
+        const action = document.querySelector(".completion-surface");
+        if (!stage || !nav || !action) return false;
+        const frame = stage.getBoundingClientRect(),
+          navigation = nav.getBoundingClientRect(),
+          completion = action.getBoundingClientRect();
+        // Live content uses natural height with bottom clearance for navigation.
+        // Assert the actual controls fit, not that its flow wrapper is fixed.
         return (
-          stage &&
-          nav &&
-          stage.getBoundingClientRect().bottom <= innerHeight + 1 &&
+          frame.left >= -1 && frame.right <= innerWidth + 1 &&
           document.documentElement.scrollWidth <= innerWidth &&
-          nav.getBoundingClientRect().bottom <= innerHeight + 1
+          navigation.bottom <= innerHeight + 1 &&
+          navigation.bottom >= innerHeight - 60 &&
+          completion.top >= 0 && completion.bottom <= navigation.top &&
+          document.elementFromPoint(
+            completion.left + completion.width / 2,
+            completion.top + completion.height / 2,
+          )?.closest(".completion-surface") === action
         );
       }),
       true,
-      `${width}x${height} real signed-in stage and navigation fit the viewport`,
+      `${width}x${height} real signed-in content fits horizontally, navigation stays at the bottom and completion remains clickable`,
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });

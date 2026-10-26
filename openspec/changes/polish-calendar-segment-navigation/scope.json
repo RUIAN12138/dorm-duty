@@ -22,6 +22,6 @@
   "publishAuthorization": {
     "action": "deploy-for-review",
     "userStatement": "更新网站",
-    "authorizedDigest": "e808503038fd023f60fa3f13ddd98249ece24f68bd04784148072fc1fc7879aa"
+    "authorizedDigest": "e392c495b22453469f458e9ec5415027c6f0b3e197286b0ead6fa3800485bfea"
   }
 }
