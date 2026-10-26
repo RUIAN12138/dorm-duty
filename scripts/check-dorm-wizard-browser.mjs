@@ -360,16 +360,16 @@ try {
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===1,'dorm name screen asks only one question');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) label,.wizard-step:not([aria-hidden=true]) .wizard-secondary').count()===0,"dorm name screen has no duplicate label or helper text");
   check(await p.locator('.progress-hit').count()===5,'new dorm creation exposes exactly five progress targets');
-  check(await p.locator('.creation-progress.is-create-mode').count()===1,'five-node progress appearance is isolated to new dorm creation');
+  check(await p.locator('.creation-progress.is-create-mode').count()===1,'creation progress appearance is isolated to new dorm creation');
   check(await p.locator('.progress-hit').allTextContents().then(xs=>xs.every(x=>!x.trim())),'progress bar has no visible numeric or symbol labels');
-  check(await p.locator('.progress-node').count()===5&&await p.locator('.progress-node').allTextContents().then(xs=>xs.every(x=>!x.trim())),'creation progress shows five minimal shape-only nodes');
+  check(await p.locator('.progress-node').count()===0,'creation progress has no visible step nodes');
   const progressTargets=await p.locator('.progress-hit').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height};}));
-  const creationNodeAlignment=await p.locator('.creation-progress').evaluate(host=>{
-    const nodes=[...host.querySelectorAll('.progress-node')].map(node=>node.getBoundingClientRect());
-    const targets=[...host.querySelectorAll('.progress-hit')].map(node=>node.getBoundingClientRect());
-    return nodes.length===targets.length&&nodes.every((node,index)=>Math.abs(node.left+node.width/2-(targets[index].left+targets[index].width/2))<1);
+  const creationTargetAlignment=await p.locator('.creation-progress').evaluate(host=>{
+    const bounds=host.getBoundingClientRect();
+    const centers=[...host.querySelectorAll('.progress-hit')].map(target=>{const r=target.getBoundingClientRect();return r.left+r.width/2-bounds.left;});
+    return centers.length===5&&centers.every((x,index)=>Math.abs(x-(24+(bounds.width-48)*index/4))<1);
   });
-  check(creationNodeAlignment,'five creation nodes align with their real step hit targets');
+  check(creationTargetAlignment,'five invisible accessible step targets remain aligned on the continuous track');
   const progressGlass=await p.locator('.progress-glass-surface').evaluate(el=>({width:el.offsetWidth,height:el.offsetHeight}));
   const progressTrack=await p.locator('.progress-track').boundingBox();
   check(progressTargets.every(r=>r.width>=44&&r.height===60)&&progressGlass?.width===40&&progressGlass?.height===40,'creation progress has 44px+ touch targets around a 40px glass thumb');

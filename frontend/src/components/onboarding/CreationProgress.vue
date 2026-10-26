@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { animate } from 'motion-v';
 import { motionAllowed, motionTokens } from '../../interaction/motion';
 import { observeElementSize } from './observeElementSize.mjs';
@@ -41,20 +41,6 @@ let gesture: {
 const lastIndex = () => Math.max(0, props.labels.length - 1);
 const bound = (value: number) => Math.max(0, Math.min(lastIndex(), value));
 const hitWidth = () => Math.max(44, Math.min(64, (hostWidth.value - 48) / Math.max(1, lastIndex())));
-const progressNodes = computed(() => {
-  const count = Math.min(5, props.labels.length);
-  return Array.from({ length: count }, (_, index) => {
-    const position = count <= 1 ? 0 : index * lastIndex() / (count - 1);
-    return {
-      index,
-      position,
-      left: 24 + Math.max(0, hostWidth.value - 48) * (count <= 1 ? 0 : index / (count - 1)),
-      complete: position <= props.modelValue + 0.001,
-      current: Math.abs(position - props.modelValue) < 0.5,
-    };
-  });
-});
-
 function paint(value: number) {
   position = bound(value);
   const fraction = position / Math.max(1, lastIndex());
@@ -305,16 +291,6 @@ onBeforeUnmount(() => {
     @click="tapTrack"
   >
     <div class="progress-track" aria-hidden="true"><i ref="fill" /></div>
-    <template v-if="creationMode">
-      <i
-        v-for="node in progressNodes"
-        :key="`node-${node.index}`"
-        class="progress-node"
-        :class="{ 'is-complete': node.complete, 'is-current': node.current }"
-        :style="{ left: `${node.left}px` }"
-        aria-hidden="true"
-      />
-    </template>
     <div
       ref="thumb"
       class="progress-glass"
@@ -368,29 +344,9 @@ onBeforeUnmount(() => {
   transform-origin: left center;
   will-change: transform;
 }
-.progress-node {
-  position: absolute;
-  z-index: -1;
-  top: 28px;
-  width: 8px;
-  height: 8px;
-  margin-left: -4px;
-  box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--canvas));
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 20%, var(--canvas));
-  pointer-events: none;
-}
-.progress-node.is-complete {
-  border-color: color-mix(in srgb, var(--canvas) 76%, var(--ink));
-  background: var(--ink);
-}
-.progress-node.is-current {
-  width: 10px;
-  height: 10px;
-  top: 27px;
-  margin-left: -5px;
-}
+
+
+
 .progress-glass {
   position: absolute;
   z-index: -1;
@@ -457,10 +413,7 @@ onBeforeUnmount(() => {
   outline: 2px solid var(--ink);
   outline-offset: -3px;
 }
-:global(html[data-theme="dark"]) .progress-node:not(.is-complete) {
-  border-color: rgb(255 255 255 / 22%);
-  background: color-mix(in srgb, var(--canvas) 76%, var(--ink));
-}
+
 :global(html[data-theme="dark"]) .progress-glass-surface {
   border-color: rgb(255 255 255 / 13%);
   background: linear-gradient(145deg, rgb(255 255 255 / 15%), rgb(255 255 255 / 6%) 58%, rgb(0 0 0 / 10%));
@@ -472,13 +425,7 @@ onBeforeUnmount(() => {
 }
 .is-create-mode { --creation-track-size: 32px; height: 60px; flex-basis: 60px; }
 .is-create-mode .progress-track { left: 8px; right: 8px; top: 14px; height: var(--creation-track-size); }
-.is-create-mode .progress-node,
-.is-create-mode .progress-node.is-current,
-:global(html[data-theme="dark"]) .is-create-mode .progress-node:not(.is-complete) {
-  z-index: -1; top: 14px; width: var(--creation-track-size); height: var(--creation-track-size);
-  margin-left: -16px; border: 0; background: #fff;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 5%);
-}
+
 .is-create-mode .progress-glass { z-index: 0; top: 8px; }
 .is-create-mode .progress-glass-surface {
   inset: 2px; border-radius: 50%;

@@ -8,7 +8,7 @@ The new creation wizard SHALL display core content and footer on a normal mobile
 - **WHEN** viewport height or large text cannot safely fit content
 - **THEN** necessary scrolling SHALL remain available without hiding required actions
 ### Requirement: Creation progress is directly manipulable
-The creation track SHALL be thick with white circular nodes equal to track thickness and an interruptible transient glass thumb.
+The creation track SHALL be thick without visible step nodes, numbers or tick marks, and retain an interruptible transient glass thumb.
 #### Scenario: Drag track
 - **WHEN** a pointer presses any point on the track and drags across steps
 - **THEN** thumb, page and tips SHALL update together, with at most one haptic attempt per changed step

@@ -121,25 +121,13 @@ try {
     const track = el.querySelector(".progress-track").getBoundingClientRect();
     return {
       track: track.height,
-      nodes: [...el.querySelectorAll(".progress-node")].map((n) => ({
-        h: n.getBoundingClientRect().height,
-        w: n.getBoundingClientRect().width,
-        color: getComputedStyle(n).backgroundColor,
-      })),
+      nodes: el.querySelectorAll(".progress-node").length,
       text: el.innerText,
     };
   });
   check(
-    sizes.track >= 28 &&
-      sizes.nodes.length === 5 &&
-      sizes.nodes.every(
-        (n) =>
-          n.h === sizes.track &&
-          n.w === sizes.track &&
-          n.color === "rgb(255, 255, 255)",
-      ) &&
-      !sizes.text.trim(),
-    "thick track contains equal-diameter white circles without numbers",
+    sizes.track >= 28 && sizes.nodes === 0 && !sizes.text.trim(),
+    "continuous thick track has no visible nodes, numbers or symbols",
   );
   for (const [width, height] of [
     [375, 700],
