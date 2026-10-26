@@ -15,5 +15,14 @@
     "scripts/check-dorm-wizard-browser.mjs",
     "openspec/changes/restore-live-layout-and-guided-onboarding/"
   ],
-  "acceptance": { "status": "pending", "userStatement": null, "acceptedDigest": null }
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站",
+    "authorizedDigest": "8c967fefd1d0ec97adc976ad270e32316a76e2261a80603fc807d65b29bbb5f7"
+  }
 }

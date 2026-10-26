@@ -62,7 +62,7 @@
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "把最近成熟的更新都推送 pr 并且更新网站",
-    "authorizedDigest": "c5a2e32710f777cdf00af08c9258761e6e75a034a35fdd3b3f5380ce363ff9a8"
+    "userStatement": "更新到网站",
+    "authorizedDigest": "8c967fefd1d0ec97adc976ad270e32316a76e2261a80603fc807d65b29bbb5f7"
   }
 }

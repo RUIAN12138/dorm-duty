@@ -36,3 +36,7 @@
 - 未连接实体 iPhone，主屏幕独立运行、中文/英文/emoji 键盘与真实 safe area 待验收；Android WebView、HarmonyOS ArkWeb 真机未测。
 - 用户对恢复排版的最终视觉认可未取得。未迁移/读取正式数据库，未更新服务器。
 - 当前 AGENTS.md 对未验收预览要求不推送；因此仅保留独立本地分支，不创建 PR、不合并、不推送或部署，不复用上一批 v82 授权。
+
+## 本批次发布授权（2026-10-26）
+
+用户在查看隔离预览后明确要求“更新到网站”。本次仅记录绑定当前摘要的 deploy-for-review 授权并发布；acceptance 仍 pending，不追认真机通过，不创建 PR、不合并 main。该最新指令覆盖上文的本批次不部署限制。开发分支按用户既定 GitHub 协作要求推送，发布后用独立工作树更新 CODEX_HANDOFF；不修改 ChatGPT 评审。
