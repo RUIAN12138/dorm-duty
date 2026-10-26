@@ -64,6 +64,9 @@ function settle(value: number, hide = false) {
   }
   flight = animate(position, target, {
     ...motionTokens.selection,
+    // Creation coordinates are measured in steps (roughly 70–90px each).
+    // Finish below visible precision rather than waiting for a subpixel tail.
+    ...(props.creationMode ? { restDelta: 0.004, restSpeed: 0.08 } : {}),
     onUpdate: paint,
     onComplete: () => {
       if (revision !== flightRevision) return;
@@ -102,7 +105,14 @@ function stepAt(clientX: number, rect: DOMRect) {
 
 function applyHorizontalPoint(clientX: number, active: NonNullable<typeof gesture>) {
   const raw = stepAt(clientX, active.rect);
-  paint(raw);
+  const nearest = Math.round(raw);
+  const offset = raw - nearest;
+  // Keep selection based on the real pointer. Only the creation thumb feels
+  // a small, continuous attraction near a stop; no delayed pointer tracking.
+  const attraction = props.creationMode
+    ? Math.max(0, 1 - Math.abs(offset) / 0.22) ** 2 * 0.75
+    : 0;
+  paint(raw - offset * attraction);
 
   // A small hysteresis prevents the live page from flickering at step boundaries.
   const current = active.index;
@@ -291,7 +301,7 @@ onBeforeUnmount(() => {
     @click="tapTrack"
   >
     <div class="progress-track" aria-hidden="true"><i ref="fill" /></div>
-    <i v-for="(_, index) in creationMode ? labels : []" :key="`mark-${index}`" class="progress-step-mark" :class="{ 'is-passed': index <= modelValue }" :style="{ left: `${24 + Math.max(0, hostWidth - 48) * index / Math.max(1, labels.length - 1)}px` }" aria-hidden="true" />
+    <i v-for="(_, index) in creationMode ? labels : []" :key="`mark-${index}`" class="progress-step-mark" :class="{ 'is-passed': index < modelValue, 'is-current': index === modelValue }" :style="{ left: `${24 + Math.max(0, hostWidth - 48) * index / Math.max(1, labels.length - 1)}px` }" aria-hidden="true" />
     <div
       ref="thumb"
       class="progress-glass"
@@ -427,8 +437,9 @@ onBeforeUnmount(() => {
 .is-create-mode { --creation-track-size: 32px; height: 60px; flex-basis: 60px; }
 .is-create-mode .progress-track { left: 8px; right: 8px; top: 14px; height: var(--creation-track-size); }
 
-.progress-step-mark { position:absolute; z-index:-1; top:25px; width:2px; height:10px; margin-left:-1px; border-radius:1px; background:color-mix(in srgb,var(--ink) 28%,transparent); pointer-events:none; transition:background-color 160ms ease-out; }
+.progress-step-mark { position:absolute; z-index:-1; top:28px; width:6px; height:4px; margin-left:-3px; border-radius:999px; background:color-mix(in srgb,var(--ink) 28%,transparent); pointer-events:none; transition:background-color 160ms ease-out, transform 160ms cubic-bezier(.22,1,.36,1); }
 .progress-step-mark.is-passed { background:color-mix(in srgb,var(--canvas) 70%,transparent); }
+.progress-step-mark.is-current { background:color-mix(in srgb,var(--canvas) 56%,var(--ink)); transform:scale(1.45,1.2); }
 .is-create-mode .progress-glass { z-index: 0; top: 8px; }
 .is-create-mode .progress-glass-surface {
   inset: 2px; border-radius: 50%;
@@ -444,9 +455,10 @@ onBeforeUnmount(() => {
   transform: scaleX(1.07) scaleY(.92); transition-duration: 120ms;
 }
 .is-create-mode .progress-glass.is-dragging .progress-glass-surface {
-  transition: opacity 120ms ease-out;
+  transition: transform 80ms ease-out, opacity 120ms ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
+  .progress-step-mark,
   .progress-glass-surface,
   .progress-track i {
     transition: none !important;

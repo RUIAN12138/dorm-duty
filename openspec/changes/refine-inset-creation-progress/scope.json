@@ -1,0 +1,14 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "bbbfcfadca98690585f3a3dffd906808a99fbb95",
+  "allowed": [
+    "frontend/src/components/onboarding/CreationProgress.vue",
+    "scripts/check-inset-creation-progress.mjs",
+    "openspec/changes/refine-inset-creation-progress/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}
