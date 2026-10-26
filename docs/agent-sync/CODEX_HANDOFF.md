@@ -500,3 +500,28 @@
 - platform_status: 本机桌面 Chromium/WebKit/隔离服务测试与 Android Debug 编译；没有连接 vivo/Android 设备，邮箱验证→强停→重开→`/email/me` 实测未完成。iPhone PWA 与 HarmonyOS 未验证。未访问正式服务器或数据库；未部署。
 - remaining: 根因仍未通过目标设备证实。需安装含新原生桥接的签名 APK，在用户测试账号上完成邮箱验证码登录、强制停止、立即重开，并仅记录 `/email/me` 是否登录（不得采集 Cookie/token）；随后验证显式登出仍会撤销。当前 `CHATGPT_REVIEW.md` 的 `reviewed_code_sha=1f7dee95fac6015721f1a255e12add34d290703f` 早于当前 SHA。PR CI 未全部完成，不合并、不部署。
 - questions: 若要确认真实故障已解决，需要 vivo 设备/安装测试签名版本或通过现有正式签名渠道更新本机 APK；不需要用户提供任何凭证。
+
+# Codex → ChatGPT · PR #85 已更新，v82 发布准备（2026-10-26）
+
+- code_branch: `codex/new-dorm-wizard-pr`
+- code_sha: `8a6d63640cc406b160fc92c96e22f95ba162e3b6`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/8a6d63640cc406b160fc92c96e22f95ba162e3b6
+- related_pr: https://github.com/RUIAN12138/dorm-duty/pull/85 （OPEN；base `codex/refine-card-feedback`；head 已实际推送至本 SHA，未合并 main）
+- requirements: 用户单独授权仅修 `scripts/check-email-experience.mjs` 旧创建测试，并最新明确“把最近成熟的更新都推送 pr 并且更新网站”。此指令授权本批次 PR 更新与网站发布，不追认真机验收或 main 合并；产品 acceptance 保持 pending。
+- changed_files: 相对远端上一 SHA `856165d`，更新 `scripts/check-email-experience.mjs`、此前已授权的 `scripts/check-dorm-wizard-browser.mjs` 请求观察器及创建向导 OpenSpec 记录；18 个 active scope 仅更新本批次 PR/publish 授权摘要。没有新增产品业务代码修改。
+- implemented:
+  - 邮箱测试通过真实五步向导创建 v2 宿舍，等首次教程出现并退出后再测正式页面，避免操作教程下面的旧 DOM。
+  - 因新流程只创建创建者，隔离夹具通过真实 HTTPS 邮箱验证/加入 API 建立两位独立测试室友，继续验证三人地板记录与日历刷新。新成员显式选择标记，重复姓名按 v2 现有规则拒绝；未使用 force click、绕过权限或降低原三人记录要求。
+  - 预览请求观察器监测全部 fetch/XHR，并用非 chores 路径验证观察器本身，正式预览操作仍为零 fetch/XHR。
+  - 已更新现有 PR 的描述和测试状态；发布包 `20261026-wizard-startup-v82` 从干净 worktree 构建并上传，归档 SHA-256 `627d4ad1d3d2bcfb128671770b7f20c98733a1b6f15d6d25d5a20a040d8bfa37` 本地/服务器一致。44 个源码/运行文件逐字节等于本提交，不携带数据库和凭据。
+- tests:
+  - Node 22.23.4 下 `scripts/check-email-experience.mjs`：Chromium 90 项、WebKit 90 项完整 HTTPS/SQLite/Vue 流程通过，邮件传输注入，未发送真实邮件。
+  - `scripts/check-dorm-wizard-browser.mjs`：本轮 Chromium 完整创建、真实组件预览、手势和零 fetch/XHR 回归通过。
+  - `scripts/check-dorm-wizard.mjs`：108 项通过；`site/scripts/check-dynamic-task-migration.mjs`：4 项通过，7 张旧表保留；`scripts/check-startup-session.mjs`：26 项通过，均为隔离数据库/会话。
+  - 正确部署路径构建、typecheck、脚本语法和 diff 检查通过。早先本机邮件测试登录失败源于误用 `/` 构建与 `/dorm-duty/` Cookie 的环境不匹配，按 CI 的部署前缀构建后通过，未因此修改认证代码。
+  - 干净 SHA：OpenSpec 19/19、18 项范围门禁，PR 与 publish gate 通过，digest `c5a2e32710f777cdf00af08c9258761e6e75a034a35fdd3b3f5380ce363ff9a8`。
+  - 独立发布包在 Node 22.23.4 和临时 SQLite 启动成功，7 个页面/资源/健康入口返回 200；没有连接生产数据库。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40269162137 对应本 SHA；最近查询 `spec-contract=success`、`android=success`、`conversation-motion=success`，`web-and-business=in_progress`。不得报告全部完成。
+- platform_status: 桌面 Chromium/WebKit 移动视口及 Android CI 构建；实体 iPhone Safari/PWA、vivo 强停/重启、HarmonyOS ArkWeb 未验收。原生邮箱 Cookie 桥接需新 APK，发布网站不更新已安装 APK。
+- remaining: 线上仍是 v81；等待当前 SHA 的完整 CI 后再在线备份、原子部署 v82、校验旧数据及公网资源，随后补充本交接。最新 CHATGPT_REVIEW 的 reviewed_code_sha 仍为 `1f7dee95fac6015721f1a255e12add34d290703f`，早于当前业务 SHA，请对当前提交评审。原工作树的 `site/runtime/push-runtime.cjs` 预存本地修改保持未编辑、未暂存、未提交；发布从独立干净 worktree 取已提交内容。
+- questions: 暂无新的产品决策。当前用户已授权更新网站；保留真机验证缺口与旧宿舍数据隔离边界。
