@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
+import GuidedPractice from "../components/onboarding/GuidedPractice.vue";
 import DormCompanion from "../components/DormCompanion.vue";
 import { motionAllowed } from "../interaction/motion";
 
 const router = useRouter();
+const route = useRoute();
+const practicing = ref(route.query.practice === "1");
 const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
 const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
 const pages = [
@@ -68,18 +71,19 @@ async function finish(skipped = false) {
     if (flow?.firstUse) sessionStorage.removeItem(GUIDE_OPEN_KEY);
   } catch { /* Tutorial and return remain available when storage is blocked. */ }
   let target = returnTarget(flow?.returnTo);
-  if (!skipped && flow?.version === 2 && flow.showFeatureTour) {
-    const url = new URL(target, window.location.origin);
-    url.searchParams.set("tour", "1");
-    target = `${url.pathname}${url.search}${url.hash}`;
-  }
+  // The feature lesson runs in the isolated practice view before returning.
+  // Never start another informational overlay over the user's live room.
+  const url = new URL(target, window.location.origin);
+  url.searchParams.delete("tour");
+  target = `${url.pathname}${url.search}${url.hash}`;
   await router.replace(target);
 }
 onMounted(async () => { await nextTick(); updateIndex(); });
 </script>
 
 <template>
-  <main class="welcome-guide" data-testid="welcome-guide">
+  <GuidedPractice v-if="practicing" @done="finish()" @skip="finish(true)" />
+  <main v-else class="welcome-guide" data-testid="welcome-guide">
     <header><button class="guide-skip" @click="finish(true)">跳过</button><span>轮到 · 使用引导</span></header>
     <div ref="track" class="guide-pages" @pointerdown="programmaticTarget=null" @scroll.passive="updateIndex">
       <section v-for="(page, i) in pages" :key="page.title" class="guide-page" :aria-hidden="i !== index">
@@ -92,7 +96,8 @@ onMounted(async () => { await nextTick(); updateIndex(); });
       <div class="guide-dots" aria-label="引导进度">
         <button v-for="(_, i) in pages" :key="i" :class="{ active: i === index }" :aria-label="`第 ${i + 1} 页`" :aria-current="i === index ? 'step' : undefined" @click="goTo(i)" />
       </div>
-      <button class="guide-next" @click="index === pages.length - 1 ? finish() : goTo(index + 1)">{{ index === pages.length - 1 ? "开始使用" : "继续" }}</button>
+      <button class="guide-next" @click="index === pages.length - 1 ? practicing = true : goTo(index + 1)">{{ index === pages.length - 1 ? "开始使用" : "继续" }}</button>
+      <button class="guide-practice" @click="practicing = true">直接动手练习</button>
     </footer>
   </main>
 </template>
@@ -118,6 +123,8 @@ footer { display: grid; justify-items: center; gap: 28px; padding-top: 18px; }
 .guide-dots button.active::before { background: var(--ink); transform: translate(-50%,-50%) scaleX(2.75); }
 .guide-next { width: 100%; max-width: 460px; min-height: 56px; border: 0; border-radius: 30px; color: var(--canvas); background: var(--ink); font: inherit; font-weight: 600; transition: transform 220ms cubic-bezier(.22,1,.36,1); }
 .guide-next:active { transform: scale(.985); }
+.guide-practice { min-height: 44px; margin-top: -20px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; transition: transform 160ms var(--ui-ease-out); }
+.guide-practice:active { transform: scale(.97); }
 @media (max-height: 600px) { .guide-page { justify-content: flex-start; padding-block: 16px 24px; } p { margin-top: 14px; } }
 @media (max-height: 600px) and (orientation: landscape) { .welcome-guide { padding-top: calc(env(safe-area-inset-top,0px) + 6px); padding-bottom: calc(env(safe-area-inset-bottom,0px) + 6px); } .guide-page { padding-block: 6px 12px; } .guide-page :deep(.companion-frame), .guide-page :deep(.dorm-companion) { width: 72px !important; height: 72px !important; } .guide-page :deep(.dorm-companion) { margin-bottom: 8px; } h1 { font-size: 32px; line-height: 1.14; } p { margin-top: 8px; font-size: 15px; line-height: 1.35; } footer { gap: 4px; padding-top: 0; } .guide-next { min-height: 48px; } }
 @media (prefers-reduced-motion: reduce) { .guide-dots button,.guide-dots button::before,.guide-next,.guide-skip { transition: none; } .guide-dots button:active,.guide-next:active,.guide-skip:active { transform: none; opacity: 1; } }

@@ -1094,7 +1094,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <ScreenStage :signed-in="navVisible">
+  <ScreenStage :signed-in="navVisible" :preserve-content-layout="navVisible">
     <StartupGate :status="startupStatus" @retry="boot" />
     <main
       v-if="!startupBlocked"

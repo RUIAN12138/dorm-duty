@@ -276,6 +276,9 @@ try {
   await p.screenshot({ path: `data/startup-review/${engine}-welcome-guide-copy-after.png` });
   check(await p.getByRole("button", { name: "开始使用", exact: true }).isVisible(), "last tutorial page exposes the start action");
   await p.getByRole("button", { name: "开始使用", exact: true }).click();
+  await p.getByTestId("guided-practice").waitFor();
+  check(await p.getByTestId("lesson-duty").isVisible(), "welcome starts the hands-on practice directory");
+  await p.getByRole("button", { name: "稍后再学", exact: true }).click();
   const localEntry=p.getByTestId("dev-new-dorm-wizard");
   if(!(await localEntry.isVisible())){
     await p.getByTestId("open-tools").click();
@@ -776,10 +779,10 @@ try {
   check(await firstUseGuide.count()===1,'new schema-v2 room automatically opens the welcome guide on first entry');
   await p.getByRole('button',{name:'第 4 页',exact:true}).click();
   await p.getByRole('button',{name:'开始使用',exact:true}).click();
-  const featureTour=p.locator('.tour');
-  await featureTour.waitFor({state:'visible',timeout:5000}).catch(()=>{});
-  if(await featureTour.count())await featureTour.getByRole('button',{name:'跳过',exact:true}).click();
-  await featureTour.waitFor({state:'detached',timeout:5000}).catch(()=>{});
+  await p.getByTestId('guided-practice').waitFor();
+  check(await p.getByTestId('lesson-messages').isVisible(),'first-use tutorial offers real message practice');
+  await p.getByRole('button',{name:'稍后再学',exact:true}).click();
+  await p.waitForFunction(()=>location.pathname!=='/guide');
   await p.getByTestId('open-tools').click();
   await p.getByTestId('open-welcome-guide').click();
   await p.getByTestId('welcome-guide').waitFor({state:'visible'});

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import "../interaction/memberNames.css";
+import { tutorialPracticeKey } from "../interaction/tutorialPractice";
 import NewTaskPane from "./onboarding/NewTaskPane.vue";
 import TaskWorkspace from "./onboarding/TaskWorkspace.vue";
 import SpotlightTour from "./onboarding/SpotlightTour.vue";
@@ -21,6 +22,7 @@ import {
 } from "../interaction/companion";
 import LoadingSkeleton from "./LoadingSkeleton.vue";
 import {
+  inject,
   computed,
   defineAsyncComponent,
   nextTick,
@@ -120,12 +122,16 @@ const props = defineProps<{
   section: "duty" | "water" | "calendar";
 }>();
 const router = useRouter();
+const practiceService = inject(tutorialPracticeKey, null);
+const practice = computed(() => props.preview &&
+  practiceService?.matches(props.invite, props.memberId, props.token)
+    ? practiceService : null);
 const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
 const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
 function guideSeenKey() {
   return `dorm-welcome-guide-v2:${encodeURIComponent(props.invite)}:${props.memberId}`;
 }
-function openWelcomeGuide(firstUse = false) {
+function openWelcomeGuide(firstUse = false, practiceOnly = false) {
   if (props.preview || props.demo) return;
   const seenKey = guideSeenKey();
   if (firstUse) {
@@ -143,7 +149,7 @@ function openWelcomeGuide(firstUse = false) {
     showFeatureTour: true,
   };
   try { sessionStorage.setItem(GUIDE_FLOW_KEY, JSON.stringify(flow)); } catch { /* The guide still works with a root fallback. */ }
-  void router.push("/guide").catch(() => {
+  void router.push(practiceOnly ? "/guide?practice=1" : "/guide").catch(() => {
     try {
       sessionStorage.removeItem(GUIDE_FLOW_KEY);
       if (firstUse) sessionStorage.removeItem(GUIDE_OPEN_KEY);
@@ -314,7 +320,7 @@ function menuAction(action: MenuAction) {
     },
     guide: () => openWelcomeGuide(false),
     "feature-tour": () => {
-      featureTourOpen.value = true;
+      openWelcomeGuide(false, true);
     },
   };
   const insideSettings = [
@@ -424,6 +430,7 @@ watch(chatOpen, (open) => {
   if (!open) chatCommitted.value = false;
 });
 function demoChatUnavailable() {
+  if (practice.value) return false;
   if (!props.demo && !props.preview) return false;
   demoNotice();
   return true;
@@ -1278,7 +1285,7 @@ function acceptCompletion(receipt: ChoreCompletion) {
   completionSyncPending.value = true;
 }
 async function complete(task: ChoreTask, circle = false) {
-  if (props.preview) {
+  if (props.preview && !practice.value) {
     showToast("预览不会记录打卡");
     return;
   }
@@ -1309,6 +1316,11 @@ async function complete(task: ChoreTask, circle = false) {
   busy.value = `complete-${task.id}`;
   actionError.value = "";
   try {
+    if (practice.value) {
+      acceptCompletion(practice.value.complete(task));
+      completionSyncPending.value = false;
+      return;
+    }
     const syncStatus = await completeChore(
       task.id,
       props.token,
@@ -1338,7 +1350,7 @@ function sectionIsWater() {
   return props.section === "water";
 }
 async function undo(id: number) {
-  if (props.preview) {
+  if (props.preview && !practice.value) {
     showToast("预览不会修改打卡记录");
     return;
   }
@@ -1351,7 +1363,7 @@ async function undo(id: number) {
   actionError.value = "";
   syncAction.value = "撤销";
   try {
-    const receipt = await choreRequest<{ task: ChoreTask; version: number }>(
+    const receipt = practice.value ? practice.value.undo(id) : await choreRequest<{ task: ChoreTask; version: number }>(
       `/chores/tasks/${id}/undo`,
       props.token,
       { method: "PATCH", body: "{}" },
@@ -1383,7 +1395,7 @@ async function undo(id: number) {
       selectedTaskKey.value = receipt.task.key;
     }
     board.value.version = receipt.version;
-    completionSyncPending.value = true;
+    completionSyncPending.value = !practice.value;
     await load();
   } catch (e) {
     if (alive) actionError.value = (e as Error).message;
@@ -1395,7 +1407,8 @@ async function nudgeWater(taskOverride?: ChoreTask) {
   const task = taskOverride || water.value;
   if (!task || task.assignee_id === props.memberId || busy.value) return;
   if (props.preview) {
-    nudgeStatus.value = "预览 · 未发送提醒";
+    if (practice.value) practice.value.events.nudge++;
+    nudgeStatus.value = practice.value ? "练习成功 · 正式使用时会提醒这位室友" : "预览 · 未发送提醒";
     return;
   }
   if (props.demo) {
@@ -1472,7 +1485,7 @@ const {
   },
 );
 const markRead = (id: number, fromBanner = false) =>
-  props.preview ? Promise.resolve(false) : readReminder(id, fromBanner);
+  props.preview ? Promise.resolve(practice.value?.read(id) || false) : readReminder(id, fromBanner);
 const {
   draft: markerDraft,
   error: markerError,
@@ -1658,7 +1671,7 @@ onUnmounted(() => {
             :track="true"
             continuous
             :size="52"
-            :chat-enabled="!demo && !preview"
+            :chat-enabled="!demo && (!preview || !!practice)"
             :style="{ visibility: chatPresent ? 'hidden' : undefined }"
             @chat="openChat"
             @chat-preview="previewChat"
@@ -1686,7 +1699,7 @@ onUnmounted(() => {
           <span class="identity-name"
             ><span>{{ dormName }}</span
             ><span class="current-identity"
-              >{{ preview ? "草稿预览 · " : demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+              >{{ practice ? "操作练习 · " : preview ? "草稿预览 · " : demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
             ></span
           >
         </div>
@@ -1697,9 +1710,9 @@ onUnmounted(() => {
             class="preview-exit"
             data-testid="exit-live-preview"
             @click="emit('exit-preview')"
-          >退出预览</button>
+          >{{ practice ? "退出练习" : "退出预览" }}</button>
           <button
-            v-if="!preview"
+            v-if="!preview || practice"
             class="tools-button"
             :aria-label="
               unread.length ? `设置，${unread.length} 条未读消息` : '设置'
@@ -1887,7 +1900,7 @@ onUnmounted(() => {
                     completionSyncPending ||
                     (!demo && activeDutyTask.duty_date > board.today)
                   "
-                  :demo="!!(demo || preview)"
+                  :demo="!!(demo || (preview && !practice))"
                   :receipt="completionReceipt"
                   @settled="settleCompletion"
                   @complete="complete"

@@ -7,7 +7,11 @@ import {
   pagePullInput,
   pageSpringStep,
 } from "../interaction/pageElasticity";
-defineProps<{ signedIn: boolean }>();
+const props = defineProps<{
+  signedIn: boolean;
+  /** Live pages retain their own sizing; the wizard keeps its screen canvas. */
+  preserveContentLayout?: boolean;
+}>();
 const surface = ref<HTMLElement>();
 const height = ref(0),
   top = ref(0),
@@ -17,7 +21,9 @@ const pose = computed(() => {
   const distance = motionAllowed() ? pull.value : 0;
   const stretch = Math.min(0.022, Math.abs(distance) / 3200);
   return {
-    transform: `translate3d(0,${distance}px,0) scale(${1 - stretch},${1 + stretch})`,
+    transform: props.preserveContentLayout && distance === 0
+      ? "none"
+      : `translate3d(0,${distance}px,0) scale(${1 - stretch},${1 + stretch})`,
     transformOrigin: distance < 0 ? "50% 100%" : "50% 0",
   };
 });
@@ -71,6 +77,10 @@ function move(event: PointerEvent) {
       return;
     }
     if (Math.abs(y) < 9 || Math.abs(y) < Math.abs(x) * 1.15) return;
+    if (props.preserveContentLayout && canScrollDocument(y)) {
+      gesture = null;
+      return;
+    }
     active.vertical = true;
     surface.value?.setPointerCapture(event.pointerId);
   }
@@ -143,7 +153,14 @@ function click(event: MouseEvent) {
     event.stopPropagation();
   }
 }
+function canScrollDocument(delta: number) {
+  const root = document.scrollingElement;
+  if (!root) return false;
+  const remaining = root.scrollHeight - root.clientHeight - root.scrollTop;
+  return delta < 0 ? remaining > 2 : root.scrollTop > 2;
+}
 function wheel(event: WheelEvent) {
+  if (props.preserveContentLayout && canScrollDocument(-event.deltaY)) return;
   if (
     event.ctrlKey ||
     !(event.target instanceof Element) ||
@@ -195,9 +212,8 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div
-    class="app-stage"
-    :class="{ 'is-signed-in': signedIn }"
-    :style="{ height: height ? `${height}px` : '100dvh', top: `${top}px` }"
+    :class="[preserveContentLayout ? 'content-stage' : 'app-stage', { 'is-signed-in': signedIn }]"
+    :style="preserveContentLayout ? undefined : { height: height ? `${height}px` : '100dvh', top: `${top}px` }"
   >
     <div
       ref="surface"
@@ -215,6 +231,20 @@ onBeforeUnmount(() => {
   </div>
 </template>
 <style scoped>
+.content-stage {
+  width: 100%;
+  max-width: 520px;
+  min-height: 100svh;
+  margin-inline: auto;
+  background: var(--app-tone-hfff, #fff);
+}
+.content-stage > .screen-surface :deep(> main) {
+  width: 100%;
+}
+.content-stage > .screen-surface {
+  height: auto;
+  min-height: 100svh;
+}
 .app-stage {
   position: fixed;
   inset-inline: 0;

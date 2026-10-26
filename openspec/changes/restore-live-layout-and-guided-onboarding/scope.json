@@ -1,0 +1,19 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "8a6d63640cc406b160fc92c96e22f95ba162e3b6",
+  "allowed": [
+    "frontend/src/components/ScreenStage.vue",
+    "frontend/src/views/GuestHome.vue",
+    "frontend/src/views/WelcomeGuide.vue",
+    "frontend/src/components/onboarding/GuidedPractice.vue",
+    "frontend/src/components/onboarding/PracticeSpotlight.vue",
+    "frontend/src/interaction/tutorialPractice.ts",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/composables/useConversationNotes.ts",
+    "scripts/check-guided-onboarding.mjs",
+    "scripts/check-dorm-wizard-browser.mjs",
+    "openspec/changes/restore-live-layout-and-guided-onboarding/"
+  ],
+  "acceptance": { "status": "pending", "userStatement": null, "acceptedDigest": null }
+}

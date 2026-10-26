@@ -15,6 +15,7 @@ export function useConversationNotes(
   },
   message: (role: "user" | "assistant", text: string) => void,
   sent: () => void,
+  practiceSend?: (note: { target_member_id: number | "all"; text: string }) => Promise<void>,
 ) {
   const state = ref(emptyNote());
   const scope = () => {
@@ -60,7 +61,8 @@ export function useConversationNotes(
     try {
       // Keep the existing endpoint, room authorization, cooldown and fan-out.
       // A synchronous sending state locks out every duplicate confirmation.
-      await choreRequest("/chores/notes", p.token, {
+      if (practiceSend) await practiceSend(snapshot);
+      else await choreRequest("/chores/notes", p.token, {
         method: "POST",
         body: JSON.stringify(snapshot),
       });

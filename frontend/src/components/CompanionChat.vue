@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onBeforeUnmount, inject } from "vue";
+import { tutorialPracticeKey } from "../interaction/tutorialPractice";
 import {
   DialogRoot,
   DialogPortal,
@@ -109,7 +110,12 @@ const viewport = ref({ top: 0, height: window.innerHeight, inset: 0 }),
   // occlusion then compresses it progressively from the same viewport state.
   compactViewport = ref(false),
   thinking = computed(() => awaiting.value || notes.sending.value);
-let api = companionClient(props.invite, props.memberId, props.token),
+const practice = inject(tutorialPracticeKey, null);
+function client() {
+  return practice?.matches(props.invite, props.memberId, props.token)
+    ? practice.api : companionClient(props.invite, props.memberId, props.token);
+}
+let api = client(),
   epoch = 0,
   controller: AbortController | undefined,
   removeBack: (() => void) | undefined,
@@ -151,6 +157,7 @@ const notes = useConversationNotes(
     bottom();
   },
   () => emit("noteSent"),
+  practice?.matches(props.invite, props.memberId, props.token) ? practice.sendNote : undefined,
 );
 let handledNoteKey: number | undefined;
 watch(
@@ -1130,7 +1137,7 @@ watch(scope, () => {
   reminders.value = [];
   retry = null;
   available.value = false;
-  api = companionClient(props.invite, props.memberId, props.token);
+  api = client();
   if (props.modelValue) close();
 });
 function fontMetricsChanged() {
