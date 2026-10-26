@@ -14,6 +14,7 @@ const emit = defineEmits<{ next: []; leave: [] }>();
 const note = ref<HTMLElement>();
 // Keep tutorial controls inside the active dialog focus/pointer boundary.
 const portalHost = ref<HTMLElement | string>("body");
+const paused = ref(false);
 const box = ref({ x: 0, y: 0, width: 0, height: 0, radius: 20 });
 const viewport = ref({ top: 0, height: innerHeight, width: innerWidth });
 const ready = ref(false), complete = ref(false), noteY = ref(80);
@@ -33,7 +34,10 @@ function measure() {
   viewport.value = { top: vv?.offsetTop || 0, height: vv?.height || innerHeight, width: vv?.width || innerWidth };
   const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter((el) =>
     !el.closest("[inert],[aria-hidden=true]") && el.getBoundingClientRect().height > 0 && getComputedStyle(el).visibility !== "hidden");
-  portalHost.value = dialogs.at(-1) || "body";
+  // Global release/security dialogs own input until dismissed. Never put the
+  // coach inside them or cover their real actions with tutorial blockers.
+  paused.value = dialogs.some(el => !el.matches(".sheet-layer,.companion-chat"));
+  portalHost.value = paused.value ? "body" : dialogs.at(-1) || "body";
   complete.value = props.step.completed();
   const next = document.querySelector<HTMLElement>(complete.value && props.step.resultTarget ? props.step.resultTarget : props.step.target);
   if (next !== target) {
@@ -68,6 +72,7 @@ const blocks = computed(() => {
   ];
 });
 function blockKeys(event: KeyboardEvent) {
+  if (paused.value) return;
   if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); emit("leave"); return; }
   if (event.key === "Tab") {
     const current = document.activeElement;
@@ -111,7 +116,7 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <Teleport :to="portalHost">
-    <div class="practice-coach" :class="{ compact }" data-testid="practice-coach" :data-step="step.id" :data-complete="complete">
+    <div v-show="!paused" class="practice-coach" :class="{ compact }" data-testid="practice-coach" :data-step="step.id" :data-complete="complete">
       <div v-for="(block, i) in blocks" :key="i" class="practice-block" :style="Object.fromEntries(Object.entries(block).map(([k,v]) => [k, `${v}px`]))" />
       <div v-if="ready" class="practice-light" :style="{ left:`${box.x}px`,top:`${box.y}px`,width:`${box.width}px`,height:`${box.height}px`,borderRadius:`${box.radius}px` }" />
       <aside ref="note" class="practice-note" :style="{ top:`${noteY}px` }" aria-label="操作练习" aria-live="polite">

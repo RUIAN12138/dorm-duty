@@ -54,6 +54,17 @@ try {
   });
   await settleCoach();
   await page.screenshot({ path: path.join(evidence, "duty-step.png") });
+  await page.evaluate(() => {
+    const dialog = document.createElement("div");
+    dialog.id = "practice-external-dialog"; dialog.setAttribute("role","dialog");
+    dialog.style.cssText = "position:fixed;inset:20px;z-index:9500;background:white";
+    const button = document.createElement("button"); button.textContent="关闭全局说明";
+    button.onclick=()=>dialog.remove(); dialog.append(button); document.body.append(dialog);
+  });
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector(".practice-coach")).display==="none");
+  await page.getByRole("button",{name:"关闭全局说明",exact:true}).click();
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector(".practice-coach")).display!=="none");
+  check(true,"global dialogs suspend the coach and retain their real close action");
   await act("duty-select", () => page.locator(".task-selector button").nth(1).click());
   await act("duty-detail", () => page.getByRole("button", { name: "查看洗手池详情", exact: true }).click());
   await act("duty-detail-close", () => page.getByRole("button", { name: "关闭详情", exact: true }).click());

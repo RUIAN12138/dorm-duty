@@ -35,7 +35,7 @@
   "publishAuthorization": {
     "action": "deploy-for-review",
     "userStatement": "更新到网站",
-    "authorizedDigest": "8c967fefd1d0ec97adc976ad270e32316a76e2261a80603fc807d65b29bbb5f7"
+    "authorizedDigest": "d9d8e5c2db19b429aa4a83516975b2c132e4b0e50b0bd5e61f6fd19c8efc7b59"
   },
   "prAuthorization": {
     "action": "create-for-review",

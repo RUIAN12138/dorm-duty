@@ -16,8 +16,8 @@
 
 ## 已执行
 
-- `node scripts/check-guided-onboarding.mjs`：Chromium 47 项通过；完整四章、真实完成动画中间状态、零 fetch/XHR、320/390/430px 命中、暗色/减动效、退出清理，以及 320×568、390×844、430×932 正式组件宽度/导航检查。
-- `DORM_BROWSER=webkit node scripts/check-guided-onboarding.mjs`：桌面 WebKit 移动视口同 47 项通过。它不是实体 iPhone Safari/PWA。
+- `node scripts/check-guided-onboarding.mjs`：Chromium 48 项通过；完整四章、真实完成动画中间状态、零 fetch/XHR、320/390/430px 命中、暗色/减动效、退出清理，以及 320×568、390×844、430×932 正式组件宽度/导航检查。
+- `DORM_BROWSER=webkit node scripts/check-guided-onboarding.mjs`：桌面 WebKit 移动视口同 48 项通过。它不是实体 iPhone Safari/PWA。
 - `DORM_WIZARD_ORIGIN=http://127.0.0.1:8098 npx --yes node@22 scripts/check-dorm-wizard-browser.mjs`：整套 Chromium 回归退出码 0；包含创建、实时预览零请求、真实组件复用、导航编排、旧/新配置、设置工作台、欢迎页与新练习入口及原有聚光灯键盘/焦点检查。只更新欢迎页完成后的新流程期望，保留业务及隔离断言。
 - `node scripts/check-screen-gesture-check.mjs`：真实组件处理器检查通过，覆盖按住、中断、视口噪声、回弹和浮窗手势；这是内存逻辑测试，不是触屏设备证明。
 - `npm --prefix frontend run build`：类型检查、Vite 与 PWA 构建通过；已有 DormWizard 大 chunk 警告仍存在，本轮未进行无关拆包。
@@ -40,3 +40,7 @@
 ## 本批次发布授权（2026-10-26）
 
 用户在查看隔离预览后明确要求“更新到网站”。本次仅记录绑定当前摘要的 deploy-for-review 授权并发布；acceptance 仍 pending，不追认真机通过，不创建 PR、不合并 main。该最新指令覆盖上文的本批次不部署限制。开发分支按用户既定 GitHub 协作要求推送，发布后用独立工作树更新 CODEX_HANDOFF；不修改 ChatGPT 评审。
+
+## 发布包额外回归
+
+带版本号的包会显示既有更新说明。冒烟发现教程误把全局 Dialog 当作练习抽屉；本轮只修教程控制器：遇到非练习的全局 Dialog 暂停遮罩及键盘拦截，关闭后恢复当前步骤。没有修改更新说明组件或其通知规则。追加外部 Dialog 避让断言，并以实际带版本发布包复测。
