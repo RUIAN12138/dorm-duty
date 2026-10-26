@@ -680,3 +680,19 @@
 - platform_status: 桌面Chromium/WebKit自动化；实体iPhone Safari/PWA、Android WebView和HarmonyOS ArkWeb未测，Android CI构建/lint不等于设备验收。
 - remaining: v85已准备并上传，尚未安装。正常包 `20261026-wizard-progress-v85.tar.gz` SHA256=`bd6484a8d689c63b6c1f962bae676e037d204746be179aba3c1f8673a718dce9`；服务器当前仍v84。CI必须最终成功后才执行备份/安装/数据保留与公网逐字节校验。SSH共享连接现已结束、免交互被拒绝，已请求用户重连；没有执行正式数据库写入或迁移。最新GPT评审仍针对旧1f7dee95，不冒充本SHA已评审。
 - questions: 待用户恢复SSH；CI超时job已重跑。完成发布后另追加实际收据、备份及验证结果，只更新本文件，不修改CHATGPT_REVIEW。
+
+
+# Codex → ChatGPT · 已授权仅调整Web CI时限（2026-10-26）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `e6ebb745cf51aa6d0f2e3e6cb9fbaca546f41cf2`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e6ebb745cf51aa6d0f2e3e6cb9fbaca546f41cf2
+- related_pr: 本轮无PR创建/更新或main合并。
+- requirements: 用户恢复SSH并明确“允许，仅调整 Web CI 时限”；继续其网站发布授权。只将 `.github/workflows/checks.yml` 的 `web-and-business.timeout-minutes` 从15调为25，不扩大代码范围。
+- changed_files: 配置仅一行15→25；`openspec/changes/allow-web-ci-completion/`；所有现有scope的publishAuthorization重新绑定当前摘要。与b19ed0f相比，frontend/site/scripts/native/deploy产品源码均无差异，测试数量/断言/等待与其他job配置不变。
+- implemented: 有界CI预算增加，保留全部检查。接受状态仍pending，发布授权摘要 `0613d665f9c990c9a9dfd8879a50b881bcb6bf08ee6ff00708e32dd5a2133866`，deploy-for-review，不代表验收或PR/合并授权。
+- tests: OpenSpec strict、scope、门禁检查与publish gate通过；git diff --check通过。新SHA正常发布包重建成功，44个包内源码文件与HEAD逐字节一致。隔离正常包路由/健康/教程自动推进与球球讲解，以及生产域名条件下创建向导/轨道联动检查通过；业务写入0、浏览器异常0。没有后端/迁移差异。归档SHA256 `cd42853d7b084740c2b5d7efc3f1cbd48bdc8092aa4e09c4e106cb359a76702a`，服务器incoming上传字节校验一致。
+- CI: 本SHA https://github.com/RUIAN12138/dorm-duty/actions/runs/40326434709 已触发，交接时queued/in_progress，未称全绿。旧b19ed0f超时尝试未用于证明新SHA通过。
+- platform_status: 桌面Chromium/WebKit自动化及隔离SQLite；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb实体设备未测。没有用Android构建结果代替真机。
+- remaining: 等待精确SHA完整CI成功；随后执行已准备的在线备份、原子安装、健康版本检查、旧数据只读保留对比和公网资产逐字节/教程检查。服务器尚v84，v85尚未安装。SSH已恢复。最终结果会另附实际收据。CHATGPT_REVIEW仍旧SHA，不把其视为本提交已评审。
+- questions: 暂无新的用户决策需求。未修改CHATGPT_REVIEW，不触发额外产品改动。
