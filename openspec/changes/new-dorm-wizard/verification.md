@@ -359,3 +359,12 @@
 - `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change / 389 个文件、18 项范围门禁通过；`git diff --check` 通过。
 - 预存的 `site/runtime/push-runtime.cjs` 工作区修改在本轮开始前已存在，本轮未编辑、暂存或提交该文件。
 - PR #85 当前 CI 的 `web-and-business` 仍因 `scripts/check-email-experience.mjs:441` 找不到旧版 `guest-create-name` 选择器失败；这是范围外历史验收脚本，本轮未修改。PR 未推送更新、未合并、未部署。
+
+## 2026-10-26 · 用户授权的邮箱创建夹具更新
+
+- 用户明确允许只修 `scripts/check-email-experience.mjs` 的旧测试，随后再次要求“把最近成熟的更新都推送 pr 并且更新网站”。本次仅更新该测试夹具及必要的 OpenSpec 范围、验证记录；未修改产品组件、API、通知规则或生产数据。
+- 测试现通过真实的五步 `DormWizard` 创建宿舍并退出首次使用教程。新版创建不预建舍友，因此用注入邮件的真实 HTTPS 验证/加入接口建立两位独立测试室友，保留三人地板记录及日历刷新断言；新增成员在真实界面选择标记，并检查新版同名身份保护反馈。未使用强制点击、跳过权限校验或降低原有三人记录期望。
+- 本机第一次复测使用了 `/` 构建，导致 `/dorm-duty/` Cookie 不会跟随根路径 API 请求。改用与 CI 相同的命令 `DORM_WEB_BASE=/dorm-duty/ npm run build --prefix frontend -- --outDir dist-server` 后，完整登录及创建流程正常；此为测试环境纠正，未更改产品代码。
+- `npx --yes node@22 scripts/check-email-experience.mjs`：Chromium 完整 HTTPS/SQLite/Vue 流程通过，退出码 0。覆盖创建返回历史、创建者绑定、三人完成与日历更新、跨设备会话恢复、离线恢复、退出撤销、解绑与重新认领、旧宿舍创建者凭据恢复和过期邮箱入口；无未捕获浏览器错误。邮件发送为注入传输，不是实际邮箱投递。
+- `npx --yes node@22 scripts/check-dorm-wizard.mjs`：108 项通过；`npx --yes node@22 site/scripts/check-dynamic-task-migration.mjs`：4 项通过，7 张旧表数据保留；`npx --yes node@22 scripts/check-startup-session.mjs`：26 项通过。均使用隔离数据库或模拟会话，不访问正式宿舍。
+- 本轮 Chromium 创建向导完整隔离浏览器回归通过。实体 iPhone Safari/PWA、vivo 强制停止/重开和 HarmonyOS ArkWeb 尚未验收，不将桌面浏览器结果写为真机通过。

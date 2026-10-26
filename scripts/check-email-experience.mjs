@@ -315,6 +315,13 @@ try {
   );
   await page.mouse.up();
   let checkedWrongCodeMotion = false;
+  async function finishFirstUseGuide(p) {
+    const guide = p.getByTestId("welcome-guide");
+    await guide.waitFor({ state: "visible" });
+    await guide.getByRole("button", { name: "跳过", exact: true }).click();
+    await guide.waitFor({ state: "hidden" });
+    await p.getByTestId("chore-board").waitFor();
+  }
   async function login(
     p,
     address = "ui-qa@example.invalid",
@@ -443,16 +450,29 @@ try {
   await wizard.waitFor({ state: "visible" });
   await wizard.getByLabel("宿舍名称", { exact: true }).fill("邮箱界面 QA");
   await wizardPrimary.click();
-  await wizard.getByRole("heading", { name: "一起照顾哪些事？", exact: true }).waitFor({ state: "visible" });
+  await wizard
+    .getByRole("heading", { name: "一起照顾哪些事？", exact: true })
+    .waitFor({ state: "visible" });
   await wizardPrimary.click();
-  await wizard.getByRole("heading", { name: "任务放在哪里？", exact: true }).waitFor({ state: "visible" });
+  await wizard
+    .getByRole("heading", { name: "任务放在哪里？", exact: true })
+    .waitFor({ state: "visible" });
   await wizardPrimary.click();
-  await wizard.getByRole("heading", { name: "任务按什么节奏完成？", exact: true }).waitFor({ state: "visible" });
+  await wizard
+    .getByRole("heading", { name: "任务按什么节奏完成？", exact: true })
+    .waitFor({ state: "visible" });
   await wizardPrimary.click();
-  await wizard.getByRole("heading", { name: "先体验，再确认", exact: true }).waitFor({ state: "visible" });
+  await wizard
+    .getByRole("heading", { name: "先体验，再确认", exact: true })
+    .waitFor({ state: "visible" });
   await wizardPrimary.click();
-  await wizard.getByRole("button", { name: "开始使用", exact: true }).waitFor({ state: "visible" });
+  await wizard
+    .getByRole("button", { name: "开始使用", exact: true })
+    .waitFor({ state: "visible" });
   await wizard.getByRole("button", { name: "开始使用", exact: true }).click();
+  // New schema-v2 rooms show the first-use guide after the companion arrives.
+  // Finish that real route before exercising the task board underneath it.
+  await finishFirstUseGuide(page);
   // The entry screen now has its own Settings button; wait for the actual
   // signed-in board, not an unrelated control that was already visible.
   await page.getByTestId("chore-board").waitFor();
@@ -498,6 +518,56 @@ try {
     1,
     "new dorm automatically binds its creator to verified account",
   );
+  // The new wizard creates only the owner. Join two synthetic verified peers
+  // through the real HTTPS APIs to retain the three-person calendar fixture.
+  const fixtureMembers = [];
+  for (const [index, nickname] of ["界面测试甲", "记录测试乙"].entries()) {
+    const fixtureContext = await context();
+    try {
+      const address = `calendar-peer-${index}@example.invalid`;
+      const post = (route, data) =>
+        fixtureContext.request.post(url + route, {
+          headers: { "X-Dorm-Email": "1", Origin: origin },
+          data,
+        });
+      const challengeResponse = await post("email/code", { email: address });
+      assert.equal(
+        challengeResponse.status(),
+        202,
+        "fixture peer receives an injected OTP",
+      );
+      const challenge = await challengeResponse.json();
+      const code = deliveries.at(-1).text.match(/验证码是：(\d{6})/)[1];
+      const verification = await post("email/verify", {
+        email: address,
+        code,
+        challenge_id: challenge.challenge_id,
+        mail_enabled: false,
+      });
+      assert.equal(
+        verification.status(),
+        200,
+        "fixture peer verifies its own email",
+      );
+      const identity = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("dorm-guest-view-v1")),
+      );
+      const joined = await post("chores/claim", {
+        invite_code: identity.invite_code,
+        nickname,
+      });
+      assert.equal(
+        joined.status(),
+        201,
+        "fixture peer joins the new room with its own identity",
+      );
+      fixtureMembers.push(await joined.json());
+    } finally {
+      await fixtureContext.close();
+    }
+  }
+  await page.reload();
+  await page.getByTestId("chore-board").waitFor();
   for (const source of ["duty", "water"]) {
     await page.getByTestId(`nav-${source}`).click();
     await page.getByTestId(`pane-${source}`).waitFor();
@@ -572,26 +642,11 @@ try {
   const liveIdentity = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("dorm-guest-view-v1")),
   );
-  const fixtureMembers = h.db.sqlite
-    .prepare(
-      "SELECT u.id,u.nickname FROM users u JOIN dorm_members m ON m.user_id=u.id JOIN dormitories d ON d.id=m.dorm_id WHERE d.invite_code=? AND u.id<>? AND m.is_active=1",
-    )
-    .all(liveIdentity.invite_code, liveIdentity.member_id);
   for (const person of fixtureMembers) {
-    const claim = await (
-      await h.request("/chores/claim", {
-        method: "POST",
-        data: {
-          invite_code: liveIdentity.invite_code,
-          member_id: person.id,
-          nickname: person.nickname,
-        },
-      })
-    ).json();
     const otherBoard = await (
       await h.request(
-        `/chores/board?invite_code=${liveIdentity.invite_code}&member_id=${person.id}`,
-        { token: claim.access_token },
+        `/chores/board?invite_code=${liveIdentity.invite_code}&member_id=${person.member.user_id}`,
+        { token: person.access_token },
       )
     ).json();
     const otherTask = otherBoard.today_tasks.find((t) => t.key === "floor");
@@ -599,7 +654,7 @@ try {
       (
         await h.request(`/chores/tasks/${otherTask.id}/complete`, {
           method: "PATCH",
-          token: claim.access_token,
+          token: person.access_token,
           data: {},
         })
       ).status,
@@ -874,6 +929,7 @@ try {
   other.on("pageerror", (e) => errors.push(e.message));
   await other.goto(url);
   await login(other, "ui-qa@example.invalid", false, true);
+  await finishFirstUseGuide(other);
   await other.getByTestId("open-tools").waitFor();
   check(
     (await other.getByText("邮箱界面 QA", { exact: true }).count()) > 0,
@@ -1023,7 +1079,9 @@ try {
   await newcomer.getByTestId("guest-join-submit").click();
   await newcomer.getByTestId("guest-member-name").fill("界面测试乙");
   await newcomer.getByTestId("guest-name-submit").click();
+  await newcomer.locator(".marker-grid button:enabled").first().click();
   await newcomer.getByTestId("marker-confirm").click();
+  await finishFirstUseGuide(newcomer);
   await newcomer.getByTestId("open-tools").waitFor();
   const joinedMember = h.db.sqlite
     .prepare(
@@ -1117,16 +1175,18 @@ try {
   await newcomer.getByTestId("guest-member-name").fill("界面测试甲");
   await newcomer.getByTestId("guest-name-submit").click();
   await newcomer
-    .getByText("此成员已绑定邮箱，请使用本人的邮箱登录", { exact: true })
+    .getByText("此姓名已有人使用，请填写可区分的本人姓名", { exact: true })
     .waitFor();
   check(
     await newcomer.getByTestId("marker-confirm").count(),
     0,
-    "another email-bound identity cannot be selected",
+    "new-room duplicate name cannot claim another email-bound identity",
   );
   await newcomer.getByTestId("guest-member-name").fill("界面测试丙");
   await newcomer.getByTestId("guest-name-submit").click();
+  await newcomer.locator(".marker-grid button:enabled").first().click();
   await newcomer.getByTestId("marker-confirm").click();
+  await finishFirstUseGuide(newcomer);
   await newcomer.getByTestId("open-tools").waitFor();
   check(
     h.db.sqlite
@@ -1135,7 +1195,7 @@ try {
       )
       .get().nickname,
     "界面测试丙",
-    "unlinked email binds an available identity",
+    "unlinked email creates its own available new-room identity",
   );
   await newcomer.reload();
   await newcomer.getByTestId("open-tools").waitFor();
