@@ -35,6 +35,7 @@
     "site/scripts/check-dynamic-task-migration.mjs",
     "scripts/check-dorm-wizard.mjs",
     "scripts/check-dorm-wizard-browser.mjs",
+    "scripts/check-email-experience.mjs",
     "scripts/check-stats-palette.mjs",
     "scripts/check-companion-chat-browser.mjs",
     "scripts/preview-startup/server.mjs",

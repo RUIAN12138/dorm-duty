@@ -438,10 +438,21 @@ try {
     "HTTPS cookie is HttpOnly, Secure and scoped to deployment path",
   );
   await page.getByTestId("guest-create-dorm").click();
-  await page.getByTestId("guest-create-name").fill("邮箱界面 QA");
-  await page.getByTestId("guest-create-nickname").fill("界面测试甲");
-  await page.getByTestId("guest-create-members").fill("界面测试乙\n界面测试丙");
-  await page.getByTestId("guest-create-submit").click();
+  const wizard = page.locator(".dorm-wizard"),
+    wizardPrimary = wizard.locator(".wizard-footer .wizard-primary");
+  await wizard.waitFor({ state: "visible" });
+  await wizard.getByLabel("宿舍名称", { exact: true }).fill("邮箱界面 QA");
+  await wizardPrimary.click();
+  await wizard.getByRole("heading", { name: "一起照顾哪些事？", exact: true }).waitFor({ state: "visible" });
+  await wizardPrimary.click();
+  await wizard.getByRole("heading", { name: "任务放在哪里？", exact: true }).waitFor({ state: "visible" });
+  await wizardPrimary.click();
+  await wizard.getByRole("heading", { name: "任务按什么节奏完成？", exact: true }).waitFor({ state: "visible" });
+  await wizardPrimary.click();
+  await wizard.getByRole("heading", { name: "先体验，再确认", exact: true }).waitFor({ state: "visible" });
+  await wizardPrimary.click();
+  await wizard.getByRole("button", { name: "开始使用", exact: true }).waitFor({ state: "visible" });
+  await wizard.getByRole("button", { name: "开始使用", exact: true }).click();
   // The entry screen now has its own Settings button; wait for the actual
   // signed-in board, not an unrelated control that was already visible.
   await page.getByTestId("chore-board").waitFor();

@@ -27,6 +27,11 @@ schema v2 在四个 canonical 任务键之外支持最多 16 个稳定格式的�
 - Preview safety is enforced at handlers that can issue business requests, not only by hiding controls. Browser verification observes outgoing API requests while exercising task, reminder, push, account, and room actions in the real preview component tree.
 - No production data is used. The tests create isolated rooms and synthetic preview fixtures only.
 
+## 2026-10-25 Preview request-observer hardening (backfilled)
+- The browser fixture invokes the real preview component handlers, then records every Playwright `fetch`/XHR request while the preview is open. It does not maintain a finite endpoint allowlist, so newly added email, auth, push, reminder, room, or task APIs cannot escape the assertion merely because their path prefix was omitted.
+- The network observer is test-only. Preview action/service guards remain the product boundary; no runtime behavior or business endpoint changes are introduced by this verification update.
+- This test uses an isolated local room fixture and never calls the production origin or database.
+
 ## 2026-10-24 补充：新建向导最多五个主页面
 
 新宿舍创建流程固定为五个主页面：宿舍名称、任务、页面安排、规则、预览/确认。名称与说明在任务页中选中单项后编辑；第二页用途并入页面安排；软/硬模式、按任务时间与轮换并入规则页，同一时刻只展开一个任务的细项。条件时间控件仅在硬性模式下显示。不得把原来的十余个内部步骤继续展示为进度刻度。

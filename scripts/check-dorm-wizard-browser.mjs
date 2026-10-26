@@ -144,11 +144,11 @@ p.on("requestfailed", r => failedRequests.push(`${r.url()} :: ${r.failure()?.err
 let writes = 0;
 let createRequests = 0;
 let previewTracking = false;
-const previewApiRequests = [];
+const previewFetchRequests = [];
 p.on("request", (r) => {
   if (r.method() === "POST" && new URL(r.url()).pathname === "/guest/create") createRequests++;
-  if (previewTracking && /\/(chores|guest|dorms)\//.test(new URL(r.url()).pathname))
-    previewApiRequests.push(`${r.method()} ${new URL(r.url()).pathname}`);
+  if (previewTracking && ["fetch", "xhr"].includes(r.resourceType()))
+    previewFetchRequests.push(`${r.method()} ${new URL(r.url()).pathname}`);
   if (
     r.url().includes("/chores/") &&
     ["POST", "PATCH"].includes(r.method()) &&
@@ -703,6 +703,11 @@ try {
   const live = p.getByTestId('live-draft-preview');
   await live.waitFor();
   await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='1');
+  check(previewFetchRequests.length===0,'opening isolated preview has no fetch/XHR traffic');
+  const probePath='/email/__preview-observer-probe';
+  await p.evaluate(async path=>{await fetch(path);},probePath);
+  check(previewFetchRequests.at(-1)===`GET ${probePath}`,'preview request observer catches a non-chore email endpoint');
+  previewFetchRequests.pop();
   check(await p.locator('.dorm-wizard').evaluate(el=>getComputedStyle(el).visibility)==='hidden','full-screen preview removes the wizard from view');
   check(await live.locator('.chore-board').count()===1&&await live.locator('.chore-bottom-nav').count()===1,'preview mounts the production task board and Liquid Glass navigation');
   const guardedActions=await live.locator('.chore-board').evaluate(async el=>{const s=el.__vueParentComponent?.setupState;if(!s||typeof s.complete!=='function'||typeof s.undo!=='function'||typeof s.menuAction!=='function'||typeof s.markRead!=='function')return false;await s.complete(s.board.workspace_tasks[0]);await s.undo(-900);await s.nudgeWater({id:-901,key:'water',assignee_id:-2,status:'pending',can_complete:true});await s.markRead(-902,true);for(const action of ['settings','push','identity','email','recovery','refresh'])s.menuAction(action);return true;});
@@ -731,7 +736,7 @@ try {
   check(await nav.innerText()!==before,'held real navigation item reorders the live preview and draft');
   await p.waitForTimeout(450);
   await p.screenshot({path:`data/startup-review/${engine}-wizard-preview.png`});
-  check(previewApiRequests.length===0,`preview interactions make no business API requests: ${previewApiRequests.join(', ')}`);
+  check(previewFetchRequests.length===0,`preview interactions issue no fetch/XHR requests: ${previewFetchRequests.join(', ')}`);
   previewTracking = false;
   await p.getByTestId('exit-live-preview').click();
   await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="live-draft-preview"]')).opacity==='0');

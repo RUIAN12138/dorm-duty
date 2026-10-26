@@ -348,3 +348,14 @@
 - `scripts/check-dorm-wizard-browser.mjs` 增加首步返回后离开本地创建向导的回归断言；`node scripts/check-dorm-wizard-browser.mjs`（Chromium）与 `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`（WebKit）均以退出码 0 完成，新增返回断言通过。`npm --prefix frontend run typecheck`、`npm run spec:validate`（19/19）、脚本语法检查及 `git diff --check` 通过。
 - 本机 `node scripts/check-email-experience.mjs` 在进入浏览器步骤前由 Node v26.4.0 的隔离 HTTP fixture 抛出 `ERR_HTTP_HEADERS_SENT`（`scripts/check-email-experience.mjs:100`），因此未能本机复测该脚本；原 GitHub run `40190721916` 确认旧的 `entry-back` 点击命中了向导头部。本修复等待新提交 CI 验证。
 - 仅修改新版创建流程与创建专属回归，未改旧宿舍业务或正式数据库；移动端真机状态待设备验收。
+
+## 2026-10-25 · 实时预览请求隔离观察器加固
+
+- 根因：浏览器测试只收集 `/chores/`、`/guest/`、`/dorms/` 等预设路径，未来新增的 `/email/`、`/auth/` 或其他 API 可能漏出监测。现改为在预览打开期间记录所有浏览器 `fetch`/XHR 请求，不依赖业务端点路径名单；运行时代码和 API 未修改。
+- `node scripts/check-dorm-wizard-browser.mjs`：Chromium 完整隔离创建/预览流程通过，退出码 0；实际调用生产组件的完成、撤销、催促、消息及账户设置处理器后，全部 `fetch`/XHR 请求数为 0；退出再进保留草稿，正式任务写入数为 0。
+- `DORM_BROWSER=webkit node scripts/check-dorm-wizard-browser.mjs`：WebKit 完整隔离流程通过，退出码 0；同一预览请求断言为 0，草稿与任务写入回归通过。
+- 两项均是桌面 Chromium/WebKit 的移动视口模拟，不等于实体 iPhone、Android WebView 或 HarmonyOS ArkWeb 验收。测试只使用本地隔离宿舍夹具；未访问正式网站、正式数据库或登录凭证。
+- `node scripts/check-dorm-wizard.mjs`：108 项隔离 SQLite 检查通过，覆盖 schema-v2 配置、旧宿舍不迁移、身份绑定、本人/代做权限、并发轮序、撤销一致性及提醒/推送副作用不变。
+- `npm run spec:check`：OpenSpec 严格校验 19/19、范围检查 18 个 change / 389 个文件、18 项范围门禁通过；`git diff --check` 通过。
+- 预存的 `site/runtime/push-runtime.cjs` 工作区修改在本轮开始前已存在，本轮未编辑、暂存或提交该文件。
+- PR #85 当前 CI 的 `web-and-business` 仍因 `scripts/check-email-experience.mjs:441` 找不到旧版 `guest-create-name` 选择器失败；这是范围外历史验收脚本，本轮未修改。PR 未推送更新、未合并、未部署。
