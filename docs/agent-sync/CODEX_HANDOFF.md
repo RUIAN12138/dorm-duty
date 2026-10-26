@@ -601,3 +601,27 @@
 - platform_status: 桌面Chromium/WebKit移动视口、合成安全区/键盘/震动调用；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb均未验证。没有生产或旧宿舍测试写入。
 - remaining: 用户对无节点连续轨道、单屏布局与触摸手感的视觉验收；真实设备键盘/触摸仍待。CI的聊天关闭超时需后续独立定位，Web任务最终结果尚待。CHATGPT_REVIEW仍针对1f7dee95fac6015721f1a255e12add34d290703f，不把过期建议当作本SHA新发现。
 - questions: 暂无。只按既有协作授权提交推送开发代码和本报告；未经新授权不PR、不合并、不部署。
+
+
+# Codex → ChatGPT · 轻量步骤标记、正式预览与第二页任务切换（2026-10-26）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `bbbfcfadca98690585f3a3dffd906808a99fbb95`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/bbbfcfadca98690585f3a3dffd906808a99fbb95
+- related_pr: 本轮无PR、main合并、部署或生产数据库访问。
+- requirements: 用户新原话「但是要能看出来有节点的存在，然后预览页也要和正式页一样的效果，然后抬水页如果有多个任务，就可以像值日页一样切换」。这覆盖上一版完全无可见节点，改为短刻线；直接授权预览与相应正式共用任务展示组件的必要局部调整，不扩大到其他业务模块。
+- changed_files: 六个产品组件 `CreationProgress.vue`、`LiveDraftPreview.vue`、`NewTaskPane.vue`、新增 `TaskSelector.vue`、`ChoreBoard.vue`、`ScreenStage.vue`；三份相关浏览器脚本与 `openspec/changes/align-preview-task-navigation/`。无后端、全局CSS或任务/成员/历史数据结构变化。
+- implemented:
+  - 32px粗轨道内部五条低对比度短刻线，不恢复大白圆或数字。原玻璃显隐、实时拖动、吸附与可用平台触感保留；工作台不显示创建刻线。
+  - 找到预览布局差异根因：复用了正式页面组件，但仍使用旧app-stage尺寸覆盖，且缺少GuestHome正式容器。现复用content-stage自然布局和guest-page安全区/导航留白；固定预览使用自己的滚动根，ScreenStage未传scrollRoot时继续document原路径。页面切换回顶与正式router一致，不改正式页排版。
+  - 将现有正式值日选择器原样提取为TaskSelector，让值日与第二页共用按钮/勾选/按压样式；第二页多任务改成一次呈现当前任务，使用稳定key、现有TaskTitle和taskSwipe。点按、标题横滑、快速中断、返回保留任务选中均接通；单任务不显示多余选择栏。详情、轮次、代做选择、完成/撤销/催促仍走既有事件与权限；受控代做选择值明确对应当前呈现任务，未放宽can_complete。
+- tests:
+  - 新隔离专项Chromium/WebKit各40项通过：真实正式/预览组件对照，身份栏与任务栏四个几何值2px以内一致；水页栏实际均x28/y177.5/334×44，标题字号、按钮字号/圆角相同。实际TaskTitle透明度/位移中间帧、反向快速切换后单标题、稳定key、页间返回、单任务、真实详情、窄屏/深色/减动效通过。
+  - 预览fetch/XHR=0、业务写入=0、浏览器异常=0；独立临时SQLite中所有含dorm_id的旧宿舍行前后逐字节一致。正式任务切换/导航也未发业务写入，没有用隐藏按钮冒充服务层隔离。
+  - Chromium原生mouse.wheel验证本地预览内容可滚动时不被整屏弹性劫持。Playwright移动WebKit不支持mouse.wheel，明确仅程序滚动/合成WheelEvent未被取消的处理器检查；不称原生触摸或设备验收。
+  - 创建/工作台完整回归两引擎各212项，创建单屏专项各50项；原完成反馈两引擎各193项；22项状态回归；类型/Vite/PWA构建、OpenSpec strict24/24、范围23changes/431files、diff检查通过。完成反馈初次并行采样曾在Chromium鼓励中间帧失败，未改该断言或产品鼓励动画，重跑后通过；保留时序敏感风险。
+  - 原始命令、失败修正与限制见新change verification.md。本机预览 http://127.0.0.1:8104/?preview=new-dorm 。截图/结果 data/preview-task-navigation/{chromium,webkit}/；真实UI录屏 data/preview-task-navigation/flow.mp4（桌面WebKit，不是iPhone）。首次录制在最后一步误找已隐藏的footer预览按钮超时，改用该页实际入口重录，没改产品入口。
+- CI: 最终SHA已手动触发 https://github.com/RUIAN12138/dorm-duty/actions/runs/40297209216 ，交接时运行中，未称远端全绿。上一SHA5aa7fdf的聊天仲裁关闭超时仍是已报告的范围外观察，本轮没有顺手修改聊天/其测试。
+- platform_status: 桌面Chromium/WebKit、移动视口与隔离SQLite；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未验证。没有真实AI/通知调用，不触及生产数据。
+- remaining: 用户对轻量刻线及第二页单任务切换的视觉验收、真实设备触摸/键盘；CI最终结果待确认。CHATGPT_REVIEW仍针对1f7dee95fac6015721f1a255e12add34d290703f，请按本次新SHA审查。
+- questions: 暂无。只提交推送受控开发分支及此报告，未创建PR、合并或部署。
