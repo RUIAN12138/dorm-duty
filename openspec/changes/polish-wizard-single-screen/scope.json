@@ -13,5 +13,10 @@
     "status": "pending",
     "userStatement": null,
     "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站",
+    "authorizedDigest": "cc28ae1a61c9e9a5f295cbc411324156ccb894fc9d7c313ce1f6995812ea6cd7"
   }
 }

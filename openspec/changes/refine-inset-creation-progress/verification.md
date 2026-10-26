@@ -23,3 +23,6 @@
 ## Limits
 实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb均未测，不把桌面移动视口、模拟震动/键盘或录屏称为真机通过。无生产数据库操作。
 当前CHATGPT_REVIEW仍针对旧1f7dee95fac6015721f1a255e12add34d290703f；上一代码bbbfcfa远端Web CI的聊天快捷语固定回复断言失败已单独报告。本轮未获该测试编辑授权，没有修改聊天产品/脚本来掩盖该失败；本轮最终远端CI单独报告。
+
+## Website publication request
+用户在本轮预览后明确“更新到网站”，授权将当前分支已完成内容构建为正常网站版本 `20261026-wizard-progress-v85`，不包含隔离预览服务器/模拟账号，不授权PR或main合并。产品验收仍pending、真机缺口仍保留；只在最终CI通过、正常包冒烟和服务器备份后安装。发布授权绑定当前全批次摘要，后续实现变化不得复用。SSH当前不可用，等待用户重建共享连接；目前尚未发布。
