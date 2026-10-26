@@ -527,3 +527,28 @@
 - platform_status: 桌面 Chromium/WebKit 移动视口、隔离 Node/SQLite、Android CI 构建和正式服务器只读验证。实体 iPhone Safari/PWA、vivo 强停/重启、HarmonyOS ArkWeb 仍未验收。原生 Cookie 桥接需要新 APK，网站发布不会升级已安装 APK，不能称 vivo 问题已实测解决。
 - remaining: 网站与 PR 更新已完成。真机验证缺口继续保留；最新 CHATGPT_REVIEW reviewed_code_sha 为 `1f7dee95fac6015721f1a255e12add34d290703f`，早于当前代码，请核对当前提交评审，不把过期建议当作新修改任务。原工作树 `site/runtime/push-runtime.cjs` 的预存本地修改未编辑、暂存或提交；发布来自独立干净工作树。
 - questions: 暂无。后续新增业务改动需依照最新用户范围与新评审处理，不复用本次发布授权。
+
+
+# Codex → ChatGPT · 排版恢复、操作式教程与 v83 发布（2026-10-26）
+
+- code_branch: `codex/restore-layout-guided-tutorial`（从 v82 的 `8a6d63640cc406b160fc92c96e22f95ba162e3b6` 建立独立分支；未用旧 main 覆盖业务）
+- code_sha: `a732d214d45bda85355e7d7feee031eba3683d12`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/a732d214d45bda85355e7d7feee031eba3683d12
+- related_pr: 本批次未创建 PR、未更新 #85、未合并 main。业务分支已推送。
+- requirements: 用户直接要求教程要教实际点击；反馈 iOS 主屏幕页面位置/大小改变、下方留白过多，要求恢复原组件排版。本轮随后明确“更新到网站”，只解锁同一内容摘要的发布；不追认真机/产品验收，不授权新 PR 或 main 合并。用户新要求覆盖此前协调文档中暂缓独立教程与正式页面展示修复的范围限制。
+- changed_files: `ScreenStage.vue`、`GuestHome.vue` 正式页面承载；`WelcomeGuide.vue`、`onboarding/GuidedPractice.vue`、`onboarding/PracticeSpotlight.vue`、`interaction/tutorialPractice.ts`；`ChoreBoard.vue`、`CompanionChat.vue`、`useConversationNotes.ts` 的显式练习适配接口；两个教程/向导检查脚本；专属 OpenSpec change 及本批次发布授权摘要。未改认证、后端、任务规则、通知规则或数据库迁移。
+- implemented:
+  - 仅正式已登录页面退出 `.app-stage` 的尺寸覆盖，使用原组件布局；创建向导继续使用其固定屏幕容器。v81/v82 的 ScreenStage、screen.css、main.ts 本就相同，没有虚称是 v82 新加的 viewport 回归或简单回退发布号。
+  - 四章 27 个真实操作步骤：值日、抬水、日历、留言；只有对应状态成立才可推进。复用真实任务/完成、轮次、交接、日历、球球聊天和留言状态机；专属注入的负数合成身份/空 token/练习 invite 处理全部内存操作。普通草稿预览及正式路径保持原限制。
+  - 聚光控制器跟随实际练习 Dialog，避免教程继续按钮被视作外部点击。发布包发现与全局更新说明互相阻挡，已单独修复为全局 Dialog 出现时暂停教程遮罩与键盘拦截，关闭后恢复当前步骤；未修改全局更新通知组件。
+  - 北京时间 2026-10-26 14:39:16 原子发布 `20261026-guided-layout-v83`，网站 https://8.148.190.114/dorm-duty/ 。前版 `/opt/dorm-duty/releases/20261026-wizard-startup-v82` 保留；安装器健康失败会自动回退。
+- tests:
+  - Chromium 48 项、桌面 WebKit 移动视口 48 项：完整四章、真实操作结果、零 fetch/XHR、外部 Dialog 避让、窄屏命中、暗色减动效、退出清理、320×568/390×844/430×932 正式组件宽度与导航检查。
+  - Chromium 创建向导整套回归通过；`check-screen-gesture-check.mjs` 真实处理器检查通过；22 项前端状态回归通过。类型检查、站点前缀正式构建与 OpenSpec strict 20/20 通过，publish gate digest=`d9d8e5c2db19b429aa4a83516975b2c132e4b0e50b0bd5e61f6fd19c8efc7b59`。
+  - 最终发布包 7 个页面/资源/健康入口通过；真实更新说明可关闭、教程恢复并完成一次操作，零 fetch/XHR。包内 44 个代码/运行文件逐字节等于提交；构建生成的 push-runtime 仅带依赖目录标签差异，已核对并使用提交中的原运行文件，未混入本地未提交改动。
+  - 包 SHA-256=`ef77c05dba43f63d7658209e4fa02617ec7b0ac63f3101de7badd665ea881abf`，本地/远端一致。备份 `/opt/dorm-duty/backups/dorm-20261026T063907Z.sqlite`；完整性 ok，外键违规 0。发布后 69 条旧完成记录、历史补记/审计、成员/配置/有效会话共 12 张表的既有行校验 changedOrMissing=0；既有宿舍未自动配置。没有测试打卡/通知或覆盖数据库。
+  - 公网 161 个页面/资源逐字节匹配最终发布包，health 确认本 SHA、v83、Node/SQLite。
+- CI: 已通过 workflow_dispatch 启动最终 SHA 的 https://github.com/RUIAN12138/dorm-duty/actions/runs/40280952025 。本次查询时 spec-contract、android 成功；web-and-business、conversation-motion 尚运行，不称远端全绿。此前预修提交 b354e60 的 run 40280594371 不是最终代码的验收。
+- platform_status: 桌面 Chromium/WebKit 移动视口、合成数据库、正式代码包冒烟及线上只读检查；实体 iPhone 主屏幕/真实键盘、Android WebView、HarmonyOS ArkWeb 真机仍未验收。未把网页部署当作原生 APK 升级。
+- remaining: 用户对恢复排版的最终真机视觉确认待完成；CI 剩余任务等待最终状态。CHATGPT_REVIEW 仍针对旧 SHA `1f7dee95fac6015721f1a255e12add34d290703f`，请核对此次新分支和 SHA，不重复执行旧建议。
+- questions: 暂无。后续新功能不复用本批次部署授权。
