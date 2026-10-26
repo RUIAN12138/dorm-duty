@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { LayoutGroup, motion } from 'motion-v';
 import { motionAllowed, motionTokens } from '../../interaction/motion';
 import type { DormDraft, TaskKey } from '../../interaction/dormDraft';
@@ -8,6 +8,11 @@ const props = withDefaults(defineProps<{ draft: DormDraft; compact?: boolean }>(
   compact: false,
 });
 
+const group = reactive({ duty: 0, water: 0 });
+const pages = ['duty', 'water'] as const;
+const groupedTasks = computed(() => Object.fromEntries(pages.map(page => [page, props.draft.tasks.filter(task => task.enabled && task.page === page)])) as Record<'duty'|'water', typeof props.draft.tasks>);
+const groupCount = (page: 'duty'|'water') => Math.max(1, Math.ceil(groupedTasks.value[page].length / 3));
+watch(groupedTasks, () => { for (const page of pages) group[page] = Math.min(group[page], groupCount(page) - 1); });
 const dragged = ref<TaskKey | null>(null);
 const hover = ref('');
 const notice = ref('');
@@ -127,7 +132,7 @@ onBeforeUnmount(() => up());
         </header>
         <div class="page-tasks page-tasks--compact" :class="{ 'page-tasks--empty': !draft.tasks.some(task => task.enabled && task.page === page) }">
           <motion.button
-            v-for="task in draft.tasks.filter(item => item.enabled && item.page === page)"
+            v-for="task in groupedTasks[page].slice(group[page]*3,group[page]*3+3)"
             :key="task.key"
             :layout-id="`new-room-page-task-${task.key}`"
             layout="position"
@@ -140,6 +145,10 @@ onBeforeUnmount(() => up());
             @click="moveTask(task.key)"
           >{{ task.name || '未命名任务' }}</motion.button>
           <span v-if="!draft.tasks.some(task => task.enabled && task.page === page)" class="page-empty">暂无任务</span>
+        </div>
+        <div v-if="groupCount(page)>1" class="page-group-controls" :aria-label="`${page==='duty'?'值日':'第二页面'}任务分页`">
+          <button :disabled="group[page]===0" @click="group[page]--">上一组</button>
+          <button :disabled="group[page]===groupCount(page)-1" @click="group[page]++">下一组</button>
         </div>
       </section>
     </LayoutGroup>
@@ -309,6 +318,10 @@ onBeforeUnmount(() => up());
 .page-task--compact.lifting { opacity: .24; }
 .page-empty { padding: 10px 2px; color: var(--muted); font-size: 15px; }
 .page-notice { position: absolute; inset-inline: 0; bottom: -30px; margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
+.page-group-controls { display:flex; justify-content:space-between; gap:4px; margin-top:8px; }
+.page-group-controls button { border:0; background:none; color:var(--muted); font:inherit; font-size:13px; min-height:44px; padding:4px; }
+.page-group-controls button:disabled { opacity:.35; }
+.page-group-controls button:active:not(:disabled) { transform:scale(.96); }
 .task-ghost { position: fixed; z-index: 1500; transform: translate(-50%,-50%) scale(1.035); background: var(--canvas); border: 1px solid var(--line); box-shadow: 0 8px 18px rgb(0 0 0 / 12%); padding: 12px 18px; border-radius: 15px; pointer-events: none; font-size: 16px; font-weight: 600; }
 @media (max-width: 350px) {
   .page-board--compact { gap: 8px; }

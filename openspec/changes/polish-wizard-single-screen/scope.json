@@ -1,0 +1,17 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "76b508b16eb63b3a733d8d3a6f307c0b4d03e681",
+  "allowed": [
+    "frontend/src/components/onboarding/CreationProgress.vue",
+    "frontend/src/components/onboarding/DormWizard.vue",
+    "frontend/src/components/onboarding/TaskPageBoard.vue",
+    "scripts/check-wizard-single-screen.mjs",
+    "openspec/changes/polish-wizard-single-screen/",
+    "scripts/check-dorm-wizard-browser.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

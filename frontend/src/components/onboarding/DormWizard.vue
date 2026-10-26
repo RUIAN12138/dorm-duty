@@ -33,6 +33,16 @@ const selectedTask=ref<string|null>(null),advanced=ref(false);
 const creationEditTaskKey=ref<string|null>(null),selectedRuleTaskKey=ref<string|null>(null);
 const ruleFacet=ref<'timing'|'rotation'>('rotation');
 const rulesAdvanced=ref(false);
+const taskGroup=ref(0), ruleView=ref<'cycle'|'time'>('cycle');
+let templateSwipe: { id:number; x:number; y:number }|null=null;
+let suppressTemplateClickUntil=0;
+function templateDown(e:PointerEvent){if(e.isPrimary)templateSwipe={id:e.pointerId,x:e.clientX,y:e.clientY};}
+function templateUp(e:PointerEvent){const start=templateSwipe;templateSwipe=null;if(!start||start.id!==e.pointerId)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.abs(dx)<48||Math.abs(dx)<Math.abs(dy)*1.4)return;suppressTemplateClickUntil=performance.now()+350;taskGroup.value=Math.max(0,Math.min(taskGroupCount.value-1,taskGroup.value+(dx<0?1:-1)));}
+function templateClick(e:MouseEvent){if(performance.now()<suppressTemplateClickUntil){e.preventDefault();e.stopImmediatePropagation();}}
+const taskGroupCount=computed(()=>Math.ceil(draft.tasks.length/4));
+const visibleTemplates=computed(()=>draft.tasks.slice(taskGroup.value*4,taskGroup.value*4+4));
+const displayTitle=computed(()=>!props.workspace&&current.value.kind==='tasks'&&creationEditTaskKey.value?'这件事，叫什么？':!props.workspace&&current.value.kind==='rules'&&ruleView.value==='time'&&!rulesAdvanced.value?'什么时候完成？':current.value.title);
+const displayTip=computed(()=>!props.workspace&&current.value.kind==='tasks'&&creationEditTaskKey.value?'名称与说明，简单一点':!props.workspace&&current.value.kind==='rules'&&ruleView.value==='time'&&!rulesAdvanced.value?'上下滑动数字，轻点可输入':current.value.tip);
 const ruleTimeField=ref<'execution_time'|'deadline'>('deadline');
 const workspaceTimeField=ref<'execution_time'|'deadline'>('deadline');
 const steps=computed<Step[]>(()=>{
@@ -76,6 +86,7 @@ function backCreationStep(){if(index.value>0){go(index.value-1);return;}emit('ca
 function submit(){localError.value=draftErrors(draft).join('；');if(localError.value)return;if(props.experience){experienceComplete.value=true;return;}emit('submit',clone(draft));}
 function toggle(t:DraftTask){t.enabled=!t.enabled;if(!props.workspace){creationEditTaskKey.value=t.enabled?t.key:null;if(t.enabled&&!enabled.value.some(item=>item.key===selectedRuleTaskKey.value))selectedRuleTaskKey.value=t.key;}}
 function chooseCycle(mode:'round'|'scheduled'|'completion'){
+ if(!props.workspace)ruleView.value=mode==='scheduled'?'time':'cycle';
  draft.policy=mode==='scheduled'?'hard':'soft';
  for(const task of ruleTasks.value)task.rotation=mode==='scheduled'?'rotation':mode==='completion'?'completion':'round';
  if(!ruleTasks.value.some(t=>t.key===selectedRuleTaskKey.value))selectedRuleTaskKey.value=ruleTasks.value[0]?.key||null;
@@ -94,10 +105,10 @@ function tourDone(){tour.value=false;}
 const tourSteps=computed(()=>[{target:'.creation-progress, .wizard-steps',text:'点选或拖动进度条，随时回去修改。'},{target:'.wizard-footer',text:'每次只安排一件事；确认前都保存在草稿。'}]);
  const mood=computed(()=>passwordFocus.value?'00':localError.value?'13':invite.value?'05':current.value.kind==='time'?'19':current.value.kind==='rotation'?'03':'02');
 let tipMotion:Animation|undefined;
-watch(()=>current.value.tip,()=>{if(!motionAllowed()||!guideBall.value)return;tipMotion?.cancel();tipMotion=guideBall.value.animate([{rotate:'0deg'},{rotate:'-1.2deg',offset:.45},{rotate:'0deg'}],{duration:230,easing:'cubic-bezier(.22,1,.36,1)'});});
+watch(()=>displayTip.value,()=>{if(!motionAllowed()||!guideBall.value)return;tipMotion?.cancel();tipMotion=guideBall.value.animate([{rotate:'0deg'},{rotate:'-1.2deg',offset:.45},{rotate:'0deg'}],{duration:230,easing:'cubic-bezier(.22,1,.36,1)'});});
 let baseline=0,raf=0;
 const compact=ref(false),viewportStyle=ref<Record<string,string>>({});
-function syncViewport(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{const v=window.visualViewport;if(!v)return;baseline=Math.max(baseline,window.innerHeight,v.height+v.offsetTop);compact.value=baseline-v.height-v.offsetTop>100;viewportStyle.value={'--wizard-height':`${v.height}px`,'--wizard-top':`${v.offsetTop}px`};});}
+function syncViewport(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{const v=window.visualViewport;if(!v)return;const editing=document.activeElement?.matches('input,textarea,[contenteditable=true]');if(props.workspace){baseline=Math.max(baseline,window.innerHeight,v.height+v.offsetTop);compact.value=baseline-v.height-v.offsetTop>100;}else{baseline=editing?Math.max(baseline,window.innerHeight):Math.max(window.innerHeight,v.height+v.offsetTop);compact.value=!!editing&&baseline-v.height-v.offsetTop>100;}viewportStyle.value={'--wizard-height':`${v.height}px`,'--wizard-top':`${v.offsetTop}px`};});}
 function focus(e:FocusEvent){const el=e.target as HTMLInputElement;passwordFocus.value=el.type==='password';if(el.matches('input,textarea')){const r=el.getBoundingClientRect();gaze.value={x:r.x+r.width/2,y:r.y+r.height/2};}}
 function blur(){passwordFocus.value=false;gaze.value=undefined;}
 onMounted(()=>{syncViewport();window.visualViewport?.addEventListener('resize',syncViewport);window.visualViewport?.addEventListener('scroll',syncViewport);});
@@ -127,18 +138,18 @@ function setTime(t:DraftTask,key:'execution_time'|'deadline',v:string[]){t[key]=
 onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEventListener('resize',syncViewport);window.visualViewport?.removeEventListener('scroll',syncViewport);tipMotion?.cancel();finishFlight?.stop();pagesInMotion.forEach((_,el)=>cancelPage(el));preference.removeEventListener('change',quietPages);document.removeEventListener('visibilitychange',quietPages);window.removeEventListener('ui-motion-change',quietPages);});
 </script>
 <template><section ref="root" class="dorm-wizard" data-native-scroll :class="{'wizard-complete':!!invite,'is-compact':compact,'is-page-arrangement':!workspace&&current.kind==='pages','is-rules':current.kind==='rules','is-workspace':workspace,'preview-open':previewOpen}" :style="viewportStyle" @focusin="focus" @focusout="blur" @pointerdown="pressDown" @pointermove="tilt" @pointerup="release" @pointercancel="release">
-<header class="wizard-guide"><div ref="guideBall" class="guide-ball"><DormCompanion :size="72" :interactive="true" :mood="mood" :gaze-point="gaze" :tips="false"/></div><Transition name="wizard-tip" mode="out-in"><p :key="invite?'完成':current.tip" class="wizard-tip">{{invite?(experience?'本地体验完成，草稿仅保存在本机':'把邀请码分享给室友吧'):current.tip}}</p></Transition><button v-if="!workspace&&!invite" class="wizard-back" aria-label="返回上一页" data-testid="entry-back" :disabled="busy" @click="backCreationStep"><van-icon name="arrow-left"/></button><button v-if="workspace" class="wizard-help" aria-label="使用引导" @click="tour=true"><van-icon name="question-o"/></button><button class="wizard-close" aria-label="退出配置" :disabled="busy" @click="emit('cancel')"><van-icon name="cross"/></button></header>
+<header class="wizard-guide"><div ref="guideBall" class="guide-ball"><DormCompanion :size="72" :interactive="true" :mood="mood" :gaze-point="gaze" :tips="false"/></div><Transition name="wizard-tip" mode="out-in"><p :key="invite?'完成':displayTip" class="wizard-tip">{{invite?(experience?'本地体验完成，草稿仅保存在本机':'把邀请码分享给室友吧'):displayTip}}</p></Transition><button v-if="!workspace&&!invite" class="wizard-back" aria-label="返回上一页" data-testid="entry-back" :disabled="busy" @click="backCreationStep"><van-icon name="arrow-left"/></button><button v-if="workspace" class="wizard-help" aria-label="使用引导" @click="tour=true"><van-icon name="question-o"/></button><button class="wizard-close" aria-label="退出配置" :disabled="busy" @click="emit('cancel')"><van-icon name="cross"/></button></header>
 <CreationProgress v-if="!invite" :model-value="index" :labels="steps.map(s=>s.label)" :nav-label="workspace?'任务配置进度':'新宿舍创建进度'" :creation-mode="!workspace" @update:model-value="go"/>
 <div class="wizard-body"><template v-if="invite"><h1 class="finish-title">准备好，一起开始</h1><div class="created-summary"><strong>{{enabled.map(t=>t.name).join("、")}}</strong><span>{{experience?'本地草稿体验完成':'任务安排已保存'}}</span></div><div class="invite-result"><span>{{experience?'创建流程体验':'宿舍邀请码'}}</span><strong>{{experience?'已完成':invite}}</strong><p>{{experience?'本机仅保留向导草稿，不会创建宿舍或生成有效邀请码。':'舍友验证邮箱后，填写自己的姓名加入。'}}</p><button v-if="!experience" @click="copyInvite">复制邀请码</button><button class="wizard-primary" @click="completeWizard">{{experience?'退出体验':'开始使用'}}</button></div></template>
-<div v-else class="wizard-stage"><Transition :css="false" appear @enter="enter" @leave="leave" @enter-cancelled="cancelPage" @leave-cancelled="cancelPage"><section :key="current.id" class="wizard-step" :data-step="current.kind"><h1 data-enter>{{current.title}}</h1>
+<div v-else class="wizard-stage"><Transition :css="false" appear @enter="enter" @leave="leave" @enter-cancelled="cancelPage" @leave-cancelled="cancelPage"><section :key="current.id" class="wizard-step" :data-step="current.kind"><h1 data-enter>{{displayTitle}}</h1>
 <div v-if="current.kind==='name'" class="wizard-fields"><input data-enter v-model="draft.name" aria-label="宿舍名称" placeholder="例如：Y11505" maxlength="64" autocomplete="off"/></div>
-<template v-else-if="current.kind==='tasks'"><div v-if="!creationEditTaskKey" data-enter><div class="template-grid"><motion.button v-for="(t,i) in draft.tasks" :key="t.key" layout="position" :transition="motionAllowed()?motionTokens.layout:{duration:0}" class="wizard-choice template-card" :aria-pressed="t.enabled" :class="{selected:t.enabled}" :style="{'--i':i}" @click="toggle(t)"><strong>{{t.name||'自定义任务'}}</strong></motion.button></div><button v-if="canAddTask" class="wizard-text add-task" @click="custom">自定义任务</button><p v-else class="wizard-secondary add-task-guidance" role="status">最多{{MAX_DORM_TASKS}}项任务</p></div><div v-else class="creation-task-edit" data-enter><button class="wizard-text" @click="creationEditTaskKey=null">‹ 返回任务</button><TaskEditor :key="creationEditTaskKey" :task="draft.tasks.find(t=>t.key===creationEditTaskKey)!"/></div><div v-if="enabled.length" class="creation-task-picks" data-enter aria-label="已添加任务"><button v-for="t in enabled" :key="t.key" :class="{selected:creationEditTaskKey===t.key}" :aria-pressed="creationEditTaskKey===t.key" @click="creationEditTaskKey=creationEditTaskKey===t.key?null:t.key">{{t.name||'未命名任务'}}</button></div><div v-if="!enabled.length" class="empty-guide" data-enter><span>↑</span><p>选一项常用任务，也可以新建。</p></div></template>
+<template v-else-if="current.kind==='tasks'"><div v-if="!creationEditTaskKey" data-enter><div class="template-grid" @pointerdown="templateDown" @pointerup="templateUp" @pointercancel="templateSwipe=null" @click.capture="templateClick"><motion.button v-for="(t,i) in visibleTemplates" :key="t.key" layout="position" :transition="motionAllowed()?motionTokens.layout:{duration:0}" class="wizard-choice template-card" :aria-pressed="t.enabled" :class="{selected:t.enabled}" :style="{'--i':i}" @click="toggle(t)"><strong>{{t.name||'自定义任务'}}</strong></motion.button></div><div v-if="taskGroupCount>1" class="task-group-controls" aria-label="任务模板分页"><button class="wizard-text" :disabled="taskGroup===0" @click="taskGroup--">上一组</button><button class="wizard-text" :disabled="taskGroup===taskGroupCount-1" @click="taskGroup++">下一组</button></div><button v-if="canAddTask" class="wizard-text add-task" @click="custom">自定义任务</button><p v-else class="wizard-secondary add-task-guidance" role="status">最多{{MAX_DORM_TASKS}}项任务</p></div><div v-else class="creation-task-edit" data-enter><button class="wizard-text" @click="creationEditTaskKey=null">‹ 返回任务</button><TaskEditor :key="creationEditTaskKey" :task="draft.tasks.find(t=>t.key===creationEditTaskKey)!"/></div><div v-if="enabled.length" class="creation-task-picks" data-enter aria-label="已添加任务"><button v-for="t in enabled" :key="t.key" :class="{selected:creationEditTaskKey===t.key}" :aria-pressed="creationEditTaskKey===t.key" @click="creationEditTaskKey=creationEditTaskKey===t.key?null:t.key">{{t.name||'未命名任务'}}</button></div><div v-if="!enabled.length" class="empty-guide" data-enter><span>↑</span><p>选一项常用任务，也可以新建。</p></div></template>
 <template v-else-if="current.kind==='templates'"><div class="template-grid"><motion.button v-for="(t,i) in draft.tasks" :key="t.key" layout="position" :transition="motionAllowed()?motionTokens.layout:{duration:0}" class="wizard-choice template-card" :aria-pressed="t.enabled" :class="{selected:t.enabled}" data-enter :style="{'--i':i}" @click="toggle(t)"><van-icon :name="t.key==='water'?'fire-o':t.key==='floor'?'brush-o':'home-o'"/><strong>{{t.name||'自定义任务'}}</strong><span>{{t.enabled?'已添加':'点按添加'}}</span></motion.button></div><button v-if="canAddTask" data-enter class="wizard-text add-task" @click="custom"><van-icon name="plus"/> 自定义任务</button><p v-else data-enter class="wizard-secondary add-task-guidance" role="status">最多{{MAX_DORM_TASKS}}项任务</p><div v-if="!enabled.length" class="empty-guide" data-enter><span>↑</span><p>点选上方任务，一起开始吧。</p></div></template>
 <template v-else-if="current.kind==='list'"><div class="workspace-task-list"><motion.div v-for="t in enabled" :key="t.key" layout="position" :transition="motionAllowed()?motionTokens.layout:{duration:0}" class="workspace-task-row" data-enter><button class="wizard-choice" @click="edit(t)"><strong>{{t.name}}</strong><span>名称 · 页面 · 完成方式</span><van-icon name="arrow"/></button><button class="wizard-text" :aria-label="`删除${t.name}`" @click="selectedTask=t.key;pendingDelete=true">删除</button></motion.div></div><button class="wizard-text" data-enter @click="stepId='templates'">添加任务</button><template v-if="pendingDelete"><div class="delete-confirm" data-enter role="alert"><p>移除后历史记录仍然保留。</p><button @click="remove(draft.tasks.find(t=>t.key===selectedTask)!);pendingDelete=false">移除此任务</button><button @click="pendingDelete=false">取消</button></div></template></template>
 <TaskEditor v-else-if="current.kind==='task'" :task="current.task!"/>
 <template v-else-if="current.kind==='pages'"><TaskPageBoard :draft="draft" :compact="!workspace"/></template>
 <template v-else-if="current.kind==='second'"><button class="wizard-choice policy-option" data-enter :aria-pressed="draft.second_page_kind!=='nudge'" :class="{selected:draft.second_page_kind!=='nudge'}" @click="draft.second_page_kind='tasks'"><strong>任务页</strong><span>查看安排，完成后交接</span></button><button class="wizard-choice policy-option" data-enter :aria-pressed="draft.second_page_kind==='nudge'" :class="{selected:draft.second_page_kind==='nudge'}" @click="draft.second_page_kind='nudge'"><strong>催促页</strong><span>显示负责人，轻点发出提醒</span></button></template>
-<template v-else-if="current.kind==='rules'"><template v-if="!rulesAdvanced"><div v-if="ruleTasks.length" class="rule-primary" data-enter><Transition name="wizard-panel"><div v-if="globalPacing==='scheduled'&&ruleTasks.length>1" class="creation-task-picks rule-task-picks" aria-label="选择定时任务"><button v-for="t in ruleTasks" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline'">{{t.name}}</button></div></Transition><div class="rule-mode-picks"><button v-for="choice in pacingChoices" :key="choice.mode" class="wizard-choice" :class="{selected:globalPacing===choice.mode}" :aria-pressed="globalPacing===choice.mode" @click="chooseCycle(choice.mode)"><strong>{{choice.title}}</strong><span>{{choice.description}}</span></button></div><div v-if="globalPacing==='scheduled'&&selectedRuleTask" class="rule-time-panel"><div class="time-field-switch" role="group" aria-label="选择任务时间"><button :class="{selected:ruleTimeField==='execution_time'}" @click="ruleTimeField='execution_time'">执行</button><button :class="{selected:ruleTimeField==='deadline'}" @click="ruleTimeField='deadline'">截止</button></div><TimeWheelSetting v-if="ruleTimeField==='execution_time'" v-model="selectedRuleTask.execution_time" label="执行时间" compact/><TimeWheelSetting v-else v-model="selectedRuleTask.deadline" label="截止时间" compact/></div></div><div v-else class="rule-fixed" data-enter><strong>抬水做完后交给下一位</strong></div><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=true">为单项任务调整</button></template><template v-else><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=false">‹ 使用统一方式</button><div v-if="enabled.length" class="creation-task-picks rule-task-picks" data-enter aria-label="选择任务"><button v-for="t in enabled" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline';ruleFacet='rotation'">{{t.name}}</button></div><Transition name="wizard-panel">
+<template v-else-if="current.kind==='rules'"><template v-if="!rulesAdvanced"><div v-if="ruleTasks.length" class="rule-primary" data-enter><Transition name="wizard-panel"><div v-if="globalPacing==='scheduled'&&ruleTasks.length>1&&ruleView==='time'" class="creation-task-picks rule-task-picks" aria-label="选择定时任务"><button v-for="t in ruleTasks" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline'">{{t.name}}</button></div></Transition><button v-if="ruleView==='time'" class="wizard-text rule-back" @click="ruleView='cycle'">‹ 完成方式</button><div v-if="ruleView==='cycle'" class="rule-mode-picks"><button v-for="choice in pacingChoices" :key="choice.mode" class="wizard-choice" :class="{selected:globalPacing===choice.mode}" :aria-pressed="globalPacing===choice.mode" @click="chooseCycle(choice.mode)"><strong>{{choice.title}}</strong><span>{{choice.description}}</span></button></div><div v-if="globalPacing==='scheduled'&&selectedRuleTask&&ruleView==='time'" class="rule-time-panel"><div class="time-field-switch" role="group" aria-label="选择任务时间"><button :class="{selected:ruleTimeField==='execution_time'}" @click="ruleTimeField='execution_time'">执行</button><button :class="{selected:ruleTimeField==='deadline'}" @click="ruleTimeField='deadline'">截止</button></div><TimeWheelSetting v-if="ruleTimeField==='execution_time'" v-model="selectedRuleTask.execution_time" label="执行时间" compact/><TimeWheelSetting v-else v-model="selectedRuleTask.deadline" label="截止时间" compact/></div><button v-if="ruleView==='cycle'&&globalPacing==='scheduled'" class="wizard-text" @click="ruleView='time'">调整时间</button></div><div v-else class="rule-fixed" data-enter><strong>抬水做完后交给下一位</strong></div><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=true">为单项任务调整</button></template><template v-else><button class="wizard-text rule-advanced-toggle" data-enter @click="rulesAdvanced=false">‹ 使用统一方式</button><div v-if="enabled.length" class="creation-task-picks rule-task-picks" data-enter aria-label="选择任务"><button v-for="t in enabled" :key="t.key" :class="{selected:selectedRuleTaskKey===t.key}" :aria-pressed="selectedRuleTaskKey===t.key" @click="selectedRuleTaskKey=t.key;ruleTimeField='deadline';ruleFacet='rotation'">{{t.name}}</button></div><Transition name="wizard-panel">
   <div v-if="selectedRuleTask" class="rule-detail" data-enter>
     <header><strong>{{selectedRuleTask.name}}</strong></header>
     <div class="rule-facets" role="tablist" aria-label="任务设置">
@@ -498,4 +509,95 @@ onBeforeUnmount(()=>{cancelAnimationFrame(raf);window.visualViewport?.removeEven
     transition: none !important;
   }
 }
+</style>
+
+<style scoped>
+/* Creation-only space budget; the existing settings workspace keeps its layout. */
+.dorm-wizard:not(.is-workspace):not(.wizard-complete) {
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+}
+.dorm-wizard:not(.is-workspace):not(.wizard-complete) .wizard-guide {
+  flex-basis: 104px; gap: 6px; padding-top: 4px;
+}
+.dorm-wizard:not(.is-workspace):not(.wizard-complete) .guide-ball {
+  height: 64px; transform: scale(.89); transform-origin: center top;
+}
+.dorm-wizard:not(.is-workspace) .wizard-body {
+  padding-top: 14px; padding-bottom: 10px; scroll-padding-block: 12px;
+}
+.dorm-wizard:not(.is-workspace) .wizard-body h1 {
+  margin-bottom: 22px; font-size: 34px; line-height: 1.18;
+}
+.dorm-wizard:not(.is-workspace) .wizard-footer {
+  gap: 14px; padding-top: 10px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.dorm-wizard:not(.is-workspace) .template-grid {
+  grid-auto-rows: 76px; gap: 10px; touch-action: pan-y;
+}
+.dorm-wizard:not(.is-workspace) .template-card {
+  min-height: 76px; padding: 14px 16px; align-content: center; border-radius: 22px;
+}
+.dorm-wizard:not(.is-workspace) .template-card strong { font-size: 19px; }
+.dorm-wizard:not(.is-workspace) .creation-task-picks { margin-top: 12px; }
+.task-group-controls { display: flex; justify-content: space-between; gap: 16px; }
+.task-group-controls button { min-width: 64px; }
+.dorm-wizard:not(.is-workspace) .creation-task-edit { gap: 6px; }
+.dorm-wizard:not(.is-workspace) .creation-task-edit > .wizard-text { justify-self: start; }
+.dorm-wizard:not(.is-workspace) :deep(.task-editor) { gap: 16px; }
+.dorm-wizard:not(.is-workspace) :deep(.task-editor label) { gap: 6px; }
+.dorm-wizard:not(.is-workspace) :deep(.task-editor label > span) { display: none; }
+.dorm-wizard:not(.is-workspace) :deep(.task-editor input),
+.dorm-wizard:not(.is-workspace) :deep(.task-editor textarea) {
+  padding: 12px 16px; line-height: 1.4; font-size: 18px;
+}
+/* Prevent the global input scale and child-editor focus transform from stacking. */
+.dorm-wizard:not(.is-workspace) .creation-task-edit :deep(input),
+.dorm-wizard:not(.is-workspace) .creation-task-edit :deep(textarea) {
+  -webkit-appearance: none; appearance: none; scale: 1 !important;
+}
+.dorm-wizard:not(.is-workspace) .creation-task-edit :deep(input:focus),
+.dorm-wizard:not(.is-workspace) .creation-task-edit :deep(textarea:focus) {
+  transform: scale(1.004); border-color: color-mix(in srgb, var(--ink) 22%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.dorm-wizard:not(.is-workspace) .creation-task-edit :deep(input:focus-visible),
+.dorm-wizard:not(.is-workspace) .creation-task-edit :deep(textarea:focus-visible) {
+  outline: 2px solid var(--ink); outline-offset: -3px;
+}
+.dorm-wizard:not(.is-workspace) .rule-mode-picks { gap: 10px; }
+.dorm-wizard:not(.is-workspace) .rule-mode-picks .wizard-choice {
+  min-height: 72px; padding: 12px 16px; gap: 5px; border-radius: 22px;
+}
+.dorm-wizard:not(.is-workspace) .rule-mode-picks strong { font-size: 18px; }
+.dorm-wizard:not(.is-workspace) .rule-mode-picks span { font-size: 13px; }
+.dorm-wizard:not(.is-workspace) .rule-primary .rule-back { justify-self: start; }
+.dorm-wizard:not(.is-workspace) .rule-time-panel { gap: 16px; margin-block: 8px; }
+.dorm-wizard:not(.is-workspace) .rule-time-panel :deep(.time-dial) { font-size: 48px; }
+.dorm-wizard:not(.is-workspace) .time-field-switch button { min-height: 44px; }
+.dorm-wizard:not(.is-workspace) .rule-rotation {
+  grid-template-columns: 1fr; gap: 8px;
+}
+.dorm-wizard:not(.is-workspace) .rule-rotation .wizard-choice { min-height: 56px; }
+.dorm-wizard:not(.is-workspace).is-compact .wizard-guide { flex-basis: 62px; }
+.dorm-wizard:not(.is-workspace).is-compact .guide-ball { transform: scale(.65); height: 52px; }
+.dorm-wizard:not(.is-workspace).is-compact .wizard-tip { display: none; }
+@media (max-height: 700px) {
+  .dorm-wizard:not(.is-workspace):not(.wizard-complete) .wizard-guide { flex-basis: 82px; }
+  .dorm-wizard:not(.is-workspace):not(.wizard-complete) .guide-ball { height: 50px; transform: scale(.7); }
+  .dorm-wizard:not(.is-workspace) .wizard-body { padding-top: 8px; }
+  .dorm-wizard:not(.is-workspace) .wizard-body h1 { font-size: 30px; margin-bottom: 16px; }
+  .dorm-wizard:not(.is-workspace) .rule-mode-picks .wizard-choice { min-height: 62px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dorm-wizard:not(.is-workspace) .guide-ball { transition: none; }
+}
+</style>
+
+<style scoped>
+.dorm-wizard:not(.is-workspace) .rule-detail { padding: 0; border: 0; margin-top: 4px; }
+.dorm-wizard:not(.is-workspace) .rule-detail > header { display: none; }
+.dorm-wizard:not(.is-workspace) .rule-detail .rule-rotation { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dorm-wizard:not(.is-workspace) .rule-detail .rule-rotation .wizard-choice { min-height: 64px; padding: 10px; }
+.dorm-wizard:not(.is-workspace) .rule-detail .rule-rotation strong { font-size: 16px; line-height: 1.25; }
+.dorm-wizard:not(.is-workspace) .rule-detail .rule-rotation span { display: none; }
 </style>

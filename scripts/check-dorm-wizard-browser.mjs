@@ -370,10 +370,10 @@ try {
     return nodes.length===targets.length&&nodes.every((node,index)=>Math.abs(node.left+node.width/2-(targets[index].left+targets[index].width/2))<1);
   });
   check(creationNodeAlignment,'five creation nodes align with their real step hit targets');
-  const progressGlass=await p.locator('.progress-glass-surface').boundingBox();
+  const progressGlass=await p.locator('.progress-glass-surface').evaluate(el=>({width:el.offsetWidth,height:el.offsetHeight}));
   const progressTrack=await p.locator('.progress-track').boundingBox();
-  check(progressTargets.every(r=>r.width>=44&&r.height===64)&&progressGlass?.width===36&&progressGlass?.height===36,'progress has 44px+ touch targets around a 36px glass thumb');
-  check(progressTrack?.height===20,'progress track has the stronger 20px black-and-gray treatment');
+  check(progressTargets.every(r=>r.width>=44&&r.height===60)&&progressGlass?.width===40&&progressGlass?.height===40,'creation progress has 44px+ touch targets around a 40px glass thumb');
+  check(progressTrack?.height===32,'creation progress has the stronger 32px black-and-gray treatment');
   check(await p.locator('.progress-glass-surface').evaluate(el=>getComputedStyle(el).opacity)==='0','glass thumb is visually hidden while progress is idle');
   await p.evaluate(()=>{let count=0;Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{count++;return true}});Object.defineProperty(window,'__wizardHaptics',{configurable:true,get:()=>count});});
   await p.waitForTimeout(450);
@@ -398,7 +398,7 @@ try {
     const rect = host.getBoundingClientRect();
     const stepX = (index) => rect.left + 24 + (rect.width - 48) * index / 4;
     host.dispatchEvent(new PointerEvent('pointerdown', {
-      bubbles: true, pointerId: 91, pointerType: 'touch', button: 0,
+      bubbles: true, pointerId: 91, pointerType: 'touch', button: 0, isPrimary: true,
       clientX: stepX(0), clientY: rect.top + rect.height / 2,
     }));
   });
@@ -410,7 +410,7 @@ try {
     // Simulate a touch platform that coalesces the final pointermove and only
     // delivers the release at the new step.
     host.dispatchEvent(new PointerEvent('pointerup', {
-      bubbles: true, pointerId: 91, pointerType: 'touch', button: 0,
+      bubbles: true, pointerId: 91, pointerType: 'touch', button: 0, isPrimary: true,
       clientX: stepX(1), clientY: rect.top + rect.height / 2,
     }));
   });
@@ -423,11 +423,11 @@ try {
     const rect = host.getBoundingClientRect();
     const x = rect.left + 24 + (rect.width - 48) / 4;
     host.dispatchEvent(new PointerEvent('pointerdown', {
-      bubbles: true, pointerId: 92, pointerType: 'touch', button: 0,
+      bubbles: true, pointerId: 92, pointerType: 'touch', button: 0, isPrimary: true,
       clientX: x, clientY: rect.top + rect.height / 2,
     }));
     host.dispatchEvent(new PointerEvent('pointerup', {
-      bubbles: true, pointerId: 92, pointerType: 'touch', button: 0,
+      bubbles: true, pointerId: 92, pointerType: 'touch', button: 0, isPrimary: true,
       clientX: x, clientY: rect.top + rect.height / 2 + 16,
     }));
   });
@@ -439,11 +439,11 @@ try {
     const x = rect.left + 24 + (rect.width - 48) / 4;
     for (const [type, pointerId] of [['pointercancel',93],['lostpointercapture',94]]) {
       host.dispatchEvent(new PointerEvent('pointerdown', {
-        bubbles: true, pointerId, pointerType: 'touch', button: 0,
+        bubbles: true, pointerId, pointerType: 'touch', button: 0, isPrimary: true,
         clientX: x, clientY: rect.top + rect.height / 2,
       }));
       host.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, pointerId, pointerType: 'touch', button: 0,
+        bubbles: true, pointerId, pointerType: 'touch', button: 0, isPrimary: true,
         clientX: x, clientY: rect.top + rect.height / 2,
       }));
     }
@@ -472,7 +472,10 @@ try {
   await p.locator('.creation-task-edit .task-editor').waitFor();
   await p.getByLabel('任务名称',{exact:true}).fill('阳台');
   await p.locator('.creation-task-edit button').first().click();
-  check(await creationSlots.count()===5&&await creationSlots.evaluateAll(nodes=>nodes.slice(0,4).every(node=>node.getAttribute('aria-pressed')==='true'))&&await creationSlots.last().locator('strong').textContent()==='阳台','adding a custom task preserves all four builtin draft tasks');
+  check(await creationSlots.count()===4&&await creationSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true'))&&await p.locator('.creation-task-picks button').count()===5,'adding a custom task preserves all four builtin draft tasks and pages the fifth');
+  await p.getByRole('button',{name:'下一组',exact:true}).click();
+  check(await creationSlots.count()===1&&await creationSlots.first().locator('strong').textContent()==='阳台','new custom task is reachable on its own template group');
+  await p.getByRole('button',{name:'上一组',exact:true}).click();
   await p.waitForFunction(()=>Object.keys(localStorage).some(key=>{try{return JSON.parse(localStorage.getItem(key)||'null')?.draft?.tasks?.some(task=>/^task_[0-9a-f]{32}$/.test(task.key)&&task.name==='阳台'&&task.page==='water')}catch{return false}}));
   const previewCustomKey=await p.evaluate(()=>Object.keys(localStorage).flatMap(key=>{try{return JSON.parse(localStorage.getItem(key)||'null')?.draft?.tasks||[]}catch{return []}}).find(task=>task.name==='阳台')?.key);
   check(true,'custom task receives a stable ID and defaults to the second page');
@@ -601,9 +604,6 @@ try {
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 default rules and all pacing choices fit without vertical scrolling');
   check(await p.locator('.rule-primary .rule-task-picks').count()===0,'non-scheduled unified pacing hides the task selector used only for scheduled times');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});
-  await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
-  await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
-  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-time-panel .time-segment').count()===2&&await p.locator('.rule-time-panel .van-picker').count()===0,'the unified scheduled choice exposes its tasks and one direct HH:MM control without a second wheel');
   check(
     JSON.stringify(await p.locator('.rule-mode-picks .wizard-choice span').allTextContents()) === JSON.stringify([
       '全员完成后，开始新一轮',
@@ -612,6 +612,10 @@ try {
     ]),
     'all pacing choices explain their effect without changing the existing mode labels',
   );
+  if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
+  await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
+  await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
+  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-time-panel .time-segment').count()===2&&await p.locator('.rule-time-panel .van-picker').count()===0,'the unified scheduled choice exposes its tasks and one direct HH:MM control without a second wheel');
   const scheduledFit=await p.locator('.wizard-body').evaluate(el=>({scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,children:[...el.querySelector('.rule-primary').children].map(child=>({className:child.className,height:child.getBoundingClientRect().height}))}));
   check(scheduledFit.scrollHeight<=scheduledFit.clientHeight+1,`390x844 unified scheduled rules fit without vertical scrolling ${JSON.stringify(scheduledFit)}`);
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-scheduled.png`});
@@ -659,13 +663,16 @@ try {
   check(await unifiedTime.getAttribute('data-time-value')===originalTime,'time-control interaction regression restores the original scheduled draft value');
   check(await p.locator('.rule-time-panel .time-field-switch button').count()===2,'scheduled execution and deadline fields switch in place');
   const retainedDeadline=await p.locator('.rule-time-panel .time-wheel-setting').getAttribute('data-time-value');
+  if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
   await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
   check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'switching back to round mode smoothly removes irrelevant task and time controls');
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'non-scheduled rule choice remains compact without vertical scrolling');
+  if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).click();
   await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
   check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'completion handoff also hides the scheduled-only task selector');
+  if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
   check(await p.locator('.rule-task-picks button[aria-pressed="true"]').count()===1,'scheduled task selection is restored after changing the pacing mode');
@@ -688,6 +695,7 @@ try {
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   await p.locator('.rule-override').getByRole('button',{name:'只作提示',exact:true}).click();
   await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
+  if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
   check(await p.locator('.rule-time-panel').count()===0,'round mode keeps time-only controls out of the compact default state');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
@@ -698,6 +706,7 @@ try {
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   check(await p.locator('.rule-override').getByRole('button',{name:'只作提示',exact:true}).getAttribute('aria-pressed')==='true','changing the global rhythm preserves the explicit soft override on another task');
   await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
+  if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).click();
   check(await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).getAttribute('aria-pressed')==='true','completion handoff is an explicit third creation choice');
   check(await p.locator('.wizard-step:not([aria-hidden="true"])').getAttribute('data-step')==='rules','live preview can be opened without leaving the current rules step');
