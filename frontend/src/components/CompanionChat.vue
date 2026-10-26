@@ -474,10 +474,18 @@ const viewportController = createChatViewport({
   onFrame: applyViewport,
 });
 const settleSpring = chatMotion.layout;
+let backgroundScroll = {x:0,y:0}, returnScrollPending = false;
+function restoreBackgroundScroll() {
+  if (!returnScrollPending || present.value || closing || document.activeElement?.matches("input,textarea,[contenteditable=true]")) return;
+  window.scrollTo({left:backgroundScroll.x, top:backgroundScroll.y, behavior:"instant"});
+  const state = viewportController.state();
+  if (!state.keyboard && state.inset === 0) returnScrollPending = false;
+}
 // All visualViewport/window events coalesce here. During a close the same
 // frames only refresh the return destination; no fixed-delay loop is added.
 viewportController.subscribe(() => {
   if (closing && phase.value === "closing") chatTravel.refreshDestination();
+  if (!present.value && returnScrollPending) restoreBackgroundScroll();
 });
 viewportController.start();
 function reopenFromBall(event: PointerEvent) {
@@ -505,6 +513,13 @@ function finishClose() {
   removeBack = undefined;
   lastFocus?.isConnected && lastFocus.focus({ preventScroll: true });
   closing = false;
+  returnScrollPending = true;
+  const generation = motionEpoch;
+  // Release the Dialog's native scroll lock before undoing a focus-induced
+  // document pan. Late keyboard frames use the existing viewport subscriber.
+  void nextTick().then(() => requestAnimationFrame(() => {
+    if (generation === motionEpoch) restoreBackgroundScroll();
+  }));
 }
 // Reveal the history only after the real layout exists, then pin it
 // synchronously. The observer stays instant until releaseInitial() below, so
@@ -539,6 +554,8 @@ async function show() {
   entryPointerPending = true;
   const generation = ++motionEpoch;
   const wasPresent = present.value;
+  returnScrollPending = false;
+  if (!wasPresent) backgroundScroll = {x:window.scrollX,y:window.scrollY};
   stateRequestedForOpen = false;
   if (!wasPresent) {
     prepared.value = false;

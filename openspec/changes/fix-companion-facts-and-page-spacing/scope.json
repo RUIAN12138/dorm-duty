@@ -1,0 +1,18 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "a732d214d45bda85355e7d7feee031eba3683d12",
+  "allowed": [
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/CompanionChat.vue",
+    "scripts/companion-ai.mjs",
+    "site/scripts/check-companion-facts.mjs",
+    "scripts/check-chat-return-layout.mjs",
+    "docs/COMPANION_AI.md",
+    "openspec/changes/fix-companion-facts-and-page-spacing/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

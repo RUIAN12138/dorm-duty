@@ -2492,7 +2492,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 20px;
   margin-bottom: 8px;
 }
 .identity-name {
@@ -3427,13 +3427,13 @@ onUnmounted(() => {
 }
 .water-pane > .hero-caption {
   position: absolute;
-  top: calc(50% - 136px);
+  top: calc(50% - 136px - var(--task-content-lift, 0px));
   left: 0;
   margin: 0;
 }
 .water-pane > .chore-water {
   position: absolute;
-  top: calc(50% - 90px);
+  top: calc(50% - 90px - var(--task-content-lift, 0px));
   left: 0;
   width: 100%;
 }
@@ -3486,19 +3486,19 @@ onUnmounted(() => {
 }
 .chore-personal > .hero-caption {
   position: absolute;
-  top: calc(50% - 178px);
+  top: calc(50% - 178px - var(--task-content-lift, 0px));
   left: 0;
   margin: 0;
 }
 .chore-personal > .task-selector {
   position: absolute;
-  top: calc(50% - 123px);
+  top: calc(50% - 123px - var(--task-content-lift, 0px));
   left: 50%;
   transform: translateX(-50%);
 }
 .chore-personal > .chore-task {
   position: absolute;
-  top: calc(50% - 39px);
+  top: calc(50% - 39px - var(--task-content-lift, 0px));
   left: 0;
 }
 @media (max-height: 650px) {
@@ -3643,4 +3643,10 @@ onUnmounted(() => {
   opacity: 0.65;
   box-shadow: none;
 }
+</style>
+
+<style scoped>
+/* Independent anchors: give the identity row air, lift only the task group. */
+.chore-personal,.water-pane { --task-content-lift: clamp(24px,5svh,42px); }
+@media (max-height:650px) { .chore-personal,.water-pane { --task-content-lift: 12px; } }
 </style>
