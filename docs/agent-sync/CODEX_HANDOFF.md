@@ -641,3 +641,26 @@
 - platform_status: 本轮仅GitHub CI日志、源码及本地纯函数验证；未新增真机验证。既有桌面浏览器证据不变。
 - remaining: 产品视觉/触摸验收仍待。建议只修上述快捷语用例的回复断言，使其按所选问题验证事实回复或模型回复，并继续核对用户消息一次发送；不修改其他等待点、产品代码或通知/权限规则，随后跑相关浏览器测试与最终SHA的CI。
 - questions: `USER_REQUIREMENTS.md:11` 明确既有范围外测试只能只读/运行，编辑须用户另行授权；上述聊天脚本不在本轮scope内，当前没有对此新断言的单独授权。待用户确认仅修该断言及其专属OpenSpec范围登记。未擅自编辑 `CHATGPT_REVIEW.md`。
+
+
+# Codex → ChatGPT · 创建轨道内部停靠位与玻璃连续反馈（2026-10-26）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `7268e18daefc96e127f4b16c416fe6334dddc124`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/7268e18daefc96e127f4b16c416fe6334dddc124
+- related_pr: 无；未新建/更新PR、合并main、部署或访问正式数据库。
+- requirements: 用户选中“节点改为轨道内”并纠正“我说这个”，随后“继续”；明确回到创建进度的局部视觉/拖动，不继续上一轮范围外聊天测试。保留输入框、标题、球球位置、主体留白与底部按钮。
+- changed_files: 产品仅 `frontend/src/components/onboarding/CreationProgress.vue`（16行增、4行减）；新增 `scripts/check-inset-creation-progress.mjs`；专属 `openspec/changes/refine-inset-creation-progress/` 六份文档。未改既有浏览器断言、后端、聊天、正式页面、全局CSS或旧宿舍配置。
+- implemented:
+  - 五条细竖线改为6×4px轨道内部圆润短槽，当前槽略扩大；无大圆/数字/标签，32px轨道及原命中区域不改。
+  - creationMode才启用步骤中心附近二次衰减微吸引，页面仍按原始触点及既有0.58滞回切换，避免视觉磁吸改写选择规则或抖动；工作台false分支保持原线性坐标。
+  - 创建弹簧以可见精度结束，再沿原opacity/transform收起；拖动局部形变80ms连续过渡，X直接跟手。中途重按取消旧回调，不增加延时定时器或依赖；减动效直接终态。
+- tests:
+  - 实施前在Chromium/桌面WebKit保存真实before截图和几何；实施后两引擎各27项新专项通过。标题/输入框/球球区域/底栏/进度宿主五组几何精确一致；新增当前槽/页面同步、指针释放前联动、反向、停留不重复触感、取消、隐藏中重按、缺失vibrate、键盘、320/390/430宽、暗色/减动效。业务写入0、异常0；启动email/enter单独排除，不虚称零启动网络。
+  - 既有创建/工作台两引擎各212项通过；单屏专项各50项通过，没改这些测试。22项状态回归、类型/Vite/PWA构建、OpenSpec strict25/25、范围24changes/438files与18项门禁检查通过。大分块提示及Node实验localStorage提示保留。构建自动生成的push-runtime目录标签差异已恢复，提交未包含。
+  - 玻璃松手至完全隐藏局部采样Chromium451ms/WebKit441ms（含吸附+淡出），原始中间帧记录在results.json，不冒称真机性能。用户可见浏览器也实际拖到页面编排、观察Tips/标题联动后返回名称页。
+  - 证据 `data/inset-creation-progress/{chromium,webkit}/` before/after浅深截图、pressed-light、results.json；WebKit comparison.png；progress-drag.mp4/webm约9.52秒真实桌面操作录屏。路径/命令/限制详见change verification.md。初次对比图使用系统Python缺Pillow，改用已捆绑Python生成，未安装依赖。
+- CI: 已为本节精确SHA手动触发 https://github.com/RUIAN12138/dorm-duty/actions/runs/40307354379 ，交接时未完成，不称远端全绿。新专项本地手动运行，既有workflow未新增步骤。先前workflow列表查询遇TLS握手超时，按仓库现有checks.yml直接触发成功，未改CI配置。
+- platform_status: 桌面Chromium/WebKit移动视口与模拟触感；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未测。录屏不是iPhone录屏。
+- remaining: 本轮视觉/真实触控验收待用户；远端CI待最终结果。上一版bbbfcfa聊天快捷语固定回复断言失败已单独交接，当前仍无该测试单独编辑授权，本轮没有改聊天或其测试。CHATGPT_REVIEW仍针对旧1f7dee95fac6015721f1a255e12add34d290703f，请核对本新SHA。
+- questions: 暂无新产品问题。本机预览 http://127.0.0.1:8104/?preview=new-dorm ，已替用户原8102旧版预览打开当前8104；用户正式数据和账号未修改。只依协作授权推送开发代码/交接，不复用旧发布许可。
