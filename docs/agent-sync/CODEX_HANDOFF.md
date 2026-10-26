@@ -664,3 +664,19 @@
 - platform_status: 桌面Chromium/WebKit移动视口与模拟触感；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未测。录屏不是iPhone录屏。
 - remaining: 本轮视觉/真实触控验收待用户；远端CI待最终结果。上一版bbbfcfa聊天快捷语固定回复断言失败已单独交接，当前仍无该测试单独编辑授权，本轮没有改聊天或其测试。CHATGPT_REVIEW仍针对旧1f7dee95fac6015721f1a255e12add34d290703f，请核对本新SHA。
 - questions: 暂无新产品问题。本机预览 http://127.0.0.1:8104/?preview=new-dorm ，已替用户原8102旧版预览打开当前8104；用户正式数据和账号未修改。只依协作授权推送开发代码/交接，不复用旧发布许可。
+
+
+# Codex → ChatGPT · v85 发布准备与授权测试修正（2026-10-26）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `b19ed0f639d65c7a41558d68f9050bafbb13dc6d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/b19ed0f639d65c7a41558d68f9050bafbb13dc6d
+- related_pr: 本轮未创建或更新PR，未合并main。
+- requirements: 用户明确“更新到网站”，恢复SSH后又明确“允许，仅修这处断言并继续发布”。授权仅覆盖 `check-companion-chat-browser.mjs` 原1649行快捷语回复预期和对应OpenSpec；不扩大产品修改范围。
+- changed_files: 对7268e18产品代码零改动。仅上述断言及 `openspec/changes/fix-quick-prompt-reply-check/`；其余OpenSpec scope中的publishAuthorization更新为当前精确摘要。产品文件与7268e18完全一致。
+- implemented: 快捷语“今天做什么”按认证身份事实回复断言，“怎么改轮序”继续按模拟模型回复断言；保留同次点击用户消息仅一条的原断言，未改等待时间、产品事实回答或AI权限。发布授权摘要 `34c5767fe9a52978ac0c304b0b0f98e09ffce3de7e476688aa04045d597a6dd8`，仅部署供验收，不代表产品最终接受或PR授权。
+- tests: Chromium连续性聊天45项、WebKit44项通过；最终正常发布构建、严格OpenSpec及发布门禁通过。正常发布包在隔离SQLite运行；公开路由、图标、清单、健康检查通过；真实新手教程点击自动推进通过。生产构建域名下用合成身份验证创建向导、轨道拖动与页面联动通过，没有业务写入、没有异常，不含本地开发入口。没有后端/数据库迁移差异；最终包44个源文件与HEAD逐字节一致。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40308841575 ，精确SHA如上。首次attempt：spec-contract、android、conversation-motion成功；web-and-business在15分钟job上限被取消，非断言失败。此前根构建/状态/后端业务/全部移动交互/服务端构建通过；取消前邮箱脚本已输出passed但尚未完整结束，不能称整轮成功。只重跑该超时job（attempt2），不修改workflow或测试、不随机重跑掩盖失败；交接时queued/running。
+- platform_status: 桌面Chromium/WebKit自动化；实体iPhone Safari/PWA、Android WebView和HarmonyOS ArkWeb未测，Android CI构建/lint不等于设备验收。
+- remaining: v85已准备并上传，尚未安装。正常包 `20261026-wizard-progress-v85.tar.gz` SHA256=`bd6484a8d689c63b6c1f962bae676e037d204746be179aba3c1f8673a718dce9`；服务器当前仍v84。CI必须最终成功后才执行备份/安装/数据保留与公网逐字节校验。SSH共享连接现已结束、免交互被拒绝，已请求用户重连；没有执行正式数据库写入或迁移。最新GPT评审仍针对旧1f7dee95，不冒充本SHA已评审。
+- questions: 待用户恢复SSH；CI超时job已重跑。完成发布后另追加实际收据、备份及验证结果，只更新本文件，不修改CHATGPT_REVIEW。
