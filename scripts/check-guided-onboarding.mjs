@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, webkit } from "../frontend/node_modules/@playwright/test/index.mjs";
 const origin = process.env.DORM_GUIDE_ORIGIN || "http://127.0.0.1:8098";
 const engine = process.env.DORM_BROWSER === "webkit" ? "webkit" : "chromium";
-const evidence = path.resolve(`data/guided-onboarding/${engine}`);
+const evidence = path.resolve(`data/auto-tutorial/${engine}`);
 await fs.mkdir(evidence, { recursive: true });
 const browser = await (engine === "webkit" ? webkit : chromium).launch({
   ...(engine === "chromium" && process.platform === "darwin" ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {}),
@@ -24,7 +24,7 @@ async function settleCoach() {
   await page.waitForFunction(() => {
     const coach = document.querySelector(".practice-coach");
     const light = coach?.querySelector(".practice-light"), note = coach?.querySelector(".practice-note");
-    if (!coach || !light || !note || coach.getAnimations({subtree:true}).some(a=>a.playState==="running")) {
+    if (!coach || !light || !note || coach.getAnimations({subtree:true}).some(a=>a.playState==="running" && a.effect?.getTiming().iterations !== Infinity && !a.effect?.target?.closest?.(".dorm-companion"))) {
       window.__practiceStable = null; return false;
     }
     const key = JSON.stringify([light.getBoundingClientRect().toJSON(), note.getBoundingClientRect().toJSON(), coach.dataset.step]);
@@ -34,20 +34,25 @@ async function settleCoach() {
   });
 }
 async function act(id, operation) {
-  const coach = page.getByTestId("practice-coach");
   await page.waitForFunction((id) => document.querySelector('[data-testid=practice-coach]')?.getAttribute("data-step") === id, id);
   if (operation) await operation();
-  await page.waitForFunction(() => document.querySelector('[data-testid=practice-coach]')?.getAttribute("data-complete") === "true");
-  check(true, `${id}: verified the real operation result`);
-  await coach.locator(".practice-next").click();
+  await page.waitForFunction((id) => {
+    const coach = document.querySelector('[data-testid=practice-coach]');
+    return !coach || coach.getAttribute("data-step") !== id;
+  }, id);
+  check(true, `${id}: actual operation automatically advances exactly once`);
 }
+
 try {
   await page.goto(`${origin}/guide?practice=1`);
   await page.getByTestId("lesson-duty").waitFor();
   const baseline = requests.length;
   await page.screenshot({ path: path.join(evidence, "directory.png") });
   await page.getByTestId("lesson-duty").click();
-  check(await page.locator(".practice-next").isDisabled(), "cannot advance without the required task selection");
+  await settleCoach();
+  check(await page.locator(".practice-next").count()===0, "no extra Continue button is needed for any operation");
+  check(await page.locator(".practice-note .dorm-companion").count()===1, "the existing companion narrates above the current operation");
+  check(await page.getByTestId("practice-coach").getAttribute("data-step")==="duty-select", "without an operation the tutorial stays on its current step");
   await page.waitForFunction(() => {
     const target=document.querySelector(".task-selector button:nth-child(2)"), r=target?.getBoundingClientRect();
     return r && document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest("button")===target;
@@ -129,7 +134,7 @@ try {
         navGap: innerHeight - document.querySelector('[data-testid=chore-bottom-nav]').getBoundingClientRect().bottom };
     });
     check(result.target && result.note && result.navGap < 60, `${width}px: target is clickable, coach fits, navigation stays at the bottom (${JSON.stringify(result)})`);
-    await page.getByRole("button", { name: "返回目录", exact: true }).click();
+    await page.getByRole("button", { name: "退出本节练习，返回目录", exact: true }).click();
   }
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
   await page.getByTestId("lesson-duty").click();

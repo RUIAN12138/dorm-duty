@@ -26,7 +26,6 @@ const visible = (selector: string) => {
   return !!el && !el.closest("[inert],[aria-hidden=true]") && !!el.getClientRects().length &&
     getComputedStyle(el).display !== "none" && getComputedStyle(el).visibility !== "hidden";
 };
-const closeSheet = '.sheet-layer:not([style*="display: none"]) button[aria-label="关闭详情"]';
 function step(id: string, target: string, title: string, text: string, result: string, completed: () => boolean): PracticeStep {
   const resultTargets: Record<string,string> = {
     "duty-detail": "[data-testid=task-detail]",
@@ -43,35 +42,35 @@ function step(id: string, target: string, title: string, text: string, result: s
 }
 const chapters = computed<Record<Lesson, PracticeStep[]>>(() => ({
   duty: [
-    step("duty-select", ".task-selector button:nth-child(2)", "先切换到洗手池", "点这里切换任务。正式使用时，横向切换也可以。", "大字任务名已变成洗手池，完成按钮只对应当前任务。", () => document.querySelector('.task-selector button[aria-pressed=true]')?.textContent?.includes("洗手池") || false),
+    step("duty-select", ".task-selector button:nth-child(2)", "先切换到洗手池", "点这里切换，也可以左右滑动。", "大字任务名已变成洗手池，完成按钮只对应当前任务。", () => document.querySelector('.task-selector button[aria-pressed=true]')?.textContent?.includes("洗手池") || false),
     step("duty-detail", '.task-title-stage h2:not([inert]) .task-title-button', "点任务名，看具体要做什么", "先看清任务说明，再去完成。", "这里可以确认任务内容、负责人和完成状态。", () => visible('[data-testid=task-detail]')),
-    step("duty-detail-close", closeSheet, "关闭详情，回到任务", "点右上角关闭按钮。也可以按原有方式下滑收起。", "已回到任务页。现在练习一次打卡。", () => !visible('[data-testid=task-detail]')),
+    step("duty-detail-close", ".sheet-layer:not([inert]) .elastic-sheet", "关闭详情，回到任务", "点右上角关闭按钮。也可以按原有方式下滑收起。", "已回到任务页。现在练习一次打卡。", () => !visible('[data-testid=task-detail]')),
     step("duty-complete", '[data-testid="complete-sink--11"]', "完成后，点「我已完成」", "这次是练习，不会改动你的宿舍记录。", "按钮变成已完成，轮次进度和日历也会同步记录。", () => practice.events.complete > 0 && visible('[data-testid="undo--11"]')),
     step("duty-round", '[data-testid=round-progress]', "点圆环，查看本轮进度", "这里能看到已经完成和还没完成的室友。", "本轮名单已打开。默认先显示已完成的人。", () => visible('[data-testid=round-members]')),
     step("duty-pending", '.round-filters button:nth-child(2)', "切到「未完成」", "看看这一轮还有谁没完成。名单较长时可在抽屉内滚动。", "两位练习室友仍未完成。全员完成后才会开启下一轮。", () => document.querySelector('.round-filters button:nth-child(2)')?.getAttribute('aria-pressed') === 'true'),
-    step("duty-round-close", closeSheet, "收起轮次名单", "回到刚才已完成的任务。", "现在试试修正一次误点。", () => !visible('[data-testid=round-members]')),
+    step("duty-round-close", ".sheet-layer:not([inert]) .elastic-sheet", "收起轮次名单", "回到刚才已完成的任务。", "现在试试修正一次误点。", () => !visible('[data-testid=round-members]')),
     step("duty-undo", '[data-testid="undo--11"]', "再点一次「已完成」撤销", "误点时可以直接撤销，不需要重新打卡。", "任务恢复待完成，练习中的进度和记录一并恢复。", () => practice.events.undo > 0 && visible('[data-testid="complete-sink--11"]')),
   ],
   water: [
     step("water-nav", '[data-testid=nav-water]', "点底部「抬水」", "底部导航用来切换主页面。", "现在是抬水页，大字显示当前任务或负责人。", () => section.value === "water" && visible('[data-testid=pane-water]')),
     step("water-detail", '.water-task-text', "先点「查看任务」", "确认抬水的具体内容。", "详情中可以看到由谁负责，以及任务状态。", () => visible('[data-testid=task-detail]')),
-    step("water-detail-close", closeSheet, "看完后收起详情", "点关闭，回到抬水页。", "接下来模拟你已经把水送到宿舍。", () => !visible('[data-testid=task-detail]')),
+    step("water-detail-close", ".sheet-layer:not([inert]) .elastic-sheet", "看完后收起详情", "点关闭，回到抬水页。", "接下来模拟你已经把水送到宿舍。", () => !visible('[data-testid=task-detail]')),
     step("water-complete", '[data-testid="complete-water--13"]', "点「我已抬水」完成交接", "只在已经完成抬水后记录。当前操作是练习。", "交接动画之后，下一位变成小林；刚才的完成记录保留。", () => practice.events.complete > 0 && practice.board.water_task?.assignee_id === -2),
     step("water-nudge", '[data-testid=water-nudge]', "轻点小林，练习提醒", "正式使用时会按原有限流规则提醒当前负责人。", "你已经学会催促。本次没有给任何真实室友发送通知。", () => practice.events.nudge > 0),
   ],
   calendar: [
     step("calendar-nav", '[data-testid=nav-calendar]', "点底部「日历」", "已完成的任务可以在这里查找。", "日期上的标记表示当天有完成记录。", () => section.value === "calendar" && visible('[data-testid=chore-calendar]')),
     step("calendar-date", `[data-testid="calendar-day-${practice.board.today}"]`, "点今天，查看当天记录", "练习日历里预先放了一条示例记录。", "这里显示谁完成了哪项任务，以及完成时间。", () => visible('[data-testid=calendar-day-details]')),
-    step("calendar-close", closeSheet, "收起当天记录", "点右上角关闭，回到日历。", "除了按日期查看，还可以切换成列表。", () => !visible('[data-testid=calendar-day-details]')),
+    step("calendar-close", ".sheet-layer:not([inert]) .elastic-sheet", "收起当天记录", "点右上角关闭，回到日历。", "除了按日期查看，还可以切换成列表。", () => !visible('[data-testid=calendar-day-details]')),
     step("calendar-list", '[data-testid=calendar-view-list]', "切换到「列表」", "按日期展开记录，查找完成历史。", "列表和日历使用同一份记录。正式使用时可在已有侧滑入口中修正。", () => document.querySelector('[data-calendar-panel=list]')?.getAttribute('aria-hidden') === 'false'),
     step("calendar-stats", '[data-testid=calendar-view-stats]', "再切换到「卡片」", "用卡片查看任务的完成情况和间隔。", "已进入统计卡片。这里可以沿用现有的左右滑动与配色设置。", () => document.querySelector('[data-calendar-panel=stats]')?.getAttribute('aria-hidden') === 'false'),
   ],
   messages: [
     step("message-ball", '.companion-identity .companion-frame', "单击球球，打开聊天", "单击进入聊天；双击仍是表情互动。", "聊天已展开。留言不需要先向AI提问。", () => visible('.companion-chat')),
-    step("message-start", '[data-testid=chat-quick-prompts] button:first-child', "点第一条快捷语「我要留言」", "它会进入留言流程，而不是发送普通聊天。", "现在选择收件人。支持单个室友，也支持所有人。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'recipient'),
+    step("message-start", '[data-testid=chat-quick-prompts] button:first-child', "点「我要留言」", "它会进入留言流程，而不是发送普通聊天。", "现在选择收件人。支持单个室友，也支持所有人。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'recipient'),
     step("message-recipient", '.conversation-recipients button:nth-child(2)', "选择小林", "先练习给一位室友留言。选「所有人」则会发给其他室友。", "收件人已确定。接下来写留言内容。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'content'),
     step("message-content", '[data-testid=chat-composer]', "写一句留言，再点发送箭头", "例如：晚点回来，我会记得值日。这里只会生成确认卡片。", "确认卡片已出现。请检查收件人和内容，也可以修改或取消。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'confirm'),
-    step("message-confirm", '[data-testid=conversation-note]', "确认无误后，点「确认发送」", "只有这一步才提交留言。发送失败时保留内容，可重试。", "练习留言已经确认，真实宿舍没有收到这条消息。", () => practice.events.note > 0),
+    step("message-confirm", '[data-testid=conversation-note]', "检查后，点「确认发送」", "只有这一步才提交留言。发送失败时保留内容，可重试。", "练习留言已经确认，真实宿舍没有收到这条消息。", () => practice.events.note > 0),
     step("message-back", '.companion-chat button[aria-label="返回宿舍"]', "点返回，回到任务页", "聊天历史与未发送草稿沿用原有保留规则。", "回到任务页后，可以从设置查看收到的消息。", () => !visible('.companion-chat')),
     step("message-tools", '[data-testid=open-tools]', "点右上角设置", "「使用引导」也在这里，以后可以重新练习。", "找到设置里的「室友消息」。", () => visible('[data-testid=open-messages]')),
     step("message-inbox", '[data-testid=open-messages]', "打开「室友消息」", "查看收到的留言和任务提醒。", "大字显示发送者姓名，下面是留言内容。", () => visible('[data-testid=chore-reminders]')),
