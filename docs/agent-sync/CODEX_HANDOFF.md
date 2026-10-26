@@ -552,3 +552,29 @@
 - platform_status: 桌面 Chromium/WebKit 移动视口、合成数据库、正式代码包冒烟及线上只读检查；实体 iPhone 主屏幕/真实键盘、Android WebView、HarmonyOS ArkWeb 真机仍未验收。未把网页部署当作原生 APK 升级。
 - remaining: 用户对恢复排版的最终真机视觉确认待完成；CI 剩余任务等待最终状态。CHATGPT_REVIEW 仍针对旧 SHA `1f7dee95fac6015721f1a255e12add34d290703f`，请核对此次新分支和 SHA，不重复执行旧建议。
 - questions: 暂无。后续新功能不复用本批次部署授权。
+
+# Codex → ChatGPT · 球球事实、自动教程与 v84 网站更新（2026-10-26）
+
+- code_branch: `codex/tutorial-auto-companion`
+- code_sha: `76b508b16eb63b3a733d8d3a6f307c0b4d03e681`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/76b508b16eb63b3a733d8d3a6f307c0b4d03e681
+- related_pr: 本批次没有创建 PR、更新 #85 或合并 main；独立业务分支已推送。
+- requirements: 用户要求点击实际教程目标后自动推进，由上方球球讲解；值日/抬水顶部空白过多；球球误认当前身份和任务；退出聊天后导航偶发上移；球球/设置身份栏下移少许。最新用户明确“更新网站”，仅授权本批次网站更新与必要分支同步，不复用 v83 发布授权、不追认产品或真机验收。
+- changed_files: `onboarding/PracticeSpotlight.vue`、`onboarding/GuidedPractice.vue`、`ChoreBoard.vue`、`CompanionChat.vue`、`scripts/companion-ai.mjs`、`docs/COMPANION_AI.md`、三个专项检查脚本、对应 OpenSpec；另修正 `check-email-experience.mjs` 的旧固定容器定位/几何断言及发布摘要，不改其他产品逻辑。
+- implemented:
+  - 真实练习控件满足完成条件后，等待相关有限动画结束再推进；步骤/取消/卸载会废弃旧推进任务。球球顶部解说，取消额外继续按钮；全局 Dialog 仍暂停练习控制器。
+  - 明确身份、本人当前任务、当前抬水人等问题使用每次认证后的真实快照直接回答。普通模型明显把其他舍友称作当前“你”时返回事实摘要。完成/撤销/交接后重新取最新快照；不是全自然语言事实校验器，不更改模型/Key/限流/提醒权限。
+  - 身份栏局部下移10px，值日/抬水主内容锚点适度上移；390×844 下提示位置分别 241.5→209.5、283.5→251.5，导航原尺寸/底部位置不变。小屏减少上移量。
+  - 聊天冷打开记录背景文档 scrollX/Y，关闭释放锁后恢复，晚到的键盘帧沿用唯一 viewport 订阅处理，快速重开/卸载废弃旧恢复；保留聊天草稿。这是针对焦点平移缺口的候选修复，未声称已在实体 iPhone 完全复现并解决偶发问题。
+  - v83 CI 原邮箱用例仍要求 `.app-stage` 固定单屏，实际恢复后的正式布局为 `.content-stage`。320×568 隔离测得容器609.5px、导航bottom558、主按钮bottom409.55；测试改查自然容器横向边界、导航贴底、主按钮在导航上方且 elementFromPoint 真命中，不改产品布局、不 force click。
+- tests:
+  - Chromium/WebKit 教程各50项；聊天退出/布局专项各6项；WebKit 键盘视口98项；22项前端状态，均通过（桌面浏览器/模拟视口）。
+  - AI事实19项、原AI79项通过：隔离SQLite与模拟上游，覆盖身份冒领拒绝、不同认证成员、完成/撤销/交接后实时快照、提醒原路径、无真实通知；不是正式服务商调用验收。
+  - 本次前缀正式构建/类型/PWA通过；OpenSpec strict22/22，范围21 changes/416 files，18项门禁测试通过，publish digest=`e392c495b22453469f458e9ec5415027c6f0b3e197286b0ead6fa3800485bfea`；干净业务工作树。
+  - Chromium完整HTTPS邮箱流程90项通过。额外WebKit邮箱流程在原有“email submit keeps press feedback”断言失败；未修改该产品/检查，不称全平台全部通过。初次本地尝试存在夹具缺dist-server和发布提示遮挡，按CI同样方式构建无发布提示的dist-server后完成Chromium90项。
+  - 最终发布包44个随包源码/运行文件逐字节对应本SHA；7个页面/资源/健康入口通过；更新提示正常关闭、教程点击自动推进、球球讲解、零fetch/XHR。未打包数据库、私密配置或合成预览数据。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40284187110 ，本 SHA completed/success；spec-contract、android、conversation-motion、web-and-business 四项全部成功。v83 原 run 与本轮早期 SHA 的失败未冒充全绿。
+- platform_status: 桌面Chromium/WebKit、隔离Node/SQLite、CI及代码包检查；实体iPhone Safari/PWA/真实键盘、Android WebView、HarmonyOS ArkWeb未验收，vivo原生会话修复仍需新APK真机验证。
+- deployment: 北京时间2026-10-26 15:23:25原子发布 `20261026-companion-tutorial-v84`，https://8.148.190.114/dorm-duty/ 。前版v83保留，未合并main。发布前备份 `/opt/dorm-duty/backups/dorm-20261026T072307Z.sqlite`；发布后69条旧完成记录与成员/配置/历史/有效会话共12表既有行 changedOrMissing=0，完整性ok、外键违规0，旧宿舍配置未迁移。包SHA256=`d1ee1bd795055ca22db65d70752ae8fbb12b414084d15b78e75762b1c4d49226`，workerSHA256=`e45e5ef701105603d669e54705f2ab13f6afbbdc80b61ea6e05aa79c39233ec2`。公网161资源逐字节匹配；真实公网教程打开、关闭更新提示、球球解说、点击自动下一步通过，零fetch/XHR。未在生产创建测试宿舍、打卡或通知。首次安装命令因旧脚本路径不存在而未执行切换，随后上传并核验仓库原安装器到incoming才正式安装，未放宽门禁。
+- remaining: 用户对页面位置、iOS偶发导航偏移的真机确认；WebKit邮箱按压反馈断言仍未解决。CHATGPT_REVIEW仍针对`1f7dee95fac6015721f1a255e12add34d290703f`，请评审本轮新SHA，不复用旧建议。未新增PR、未合并main，不把网站发布当原生APK更新。
+- questions: 暂无。
