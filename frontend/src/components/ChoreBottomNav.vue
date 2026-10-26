@@ -2,7 +2,7 @@
 import LiquidNavGlass from "./LiquidNavGlass.vue";
 import { companionEntering } from "../interaction/companion";
 import { computed, ref, watch, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { motion } from "motion-v";
 import {
   useSelectionMotion,
@@ -13,20 +13,36 @@ import { horizontalIntent } from "../interaction/gestures";
 const router = useRouter();
 const props = defineProps<{
   section: "duty" | "water" | "calendar";
+  pages?: { id: "duty" | "water" | "calendar"; label: string }[];
+  preview?: boolean;
 }>();
-const items = [
+const emit = defineEmits<{
+  select: [section: "duty" | "water" | "calendar"];
+  reorder: [section: "duty" | "water" | "calendar", toIndex: number];
+}>();
+const defaults = [
   { section: "duty", path: "/", label: "值日" },
   { section: "water", path: "/water", label: "抬水" },
   { section: "calendar", path: "/calendar", label: "日历" },
 ] as const;
+const items = computed(
+  () =>
+    props.pages?.map((page) => ({
+      ...defaults.find((item) => item.section === page.id)!,
+      label: page.label,
+    })) || [...defaults],
+);
 const dragging = ref(false);
 const currentIndex = computed(() =>
-  items.findIndex((item) => item.section === props.section),
+  items.value.findIndex((item) => item.section === props.section),
 );
 const pressedIndex = ref(-1),
   opticalGlass = ref(false);
 const glassPosition = ref(currentIndex.value);
-const selection = useSelectionMotion(currentIndex.value, () => items.length);
+const selection = useSelectionMotion(
+  currentIndex.value,
+  () => items.value.length,
+);
 const stopGlassPosition = selection.position.on("change", (value) => {
   glassPosition.value = value;
 });
@@ -47,26 +63,34 @@ let gesture: {
   y: number;
   nav: HTMLElement;
   navigated: boolean;
+  section: "duty" | "water" | "calendar";
+  reordering: boolean;
 } | null = null;
 let suppressClickUntil = 0;
 let navigationRequest = 0;
 let requestedIndex = currentIndex.value;
+let reorderHold: ReturnType<typeof setTimeout> | undefined;
 function selectTarget(index: number) {
   // The lens crosses intermediate labels; routing still goes straight to the
   // selected page. Lens position must never drive a route on a simple tap.
   selection.move(index);
 }
 function navigate(index: number, replace = false) {
+  if (props.preview) {
+    const item = items.value[index];
+    if (item) emit("select", item.section);
+    return;
+  }
   if (
     requestedIndex === index &&
-    router.currentRoute.value.path === items[index]!.path
+    router.currentRoute.value.path === items.value[index]!.path
   )
     return;
   requestedIndex = index;
   const request = ++navigationRequest;
   // A scrub is one navigation in history, even if it passes several pages.
   void router[replace ? "replace" : "push"]({
-    path: items[index]!.path,
+    path: items.value[index]!.path,
   }).finally(() => {
     if (request === navigationRequest && !gesture)
       selection.move(currentIndex.value);
@@ -75,15 +99,15 @@ function navigate(index: number, replace = false) {
 function position(x: number, nav: HTMLElement) {
   const rect = nav.getBoundingClientRect();
   const width = Math.max(1, rect.width - 16);
-  const fraction = ((x - rect.left - 8) / width) * items.length;
+  const fraction = ((x - rect.left - 8) / width) * items.value.length;
   return {
-    index: Math.max(0, Math.min(items.length - 1, Math.floor(fraction))),
-    progress: Math.max(0, Math.min(items.length - 1, fraction - 0.5)),
+    index: Math.max(0, Math.min(items.value.length - 1, Math.floor(fraction))),
+    progress: Math.max(0, Math.min(items.value.length - 1, fraction - 0.5)),
   };
 }
 function down(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || gesture) return;
-  if (!(event.target instanceof Element) || !event.target.closest("a")) return;
+  if (!(event.target instanceof Element) || !event.target.closest("a,button[data-section]")) return;
   const nav = event.currentTarget as HTMLElement;
   gesture = {
     id: event.pointerId,
@@ -91,15 +115,36 @@ function down(event: PointerEvent) {
     y: event.clientY,
     nav,
     navigated: false,
+    section:
+      (event.target as Element).closest<HTMLElement>("[data-section]")?.dataset
+        .section as "duty" | "water" | "calendar",
+    reordering: false,
   };
   requestedIndex = currentIndex.value;
   pressedIndex.value = position(event.clientX, nav).index;
   selectTarget(pressedIndex.value);
   suppressClickUntil = 0;
   nav.setPointerCapture(event.pointerId);
+  if (props.preview) {
+    clearTimeout(reorderHold);
+    reorderHold = setTimeout(() => {
+      if (!gesture) return;
+      gesture.reordering = true;
+      dragging.value = true;
+      navigationScrubbing.value = true;
+      pressedIndex.value = -1;
+    }, 280);
+  }
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
+  if (gesture.reordering) {
+    if (event.cancelable) event.preventDefault();
+    const to = position(event.clientX, gesture.nav).index;
+    const from = items.value.findIndex((item) => item.section === gesture!.section);
+    if (to !== from) emit("reorder", gesture.section, to);
+    return;
+  }
   if (!dragging.value) {
     const intent = horizontalIntent(
       event.clientX - gesture.x,
@@ -123,6 +168,7 @@ function cancelGesture() {
   if (!gesture) return;
   const { nav, id } = gesture;
   gesture = null;
+  clearTimeout(reorderHold);
   dragging.value = false;
   navigationScrubbing.value = false;
   pressedIndex.value = -1;
@@ -144,7 +190,9 @@ function finish(event: PointerEvent, cancelled = false) {
     return;
   const nav = gesture.nav;
   const wasDragging = dragging.value;
+  const wasReordering = gesture.reordering;
   gesture = null;
+  clearTimeout(reorderHold);
   pressedIndex.value = -1;
   dragging.value = false;
   navigationScrubbing.value = false;
@@ -167,9 +215,10 @@ function finish(event: PointerEvent, cancelled = false) {
       y: event.clientY,
       time: performance.now(),
     };
-  if (wasDragging) selection.move(index);
+  if (wasDragging && !wasReordering) selection.move(index);
+  else if (wasReordering) selection.move(currentIndex.value);
   else selectTarget(index);
-  navigate(index);
+  if (!wasReordering) navigate(index);
 }
 function click(event: MouseEvent) {
   if (event.detail > 0 && performance.now() < suppressClickUntil) {
@@ -180,7 +229,7 @@ function click(event: MouseEvent) {
   if (
     event.detail &&
     event.target instanceof Element &&
-    event.target.closest("a")
+    event.target.closest("a,button[data-section]")
   )
     navigationOrigin.value = {
       x: event.clientX,
@@ -226,16 +275,20 @@ function click(event: MouseEvent) {
       aria-hidden="true"
       :style="{ transform: selection.transform }"
     />
-    <router-link
+    <component
+      :is="preview ? 'button' : RouterLink"
       v-for="(item, index) in items"
       :key="item.section"
-      :to="{ path: item.path }"
+      :to="preview ? undefined : { path: item.path }"
+      :type="preview ? 'button' : undefined"
+      :data-section="item.section"
       :class="{
         active: section === item.section,
         pressed: pressedIndex === index,
       }"
       :aria-current="section === item.section ? 'page' : undefined"
       :data-testid="`nav-${item.section}`"
+      @click="preview && navigate(index)"
     >
       <span class="nav-native-content">
         <svg
@@ -262,7 +315,7 @@ function click(event: MouseEvent) {
         </svg>
         <span class="nav-native-caption">{{ item.label }}</span>
       </span>
-    </router-link>
+    </component>
   </nav>
 </template>
 <style scoped>
@@ -296,7 +349,7 @@ function click(event: MouseEvent) {
 .is-moving .nav-selection {
   will-change: transform;
 }
-a {
+:is(a, button[data-section]) {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -304,6 +357,11 @@ a {
   gap: 5px;
   min-height: 54px;
   color: var(--app-tone-h666, #666);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
   text-decoration: none;
   font-size: 13px;
   border-radius: var(--ui-control-radius);
@@ -311,20 +369,20 @@ a {
     color 180ms ease,
     transform var(--ui-release-time) var(--ui-ease-out);
 }
-a:active,
-a.pressed {
+:is(a, button[data-section]):active,
+:is(a, button[data-section]).pressed {
   transform: var(--ui-press-small);
   transition-duration: var(--ui-press-time);
 }
-a.active {
+:is(a, button[data-section]).active {
   color: var(--ui-ink);
   font-weight: 600;
 }
-a.active svg {
+:is(a, button[data-section]).active svg {
   stroke-width: 2.2;
 }
 @media (prefers-reduced-motion: reduce) {
-  a {
+  :is(a, button[data-section]) {
     transition: none;
   }
   a:active,
@@ -369,6 +427,14 @@ svg {
   min-height: 54px;
   border-radius: 28px;
   transform: none !important;
+}
+.chore-bottom-nav button {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 .nav-native-content {
   display: flex;

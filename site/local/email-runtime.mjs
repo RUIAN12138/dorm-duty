@@ -859,6 +859,28 @@ export function createEmailRuntime(
             .clone()
             .json()
             .catch(() => ({}));
+          // New rooms admit a self-named, verified-email member. The old roster
+          // path below is untouched. Membership + email binding are one transaction.
+          const code = String(data.invite_code || "").trim().toUpperCase();
+          const name = typeof data.nickname === "string" ? data.nickname.trim() : "";
+          const dynamicRoom = sql.prepare(`SELECT d.id FROM dormitories d JOIN dorm_configurations c ON c.dorm_id=d.id AND c.schema_version=2 WHERE d.invite_code=? AND d.is_demo=0`).get(code);
+          if (dynamicRoom && who) {
+            if (!name || [...name].length > 32) fail(422,"请输入不超过32字的本人姓名");
+            if (now().getTime()-Date.parse(who.verified_at)>10*60000) fail(401,"加入前请重新验证邮箱");
+            const linked=sql.prepare("SELECT u.nickname FROM email_members e JOIN users u ON u.id=e.user_id WHERE e.account_id=? AND e.dorm_id=?").get(who.id,dynamicRoom.id);
+            if(linked){if(linked.nickname!==name)fail(403,"请先解除当前绑定，再更换身份");return reply(grant(who,dynamicRoom.id),201);}
+            transaction(()=>{
+              if(sql.prepare("SELECT 1 FROM dorm_members m JOIN users u ON u.id=m.user_id WHERE m.dorm_id=? AND m.is_active=1 AND u.nickname=?").get(dynamicRoom.id,name)) fail(409,"此姓名已有人使用，请填写可区分的本人姓名");
+              const count=sql.prepare("SELECT COUNT(*) AS n FROM dorm_members WHERE dorm_id=? AND is_active=1").get(dynamicRoom.id).n;
+              if(count>=12)fail(409,"宿舍最多12位成员");
+              const at=stamp();
+              const u=sql.prepare("INSERT INTO users(username,password_hash,nickname,created_at,current_dorm_id) VALUES (?,?,?,?,?)").run(`email_member_${secret()}`,`disabled$${secret()}`,name,at,dynamicRoom.id);
+              const uid=Number(u.lastInsertRowid);
+              sql.prepare("INSERT INTO dorm_members(dorm_id,user_id,role,sort_order,joined_at) VALUES (?,?,'member',?,?)").run(dynamicRoom.id,uid,count,at);
+              sql.prepare("INSERT INTO email_members(account_id,user_id,dorm_id,creator_verified,bound_at) VALUES (?,?,?,0,?)").run(who.id,uid,dynamicRoom.id,at);
+            });
+            return reply(grant(who,dynamicRoom.id),201);
+          }
           const member = sql
             .prepare(
               `SELECT u.id,d.id AS dorm_id,d.admin_user_id FROM users u JOIN dorm_members m ON m.user_id=u.id AND m.is_active=1

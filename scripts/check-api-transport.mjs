@@ -115,16 +115,25 @@ assert.equal(sessionStorage.getItem("dorm-token"), "admin");
 await assert.rejects(api("/dorms/me"), (e) => e.message === "身份已过期");
 assert.equal(expired, 1);
 assert.equal(sessionStorage.getItem("dorm-token"), null);
-// A delayed 401 from the previous identity must not sign out the new one.
+// A delayed 401 from a request that used the prior durable identity must not
+// sign out the replacement session restored by a later tab/app state.
+localStorage.setItem("dorm-auth-token-v1", "old");
 sessionStorage.setItem("dorm-token", "old");
-localStorage.setItem("dorm-email-admin-grant", "new");
 let resolveOld;
-globalThis.fetch = () => new Promise((resolve) => (resolveOld = resolve));
+let oldAuthorization;
+globalThis.fetch = (_, options) => {
+  oldAuthorization = options.headers.get("Authorization");
+  return new Promise((resolve) => (resolveOld = resolve));
+};
 const stale = api("/auth/me");
+assert.equal(oldAuthorization, "Bearer old");
+localStorage.setItem("dorm-auth-token-v1", "new");
 sessionStorage.setItem("dorm-token", "new");
+localStorage.setItem("dorm-email-admin-grant", "new");
 resolveOld(json({ detail: { message: "old expired" } }, 401));
 await assert.rejects(stale, (e) => e.status === 401);
 assert.equal(sessionStorage.getItem("dorm-token"), "new");
+assert.equal(localStorage.getItem("dorm-auth-token-v1"), "new");
 assert.equal(localStorage.getItem("dorm-email-admin-grant"), "new");
 assert.equal(expired, 1, "stale expiry emits no current-session event");
 globalThis.fetch = async () =>

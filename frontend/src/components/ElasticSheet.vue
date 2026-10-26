@@ -25,6 +25,7 @@ import { createVelocityTracker, rubberBand } from "../interaction/gestures";
 const props = withDefaults(
   defineProps<{
     modelValue: boolean;
+    edgeToEdge?: boolean;
     navigationRoot?: boolean;
     modal?: boolean;
     stickyHeader?: boolean;
@@ -585,7 +586,10 @@ onBeforeUnmount(() => {
         <div
           ref="layer"
           class="sheet-layer"
-          :class="{ 'is-nonmodal': props.modal === false }"
+          :class="{
+            'is-nonmodal': props.modal === false,
+            'is-edge-sheet': edgeToEdge,
+          }"
           :data-motion="props.motion === 'bottom' ? 'bottom' : 'shared'"
           :data-phase="phase"
           :inert="phase === 'closing' ? true : undefined"
@@ -892,5 +896,18 @@ onBeforeUnmount(() => {
 .has-fixed-content .sheet-content > :deep(*) {
   min-height: 0;
   flex: 1;
+}
+</style>
+
+<style scoped>
+/* Opt-in for water detail only; existing sheets retain their geometry. */
+.is-edge-sheet > .elastic-sheet {
+  width: 100%;
+  margin-bottom: 0;
+  border-radius: var(--ui-panel-radius) var(--ui-panel-radius) 0 0;
+  max-height: 75dvh;
+}
+.is-edge-sheet .sheet-content {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 </style>

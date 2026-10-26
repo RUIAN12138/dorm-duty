@@ -1,3 +1,4 @@
+import type { DormConfiguration } from "../interaction/dormDraft";
 import { query } from "./index";
 import { requestJson } from "./transport";
 
@@ -7,7 +8,7 @@ export interface ChoreMember {
   marker_id: string;
 }
 export interface ChoreCategory {
-  key: "floor" | "toilet" | "sink" | "water";
+  key: string;
   name: string;
   content: string;
   deadline_time: string;
@@ -20,8 +21,9 @@ export interface ChoreCategory {
   mode: "scheduled" | "self_round" | "completion";
 }
 export interface ChoreTask {
+  completed_by?: number | null;
   id: number;
-  key: "floor" | "toilet" | "sink" | "water";
+  key: string;
   name: string;
   content: string;
   duty_date: string;
@@ -72,6 +74,8 @@ export interface ChoreReminder {
   read_at: string | null;
 }
 export interface ChoreBoardData {
+  configuration?: DormConfiguration | null;
+  workspace_tasks?: ChoreTask[];
   today: string;
   server_time: string;
   version: number;
@@ -80,7 +84,7 @@ export interface ChoreBoardData {
   members: ChoreMember[];
   categories: ChoreCategory[];
   rounds: {
-    key: "floor" | "toilet" | "sink";
+    key: string;
     sequence: number;
     completed: number;
     total: number;

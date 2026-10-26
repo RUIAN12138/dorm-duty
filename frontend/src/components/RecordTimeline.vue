@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import { ref, watch, nextTick } from "vue";
 import type { ChoreRecord } from "../api/chores";
 import ChoreRecordRow from "./ChoreRecordRow.vue";

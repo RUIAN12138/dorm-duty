@@ -1,0 +1,29 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "c12043ab103ed17ead0c08d2e11c746dc4075847",
+  "allowed": [
+    "frontend/src/components/ReminderBanner.vue",
+    "frontend/src/interaction/bannerReplyLayout.ts",
+    "frontend/src/components/ChoreBoard.vue",
+    "scripts/check-banner-reply-browser.mjs",
+    "scripts/check-banner-quick-reply.mjs",
+    "scripts/check-message-banner-polish.mjs",
+    "scripts/message-banner-preview/",
+    "openspec/changes/polish-message-banner-reply/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "把最近成熟的更新都推送 pr 并且更新网站",
+    "authorizedDigest": "c5a2e32710f777cdf00af08c9258761e6e75a034a35fdd3b3f5380ce363ff9a8"
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "把最近成熟的更新都推送 pr 并且更新网站",
+    "authorizedDigest": "c5a2e32710f777cdf00af08c9258761e6e75a034a35fdd3b3f5380ce363ff9a8"
+  }
+}

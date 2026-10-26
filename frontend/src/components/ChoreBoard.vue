@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
+import NewTaskPane from "./onboarding/NewTaskPane.vue";
+import TaskWorkspace from "./onboarding/TaskWorkspace.vue";
+import SpotlightTour from "./onboarding/SpotlightTour.vue";
 import {
   revealPage,
   cancelPageReveal,
@@ -13,6 +17,7 @@ import {
   companionEnabled,
   errorEmotion,
   companionEntering,
+  waitForCompanionHandoff,
 } from "../interaction/companion";
 import LoadingSkeleton from "./LoadingSkeleton.vue";
 import {
@@ -97,7 +102,6 @@ import {
 } from "../interaction/backgroundRefresh";
 import { onNativePushReady } from "../api/nativePush";
 import ElasticSheet from "./ElasticSheet.vue";
-import MemberMark from "./MemberMark.vue";
 import MarkerPicker from "./MarkerPicker.vue";
 import { useReminderInbox } from "../composables/useReminderInbox";
 import { createCalendarViewMemory } from "../interaction/calendarViewMemory";
@@ -110,9 +114,50 @@ const props = defineProps<{
   memberId: number;
   token: string;
   demo: boolean;
+  preview?: boolean;
+  previewData?: ChoreBoardData;
+  pages?: { id: "duty" | "water" | "calendar"; label: string }[];
   section: "duty" | "water" | "calendar";
 }>();
 const router = useRouter();
+const GUIDE_FLOW_KEY = "dorm-guide-flow-v2";
+const GUIDE_OPEN_KEY = "dorm-guide-open-v2";
+function guideSeenKey() {
+  return `dorm-welcome-guide-v2:${encodeURIComponent(props.invite)}:${props.memberId}`;
+}
+function openWelcomeGuide(firstUse = false) {
+  if (props.preview || props.demo) return;
+  const seenKey = guideSeenKey();
+  if (firstUse) {
+    try {
+      if (localStorage.getItem(seenKey) || sessionStorage.getItem(GUIDE_OPEN_KEY) === seenKey) return;
+      sessionStorage.setItem(GUIDE_OPEN_KEY, seenKey);
+    } catch { /* Guide availability must not depend on optional storage. */ }
+  }
+  const current = router.currentRoute.value;
+  const flow = {
+    version: 2,
+    returnTo: current.fullPath,
+    seenKey: firstUse ? seenKey : null,
+    firstUse,
+    showFeatureTour: true,
+  };
+  try { sessionStorage.setItem(GUIDE_FLOW_KEY, JSON.stringify(flow)); } catch { /* The guide still works with a root fallback. */ }
+  void router.push("/guide").catch(() => {
+    try {
+      sessionStorage.removeItem(GUIDE_FLOW_KEY);
+      if (firstUse) sessionStorage.removeItem(GUIDE_OPEN_KEY);
+    } catch { /* Optional guide progress. */ }
+  });
+}
+onMounted(() =>
+  watch(
+    () => board.value?.configuration,
+    (value) => {
+      if (value) emit("configuration", value);
+    },
+  ),
+);
 const pushSync = createPushSyncGate(syncMemberPush);
 const emit = defineEmits<{
   expired: [];
@@ -120,15 +165,29 @@ const emit = defineEmits<{
   "switch-member": [];
   "join-dorm": [];
   "create-dorm": [];
+  "local-wizard": [];
   "recover-owner": [];
+  configuration: [value: import("../interaction/dormDraft").DormConfiguration];
   "email-account": [];
   "exit-demo": [];
+  "exit-preview": [];
+  "section-change": [section: "duty" | "water" | "calendar"];
+  "page-reorder": [section: "duty" | "water" | "calendar", toIndex: number];
 }>();
-const board = ref<ChoreBoardData | null>(null),
+const board = ref<ChoreBoardData | null>(
+    props.preview ? props.previewData || null : null,
+  ),
   loading = ref(false),
   error = ref(""),
   actionError = ref(""),
   busy = ref("");
+watch(
+  () => props.previewData,
+  (value) => {
+    if (props.preview && value) board.value = value;
+  },
+  { flush: "sync" },
+);
 const completionReceipt = ref<ChoreTask | null>(null);
 const completionEpoch = ref(0);
 const completionMorphId = ref<number | null>(null);
@@ -190,14 +249,24 @@ const messagesOpen = ref(false),
 const toolsOpen = ref(false),
   preferencesOpen = ref(false),
   companionOpen = ref(false),
-  orderOpen = ref(false);
+  orderOpen = ref(false),
+  featureTourOpen = ref(false);
 let alive = true;
 const waterExceptionOpen = ref(false);
 const roundOpen = ref(false);
 const roundVisibleCount = ref(0);
 const pushOpen = ref(false);
+const pushSheetMounted = ref(false);
 const recoveryOpen = ref(false);
 let queuedTool: (() => void) | null = null;
+function openPushSettings() {
+  pushSheetMounted.value = true;
+  pushOpen.value = true;
+}
+function closePushSettings() {
+  presentNewReminders();
+  if (!pushOpen.value) pushSheetMounted.value = false;
+}
 function openTools() {
   if (detailTask.value) {
     queuedTool = () => {
@@ -207,6 +276,10 @@ function openTools() {
   } else toolsOpen.value = true;
 }
 function menuAction(action: MenuAction) {
+  if (props.preview && !["order", "messages"].includes(action)) {
+    showToast("预览不会更改正式宿舍");
+    return;
+  }
   const actions: Record<MenuAction, () => void> = {
     order: () => {
       orderOpen.value = true;
@@ -216,9 +289,7 @@ function menuAction(action: MenuAction) {
       messagesOpen.value = true;
     },
     join: () => emit("join-dorm"),
-    push: () => {
-      pushOpen.value = true;
-    },
+    push: openPushSettings,
     companion: () => {
       companionOpen.value = true;
     },
@@ -233,12 +304,17 @@ function menuAction(action: MenuAction) {
     identity: () => emit("switch-member"),
     marker: openMarker,
     create: () => emit("create-dorm"),
+    "local-wizard": () => emit("local-wizard"),
     recovery: () =>
       board.value?.is_creator
         ? (recoveryOpen.value = true)
         : emit("recover-owner"),
     refresh: () => {
       void refreshArrangements();
+    },
+    guide: () => openWelcomeGuide(false),
+    "feature-tour": () => {
+      featureTourOpen.value = true;
     },
   };
   const insideSettings = [
@@ -253,8 +329,10 @@ function menuAction(action: MenuAction) {
     "refresh",
     "email",
     "recovery",
+    "guide",
   ].includes(action);
-  if (insideSettings) actions[action]();
+  if (insideSettings && !(action === "settings" && board.value?.configuration))
+    actions[action]();
   else {
     // Route/account entry still closes settings before leaving this page.
     queuedTool = actions[action];
@@ -346,15 +424,23 @@ watch(chatOpen, (open) => {
   if (!open) chatCommitted.value = false;
 });
 function demoChatUnavailable() {
-  if (!props.demo) return false;
+  if (!props.demo && !props.preview) return false;
   demoNotice();
   return true;
 }
 const detailOpen = ref(false);
 const detailMotion = ref<"shared" | "bottom">("shared");
 const detailOrigin = ref<DOMRect | null>(null);
-const sectionOrder = ["duty", "water", "calendar"];
-const sectionPaths = ["/", "/water", "/calendar"];
+const sectionOrder = computed(() =>
+  props.preview && props.pages?.length
+    ? props.pages.map((page) => page.id)
+    : (["duty", "water", "calendar"] as const),
+);
+const sectionPaths: Record<"duty" | "water" | "calendar", string> = {
+  duty: "/",
+  water: "/water",
+  calendar: "/calendar",
+};
 const sectionSwipeOffset = ref(0);
 const sectionSwipeDragging = ref(false);
 let sectionSuppressClickUntil = 0;
@@ -470,10 +556,11 @@ function sectionSwipeUp(event: PointerEvent) {
   const travel = Math.abs(speed) > 0.3 ? projected : x;
   resetSectionSwipe();
   if (!commit) return;
-  const index = sectionOrder.indexOf(props.section);
+  const index = sectionOrder.value.indexOf(props.section);
   const next = index + (travel < 0 ? 1 : -1);
-  const path = sectionPaths[next];
-  if (path) void router.push(path);
+  const target = sectionOrder.value[next];
+  if (target && props.preview) emit("section-change", target);
+  else if (target) void router.push(sectionPaths[target]);
   else showToast(x < 0 ? "已经是最后一页" : "已经是第一页");
 }
 function sectionSwipeCancel(event: PointerEvent) {
@@ -559,14 +646,23 @@ let controller: AbortController | null = null,
   requestId = 0;
 let poll: ReturnType<typeof setInterval> | null = null,
   midnight: ReturnType<typeof setTimeout> | null = null;
-const personalToday = computed(
-  () => board.value?.today_tasks.filter((task) => task.key !== "water") || [],
+function tasksForDutyPage(tasks: ChoreTask[]) {
+  const configuration = board.value?.configuration;
+  if (!configuration) return tasks.filter((task) => task.key !== "water");
+  const dutyKeys = new Set<string>(
+    configuration.tasks
+      .filter((task) => task.enabled && task.page === "duty")
+      .map((task) => task.key),
+  );
+  return tasks.filter((task) => dutyKeys.has(task.key));
+}
+const personalToday = computed(() =>
+  tasksForDutyPage(board.value?.today_tasks || []),
 );
-const personalNext = computed(
-  () =>
-    board.value?.next_tasks
-      .filter((task) => task.key !== "water")
-      .sort((a, b) => a.duty_date.localeCompare(b.duty_date)) || [],
+const personalNext = computed(() =>
+  tasksForDutyPage(board.value?.next_tasks || []).sort((a, b) =>
+    a.duty_date.localeCompare(b.duty_date),
+  ),
 );
 const personalTasks = computed(() =>
   personalToday.value.length ? personalToday.value : personalNext.value,
@@ -866,6 +962,7 @@ const presentedMessages = new Set<string>(),
 async function acknowledgeMessage(id: number) {
   if (
     props.demo ||
+    props.preview ||
     document.hidden ||
     !props.token ||
     !unread.value.some((note) => note.id === id)
@@ -898,15 +995,18 @@ watch(
   },
   { flush: "post" },
 );
-async function dismissBannerMessage(id: number, reason: "swipe" | "escape") {
+async function dismissBannerMessage(
+  id: number,
+  reason: "swipe" | "escape" | "close",
+) {
   const active = reminderBanner.active.value;
   if (!active || active.id !== id || bannerReply.sending.value) return;
   bannerReply.cancel(id);
   reminderBanner.release(id);
   reminderBanner.dismiss(id);
   // Only a deliberate threshold swipe acknowledges a read. Auto timeout,
-  // escape and closing the whole banner never create a read request.
-  if (reason !== "swipe") return;
+  // escape/cancelling reply create no read; explicit close is acknowledged.
+  if (reason !== "swipe" && reason !== "close") return;
   const confirmed = await markRead(id, true);
   if (alive && !confirmed) showToast("已读状态稍后同步");
 }
@@ -1033,6 +1133,10 @@ function scheduleMidnight(serverTime: string) {
   midnight = setTimeout(() => void load(), Math.max(1000, next - now + 1500));
 }
 async function load(): Promise<boolean> {
+  // A live draft preview receives only its in-memory fixture. This guard is
+  // the first data boundary, so refresh gestures and child events cannot read
+  // a real room while the preview is mounted.
+  if (props.preview) return false;
   if (document.hidden && board.value) return false;
   controller?.abort();
   const requestController = new AbortController();
@@ -1069,6 +1173,19 @@ async function load(): Promise<boolean> {
     if (!props.demo) void pushSync.run(props.token);
     emit("member", result.member);
     scheduleMidnight(result.server_time);
+    if (!props.preview && !props.demo && result.configuration?.schema_version === 2) {
+      await nextTick();
+      if (router.currentRoute.value.query.tour === "1") {
+        featureTourOpen.value = true;
+        const query = { ...router.currentRoute.value.query };
+        delete query.tour;
+        void router.replace({ path: router.currentRoute.value.path, query, hash: router.currentRoute.value.hash });
+      } else {
+        await waitForCompanionHandoff();
+        if (id !== requestId || requestController.signal.aborted) return false;
+        openWelcomeGuide(true);
+      }
+    }
     return true;
   } catch (e) {
     if (id !== requestId || requestController.signal.aborted) return false;
@@ -1161,6 +1278,10 @@ function acceptCompletion(receipt: ChoreCompletion) {
   completionSyncPending.value = true;
 }
 async function complete(task: ChoreTask, circle = false) {
+  if (props.preview) {
+    showToast("预览不会记录打卡");
+    return;
+  }
   if (props.demo) {
     demoNotice();
     return;
@@ -1217,6 +1338,10 @@ function sectionIsWater() {
   return props.section === "water";
 }
 async function undo(id: number) {
+  if (props.preview) {
+    showToast("预览不会修改打卡记录");
+    return;
+  }
   if (props.demo) {
     demoNotice();
     return;
@@ -1266,9 +1391,13 @@ async function undo(id: number) {
     if (alive) busy.value = "";
   }
 }
-async function nudgeWater() {
-  const task = water.value;
+async function nudgeWater(taskOverride?: ChoreTask) {
+  const task = taskOverride || water.value;
   if (!task || task.assignee_id === props.memberId || busy.value) return;
+  if (props.preview) {
+    nudgeStatus.value = "预览 · 未发送提醒";
+    return;
+  }
   if (props.demo) {
     nudgeStatus.value = "游客体验 · 未发送提醒";
     return;
@@ -1287,8 +1416,8 @@ async function nudgeWater() {
         }),
       });
     });
-    if (water.value?.id === task.id) {
-      updateNudgeClock();
+    if (taskOverride || water.value?.id === task.id) {
+      if (!taskOverride) updateNudgeClock();
       nudgeSentAt.value = lastWaterNudge(key);
       nudgeStatus.value =
         status === "sending"
@@ -1298,7 +1427,7 @@ async function nudgeWater() {
             : "已提醒";
     }
   } catch (error) {
-    if (water.value?.id !== task.id || nudgeController?.signal.aborted) return;
+    if ((!taskOverride && water.value?.id !== task.id) || nudgeController?.signal.aborted) return;
     nudgeStatus.value =
       error instanceof ApiError && error.status === 429
         ? "刚刚已提醒"
@@ -1308,6 +1437,10 @@ async function nudgeWater() {
 }
 const reminderContext = ref<{ memberId: number; taskId: number } | null>(null);
 function openReminder(task?: ChoreTask) {
+  if (props.preview) {
+    showToast("预览不会发送提醒");
+    return;
+  }
   if (props.demo) {
     demoNotice();
     return;
@@ -1319,7 +1452,7 @@ function openReminder(task?: ChoreTask) {
 }
 const {
   error: messageError,
-  read: markRead,
+  read: readReminder,
   reconcile: reconcileMessages,
   retryPending: retryPendingReads,
 } = useReminderInbox(
@@ -1338,6 +1471,8 @@ const {
     },
   },
 );
+const markRead = (id: number, fromBanner = false) =>
+  props.preview ? Promise.resolve(false) : readReminder(id, fromBanner);
 const {
   draft: markerDraft,
   error: markerError,
@@ -1369,6 +1504,10 @@ const {
   },
 );
 function openMarker() {
+  if (props.preview) {
+    showToast("预览不会修改成员标记");
+    return;
+  }
   if (props.demo) {
     demoNotice();
     return;
@@ -1417,7 +1556,7 @@ function visibleRefresh(event?: Event) {
     );
 }
 function pushOnline() {
-  if (!props.demo && !document.hidden && board.value)
+  if (!props.demo && !props.preview && !document.hidden && board.value)
     void pushSync.run(props.token, true);
 }
 watch(month, () => void load());
@@ -1426,9 +1565,11 @@ watch(
   () => void load(),
 );
 const removeNativeReady = onNativePushReady(() => {
-  if (!props.demo && board.value) void pushSync.run(props.token, true);
+  if (!props.demo && !props.preview && board.value)
+    void pushSync.run(props.token, true);
 });
 onMounted(() => {
+  if (props.preview) return;
   void backgroundRefresh.run("foreground");
   poll = setInterval(visibleRefresh, 10000);
   document.addEventListener("visibilitychange", visibleRefresh);
@@ -1468,6 +1609,7 @@ onUnmounted(() => {
     data-testid="chore-board"
   >
     <ReminderBanner
+      v-if="!preview"
       :note="reminderBanner.active.value"
       :reply-state="bannerReply.phase.value"
       :reply-draft="bannerReply.draft.value"
@@ -1516,7 +1658,7 @@ onUnmounted(() => {
             :track="true"
             continuous
             :size="52"
-            :chat-enabled="!demo"
+            :chat-enabled="!demo && !preview"
             :style="{ visibility: chatPresent ? 'hidden' : undefined }"
             @chat="openChat"
             @chat-preview="previewChat"
@@ -1544,13 +1686,20 @@ onUnmounted(() => {
           <span class="identity-name"
             ><span>{{ dormName }}</span
             ><span class="current-identity"
-              >{{ demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+              >{{ preview ? "草稿预览 · " : demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
             ></span
           >
         </div>
         <div class="identity-actions">
-          <RefreshNotice :error="error" :loading="loading" @retry="load" />
+          <RefreshNotice v-if="!preview" :error="error" :loading="loading" @retry="load" />
           <button
+            v-if="preview"
+            class="preview-exit"
+            data-testid="exit-live-preview"
+            @click="emit('exit-preview')"
+          >退出预览</button>
+          <button
+            v-if="!preview"
             class="tools-button"
             :aria-label="
               unread.length ? `设置，${unread.length} 条未读消息` : '设置'
@@ -1607,11 +1756,12 @@ onUnmounted(() => {
                 :version="board.version"
                 :rounds="board.rounds"
                 :categories="board.categories"
+                :preview="preview"
                 @settings="
                   settingsCategory = $event;
                   settingsOpen = true;
                 "
-                :creator="board.is_creator"
+                :creator="board.is_creator && !preview"
                 :undo-ids="board.undo_tasks.map((task) => task.id)"
                 @refresh="load"
                 :today="board.today"
@@ -1627,6 +1777,25 @@ onUnmounted(() => {
                 @closed="presentNewReminders"
               />
             </section>
+            <NewTaskPane
+              v-if="board.configuration && section !== 'calendar' && section !== 'duty'"
+              :board="board"
+              :scope="`${invite}:${memberId}`"
+              :section="section"
+              :busy="!!busy || completionSyncPending"
+              :receipt="completionReceipt"
+              :nudge-status="nudgeStatus"
+              :demo="demo || preview"
+              @nudge="nudgeWater($event)"
+              @complete="complete"
+              @undo="undo($event.id)"
+              @details="openTask"
+              @round="
+                selectedTaskId = $event.id;
+                selectedTaskKey = $event.key;
+                roundOpen = true;
+              "
+            />
             <section
               v-if="section === 'duty'"
               class="chore-personal"
@@ -1718,7 +1887,7 @@ onUnmounted(() => {
                     completionSyncPending ||
                     (!demo && activeDutyTask.duty_date > board.today)
                   "
-                  :demo="demo"
+                  :demo="!!(demo || preview)"
                   :receipt="completionReceipt"
                   @settled="settleCompletion"
                   @complete="complete"
@@ -1760,7 +1929,7 @@ onUnmounted(() => {
               <div v-else class="focus-hero"><h2>休息</h2></div>
             </section>
             <section
-              v-if="section === 'water'"
+              v-if="!board.configuration && section === 'water'"
               class="water-pane"
               data-testid="pane-water"
             >
@@ -1855,7 +2024,8 @@ onUnmounted(() => {
                     </p>
                     <div class="water-task-links">
                       <button
-                        class="water-remind"
+                        class="water-remind water-task-text"
+                        data-card-feedback
                         @click="openTask(water, $event)"
                       >
                         查看任务
@@ -1946,7 +2116,7 @@ onUnmounted(() => {
         :dorm-name="dormName"
         :member="board.member"
         :creator="board.is_creator"
-        :demo="demo"
+        :demo="!!(demo || preview)"
         :unread-count="unread.length"
         :disabled="loading || !!busy"
         @action="menuAction"
@@ -1960,7 +2130,7 @@ onUnmounted(() => {
         :initial-key="section === 'duty' ? activeDutyTask?.key : 'water'"
         :current-id="water?.assignee_id"
         :last-water-id="board.water_handoff?.from_member_id"
-        :editable="!demo"
+        :editable="!demo && !preview"
         :categories="board.categories"
         :version="board.version"
         :token="token"
@@ -1975,7 +2145,8 @@ onUnmounted(() => {
         :title="detailTask?.name || '任务详情'"
         :origin="detailOrigin"
         :motion="detailMotion"
-        :modal="detailMotion !== 'bottom'"
+        :modal="detailTask?.key === 'water' || detailMotion !== 'bottom'"
+        :edge-to-edge="detailTask?.key === 'water'"
         @closed="
           detailTask = null;
           runQueuedTool();
@@ -1988,11 +2159,7 @@ onUnmounted(() => {
         >
           <p class="task-full-content">{{ detailTask.content }}</p>
           <div class="task-detail-person">
-            <MemberMark
-              :id="currentMember(detailTask.assignee_id)?.marker_id"
-              :size="30"
-            />
-            <strong class="task-detail-assignee">{{
+            <strong class="task-detail-assignee rounded-member-name">{{
               detailTask.assignee_name
             }}</strong>
             <span class="task-detail-status">{{ statusText(detailTask) }}</span>
@@ -2015,7 +2182,7 @@ onUnmounted(() => {
         :member-name="board.member.nickname"
         :token="token"
         :version="board.version"
-        :demo="demo"
+        :demo="!!(demo || preview)"
         :advance-task-id="board.water_advance_task_id"
         @saved="load"
         @completed="
@@ -2068,18 +2235,33 @@ onUnmounted(() => {
         @closed="presentNewReminders"
       />
       <ChorePushSettings
+        v-if="!preview && (!board.configuration || pushSheetMounted)"
         v-model="pushOpen"
         :token="token"
         :nickname="board.member.nickname"
-        @closed="presentNewReminders"
+        @closed="closePushSettings"
       />
       <CreatorRecovery
+        v-if="!preview"
         v-model="recoveryOpen"
         mode="manage"
         :token="token"
         @closed="presentNewReminders"
       />
+      <TaskWorkspace
+        v-if="!preview && board.configuration && settingsOpen"
+        :board="board"
+        :token="token"
+        :name="dormName"
+        @close="settingsOpen = false"
+        @saved="load"
+        @order="
+          settingsOpen = false;
+          orderOpen = true;
+        "
+      />
       <ChoreSettings
+        v-if="!preview && !board.configuration"
         v-model="settingsOpen"
         :categories="board.categories"
         :members="board.members"
@@ -2093,6 +2275,7 @@ onUnmounted(() => {
         @closed="presentNewReminders"
       />
       <ChoreReminderSheet
+        v-if="!preview"
         v-model="reminderOpen"
         :invite="invite"
         :token="token"
@@ -2103,6 +2286,16 @@ onUnmounted(() => {
         :busy="!!busy"
         :date-text="dateText"
         @sent="load"
+      />
+      <SpotlightTour
+        v-if="featureTourOpen && !preview"
+        return-focus-selector="[data-testid=open-feature-tour]"
+        :steps="[
+          { target: '.board-identity', text: '球球会根据当前页面提供提示，点设置可以查看其他功能。' },
+          { target: '.completion-surface', text: '轮到你时，完成任务后在这里记录。' },
+          { target: '[data-testid=chore-bottom-nav]', text: '从底部切换值日、抬水和日历。' },
+        ]"
+        @done="featureTourOpen = false"
       />
       <ElasticSheet v-model="markerOpen" title="你的日历标记"
         ><MarkerPicker
@@ -2179,6 +2372,20 @@ onUnmounted(() => {
   gap: 4px;
   align-items: center;
 }
+.preview-exit {
+  min-height: 44px;
+  border: 0;
+  border-radius: 22px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--canvas) 78%, transparent);
+  font: inherit;
+  font-size: 13px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 220ms var(--ui-ease-out), opacity 160ms;
+}
+.preview-exit:active { transform: scale(.97); }
 .order-trigger {
   display: flex;
   align-items: center;
@@ -2597,7 +2804,7 @@ onUnmounted(() => {
 }
 .task-detail-person {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
@@ -3397,5 +3604,30 @@ onUnmounted(() => {
 }
 .water-exception-trigger:active {
   transform: scale(0.96);
+}
+</style>
+
+<style scoped>
+.water-task-links .water-task-text {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  filter: none;
+  color: var(--app-tone-h555, #555);
+  border-radius: 0;
+  transition:
+    transform 220ms var(--ui-ease-out),
+    opacity 120ms ease;
+}
+.water-task-links .water-task-text::before,
+.water-task-links .water-task-text::after {
+  content: none;
+}
+.water-task-links .water-task-text:active:not(:disabled) {
+  transform: scale(0.97);
+  opacity: 0.65;
+  box-shadow: none;
 }
 </style>

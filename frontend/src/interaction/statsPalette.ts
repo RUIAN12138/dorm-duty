@@ -32,15 +32,18 @@ export function saveStatsColor(color: string) {
 }
 const taskKey = "lundao-stats-task-colors-v2";
 export const statsTaskKeys = ["floor", "toilet", "sink", "water"] as const;
-type StatsTask = (typeof statsTaskKeys)[number];
-type TaskColors = Partial<Record<StatsTask, { light?: string; dark?: string }>>;
+type TaskColors = Partial<Record<string, { light?: string; dark?: string }>>;
+const isStatsTaskKey = (task: string) =>
+  statsTaskKeys.includes(task as (typeof statsTaskKeys)[number]) ||
+  /^task_[0-9a-f]{32}$/.test(task);
 export function readStatsTaskColors(value: string | null): TaskColors {
   try {
-    const input = JSON.parse(value || "null"),
-      result: TaskColors = {};
-    for (const task of statsTaskKeys) {
+    const input = JSON.parse(value || "null"), result: TaskColors = {};
+    if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+    for (const [task, colors] of Object.entries(input) as [string, Partial<Record<"light" | "dark", unknown>>][]) {
+      if (!isStatsTaskKey(task)) continue;
       for (const mode of ["light", "dark"] as const) {
-        const color = input?.[task]?.[mode];
+        const color = colors?.[mode];
         if (validColor(color))
           (result[task] ||= {})[mode] = color.toLowerCase();
       }
@@ -60,17 +63,16 @@ function loadTaskColors() {
 export const statsTaskColors = ref<TaskColors>(loadTaskColors());
 export function statsColorFor(task: string, dark: boolean) {
   return (
-    statsTaskColors.value[task as StatsTask]?.[dark ? "dark" : "light"] ||
+    statsTaskColors.value[task]?.[dark ? "dark" : "light"] ||
     (dark ? "#b0b0b0" : statsBaseColor.value)
   );
 }
 export function saveStatsTaskColor(task: string, color: string, dark: boolean) {
-  if (!statsTaskKeys.includes(task as StatsTask) || !validColor(color)) return;
-  const name = task as StatsTask;
+  if (!isStatsTaskKey(task) || !validColor(color)) return;
   statsTaskColors.value = {
     ...statsTaskColors.value,
-    [name]: {
-      ...statsTaskColors.value[name],
+    [task]: {
+      ...statsTaskColors.value[task],
       [dark ? "dark" : "light"]: color.toLowerCase(),
     },
   };

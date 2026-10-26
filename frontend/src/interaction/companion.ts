@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, watch } from "vue";
 export interface EmotionDefinition {
   id: string;
   name: string;
@@ -122,10 +122,12 @@ let arrival: {
   at: number;
 } | null = null;
 let arrivalTimeout: ReturnType<typeof setTimeout> | undefined;
-export function captureCompanionHandoff() {
-  const element = document.querySelector<HTMLElement>(
-    "[data-companion-login] .dorm-companion",
-  );
+export function captureCompanionHandoff(sourceElement?: HTMLElement | null) {
+  const element =
+    sourceElement ??
+    document.querySelector<HTMLElement>(
+      "[data-companion-login] .dorm-companion",
+    );
   if (!companionEnabled.value || !element) return;
   const rect = element.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
@@ -149,4 +151,14 @@ export function finishCompanionHandoff() {
   clearTimeout(arrivalTimeout);
   arrival = null;
   companionEntering.value = false;
+}
+export function waitForCompanionHandoff(): Promise<void> {
+  if (!companionEntering.value) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = watch(companionEntering, (pending) => {
+      if (pending) return;
+      stop();
+      resolve();
+    });
+  });
 }

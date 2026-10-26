@@ -33,6 +33,14 @@ const result = await build({
     {
       name: "component-fixtures",
       setup(b) {
+        b.onResolve({ filter: /\.css$/ }, (args) => ({
+          path: args.path,
+          namespace: "style-fixture",
+        }));
+        b.onLoad({ filter: /.*/, namespace: "style-fixture" }, () => ({
+          contents: "",
+          loader: "js",
+        }));
         b.onResolve({ filter: /^vue$/ }, () => ({
           path: vueUrl,
           external: true,

@@ -516,8 +516,12 @@ try {
             new Date().toISOString(),
           );
       }
-      // Current auth queries require this additive column while constructing old-schema fixtures.
-      db.sqlite.exec("ALTER TABLE sessions ADD COLUMN dorm_id INTEGER REFERENCES dormitories(id)");
+      // The current Worker only runs against the current schema. Upgrade the
+      // legacy file with the same migration entry point used by the local app
+      // before creating records through current routes.
+      db.close();
+      db = null;
+      db = await openDatabase(file);
       const env = { DB: db, DEFAULT_DORM_INVITE_CODE: "", EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY };
       const h = {
         request(route, { token, method = "GET", data } = {}) {
@@ -552,7 +556,6 @@ try {
         { enabled: false, times: ["08:30"], version: 0 },
         "PATCH",
       );
-      db.sqlite.exec("ALTER TABLE sessions DROP COLUMN dorm_id");
       const tables = [
         "users",
         "dormitories",

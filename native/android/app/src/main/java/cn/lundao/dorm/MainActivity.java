@@ -24,6 +24,7 @@ public final class MainActivity extends Activity {
   private WebView web;
   private SharedPreferences prefs;
   private final ExecutorService io=Executors.newSingleThreadExecutor();
+  private final ExecutorService cookieIo=Executors.newSingleThreadExecutor();
   private JSONObject pendingPermission;
   private JavaScriptReplyProxy pendingReply;
   private boolean handlingBack;
@@ -39,6 +40,7 @@ public final class MainActivity extends Activity {
     super.onCreate(state);
     prefs=getSharedPreferences("install",MODE_PRIVATE);
     if(Build.VERSION.SDK_INT>=26) getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("dorm-reminders","室友提醒",NotificationManager.IMPORTANCE_HIGH));
+    android.webkit.CookieManager.getInstance().setAcceptCookie(true);
     web=new WebView(this);
     createLayout();
     WebSettings settings=web.getSettings();
@@ -55,6 +57,25 @@ public final class MainActivity extends Activity {
       @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler handler,android.net.http.SslError error){handler.cancel();if(loadState.fail(error.getUrl()))showConnectionError();}
     });
     if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+      WebViewCompat.addWebMessageListener(web,"DormNativeSession",Collections.singleton(ORIGIN),(view,message,origin,mainFrame,reply)->{
+        if(!mainFrame || !trusted(view.getUrl()) || !ORIGIN.equals(origin.toString())) return;
+        String id="";
+        try {
+          String raw=message.getData();if(raw==null||raw.length()>512) return;
+          JSONObject request=new JSONObject(raw);id=request.optString("id");
+          if(!"flushCookies".equals(request.optString("command")) || !id.matches("cookie-[a-z0-9]+-[0-9]{1,10}")) {
+            respondCookieFlush(reply,id,false);
+            return;
+          }
+          final String requestId=id;
+          cookieIo.execute(()->{
+            boolean ok=true;
+            try { android.webkit.CookieManager.getInstance().flush(); }
+            catch(RuntimeException error) { ok=false; }
+            respondCookieFlush(reply,requestId,ok);
+          });
+        } catch(Exception ignored){ respondCookieFlush(reply,id,false); }
+      });
       WebViewCompat.addWebMessageListener(web,"DormNativePush",Collections.singleton(ORIGIN),(view,message,origin,mainFrame,reply)->{
         if(!mainFrame || !trusted(view.getUrl()) || !ORIGIN.equals(origin.toString())) return;
         try {
@@ -172,6 +193,13 @@ public final class MainActivity extends Activity {
       runOnUiThread(()->{try{if(!isDestroyed()&&WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);}catch(IllegalStateException ignored){ /* The initiating document may already be closed. */ }});
     }catch(JSONException ignored){}
   }
+  private void respondCookieFlush(JavaScriptReplyProxy reply,String id,boolean ok){
+    if(id==null||id.length()>64) return;
+    try {
+      String value=new JSONObject().put("command","cookiesFlushed").put("id",id).put("ok",ok).toString();
+      runOnUiThread(()->{try{if(!isDestroyed()&&WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);}catch(IllegalStateException ignored){ /* The initiating document may already be closed. */ }});
+    }catch(JSONException ignored){}
+  }
   private void respond(JavaScriptReplyProxy reply,JSONObject request,boolean ok,String message,boolean enabled){
     try {String value=new JSONObject().put("id",request.optString("id")).put("ok",ok).put("message",message).put("enabled",enabled).put("platform","android").put("configured",BuildConfig.JPUSH_APPKEY.matches("[a-fA-F0-9]{24}")).toString();runOnUiThread(()->{try{if(!isDestroyed()&&WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))reply.postMessage(value);}catch(IllegalStateException ignored){ /* The initiating document may already be closed. */ }});}catch(JSONException ignored){}
   }
@@ -189,5 +217,6 @@ public final class MainActivity extends Activity {
   }
   private void navigateBack(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String url=intent.getStringExtra("route");if(trusted(url))web.loadUrl(url);}
-  @Override protected void onDestroy(){ui.removeCallbacks(loadTimeout);io.shutdownNow();web.destroy();super.onDestroy();}
+  @Override protected void onPause(){android.webkit.CookieManager.getInstance().flush();super.onPause();}
+  @Override protected void onDestroy(){ui.removeCallbacks(loadTimeout);io.shutdownNow();cookieIo.shutdown();web.destroy();super.onDestroy();}
 }

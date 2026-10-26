@@ -37,7 +37,7 @@ const props = defineProps<{
   replySender?: string;
 }>();
 const emit = defineEmits<{
-  dismiss: [id: number, reason: "swipe" | "escape"];
+  dismiss: [id: number, reason: "swipe" | "escape" | "close"];
   expire: [id: number];
   reply: [id: number];
   open: [id: number];
@@ -59,6 +59,33 @@ const canSend = computed(
     replyLength.value >= 1 &&
     replyLength.value <= REPLY_LIMIT,
 );
+type SurfacePhase =
+  | "idle"
+  | "pressing"
+  | "expanding"
+  | "replying"
+  | "collapsing";
+const surfacePhase = ref<SurfacePhase>("idle");
+function finishMorph(event: TransitionEvent) {
+  if (
+    event.target !== event.currentTarget ||
+    event.propertyName !== "grid-template-rows"
+  )
+    return;
+  surfacePhase.value = replying.value ? "replying" : "idle";
+  if (!replying.value && editor.value) editor.value.style.height = "";
+}
+const messageTime = computed(() => {
+  const date = new Date(props.note?.created_at || "");
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "Asia/Shanghai",
+      }).format(date)
+    : "";
+});
 const positionEl = ref<HTMLElement>();
 const cardEl = ref<HTMLElement>();
 const editor = ref<HTMLTextAreaElement>();
@@ -297,6 +324,7 @@ let gesture: {
   velocityX: ReturnType<typeof createVelocityTracker>;
   velocity: ReturnType<typeof createVelocityTracker>;
   longPress: boolean;
+  movement: number;
 } | null = null;
 let suppressUntil = 0;
 function down(event: PointerEvent) {
@@ -320,8 +348,10 @@ function down(event: PointerEvent) {
     velocityX: createVelocityTracker(event.clientX, performance.now()),
     velocity: createVelocityTracker(event.clientY, performance.now()),
     longPress: false,
+    movement: 0,
   };
   clearTimers();
+  surfacePhase.value = replying.value ? "replying" : "pressing";
   const id = props.note?.id;
   if (id && !replying.value)
     longTimer = setTimeout(() => {
@@ -330,6 +360,7 @@ function down(event: PointerEvent) {
       if (!gesture || dragging.value || props.note?.id !== id || sending.value)
         return;
       gesture.longPress = true;
+      surfacePhase.value = "expanding";
       suppressUntil = performance.now() + 800;
       emit("reply", id);
       void nextTick(() => {
@@ -341,11 +372,14 @@ function down(event: PointerEvent) {
 }
 function move(event: PointerEvent) {
   if (!gesture || gesture.id !== event.pointerId) return;
+  // The initiating hold owns this pointer until release; never turn it into dismissal.
+  if (gesture.longPress) return;
   const y = event.clientY - gesture.y,
     x = event.clientX - gesture.x;
+  gesture.movement = Math.hypot(x, y);
   gesture.velocity.add(event.clientY, performance.now());
   gesture.velocityX.add(event.clientX, performance.now());
-  if (!dragging.value && Math.hypot(x, y) > 3) {
+  if (!dragging.value && Math.hypot(x, y) > 10) {
     dragging.value = true;
     clearTimeout(longTimer);
   }
@@ -370,10 +404,14 @@ function finish(event: PointerEvent, cancelled = false) {
   }
   const close =
     !cancelled &&
+    !current.longPress &&
     dragging.value &&
     dismissBanner(-offset.value, current.velocity.read(performance.now()));
-  if (dragging.value) suppressUntil = performance.now() + 400;
+  if (dragging.value || current.movement > 3)
+    suppressUntil = performance.now() + 400;
+  if (current.longPress) suppressUntil = performance.now() + 500;
   gesture = null;
+  if (!replying.value) surfacePhase.value = "idle";
   dragging.value = false;
   if (current.element.hasPointerCapture(event.pointerId))
     current.element.releasePointerCapture(event.pointerId);
@@ -397,7 +435,7 @@ function finish(event: PointerEvent, cancelled = false) {
     returnHome();
     scheduleExpiry();
     const el = current.element.parentElement;
-    if (el)
+    if (el && !current.longPress)
       animateMotion(
         el,
         [
@@ -416,11 +454,17 @@ function finish(event: PointerEvent, cancelled = false) {
     }
   }
 }
+function contextMenu(event: MouseEvent) {
+  // Native text selection belongs to the editor, not the capsule gesture.
+  if (!(event.target as Element | null)?.closest(".banner-reply-panel"))
+    event.preventDefault();
+}
 function open(event?: MouseEvent) {
   if (replying.value || performance.now() < suppressUntil) {
     // The held gesture's synthetic click must not reach the detail entry or
     // steal focus back from the freshly mounted editor.
     event?.preventDefault();
+    event?.stopPropagation();
     return;
   }
   const id = props.note?.id;
@@ -450,6 +494,7 @@ function cancelGesture() {
 function inactive() {
   if (!motionAllowed()) {
     cancelGesture();
+    surfacePhase.value = replying.value ? "replying" : "idle";
     layout?.sync();
     for (const el of [...flights.keys()]) {
       stopMotion(el);
@@ -559,6 +604,10 @@ function submit() {
   if (!id || !canSend.value) return;
   emit("send", id);
 }
+function closeMessage() {
+  const id = props.note?.id;
+  if (id && !sending.value) emit("dismiss", id, "close");
+}
 function cancelReply() {
   const id = props.note?.id;
   if (!id || sending.value) return;
@@ -570,7 +619,10 @@ function backdropPointer() {
 }
 
 watch(replying, async (active) => {
+  surfacePhase.value = active ? "expanding" : "collapsing";
+  if (!motionAllowed()) surfacePhase.value = active ? "replying" : "idle";
   if (active) {
+    if (editor.value) editor.value.style.height = "";
     clearTimeout(autoTimer);
     returnFocus =
       document.activeElement instanceof HTMLElement
@@ -582,6 +634,9 @@ watch(replying, async (active) => {
     layout?.sync();
     focusEditor();
   } else {
+    if (editor.value)
+      editor.value.style.height = `${editor.value.offsetHeight}px`;
+    editor.value?.blur();
     releaseLock?.();
     releaseLock = null;
     // The same position owner reverses to the parked position while the
@@ -674,13 +729,14 @@ onBeforeUnmount(() => {
               'is-reply': replying,
             }"
             :style="swipePose"
+            :data-phase="surfacePhase"
             @pointerdown="down"
             @pointermove="move"
             @pointerup="finish($event)"
             @pointercancel="finish($event, true)"
             @lostpointercapture="finish($event, true)"
             @click="open"
-            @contextmenu.prevent
+            @contextmenu="contextMenu"
           >
             <LiquidGlassSurface
               class="banner-optics"
@@ -699,12 +755,17 @@ onBeforeUnmount(() => {
               type="button"
               class="reminder-banner-main"
               :tabindex="replying ? -1 : undefined"
-              :aria-label="`${note.sender_name || '室友'}${note.source === 'note' ? '给你留言' : '提醒你'}，${note.task_name || '完成宿舍任务'}，查看消息`"
+              :aria-label="`${note.sender_name || '室友'}${note.source === 'note' ? '给你留言' : '提醒你'}，${note.body || note.task_name || '完成宿舍任务'}，查看消息，长按或按Shift加回车快捷回复`"
             >
-              <span class="reminder-banner-caption"
-                >{{ note.sender_name || "室友"
-                }}{{ note.source === "note" ? "给你留言" : "提醒你" }}</span
-              >
+              <span class="reminder-banner-caption">
+                <span class="banner-caption-label"
+                  >{{ note.sender_name || "室友"
+                  }}{{ note.source === "note" ? "给你留言" : "提醒你" }}</span
+                >
+                <time v-if="messageTime" :datetime="note.created_at">{{
+                  messageTime
+                }}</time>
+              </span>
               <strong>{{
                 note.body || note.task_name || "完成宿舍任务"
               }}</strong>
@@ -712,6 +773,7 @@ onBeforeUnmount(() => {
             <div
               class="banner-reply-slot"
               :class="{ 'is-open': replying }"
+              @transitionend="finishMorph"
               :inert="!replying"
               :aria-hidden="replying ? undefined : 'true'"
             >
@@ -762,6 +824,14 @@ onBeforeUnmount(() => {
                   <div class="banner-reply-actions">
                     <button
                       type="button"
+                      class="banner-reply-close"
+                      :disabled="sending"
+                      @click="closeMessage"
+                    >
+                      关闭消息
+                    </button>
+                    <button
+                      type="button"
                       class="banner-reply-cancel"
                       :disabled="sending"
                       @click="cancelReply"
@@ -800,18 +870,19 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   z-index: 2900;
   pointer-events: none;
-  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .reminder-banner-position.is-reply {
   width: min(396px, calc(100% - 18px));
+  transition-duration: 320ms;
 }
 .banner-reply-backdrop {
   position: fixed;
   inset: 0;
   z-index: 2899;
-  background: #2525254d;
-  backdrop-filter: blur(6px) saturate(112%);
-  -webkit-backdrop-filter: blur(6px) saturate(112%);
+  background: #19191921;
+  backdrop-filter: blur(6px) saturate(95%);
+  -webkit-backdrop-filter: blur(6px) saturate(95%);
   touch-action: none;
 }
 .banner-backdrop-enter-active,
@@ -845,11 +916,13 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   touch-action: none;
   transform-origin: 50% 0;
-  transition: border-radius 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-radius 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
 }
 .reminder-banner-card.is-reply {
-  border-radius: 24px;
+  border-radius: 26px;
+  touch-action: pan-y;
+  transition-duration: 320ms;
 }
 .reminder-banner-card::after {
   content: "";
@@ -868,11 +941,11 @@ onBeforeUnmount(() => {
   mask-composite: exclude;
   pointer-events: none;
 }
-.reminder-banner-card.is-dragging,
-.reminder-banner-card.is-held {
+.reminder-banner-card.is-dragging {
   transition: none;
 }
 .reminder-banner-main {
+  touch-action: none;
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -885,11 +958,24 @@ onBeforeUnmount(() => {
   font: inherit;
 }
 .reminder-banner-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--app-tone-h666, #666);
+}
+.banner-caption-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reminder-banner-caption time {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .reminder-banner-main strong {
   font-size: 14px;
@@ -906,16 +992,16 @@ onBeforeUnmount(() => {
   opacity: 0;
   visibility: hidden;
   transition:
-    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 180ms ease,
-    visibility 0s linear 280ms;
+    visibility 0s linear 260ms;
 }
 .banner-reply-slot.is-open {
   grid-template-rows: 1fr;
   opacity: 1;
   visibility: visible;
   transition:
-    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 180ms ease,
     visibility 0s;
 }
@@ -925,23 +1011,28 @@ onBeforeUnmount(() => {
 }
 .banner-reply-panel {
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  max-height: max(100px, calc(var(--banner-visible-height, 100dvh) - 84px));
+  gap: 10px;
+  margin: 10px 0 0;
+  box-sizing: border-box;
+  max-height: max(80px, calc(var(--banner-visible-height, 100dvh) - 106px));
   overflow-y: auto;
   touch-action: pan-y;
   overscroll-behavior: contain;
-  padding-top: 10px;
+  padding: 10px 8px 6px;
+  scrollbar-width: none;
   border-top: 1px solid var(--glass-border);
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(-4px) scale(0.985);
   transition:
     opacity 200ms ease,
-    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform 300ms cubic-bezier(0.22, 1.12, 0.36, 1);
 }
 .banner-reply-slot.is-open .banner-reply-panel {
   opacity: 1;
   transform: none;
+}
+.banner-reply-panel::-webkit-scrollbar {
+  display: none;
 }
 .banner-reply-hint {
   font-size: 11px;
@@ -951,7 +1042,8 @@ onBeforeUnmount(() => {
 .banner-reply-input {
   width: 100%;
   box-sizing: border-box;
-  min-height: 44px;
+  min-width: 0;
+  min-height: 46px;
   max-height: 120px;
   resize: none;
   border: 1px solid var(--glass-border);
@@ -1010,6 +1102,15 @@ onBeforeUnmount(() => {
 }
 .banner-reply-actions button:active {
   transform: scale(0.97);
+}
+.banner-reply-close {
+  margin-right: auto;
+  border: 0;
+  background: transparent;
+  color: var(--app-tone-h555, #555);
+}
+:global(:root[data-theme="dark"]) .banner-reply-backdrop {
+  background: #00000035;
 }
 .banner-reply-cancel {
   border: 1px solid var(--glass-border);

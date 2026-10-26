@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import type { ChoreTask } from "../api/chores";
 import TaskCategoryIcon from "./TaskCategoryIcon.vue";
 defineProps<{
@@ -25,7 +26,8 @@ defineEmits<{
     <TaskCategoryIcon :kind="task.key" />
     <div class="quiet-task-copy">
       <p class="task-who">
-        {{ task.assignee_name }}<span aria-hidden="true"> · </span
+        <span class="rounded-member-name">{{ task.assignee_name }}</span
+        ><span aria-hidden="true"> · </span
         >{{ task.key === "water" ? "轮到抬水" : "值日" }}
       </p>
       <button

@@ -1,3 +1,4 @@
+import { validateDormConfiguration } from "../shared/dorm-configuration.mjs";
 // Three independent chores, shared by the local SQLite adapter and Cloudflare D1.
 // Member claims are intentionally incapable of authenticating any legacy admin endpoint.
 import { MARK_IDS } from "../shared/member-marks.mjs";
@@ -16,6 +17,7 @@ import {
 
 const DAY = 86_400_000;
 const KEYS = ["floor", "toilet", "sink", "water"];
+const MAX_CONFIGURED_TASKS = 20;
 const encoder = new TextEncoder();
 const markerIds = new Set(MARK_IDS);
 export class ChoreError extends Error {
@@ -184,23 +186,40 @@ function categoryView(row) {
     mode: row.mode,
   };
 }
+function configuredCategory(category,configuration){
+  if(!configuration)return category;
+  const task=configuration.tasks.find(t=>t.key===category.key);
+  const hard=(task?.policy&&task.policy!=="inherit"?task.policy:configuration.policy)==="hard";
+  Object.defineProperties(category,{hardRound:{value:hard&&category.mode==="self_round",configurable:true},hardPolicy:{value:hard,configurable:true},executionTime:{value:task?.execution_time||"08:00",configurable:true},version2:{value:configuration?.schema_version===2,configurable:true}});
+  return category;
+}
 async function categories(db, roomId) {
   const rows = await all(db, "SELECT * FROM chore_categories WHERE dorm_id=?", [
     roomId,
   ]);
-  return KEYS.map((key) => rows.find((row) => row.key === key))
+  const configuration=JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[roomId]))?.configuration||"null");
+  const keys = configuration?.schema_version === 2
+    ? [...KEYS, ...configuration.tasks.map((task) => task.key).filter((key) => !KEYS.includes(key))]
+    : KEYS;
+  return keys.map((key) => rows.find((row) => row.key === key))
     .filter(Boolean)
-    .map(categoryView);
+    .map(row => configuredCategory(categoryView(row), configuration));
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
-  const initialized = await first(
-    db,
-    "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
-    [room.id, room.id],
-  );
-  if (initialized) return;
-
+  const initialConfig = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null");
+  const settingsReady = await first(db, "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=?", [room.id]);
+  if (initialConfig?.schema_version === 2) {
+    const existing = new Set((await all(db, "SELECT key FROM chore_categories WHERE dorm_id=?", [room.id])).map((row) => row.key));
+    if (settingsReady && KEYS.every((key) => existing.has(key)) && initialConfig.tasks.every((task) => existing.has(task.key))) return;
+  } else {
+    const initialized = await first(
+      db,
+      "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
+      [room.id, room.id],
+    );
+    if (initialized) return;
+  }
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "宿舍没有有效成员");
   const legacy = parse(room.rotation_order || "[]"),
@@ -211,32 +230,44 @@ async function initialize(db, room, now) {
   ];
   const shift = order.length > 1 ? [...order.slice(1), order[0]] : order;
   const start = localDate(now);
-  const defaults = [
+  const baseDefaults = [
     ["floor", "地板", "扫地、拖地", "22:00", order],
     ["toilet", "厕所", "清洗便池、冲洗地面", "22:00", shift],
     ["sink", "洗手池", "清洁洗手池、台面和水渍", "22:00", order],
     ["water", "抬水", "将饮用水送到宿舍", "20:00", order],
   ];
+  const defaults = initialConfig?.schema_version === 2
+    ? [
+        ...baseDefaults.map(([key, name, content, hhmm, rotation]) => {
+          const task = initialConfig.tasks.find((entry) => entry.key === key);
+          return [key, task?.name || name, task?.content || task?.name || content, task?.deadline || hhmm, rotation, task];
+        }),
+        ...initialConfig.tasks.filter((task) => !KEYS.includes(task.key)).map((task) => [task.key, task.name, task.content || task.name, task.deadline, order, task]),
+      ]
+    : baseDefaults;
   await db.batch([
     stmt(db, "INSERT OR IGNORE INTO chore_settings(dorm_id) VALUES (?)", [
       room.id,
     ]),
-    ...defaults.map(([key, name, content, hhmm, rotation]) =>
-      stmt(
+    ...defaults.map(([key, name, content, hhmm, rotation, configured]) => {
+      const custom = configured || initialConfig?.tasks.find(t=>t.key===key);
+      return stmt(
         db,
-        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode,enabled,reminder_interval_days) VALUES (?,?,?,?,?,?,?,?,?,?)",
         [
           room.id,
           key,
-          name,
-          content,
-          hhmm,
+          custom?.name || name,
+          custom ? (custom.content || custom.name) : content,
+          custom?.deadline || hhmm,
           start,
           JSON.stringify(rotation),
-          key === "water" ? "completion" : "self_round",
+          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : initialConfig && custom?.rotation === "completion" ? "completion" : "self_round",
+          initialConfig ? (custom?.enabled ? 1 : 0) : 1,
+          custom?.interval || 3,
         ],
-      ),
-    ),
+      );
+    }),
   ]);
 }
 async function actor(request, db, now, required = false) {
@@ -423,29 +454,32 @@ async function planDaily(
   const today = localDate(now),
     end = addDate(today, 29),
     rows = [];
+  for (const category of settings.filter((entry) => replaceKeys.includes(entry.key) && entry.mode === "scheduled" && entry.key !== "water"))
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
+      [room.id, category.key, today],
+    );
   for (const category of settings.filter(
-    (entry) => entry.mode === "scheduled",
+    (entry) => entry.enabled && entry.mode === "scheduled" && entry.key !== "water",
   )) {
     const replace = replaceKeys.includes(category.key);
-    if (replace)
-      mutation.update(
-        "chore_tasks",
-        { status: "cancelled" },
-        "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
-        [room.id, category.key, today],
-      );
-    for (let i = replace ? 1 : 0; i < 30; i++) {
+    const existingToday = replace
+      ? await first(db, "SELECT 1 AS exists_today FROM chore_tasks WHERE dorm_id=? AND key=? AND duty_date=? AND status<>'cancelled'", [room.id, category.key, today])
+      : null;
+    for (let i = replace && existingToday ? 1 : 0; i < 30; i++) {
       const day = addDate(today, i),
         uid = scheduledAssignee(category, day);
       if (uid) rows.push(plannedRow(room, category, day, uid, members));
     }
   }
   // Each replacement only touches future rows. Historical / completed rows remain immutable.
-  for (const key of KEYS.filter((entry) => entry !== "water"))
+  for (const category of settings.filter((entry) => entry.enabled && entry.mode === "scheduled" && entry.key !== "water"))
     appendRows(
       mutation,
-      rows.filter((row) => row[1] === key),
-      replaceKeys.includes(key),
+      rows.filter((row) => row[1] === category.key),
+      replaceKeys.includes(category.key),
     );
   return end;
 }
@@ -483,7 +517,7 @@ function roundRow(room, category, member, members, now, sequence) {
     sequence,
   );
   row[2] = `round-${sequence}-${member.user_id}`;
-  row[9] = ""; // Voluntary rounds have no daily deadline.
+  if (!category.hardRound) row[9] = ""; // Legacy / soft rounds remain voluntary.
   return row;
 }
 async function planRound(
@@ -526,6 +560,36 @@ async function planRound(
     ),
     true,
   );
+}
+async function planCompletionTurn(db, mutation, room, category, members, now, completingTask = null) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const max = await first(db,"SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL",[room.id,category.key]);
+  const sequence = Number(max?.sequence || 0) + 1;
+  const last = completingTask
+    ? completingTask
+    : await first(db,"SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1",[room.id,category.key]);
+  const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+  const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+  const member = members.find((entry) => entry.user_id === category.rotation_order[nextIndex]) || members[0];
+  const day = localDate(now) > category.start_date ? localDate(now) : category.start_date;
+  appendRows(mutation,[plannedRow(room,category,day,member.user_id,members,sequence)]);
+}
+async function maintainCompletionTurn(db, mutation, room, category, members, now) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const pending = await all(db,"SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL ORDER BY sequence,id",[room.id,category.key]);
+  if (pending.length) {
+    const keep = pending[0];
+    for (const extra of pending.slice(1)) mutation.update("chore_tasks",{status:"cancelled"},"id=? AND status='pending'",[extra.id]);
+    if (!members.some((member)=>member.user_id===keep.assignee_id)) {
+      const last = await first(db,"SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1",[room.id,category.key]);
+      const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+      const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+      const member = members.find((entry)=>entry.user_id===category.rotation_order[nextIndex]) || members[0];
+      mutation.update("chore_tasks",{assignee_id:member.user_id,assignee_name_snapshot:member.nickname,marker_id_snapshot:member.marker_id},"id=? AND status='pending'",[keep.id]);
+    }
+    return;
+  }
+  await planCompletionTurn(db,mutation,room,category,members,now);
 }
 function synchronizedOrder(order, ids) {
   return [
@@ -570,7 +634,7 @@ async function maintain(db, room, now) {
     const tokens = new Set(existing.map((row) => `${row.key}:${row.task_key}`));
     let missing = replacements.length > 0;
     for (const category of settings.filter(
-      (entry) => entry.mode === "scheduled",
+      (entry) => entry.enabled && entry.mode === "scheduled",
     ))
       for (let i = 0; i < 30; i++) {
         const day = addDate(today, i);
@@ -586,7 +650,7 @@ async function maintain(db, room, now) {
         "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
         [room.id],
       );
-    if (pending && !ids.includes(pending.assignee_id)) {
+    if (pending && water && !ids.includes(pending.assignee_id)) {
       const uid = water.rotation_order[0],
         member = members.find((entry) => entry.user_id === uid);
       mutation.update(
@@ -601,7 +665,7 @@ async function maintain(db, room, now) {
       );
       missing = true;
     }
-    if (water.enabled && !pending) {
+    if (water?.enabled && !pending) {
       const last = await first(
         db,
         "SELECT assignee_id,sequence FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
@@ -628,6 +692,8 @@ async function maintain(db, room, now) {
       (entry) => entry.mode === "self_round",
     ))
       await planRound(db, mutation, room, category, members, now);
+    for (const category of settings.filter((entry)=>entry.mode === "completion" && entry.key !== "water"))
+      await maintainCompletionTurn(db,mutation,room,category,members,now);
     if (!missing && mutation.ops.length === 1)
       return { state, settings, members };
     await planDaily(db, mutation, room, settings, members, now, replacements);
@@ -665,20 +731,33 @@ function taskView(task, now, who, settings, members) {
       task.status === "completed"
         ? task.marker_id_snapshot
         : active?.marker_id || task.marker_id_snapshot,
-    deadline_at: category?.mode === "scheduled" ? task.deadline_at : "",
+    deadline_at: category?.mode === "scheduled" || category?.hardPolicy ? task.deadline_at : "",
     mode: category?.mode,
     status: task.status,
     completed_at: task.completed_at,
-    can_complete: Boolean(
-      who &&
-        !who.is_demo &&
-        who.user_id === task.assignee_id &&
-        task.status === "pending" &&
-        task.duty_date <= localDate(now) &&
-        category?.enabled,
-    ),
+    completed_by: task.completed_by || null,
+    can_complete: canCompleteTask(task, category, who, now),
     sequence: task.sequence,
   };
+}
+function canDelegateTask(category) {
+  // Schema version alone is not an authorization grant. The explicit hard
+  // policy is the product rule that permits a roommate to cover a task.
+  return category?.version2 === true && category?.hardPolicy === true;
+}
+function canCompleteTask(task, category, who, now) {
+  if (
+    !task ||
+    !who ||
+    who.is_demo ||
+    !category?.enabled ||
+    task.status !== "pending" ||
+    task.duty_date > localDate(now) ||
+    (who.user_id !== task.assignee_id && !canDelegateTask(category))
+  )
+    return false;
+  return !category.hardPolicy ||
+    now.toISOString() >= deadline(task.duty_date, category.executionTime);
 }
 function reminderView(row) {
   return {
@@ -707,7 +786,7 @@ function reminderView(row) {
 // hide the new completion. Keep its revision/audit for concurrency and review.
 const correctionApplies =
   "h.id IS NOT NULL AND julianday(h.updated_at)>=julianday(t.completed_at)";
-const historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
+const historySQL = `SELECT t.id,t.key,t.name,COALESCE(t.completed_by,t.assignee_id) AS assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
  CASE WHEN ${correctionApplies} THEN h.completed_at ELSE t.completed_at END AS completed_at,
  COALESCE(h.revision,0) AS revision,
  CASE WHEN ${correctionApplies} THEN 1 ELSE 0 END AS corrected
@@ -856,9 +935,9 @@ async function historyChange(request, db, room, who, now) {
   } else {
     target = integer(input.member_id);
     key = input.key;
-    if (!KEYS.includes(key)) invalid();
     const member = members.find((m) => m.user_id === target),
       category = settings.find((c) => c.key === key);
+    if (!category) invalid("请选择宿舍成员和任务");
     if (!member || !category) invalid("请选择宿舍成员和任务");
     name = category.name;
     marker = member.marker_id;
@@ -962,11 +1041,13 @@ async function board(request, db, env, now, url) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month.startsWith("0000"))
     invalid("请使用 YYYY-MM 月份格式");
   const actorForTasks = who?.user_id === uid ? who : null;
+  const roomConfiguration = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null");
+  const workspaceRows = roomConfiguration ? await all(db,"SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key WHERE t.dorm_id=? AND c.enabled=1 AND t.status<>'cancelled' AND ((c.mode='scheduled' AND t.duty_date=? AND t.sequence IS NULL) OR (c.mode<>'scheduled' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key,t.assignee_id",[room.id,today]) : [];
   const todayRows = await all(
     db,
     `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
     WHERE t.dorm_id=? AND t.key<>'water' AND t.assignee_id=? AND t.status<>'cancelled' AND c.enabled=1
-    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode='self_round' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`,
+    AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode IN ('self_round','completion') AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`,
     [room.id, uid, today],
   );
   const nextRows = await all(
@@ -1046,12 +1127,12 @@ async function board(request, db, env, now, url) {
       ? await all(
           db,
           `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-     WHERE t.dorm_id=? AND t.assignee_id=? AND t.status='completed' AND t.completed_at>=?
-     AND t.id=(SELECT own.id FROM chore_tasks own WHERE own.dorm_id=t.dorm_id AND own.key=t.key AND own.assignee_id=t.assignee_id AND own.status='completed' ORDER BY own.completed_at DESC,own.id DESC LIMIT 1)
+    WHERE t.dorm_id=? AND COALESCE(t.completed_by,t.assignee_id)=? AND t.status='completed' AND t.completed_at>=?
+     AND t.id=(SELECT own.id FROM chore_tasks own WHERE own.dorm_id=t.dorm_id AND own.key=t.key AND COALESCE(own.completed_by,own.assignee_id)=? AND own.status='completed' ORDER BY own.completed_at DESC,own.id DESC LIMIT 1)
      AND c.enabled=1 AND ((t.key='water' AND EXISTS(SELECT 1 FROM chore_water_credits credit WHERE credit.task_id=t.id AND credit.status='pending')) OR (t.sequence IS NULL AND c.mode='scheduled') OR (t.sequence IS NOT NULL AND c.mode IN ('self_round','completion')))
      AND NOT EXISTS(SELECT 1 FROM chore_tasks later WHERE later.dorm_id=t.dorm_id AND later.key=t.key AND later.sequence>t.sequence AND later.status='completed')
      ORDER BY t.completed_at DESC,t.id DESC LIMIT 4`,
-          [room.id, uid, new Date(now.getTime() - DAY).toISOString()],
+          [room.id, uid, new Date(now.getTime() - DAY).toISOString(), uid],
         )
       : [];
   const rounds = [];
@@ -1110,6 +1191,10 @@ async function board(request, db, env, now, url) {
       nickname,
       marker_id,
     })),
+    configuration: JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null"),
+    workspace_tasks: workspaceRows.map((task) =>
+      taskView(task, now, actorForTasks, settings, members),
+    ),
     categories: settings,
     rounds,
     today_tasks: todayRows.map((task) =>
@@ -1248,7 +1333,7 @@ async function claim(request, db, env, now) {
     201,
   );
 }
-function normalizeCategory(input, current, ids, today) {
+function normalizeCategory(input, current, ids, today, allowedKeys = KEYS, allowV2Completion = false) {
   object(
     input,
     [
@@ -1267,11 +1352,9 @@ function normalizeCategory(input, current, ids, today) {
     ["key"],
   );
   if (
-    !KEYS.includes(input.key) ||
+    !allowedKeys.includes(input.key) ||
     (input.mode !== undefined &&
-      !(
-        input.key === "water" ? ["completion"] : ["scheduled", "self_round"]
-      ).includes(input.mode))
+      !(input.key === "water" ? ["completion"] : ["scheduled", "self_round", ...(allowV2Completion ? ["completion"] : [])]).includes(input.mode))
   )
     invalid("请选择有效的值日方式，抬水按完成顺序轮换");
   const value = { ...current, ...input };
@@ -1386,44 +1469,84 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         ["version", "key", "rotation_order"],
         ["version", "key", "rotation_order"],
       )
-    : await body(request, ["version", "categories"], ["version", "categories"]);
+    : await body(request, ["version", "categories", "configuration"], ["version", "categories"]);
   if (orderOnly)
     input.categories = [
       { key: input.key, rotation_order: input.rotation_order },
     ];
+  let nextConfiguration = null;
+  let currentConfiguration = null;
+  if (orderOnly) {
+    currentConfiguration = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=? AND schema_version=2",[room.id]))?.configuration || "null");
+  }
+  if (!orderOnly && input.configuration !== undefined) {
+    if (!(await first(db,"SELECT 1 FROM dorm_configurations WHERE dorm_id=? AND schema_version=2",[room.id]))) fail(409,"legacy_configuration","旧宿舍保持原配置方式");
+    try { nextConfiguration=validateDormConfiguration(input.configuration); } catch(e) { invalid(e.message); }
+  }
   const expected = integer(input.version),
     { state, settings, members } = await maintain(db, room, now);
+  const ids = members.map((member) => member.user_id),
+    today = localDate(now);
+  if (nextConfiguration) input.categories = nextConfiguration.tasks.map((task) => {
+    const old = settings.find((category) => category.key === task.key);
+    return {
+      key: task.key,
+      name: task.name,
+      content: task.content || task.name,
+      deadline_time: task.deadline,
+      start_date: old?.start_date || today,
+      weekdays: old?.weekdays || [1,2,3,4,5,6,7],
+      rotation_days: old?.rotation_days || task.interval,
+      reminder_interval_days: old?.reminder_interval_days || task.interval,
+      rotation_order: old?.rotation_order || ids,
+      enabled: task.enabled,
+      mode: task.key === "water" ? "completion" : task.rotation === "rotation" ? "scheduled" : task.rotation === "completion" ? "completion" : "self_round",
+    };
+  });
   if (expected !== state.version)
     fail(409, "stale_version", "任务已变化，请刷新设置后重试");
   if (
     !Array.isArray(input.categories) ||
     !input.categories.length ||
-    input.categories.length > 4 ||
+    input.categories.length > (nextConfiguration ? MAX_CONFIGURED_TASKS : 4) ||
     new Set(input.categories.map((entry) => entry?.key)).size !==
       input.categories.length
   )
     invalid();
-  const ids = members.map((member) => member.user_id),
-    today = localDate(now),
-    updatedKeys = input.categories.map((entry) => entry?.key);
+  const updatedKeys = input.categories.map((entry) => entry?.key),
+    configuredKeys = nextConfiguration?.tasks.map((task) => task.key) || null,
+    allowedKeys = configuredKeys || currentConfiguration?.tasks.map((task) => task.key) || KEYS;
   const updated = input.categories.map((entry) => {
     const old = settings.find((category) => category.key === entry?.key);
-    if (!old) invalid();
-    return normalizeCategory(entry, old, ids, today);
+    if (!old && !nextConfiguration) invalid();
+    const task = nextConfiguration?.tasks.find((item) => item.key === entry?.key);
+    const fallback = old || {
+      key: entry.key,
+      name: task?.name || "新任务",
+      content: task?.content || task?.name || "新任务",
+      deadline_time: task?.deadline || "22:00",
+      start_date: today,
+      weekdays: [1,2,3,4,5,6,7],
+      rotation_days: task?.interval || 3,
+      reminder_interval_days: task?.interval || 3,
+      rotation_order: ids,
+      enabled: task?.enabled ?? false,
+      mode: entry.key === "water" ? "completion" : task?.rotation === "rotation" ? "scheduled" : task?.rotation === "completion" ? "completion" : "self_round",
+    };
+    return configuredCategory(normalizeCategory(entry, fallback, ids, today, allowedKeys, !!nextConfiguration || !!currentConfiguration), nextConfiguration || currentConfiguration);
   });
-  const draft = settings.map(
+  const draft = nextConfiguration ? updated : settings.map(
       (category) =>
         updated.find((entry) => entry.key === category.key) || category,
     ),
     mutation = new Mutation(db, room, state.version, who, !orderOnly);
+  if (nextConfiguration) mutation.update("dorm_configurations",{configuration:JSON.stringify(nextConfiguration),updated_at:now.toISOString()},"dorm_id=? AND schema_version=2",[room.id]);
   const waterToReorder = updated.find(
-    (c) =>
-      c.key === "water" &&
-      (orderOnly ||
-        JSON.stringify(c.rotation_order) !==
-          JSON.stringify(
-            settings.find((old) => old.key === "water").rotation_order,
-          )),
+    (c) => {
+      if (c.key !== "water") return false;
+      const previous = settings.find((old) => old.key === "water");
+      return orderOnly || !previous || JSON.stringify(c.rotation_order) !== JSON.stringify(previous.rotation_order);
+    },
   );
   if (waterToReorder)
     await reassignPendingWater(
@@ -1450,26 +1573,51 @@ async function configure(request, db, room, who, now, orderOnly = false) {
     await mutation.finish();
     return json({ version: state.version + 1, categories: draft });
   }
-  for (const category of updated)
-    mutation.update(
-      "chore_categories",
-      {
-        name: category.name,
-        content: category.content,
-        deadline_time: category.deadline_time,
-        start_date: category.start_date,
-        weekdays: JSON.stringify(category.weekdays),
-        rotation_days: category.rotation_days,
-        reminder_interval_days: category.reminder_interval_days,
-        rotation_order: JSON.stringify(category.rotation_order),
-        enabled: category.enabled ? 1 : 0,
-        mode: category.mode,
-      },
-      "dorm_id=? AND key=?",
-      [room.id, category.key],
-    );
+  const retired = nextConfiguration
+    ? settings.filter((category) => !configuredKeys.includes(category.key))
+    : [];
+  for (const category of retired) {
+    mutation.update("chore_categories", { enabled: 0 }, "dorm_id=? AND key=?", [room.id, category.key]);
+    mutation.update("chore_tasks", { status: "cancelled" }, "dorm_id=? AND key=? AND status='pending'", [room.id, category.key]);
+  }
+  for (const category of updated) {
+    const previous = settings.find((entry) => entry.key === category.key);
+    if (previous) {
+      mutation.update(
+        "chore_categories",
+        {
+          name: category.name,
+          content: category.content,
+          deadline_time: category.deadline_time,
+          start_date: category.start_date,
+          weekdays: JSON.stringify(category.weekdays),
+          rotation_days: category.rotation_days,
+          reminder_interval_days: category.reminder_interval_days,
+          rotation_order: JSON.stringify(category.rotation_order),
+          enabled: category.enabled ? 1 : 0,
+          mode: category.mode,
+        },
+        "dorm_id=? AND key=?",
+        [room.id, category.key],
+      );
+    } else {
+      mutation.raw(
+        `INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,weekdays,rotation_days,rotation_order,enabled,mode,reminder_interval_days)
+         SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE ${mutation.guard}`,
+        [room.id, category.key, category.name, category.content, category.deadline_time, category.start_date, JSON.stringify(category.weekdays), category.rotation_days, JSON.stringify(category.rotation_order), category.enabled ? 1 : 0, category.mode, category.reminder_interval_days, ...mutation.guardValues],
+      );
+    }
+  }
   for (const category of updated.filter((entry) => entry.key !== "water")) {
     const previous = settings.find((entry) => entry.key === category.key);
+    if (!previous) {
+      if (category.enabled && category.mode === "self_round") {
+        appendRows(mutation, members.map((member) => roundRow(room, category, member, members, now, 1)));
+      } else if (category.enabled && category.mode === "completion") {
+        await planCompletionTurn(db, mutation, room, category, members, now);
+      }
+      continue;
+    }
     if (category.mode !== previous.mode) {
       mutation.update(
         "chore_tasks",
@@ -1500,6 +1648,8 @@ async function configure(request, db, room, who, now, orderOnly = false) {
             [plannedRow(room, category, today, uid, members)],
             true,
           );
+      } else if (category.mode === "completion" && nextConfiguration && category.key !== "water" && category.enabled) {
+        await planCompletionTurn(db,mutation,room,category,members,now);
       }
     } else if (category.mode === "self_round") {
       mutation.update(
@@ -1508,7 +1658,40 @@ async function configure(request, db, room, who, now, orderOnly = false) {
         "dorm_id=? AND key=? AND status='pending'",
         [room.id, category.key],
       );
+    } else if (category.mode === "completion" && nextConfiguration && category.key !== "water") {
+      if (!category.enabled) {
+        mutation.update(
+          "chore_tasks",
+          { status: "cancelled" },
+          "dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL",
+          [room.id, category.key],
+        );
+      } else {
+        const pending = await first(
+          db,
+          "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL ORDER BY sequence,id LIMIT 1",
+          [room.id, category.key],
+        );
+        if (pending) {
+          mutation.update(
+            "chore_tasks",
+            {
+              name: category.name,
+              content: category.content,
+              deadline_at: deadline(pending.duty_date, category.deadline_time),
+            },
+            "id=? AND status='pending'",
+            [pending.id],
+          );
+        } else {
+          await planCompletionTurn(db, mutation, room, category, members, now);
+        }
+      }
     }
+  }
+  if(nextConfiguration){
+    const pending=await all(db,"SELECT id,key,duty_date FROM chore_tasks WHERE dorm_id=? AND status='pending'",[room.id]);
+    for(const task of pending){const c=draft.find(c=>c.key===task.key);if(c?.mode==='self_round')mutation.update("chore_tasks",{deadline_at:c.hardRound?deadline(task.duty_date,c.deadline_time):""},"id=? AND status='pending'",[task.id]);}
   }
   await planDaily(
     db,
@@ -1594,14 +1777,16 @@ async function complete(db, room, who, now, id) {
 async function completeOnce(db, room, who, now, id) {
   const { state, settings, members } = await maintain(db, room, now),
     task = await taskInRoom(db, room, id),
-    category = settings.find((entry) => entry.key === task.key);
-  if (task.assignee_id !== who.user_id)
-    fail(403, "not_assignee", "只能完成自己的任务");
+    category = settings.find((entry) => entry.key === task.key),
+    v2 = category?.version2 === true;
   if (task.status !== "pending")
     fail(409, "already_completed", "任务已完成或已取消");
   if (!category.enabled) fail(409, "category_disabled", "这项任务已暂停");
   if (task.duty_date > localDate(now))
     fail(422, "future_task", "任务开始后才可以打卡");
+  if(v2 && category.hardPolicy && now.toISOString()<deadline(task.duty_date,category.executionTime)) fail(422,"task_not_started","任务到执行时间后才可以打卡");
+  if (!canCompleteTask(task, category, who, now))
+    fail(403, "not_assignee", "只能完成自己的任务");
   const member = members.find((entry) => entry.user_id === who.user_id),
     mutation = new Mutation(
       db,
@@ -1610,19 +1795,20 @@ async function completeOnce(db, room, who, now, id) {
       who,
       false,
       "EXISTS (SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND assignee_id=? AND status='pending')",
-      [task.id, who.user_id],
+      [task.id, task.assignee_id],
     );
   const completedAt = now.toISOString();
   mutation.update(
     "chore_tasks",
     {
       status: "completed",
+      completed_by: who.user_id,
       completed_at: completedAt,
       assignee_name_snapshot: member.nickname,
       marker_id_snapshot: member.marker_id,
     },
     "id=? AND assignee_id=? AND status='pending'",
-    [task.id, who.user_id],
+    [task.id, task.assignee_id],
   );
   let handoff = null;
   if (task.key === "water")
@@ -1642,10 +1828,13 @@ async function completeOnce(db, room, who, now, id) {
 
   if (category.mode === "self_round")
     await planRound(db, mutation, room, category, members, now, task.id);
+  else if (category.mode === "completion" && task.key !== "water" && v2)
+    await planCompletionTurn(db,mutation,room,category,members,now,task);
   await mutation.finish();
   const finished = {
     ...task,
     status: "completed",
+    completed_by: who.user_id,
     completed_at: completedAt,
     assignee_name_snapshot: member.nickname,
     marker_id_snapshot: member.marker_id,
@@ -1682,7 +1871,16 @@ async function undo(db, room, who, now, id) {
 async function undoOnce(db, room, who, now, id) {
   const { state, settings, members } = await maintain(db, room, now),
     task = await taskInRoom(db, room, id);
-  if (task.assignee_id !== who.user_id)
+  if (task.status === "cancelled" && task.key === "water") {
+    const cancelledCredit = await first(
+      db,
+      "SELECT id FROM chore_water_credits WHERE task_id=? AND dorm_id=? AND status='cancelled'",
+      [id, room.id],
+    );
+    if (cancelledCredit)
+      fail(409, "not_completed", "这条打卡已撤销或尚未完成");
+  }
+  if ((task.completed_by || task.assignee_id) !== who.user_id)
     fail(403, "not_assignee", "只能撤销自己的打卡");
   if (task.status !== "completed")
     fail(409, "not_completed", "这条打卡已撤销或尚未完成");
@@ -1710,14 +1908,14 @@ async function undoOnce(db, room, who, now, id) {
     );
     mutation.update(
       "chore_tasks",
-      { status: "cancelled", completed_at: null },
+      { status: "cancelled", completed_at: null, completed_by: null },
       "id=? AND status='completed'",
       [id],
     );
     await mutation.finish();
     return json({
       task: taskView(
-        { ...task, status: "pending", completed_at: null },
+        { ...task, status: "cancelled", completed_at: null, completed_by: null },
         now,
         who,
         settings,
@@ -1753,7 +1951,7 @@ async function undoOnce(db, room, who, now, id) {
     state.version,
     who,
     false,
-    "EXISTS(SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND assignee_id=? AND status='completed')",
+    "EXISTS(SELECT 1 FROM chore_tasks WHERE id=? AND dorm_id=chore_settings.dorm_id AND COALESCE(completed_by,assignee_id)=? AND status='completed')",
     [id, who.user_id],
   );
   if (task.key === "water") {
@@ -1815,14 +2013,14 @@ async function undoOnce(db, room, who, now, id) {
   }
   mutation.update(
     "chore_tasks",
-    { status: "pending", completed_at: null },
+    { status: "pending", completed_at: null, completed_by: null },
     "id=? AND assignee_id=? AND status='completed'",
-    [id, who.user_id],
+    [id, task.assignee_id],
   );
   await mutation.finish();
   return json({
     task: taskView(
-      { ...task, status: "pending", completed_at: null },
+      { ...task, status: "pending", completed_at: null, completed_by: null },
       now,
       who,
       settings,

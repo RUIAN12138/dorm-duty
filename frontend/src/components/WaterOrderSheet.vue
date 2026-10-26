@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import { computed, ref, watch, onUnmounted } from "vue";
 import { TabsRoot } from "reka-ui";
 import { ApiError } from "../api";
@@ -10,7 +11,6 @@ import {
 } from "../api/chores";
 import ElasticSheet from "./ElasticSheet.vue";
 import SortableMembers from "./SortableMembers.vue";
-import MemberMark from "./MemberMark.vue";
 import ElasticSegments from "./ElasticSegments.vue";
 import HintPopover from "./HintPopover.vue";
 let draftEpoch = 0,
@@ -161,11 +161,7 @@ async function save() {
         :class="{ current: selectedKey === 'water' && id === currentId }"
       >
         <span class="order-number">{{ index + 1 }}</span
-        ><MemberMark
-          :id="members.find((m) => m.user_id === id)?.marker_id"
-          :size="27"
-          inline
-        /><strong>{{
+        ><strong class="rounded-member-name">{{
           members.find((m) => m.user_id === id)?.nickname || "室友"
         }}</strong
         ><span

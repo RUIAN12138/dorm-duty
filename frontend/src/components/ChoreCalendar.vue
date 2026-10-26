@@ -17,6 +17,7 @@ import {
   type ChoreRecord,
   type ChoreBoardData,
   type ChoreCategory,
+  type ChoreActivity,
 } from "../api/chores";
 import { useChoreActivity } from "../composables/useChoreActivity";
 import {
@@ -56,6 +57,7 @@ const props = defineProps<{
   memberId?: number;
   busy?: boolean;
   undoError?: string;
+  preview?: boolean;
 }>();
 const emit = defineEmits<{
   change: [month: string];
@@ -280,21 +282,42 @@ const viewOptions = [
 watch(view, (value) => {
   memory.view = value;
 });
-const {
-  activity,
-  error: activityError,
-  loading: activityLoading,
-  refresh: loadActivity,
-} = useChoreActivity(
+const remoteActivity = useChoreActivity(
   () => ({
     invite: props.invite || "",
     token: props.token || "",
     version: props.version || 0,
     today: props.today,
-    active: visited.has("stats"),
+    active: !props.preview && visited.has("stats"),
   }),
   memory.activity,
 );
+const previewRecords = computed(() =>
+  mergeCalendarRecords(props.records, props.neighbors),
+);
+const activity = computed<ChoreActivity | null>(() => {
+  if (!props.preview) return remoteActivity.activity.value;
+  const ordered = [...previewRecords.value].sort((a, b) => b.completed_at.localeCompare(a.completed_at));
+  const latest = new Map<string, ChoreRecord>();
+  for (const record of ordered) if (!latest.has(record.key)) latest.set(record.key, record);
+  const daily = new Map<string, Map<string, number>>();
+  for (const record of ordered) {
+    const count = daily.get(record.completed_date) || new Map<string, number>();
+    count.set(record.key, (count.get(record.key) || 0) + 1);
+    daily.set(record.completed_date, count);
+  }
+  return {
+    start: `${props.today.slice(0, 7)}-01`,
+    today: props.today,
+    daily: [...daily].flatMap(([date, values]) => [...values].map(([key, count]) => ({ date, key, count }))),
+    last_completed: [...latest.values()].map((record) => ({ key: record.key, completed_at: record.completed_at })),
+    recent_records: ordered,
+    recent_truncated: false,
+  };
+});
+const activityError = computed(() => props.preview ? "" : remoteActivity.error.value);
+const activityLoading = computed(() => !props.preview && remoteActivity.loading.value);
+function loadActivity() { return props.preview ? Promise.resolve(false) : remoteActivity.refresh(); }
 const allRecords = computed(() =>
   mergeCalendarRecords(props.records, props.neighbors),
 );

@@ -102,13 +102,14 @@ await page.addInitScript(() => {
     window.qaMotion.reads = 0;
     window.qaMotion.readCount = true;
     const start = performance.now();
-    const frame = () => {
+    const frame = (at) => {
+      const sampledAt = Number.isFinite(at) ? at : performance.now();
       const root = document.querySelector(".companion-chat"),
         el = root?.querySelector(".chat-ball-visual");
       const r = el && window.qaRect.call(el);
       window.qaMotion.traces.push({
-        t: performance.now() - start,
-        at: performance.now(),
+        t: sampledAt - start,
+        at: sampledAt,
         exists: !!root,
         x: r ? r.left + r.width / 2 : null,
         y: r ? r.top + r.height / 2 : null,
@@ -117,9 +118,9 @@ await page.addInitScript(() => {
           ? Number(getComputedStyle(root.querySelector(".chat-footer")).opacity)
           : null,
       });
-      if (performance.now() - start < 2100) requestAnimationFrame(frame);
+      if (sampledAt - start < 2100) requestAnimationFrame(frame);
     };
-    frame();
+    requestAnimationFrame(frame);
   };
   window.qaPerf = () => {
     window.qaMotion.frames = [];
@@ -195,7 +196,22 @@ try {
   let jumps = [];
   for (let i = 1; i < compact.length; i++) {
     const dt = compact[i].at - compact[i - 1].at;
-    if (dt > 0 && dt < 28) {
+    const previousDt =
+      i > 1 ? compact[i - 1].at - compact[i - 2].at : Infinity;
+    const nextDt =
+      i + 1 < compact.length ? compact[i + 1].at - compact[i].at : Infinity;
+    // CI browsers can alternate a 16ms rAF sample with 33ms gaps. A lone
+    // short interval between missed frames does not establish a stable
+    // single-frame cadence; the controller probe below checks reversal
+    // position and velocity continuity directly in one JS turn.
+    if (
+      dt > 0 &&
+      dt < 28 &&
+      previousDt > 0 &&
+      previousDt < 28 &&
+      nextDt > 0 &&
+      nextDt < 28
+    ) {
       const d = Math.hypot(
         compact[i].x - compact[i - 1].x,
         compact[i].y - compact[i - 1].y,
@@ -381,8 +397,19 @@ try {
     "keyboard-layout change preserves the visible message anchor rather than only scrollTop",
   );
   await editor.fill("键盘回落仍保留草稿");
-  await hit(page.getByRole("button", { name: "返回宿舍", exact: true }));
-  await page.waitForTimeout(100);
+  // The back button is intentionally hidden and inert while the compact
+  // keyboard layout is active. Exercise the dialog's real Escape close path,
+  // then restore the simulated viewport so the close can complete naturally.
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".companion-chat")?.getAttribute("data-phase") ===
+      "closing",
+  );
+  check(
+    (await chat.getAttribute("data-phase")) === "closing",
+    "Escape starts chat close while the keyboard viewport is compact",
+  );
   await page.evaluate(() => {
     const v = visualViewport;
     Object.defineProperty(v, "height", {

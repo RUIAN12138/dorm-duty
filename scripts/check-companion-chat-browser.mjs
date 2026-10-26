@@ -22,7 +22,8 @@ const h = await createHarness(),
 let browser, server, runtime, page;
 let failModel = false,
   modelDelay = 500,
-  pushConfigRequests = 0;
+  pushConfigRequests = 0,
+  forceV2Board = false;
 const check = (condition, label) => {
   assert(condition, label);
   checks.push(label);
@@ -234,10 +235,36 @@ try {
         token: headers.authorization?.slice(7),
         ...(body ? { data: JSON.parse(body) } : {}),
       });
+    let responseBody = await r.text();
+    if (forceV2Board && u.pathname === "/chores/board" && r.ok) {
+      const value = JSON.parse(responseBody);
+      value.configuration = {
+        schema_version: 2,
+        pages: [
+          { id: "duty", label: "值日" },
+          { id: "water", label: "抬水" },
+          { id: "calendar", label: "日历" },
+        ],
+        tasks: ["floor", "toilet", "sink", "water"].map((key) => ({
+          key,
+          name: key,
+          content: "",
+          enabled: true,
+          page: key === "water" ? "water" : "duty",
+          rotation: "round",
+          display: "title",
+          deadline: "22:00",
+          interval: 3,
+        })),
+        policy: "soft",
+        second_page_kind: "tasks",
+      };
+      responseBody = JSON.stringify(value);
+    }
     await route.fulfill({
       status: r.status,
       contentType: "application/json",
-      body: await r.text(),
+      body: responseBody,
     });
   });
   await page.addInitScript(() => {
@@ -604,6 +631,37 @@ try {
       }),
       "slow notification request shows a matching title, description, action and rows with shimmer",
     );
+    const darkSkeletonState = await page
+      .getByTestId("settings-skeleton")
+      .evaluate((el) => {
+        const root = document.documentElement,
+          previousTheme = root.dataset.theme;
+        root.dataset.theme = "dark";
+        const shimmerOpacity = Number.parseFloat(
+            getComputedStyle(el.querySelector(".placeholder"), "::after")
+              .opacity,
+          ),
+          skeletonStyle = getComputedStyle(el),
+          isLocalLayer =
+            skeletonStyle.position === "static" &&
+            skeletonStyle.zIndex === "auto" &&
+            skeletonStyle.backgroundColor === "rgba(0, 0, 0, 0)";
+        if (previousTheme) root.dataset.theme = previousTheme;
+        else delete root.dataset.theme;
+        return {
+          shimmerOpacity,
+          skeletonOpacity: skeletonStyle.opacity,
+          skeletonFilter: skeletonStyle.filter,
+          isLocalLayer,
+        };
+      });
+    check(
+      darkSkeletonState.shimmerOpacity <= 0.12 &&
+        darkSkeletonState.skeletonOpacity === "1" &&
+        darkSkeletonState.skeletonFilter === "none" &&
+        darkSkeletonState.isLocalLayer,
+      "dark skeleton limits the veil to its shimmer without adding a full-screen dim layer",
+    );
     check(
       await page.locator(".sheet-content").evaluate((el) => el.scrollTop < 2),
       "new settings page starts at its own top",
@@ -746,12 +804,6 @@ try {
     check(
       await page.locator(".chat-ball .companion-bubble").isVisible(),
       "chat ball offers a small automatic tip",
-    );
-    check(
-      await page.evaluate(
-        () => Number(getComputedStyle(document.documentElement).opacity) === 1,
-      ),
-      "settings skeleton dark styling never dims the rest of the application",
     );
     await page.screenshot({
       path: path.join(
@@ -1599,6 +1651,95 @@ try {
       (await page.locator(".chat-bubble.user").count()) === 1 &&
         (await page.locator(".chat-bubble.user").innerText()) === chosenQuick,
       "preset question sends a real chat only after user taps it",
+    );
+
+    // Re-enter through an isolated v2 board response. Closing the notification
+    // subpage must let its own Vue transition finish before ChoreBoard unmounts it.
+    forceV2Board = true;
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto(url);
+    await page.getByTestId("pane-duty").waitFor();
+    await page.getByTestId("open-tools").click();
+    await page.getByTestId("open-preferences").click();
+    await page.getByTestId("open-system-notifications").click();
+    const notificationPage = page.locator(
+      '.sheet-navigation-page[data-sheet-page="系统通知"]',
+    );
+    await notificationPage.waitFor();
+    await page.getByTestId("push-settings").waitFor();
+    await page.waitForTimeout(400);
+    await page.getByLabel("返回上一层设置", { exact: true }).click();
+    await page.waitForTimeout(80);
+    const notificationExit = await page
+      .locator(".sheet-navigation-page")
+      .evaluateAll((els) =>
+        els.map((el) => ({
+          title: el.getAttribute("data-sheet-page"),
+          className: el.className,
+          opacity: getComputedStyle(el).opacity,
+          transform: getComputedStyle(el).transform,
+        })),
+      );
+    check(
+      (await notificationPage.count()) === 1 &&
+        notificationExit.some(
+          (page) =>
+            page.title === "系统通知" &&
+            page.className.includes("sheet-page-leave-active") &&
+            page.opacity !== "0",
+        ),
+      "v2 notification subpage stays mounted through its horizontal exit transition",
+    );
+    await page.waitForTimeout(400);
+    check(
+      (await notificationPage.count()) === 0 &&
+        (await page.getByTestId("push-settings").count()) === 0,
+      "v2 notification subpage unmounts after its closed transition completes",
+    );
+    await page.getByTestId("open-system-notifications").click();
+    await notificationPage.waitFor();
+    const handledNativeBack = await page.evaluate(() =>
+      window.DormNativeBack?.(),
+    );
+    await page.waitForTimeout(80);
+    check(
+      handledNativeBack === true &&
+        (await notificationPage.count()) === 1 &&
+        (await notificationPage.getAttribute("class"))?.includes("sheet-page-leave-active"),
+      "system-back closes the notification subpage through its exit transition",
+    );
+    await notificationPage.waitFor({ state: "detached" });
+    check(
+      (await page.getByTestId("open-system-notifications").count()) === 1 &&
+        (await page.locator(".sheet-layer").count()) === 1,
+      "system-back returns to the retained parent settings drawer",
+    );
+
+    await page.getByTestId("open-system-notifications").click();
+    await notificationPage.waitFor();
+    await page.getByLabel("关闭详情", { exact: true }).click();
+    await page.locator(".sheet-layer").waitFor({ state: "detached" });
+    await notificationPage.waitFor({ state: "detached" });
+    check(
+      (await page.locator(".sheet-layer").count()) === 0 &&
+        (await page.getByTestId("push-settings").count()) === 0,
+      "closing notification details releases the sheet and notification content",
+    );
+
+    await page.getByTestId("open-tools").click();
+    await page.getByTestId("open-preferences").click();
+    await page.getByTestId("open-system-notifications").click();
+    await page.getByTestId("push-settings").waitFor();
+    check(
+      (await notificationPage.count()) === 1,
+      "notification settings can reopen cleanly after a completed close",
+    );
+    await page.mouse.click(8, 8);
+    await page.locator(".sheet-layer").waitFor({ state: "detached" });
+    await notificationPage.waitFor({ state: "detached" });
+    check(
+      (await page.getByTestId("push-settings").count()) === 0,
+      "overlay dismissal releases the notification page without a stranded sheet",
     );
     check(errors.length === 0, "no browser runtime errors");
     console.log(

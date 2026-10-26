@@ -112,8 +112,13 @@ console.log(
 
 palette.saveStatsTaskColor("floor", "#b98a48", false);
 palette.saveStatsTaskColor("floor", "#759fc1", true);
+const customStatsKey = `task_${"c".repeat(32)}`;
+palette.saveStatsTaskColor(customStatsKey, "#9986bc", false);
+palette.saveStatsTaskColor(customStatsKey, "#759fc1", true);
 assert.equal(palette.statsColorFor("floor", false), "#b98a48");
 assert.equal(palette.statsColorFor("floor", true), "#759fc1");
+assert.equal(palette.statsColorFor(customStatsKey, false), "#9986bc");
+assert.equal(palette.statsColorFor(customStatsKey, true), "#759fc1");
 assert.equal(palette.statsColorFor("toilet", false), "#aaaaaa");
 assert.equal(palette.statsFill("#b98a48", 1, true, "#759fc1"), "#759fc1");
 assert.equal(
@@ -124,7 +129,10 @@ assert.equal(
 assert.equal(palette.statsFill("#b98a48", 0, true, "#759fc1"), "#ffffff");
 assert.deepEqual(
   palette.readStatsTaskColors(saved.get("lundao-stats-task-colors-v2")),
-  { floor: { light: "#b98a48", dark: "#759fc1" } },
+  {
+    floor: { light: "#b98a48", dark: "#759fc1" },
+    [customStatsKey]: { light: "#9986bc", dark: "#759fc1" },
+  },
 );
 palette.saveStatsTaskColor("floor", "url(evil)", false);
 palette.saveStatsTaskColor("bad", "#000000", false);
@@ -134,6 +142,10 @@ assert.deepEqual(
     '{"floor":{"dark":"bad"},"sink":{"light":"#AABBCC"}}',
   ),
   { sink: { light: "#aabbcc" } },
+);
+assert.deepEqual(
+  palette.readStatsTaskColors(`{"${customStatsKey}":{"dark":"#AABBCC"},"task_bad":{"light":"#000000"}}`),
+  { [customStatsKey]: { dark: "#aabbcc" } },
 );
 palette.resetStatsColors();
 assert.equal(palette.statsColorFor("floor", true), "#b0b0b0");

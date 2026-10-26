@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-permission android:name="android.permission.INTERNET" />
  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
- <application android:label="轮到" android:icon="@drawable/app_icon" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false">
+ <application android:label="轮到" android:icon="@mipmap/app_icon" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false">
   <service android:name=".DormPushService" android:enabled="true" android:exported="false" android:process=":pushcore">
    <intent-filter><action android:name="cn.jiguang.user.service.action" /></intent-filter>
   </service>

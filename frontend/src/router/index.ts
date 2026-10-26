@@ -14,6 +14,11 @@ export const router = createRouter({
       meta: { public: true },
     },
     {
+      path: "/guide",
+      component: () => import("../views/WelcomeGuide.vue"),
+      meta: { public: true },
+    },
+    {
       path: "/water",
       component: () => import("../views/GuestHome.vue"),
       meta: { public: true },
@@ -38,7 +43,7 @@ export const router = createRouter({
   ],
 });
 router.beforeEach(async (to) => {
-  if (["/", "/water", "/calendar"].includes(to.path)) return;
+  if (["/", "/water", "/calendar", "/guide"].includes(to.path)) return;
   try {
     await refreshEmailAccount();
     if (
@@ -52,6 +57,10 @@ router.beforeEach(async (to) => {
   }
   const session = useSession();
   await session.init();
+  // A retained token that could not be checked is not proof of logout. Keep
+  // protected and login routes behind the public startup recovery surface so
+  // temporary network failures cannot flash a misleading login page.
+  if (!session.initialized) return "/";
   if (!to.meta.public && !session.user)
     return { path: "/admin/login", query: { next: to.fullPath } };
   if (to.path === "/admin/login" && session.user) return "/dorm";

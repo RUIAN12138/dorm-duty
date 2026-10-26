@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import {
   ref,
   reactive,

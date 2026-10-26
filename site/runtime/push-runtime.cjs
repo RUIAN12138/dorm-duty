@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// node_modules/bn.js/lib/bn.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/bn.js/lib/bn.js
 var require_bn = __commonJS({
-  "node_modules/bn.js/lib/bn.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/bn.js/lib/bn.js"(exports2, module2) {
     (function(module3, exports3) {
       "use strict";
       function assert(val, msg) {
@@ -2849,9 +2849,9 @@ var require_bn = __commonJS({
   }
 });
 
-// node_modules/inherits/inherits_browser.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/inherits/inherits_browser.js
 var require_inherits_browser = __commonJS({
-  "node_modules/inherits/inherits_browser.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/inherits/inherits_browser.js"(exports2, module2) {
     if (typeof Object.create === "function") {
       module2.exports = function inherits(ctor, superCtor) {
         if (superCtor) {
@@ -2881,9 +2881,9 @@ var require_inherits_browser = __commonJS({
   }
 });
 
-// node_modules/inherits/inherits.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/inherits/inherits.js
 var require_inherits = __commonJS({
-  "node_modules/inherits/inherits.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/inherits/inherits.js"(exports2, module2) {
     try {
       util = require("util");
       if (typeof util.inherits !== "function") throw "";
@@ -2895,9 +2895,9 @@ var require_inherits = __commonJS({
   }
 });
 
-// node_modules/safer-buffer/safer.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/safer-buffer/safer.js
 var require_safer = __commonJS({
-  "node_modules/safer-buffer/safer.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/safer-buffer/safer.js"(exports2, module2) {
     "use strict";
     var buffer = require("buffer");
     var Buffer2 = buffer.Buffer;
@@ -2963,9 +2963,9 @@ var require_safer = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/base/reporter.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/reporter.js
 var require_reporter = __commonJS({
-  "node_modules/asn1.js/lib/asn1/base/reporter.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/reporter.js"(exports2) {
     "use strict";
     var inherits = require_inherits();
     function Reporter(options) {
@@ -3064,9 +3064,9 @@ var require_reporter = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/base/buffer.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/buffer.js
 var require_buffer = __commonJS({
-  "node_modules/asn1.js/lib/asn1/base/buffer.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/buffer.js"(exports2) {
     "use strict";
     var inherits = require_inherits();
     var Reporter = require_reporter().Reporter;
@@ -3181,9 +3181,9 @@ var require_buffer = __commonJS({
   }
 });
 
-// node_modules/minimalistic-assert/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/minimalistic-assert/index.js
 var require_minimalistic_assert = __commonJS({
-  "node_modules/minimalistic-assert/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/minimalistic-assert/index.js"(exports2, module2) {
     module2.exports = assert;
     function assert(val, msg) {
       if (!val)
@@ -3196,9 +3196,9 @@ var require_minimalistic_assert = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/base/node.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/node.js
 var require_node = __commonJS({
-  "node_modules/asn1.js/lib/asn1/base/node.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/node.js"(exports2, module2) {
     "use strict";
     var Reporter = require_reporter().Reporter;
     var EncoderBuffer = require_buffer().EncoderBuffer;
@@ -3731,9 +3731,9 @@ var require_node = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/constants/der.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/constants/der.js
 var require_der = __commonJS({
-  "node_modules/asn1.js/lib/asn1/constants/der.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/constants/der.js"(exports2) {
     "use strict";
     function reverse(map) {
       const res = {};
@@ -3787,9 +3787,9 @@ var require_der = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/encoders/der.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/encoders/der.js
 var require_der2 = __commonJS({
-  "node_modules/asn1.js/lib/asn1/encoders/der.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/encoders/der.js"(exports2, module2) {
     "use strict";
     var inherits = require_inherits();
     var Buffer2 = require_safer().Buffer;
@@ -4018,9 +4018,9 @@ var require_der2 = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/encoders/pem.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/encoders/pem.js
 var require_pem = __commonJS({
-  "node_modules/asn1.js/lib/asn1/encoders/pem.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/encoders/pem.js"(exports2, module2) {
     "use strict";
     var inherits = require_inherits();
     var DEREncoder = require_der2();
@@ -4042,9 +4042,9 @@ var require_pem = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/encoders/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/encoders/index.js
 var require_encoders = __commonJS({
-  "node_modules/asn1.js/lib/asn1/encoders/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/encoders/index.js"(exports2) {
     "use strict";
     var encoders = exports2;
     encoders.der = require_der2();
@@ -4052,9 +4052,9 @@ var require_encoders = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/decoders/der.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/decoders/der.js
 var require_der3 = __commonJS({
-  "node_modules/asn1.js/lib/asn1/decoders/der.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/decoders/der.js"(exports2, module2) {
     "use strict";
     var inherits = require_inherits();
     var bignum = require_bn();
@@ -4324,9 +4324,9 @@ var require_der3 = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/decoders/pem.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/decoders/pem.js
 var require_pem2 = __commonJS({
-  "node_modules/asn1.js/lib/asn1/decoders/pem.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/decoders/pem.js"(exports2, module2) {
     "use strict";
     var inherits = require_inherits();
     var Buffer2 = require_safer().Buffer;
@@ -4370,9 +4370,9 @@ var require_pem2 = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/decoders/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/decoders/index.js
 var require_decoders = __commonJS({
-  "node_modules/asn1.js/lib/asn1/decoders/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/decoders/index.js"(exports2) {
     "use strict";
     var decoders = exports2;
     decoders.der = require_der3();
@@ -4380,9 +4380,9 @@ var require_decoders = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/api.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/api.js
 var require_api = __commonJS({
-  "node_modules/asn1.js/lib/asn1/api.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/api.js"(exports2) {
     "use strict";
     var encoders = require_encoders();
     var decoders = require_decoders();
@@ -4429,9 +4429,9 @@ var require_api = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/base/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/index.js
 var require_base = __commonJS({
-  "node_modules/asn1.js/lib/asn1/base/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/base/index.js"(exports2) {
     "use strict";
     var base = exports2;
     base.Reporter = require_reporter().Reporter;
@@ -4441,9 +4441,9 @@ var require_base = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1/constants/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/constants/index.js
 var require_constants = __commonJS({
-  "node_modules/asn1.js/lib/asn1/constants/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1/constants/index.js"(exports2) {
     "use strict";
     var constants = exports2;
     constants._reverse = function reverse(map) {
@@ -4460,9 +4460,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/asn1.js/lib/asn1.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1.js
 var require_asn1 = __commonJS({
-  "node_modules/asn1.js/lib/asn1.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/asn1.js/lib/asn1.js"(exports2) {
     "use strict";
     var asn1 = exports2;
     asn1.bignum = require_bn();
@@ -4474,9 +4474,9 @@ var require_asn1 = __commonJS({
   }
 });
 
-// node_modules/safe-buffer/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/safe-buffer/index.js
 var require_safe_buffer = __commonJS({
-  "node_modules/safe-buffer/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/safe-buffer/index.js"(exports2, module2) {
     var buffer = require("buffer");
     var Buffer2 = buffer.Buffer;
     function copyProps(src, dst) {
@@ -4532,9 +4532,9 @@ var require_safe_buffer = __commonJS({
   }
 });
 
-// node_modules/jws/lib/data-stream.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/data-stream.js
 var require_data_stream = __commonJS({
-  "node_modules/jws/lib/data-stream.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/data-stream.js"(exports2, module2) {
     var Buffer2 = require_safe_buffer().Buffer;
     var Stream = require("stream");
     var util = require("util");
@@ -4580,9 +4580,9 @@ var require_data_stream = __commonJS({
   }
 });
 
-// node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js
 var require_param_bytes_for_alg = __commonJS({
-  "node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/ecdsa-sig-formatter/src/param-bytes-for-alg.js"(exports2, module2) {
     "use strict";
     function getParamSize(keySize) {
       var result = (keySize / 8 | 0) + (keySize % 8 === 0 ? 0 : 1);
@@ -4604,9 +4604,9 @@ var require_param_bytes_for_alg = __commonJS({
   }
 });
 
-// node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js
 var require_ecdsa_sig_formatter = __commonJS({
-  "node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/ecdsa-sig-formatter/src/ecdsa-sig-formatter.js"(exports2, module2) {
     "use strict";
     var Buffer2 = require_safe_buffer().Buffer;
     var getParamBytesForAlg = require_param_bytes_for_alg();
@@ -4744,9 +4744,9 @@ var require_ecdsa_sig_formatter = __commonJS({
   }
 });
 
-// node_modules/buffer-equal-constant-time/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/buffer-equal-constant-time/index.js
 var require_buffer_equal_constant_time = __commonJS({
-  "node_modules/buffer-equal-constant-time/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/buffer-equal-constant-time/index.js"(exports2, module2) {
     "use strict";
     var Buffer2 = require("buffer").Buffer;
     var SlowBuffer = require("buffer").SlowBuffer;
@@ -4778,9 +4778,9 @@ var require_buffer_equal_constant_time = __commonJS({
   }
 });
 
-// node_modules/jwa/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jwa/index.js
 var require_jwa = __commonJS({
-  "node_modules/jwa/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jwa/index.js"(exports2, module2) {
     var Buffer2 = require_safe_buffer().Buffer;
     var crypto2 = require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
@@ -5002,9 +5002,9 @@ var require_jwa = __commonJS({
   }
 });
 
-// node_modules/jws/lib/tostring.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/tostring.js
 var require_tostring = __commonJS({
-  "node_modules/jws/lib/tostring.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/tostring.js"(exports2, module2) {
     var Buffer2 = require("buffer").Buffer;
     module2.exports = function toString(obj) {
       if (typeof obj === "string")
@@ -5016,9 +5016,9 @@ var require_tostring = __commonJS({
   }
 });
 
-// node_modules/jws/lib/sign-stream.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/sign-stream.js
 var require_sign_stream = __commonJS({
-  "node_modules/jws/lib/sign-stream.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/sign-stream.js"(exports2, module2) {
     var Buffer2 = require_safe_buffer().Buffer;
     var DataStream = require_data_stream();
     var jwa = require_jwa();
@@ -5091,9 +5091,9 @@ var require_sign_stream = __commonJS({
   }
 });
 
-// node_modules/jws/lib/verify-stream.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/verify-stream.js
 var require_verify_stream = __commonJS({
-  "node_modules/jws/lib/verify-stream.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/lib/verify-stream.js"(exports2, module2) {
     var Buffer2 = require_safe_buffer().Buffer;
     var DataStream = require_data_stream();
     var jwa = require_jwa();
@@ -5206,9 +5206,9 @@ var require_verify_stream = __commonJS({
   }
 });
 
-// node_modules/jws/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/index.js
 var require_jws = __commonJS({
-  "node_modules/jws/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/jws/index.js"(exports2) {
     var SignStream = require_sign_stream();
     var VerifyStream = require_verify_stream();
     var ALGORITHMS = [
@@ -5239,9 +5239,9 @@ var require_jws = __commonJS({
   }
 });
 
-// node_modules/web-push/src/web-push-constants.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/web-push-constants.js
 var require_web_push_constants = __commonJS({
-  "node_modules/web-push/src/web-push-constants.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/web-push-constants.js"(exports2, module2) {
     "use strict";
     var WebPushConstants = {};
     WebPushConstants.supportedContentEncodings = {
@@ -5258,9 +5258,9 @@ var require_web_push_constants = __commonJS({
   }
 });
 
-// node_modules/web-push/src/urlsafe-base64-helper.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/urlsafe-base64-helper.js
 var require_urlsafe_base64_helper = __commonJS({
-  "node_modules/web-push/src/urlsafe-base64-helper.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/urlsafe-base64-helper.js"(exports2, module2) {
     "use strict";
     function validate(base64) {
       return /^[A-Za-z0-9\-_]+$/.test(base64);
@@ -5271,9 +5271,9 @@ var require_urlsafe_base64_helper = __commonJS({
   }
 });
 
-// node_modules/web-push/src/vapid-helper.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/vapid-helper.js
 var require_vapid_helper = __commonJS({
-  "node_modules/web-push/src/vapid-helper.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/vapid-helper.js"(exports2, module2) {
     "use strict";
     var crypto2 = require("crypto");
     var asn1 = require_asn1();
@@ -5448,9 +5448,9 @@ var require_vapid_helper = __commonJS({
   }
 });
 
-// node_modules/http_ece/ece.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/http_ece/ece.js
 var require_ece = __commonJS({
-  "node_modules/http_ece/ece.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/http_ece/ece.js"(exports2, module2) {
     "use strict";
     var crypto2 = require("crypto");
     var AES_GCM = "aes-128-gcm";
@@ -5899,9 +5899,9 @@ var require_ece = __commonJS({
   }
 });
 
-// node_modules/web-push/src/encryption-helper.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/encryption-helper.js
 var require_encryption_helper = __commonJS({
-  "node_modules/web-push/src/encryption-helper.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/encryption-helper.js"(exports2, module2) {
     "use strict";
     var crypto2 = require("crypto");
     var ece = require_ece();
@@ -5952,9 +5952,9 @@ var require_encryption_helper = __commonJS({
   }
 });
 
-// node_modules/web-push/src/web-push-error.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/web-push-error.js
 var require_web_push_error = __commonJS({
-  "node_modules/web-push/src/web-push-error.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/web-push-error.js"(exports2, module2) {
     "use strict";
     function WebPushError(message, statusCode, headers, body2, endpoint) {
       Error.captureStackTrace(this, this.constructor);
@@ -5970,9 +5970,9 @@ var require_web_push_error = __commonJS({
   }
 });
 
-// node_modules/ms/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/ms/index.js
 var require_ms = __commonJS({
-  "node_modules/ms/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/ms/index.js"(exports2, module2) {
     var s = 1e3;
     var m = s * 60;
     var h = m * 60;
@@ -6086,9 +6086,9 @@ var require_ms = __commonJS({
   }
 });
 
-// node_modules/debug/src/common.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/common.js
 var require_common = __commonJS({
-  "node_modules/debug/src/common.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/common.js"(exports2, module2) {
     function setup(env) {
       createDebug.debug = createDebug;
       createDebug.default = createDebug;
@@ -6263,9 +6263,9 @@ var require_common = __commonJS({
   }
 });
 
-// node_modules/debug/src/browser.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/browser.js
 var require_browser = __commonJS({
-  "node_modules/debug/src/browser.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/browser.js"(exports2, module2) {
     exports2.formatArgs = formatArgs;
     exports2.save = save;
     exports2.load = load;
@@ -6433,9 +6433,9 @@ var require_browser = __commonJS({
   }
 });
 
-// node_modules/debug/src/node.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/node.js
 var require_node2 = __commonJS({
-  "node_modules/debug/src/node.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/node.js"(exports2, module2) {
     var tty = require("tty");
     var util = require("util");
     exports2.init = init;
@@ -6607,9 +6607,9 @@ var require_node2 = __commonJS({
   }
 });
 
-// node_modules/debug/src/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/index.js
 var require_src = __commonJS({
-  "node_modules/debug/src/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/debug/src/index.js"(exports2, module2) {
     if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
       module2.exports = require_browser();
     } else {
@@ -6618,9 +6618,9 @@ var require_src = __commonJS({
   }
 });
 
-// node_modules/agent-base/dist/helpers.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/agent-base/dist/helpers.js
 var require_helpers = __commonJS({
-  "node_modules/agent-base/dist/helpers.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/agent-base/dist/helpers.js"(exports2) {
     "use strict";
     var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
       if (k2 === void 0) k2 = k;
@@ -6688,9 +6688,9 @@ var require_helpers = __commonJS({
   }
 });
 
-// node_modules/agent-base/dist/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/agent-base/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/agent-base/dist/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/agent-base/dist/index.js"(exports2) {
     "use strict";
     var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
       if (k2 === void 0) k2 = k;
@@ -6844,9 +6844,9 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/https-proxy-agent/dist/parse-proxy-response.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/https-proxy-agent/dist/parse-proxy-response.js
 var require_parse_proxy_response = __commonJS({
-  "node_modules/https-proxy-agent/dist/parse-proxy-response.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/https-proxy-agent/dist/parse-proxy-response.js"(exports2) {
     "use strict";
     var __importDefault = exports2 && exports2.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -6940,9 +6940,9 @@ var require_parse_proxy_response = __commonJS({
   }
 });
 
-// node_modules/https-proxy-agent/dist/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/https-proxy-agent/dist/index.js
 var require_dist2 = __commonJS({
-  "node_modules/https-proxy-agent/dist/index.js"(exports2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/https-proxy-agent/dist/index.js"(exports2) {
     "use strict";
     var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
       if (k2 === void 0) k2 = k;
@@ -7090,9 +7090,9 @@ var require_dist2 = __commonJS({
   }
 });
 
-// node_modules/web-push/src/web-push-lib.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/web-push-lib.js
 var require_web_push_lib = __commonJS({
-  "node_modules/web-push/src/web-push-lib.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/web-push-lib.js"(exports2, module2) {
     "use strict";
     var url = require("url");
     var https = require("https");
@@ -7377,9 +7377,9 @@ var require_web_push_lib = __commonJS({
   }
 });
 
-// node_modules/web-push/src/index.js
+// ../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/index.js
 var require_src2 = __commonJS({
-  "node_modules/web-push/src/index.js"(exports2, module2) {
+  "../../../../Users/apple/project/dorm-duty-banner-preview/site/node_modules/web-push/src/index.js"(exports2, module2) {
     "use strict";
     var vapidHelper = require_vapid_helper();
     var encryptionHelper = require_encryption_helper();
@@ -7529,7 +7529,7 @@ function notifyUser(userId, message, { db, env, guard = "1=1", values = [] }) {
 }
 var dailyReminderTasksSql = `SELECT t.id,t.name,t.content,t.key FROM chore_tasks t
   JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-  WHERE t.dorm_id=? AND t.assignee_id=? AND t.key IN ('floor','toilet','sink') AND t.status='pending' AND c.enabled=1
+  WHERE t.dorm_id=? AND t.assignee_id=? AND t.key<>'water' AND t.status='pending' AND c.enabled=1
   AND ((c.mode='scheduled' AND t.duty_date=?) OR (c.mode='self_round' AND t.duty_date<=? AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`;
 var SCHEDULE_CATCH_UP_MS = 30 * 60 * 1e3;
 
@@ -7683,20 +7683,36 @@ function categoryView(row) {
     mode: row.mode
   };
 }
+function configuredCategory(category, configuration) {
+  if (!configuration) return category;
+  const task = configuration.tasks.find((t) => t.key === category.key);
+  const hard = (task?.policy && task.policy !== "inherit" ? task.policy : configuration.policy) === "hard";
+  Object.defineProperties(category, { hardRound: { value: hard && category.mode === "self_round", configurable: true }, hardPolicy: { value: hard, configurable: true }, executionTime: { value: task?.execution_time || "08:00", configurable: true }, version2: { value: configuration?.schema_version === 2, configurable: true } });
+  return category;
+}
 async function categories(db, roomId) {
   const rows = await all(db, "SELECT * FROM chore_categories WHERE dorm_id=?", [
     roomId
   ]);
-  return KEYS.map((key) => rows.find((row) => row.key === key)).filter(Boolean).map(categoryView);
+  const configuration = JSON.parse((await first(db, "SELECT configuration FROM dorm_configurations WHERE dorm_id=?", [roomId]))?.configuration || "null");
+  const keys = configuration?.schema_version === 2 ? [...KEYS, ...configuration.tasks.map((task) => task.key).filter((key) => !KEYS.includes(key))] : KEYS;
+  return keys.map((key) => rows.find((row) => row.key === key)).filter(Boolean).map((row) => configuredCategory(categoryView(row), configuration));
 }
 async function initialize(db, room, now) {
   await ensureChoreMarkers(db, room.id);
-  const initialized = await first(
-    db,
-    "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
-    [room.id, room.id]
-  );
-  if (initialized) return;
+  const initialConfig = JSON.parse((await first(db, "SELECT configuration FROM dorm_configurations WHERE dorm_id=?", [room.id]))?.configuration || "null");
+  const settingsReady = await first(db, "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=?", [room.id]);
+  if (initialConfig?.schema_version === 2) {
+    const existing = new Set((await all(db, "SELECT key FROM chore_categories WHERE dorm_id=?", [room.id])).map((row) => row.key));
+    if (settingsReady && KEYS.every((key) => existing.has(key)) && initialConfig.tasks.every((task) => existing.has(task.key))) return;
+  } else {
+    const initialized = await first(
+      db,
+      "SELECT 1 AS ready FROM chore_settings WHERE dorm_id=? AND (SELECT COUNT(*) FROM chore_categories WHERE dorm_id=?)=4",
+      [room.id, room.id]
+    );
+    if (initialized) return;
+  }
   const members = await roomMembers(db, room.id);
   if (!members.length) fail(409, "no_members", "\u5BBF\u820D\u6CA1\u6709\u6709\u6548\u6210\u5458");
   const legacy = parse(room.rotation_order || "[]"), ids = members.map((member) => member.user_id);
@@ -7706,32 +7722,42 @@ async function initialize(db, room, now) {
   ];
   const shift = order.length > 1 ? [...order.slice(1), order[0]] : order;
   const start = localDate(now);
-  const defaults = [
+  const baseDefaults = [
     ["floor", "\u5730\u677F", "\u626B\u5730\u3001\u62D6\u5730", "22:00", order],
     ["toilet", "\u5395\u6240", "\u6E05\u6D17\u4FBF\u6C60\u3001\u51B2\u6D17\u5730\u9762", "22:00", shift],
     ["sink", "\u6D17\u624B\u6C60", "\u6E05\u6D01\u6D17\u624B\u6C60\u3001\u53F0\u9762\u548C\u6C34\u6E0D", "22:00", order],
     ["water", "\u62AC\u6C34", "\u5C06\u996E\u7528\u6C34\u9001\u5230\u5BBF\u820D", "20:00", order]
   ];
+  const defaults = initialConfig?.schema_version === 2 ? [
+    ...baseDefaults.map(([key, name, content, hhmm, rotation]) => {
+      const task = initialConfig.tasks.find((entry) => entry.key === key);
+      return [key, task?.name || name, task?.content || task?.name || content, task?.deadline || hhmm, rotation, task];
+    }),
+    ...initialConfig.tasks.filter((task) => !KEYS.includes(task.key)).map((task) => [task.key, task.name, task.content || task.name, task.deadline, order, task])
+  ] : baseDefaults;
   await db.batch([
     stmt(db, "INSERT OR IGNORE INTO chore_settings(dorm_id) VALUES (?)", [
       room.id
     ]),
-    ...defaults.map(
-      ([key, name, content, hhmm, rotation]) => stmt(
+    ...defaults.map(([key, name, content, hhmm, rotation, configured]) => {
+      const custom = configured || initialConfig?.tasks.find((t) => t.key === key);
+      return stmt(
         db,
-        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO chore_categories(dorm_id,key,name,content,deadline_time,start_date,rotation_order,mode,enabled,reminder_interval_days) VALUES (?,?,?,?,?,?,?,?,?,?)",
         [
           room.id,
           key,
-          name,
-          content,
-          hhmm,
+          custom?.name || name,
+          custom ? custom.content || custom.name : content,
+          custom?.deadline || hhmm,
           start,
           JSON.stringify(rotation),
-          key === "water" ? "completion" : "self_round"
+          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : initialConfig && custom?.rotation === "completion" ? "completion" : "self_round",
+          initialConfig ? custom?.enabled ? 1 : 0 : 1,
+          custom?.interval || 3
         ]
-      )
-    )
+      );
+    })
   ]);
 }
 var Mutation = class {
@@ -7818,27 +7844,28 @@ function appendRows(mutation, rows, replace = false) {
 }
 async function planDaily(db, mutation, room, settings, members, now, replaceKeys = []) {
   const today = localDate(now), end = addDate(today, 29), rows = [];
+  for (const category of settings.filter((entry) => replaceKeys.includes(entry.key) && entry.mode === "scheduled" && entry.key !== "water"))
+    mutation.update(
+      "chore_tasks",
+      { status: "cancelled" },
+      "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
+      [room.id, category.key, today]
+    );
   for (const category of settings.filter(
-    (entry) => entry.mode === "scheduled"
+    (entry) => entry.enabled && entry.mode === "scheduled" && entry.key !== "water"
   )) {
     const replace = replaceKeys.includes(category.key);
-    if (replace)
-      mutation.update(
-        "chore_tasks",
-        { status: "cancelled" },
-        "dorm_id=? AND key=? AND duty_date>? AND status='pending'",
-        [room.id, category.key, today]
-      );
-    for (let i = replace ? 1 : 0; i < 30; i++) {
+    const existingToday = replace ? await first(db, "SELECT 1 AS exists_today FROM chore_tasks WHERE dorm_id=? AND key=? AND duty_date=? AND status<>'cancelled'", [room.id, category.key, today]) : null;
+    for (let i = replace && existingToday ? 1 : 0; i < 30; i++) {
       const day = addDate(today, i), uid = scheduledAssignee(category, day);
       if (uid) rows.push(plannedRow(room, category, day, uid, members));
     }
   }
-  for (const key of KEYS.filter((entry) => entry !== "water"))
+  for (const category of settings.filter((entry) => entry.enabled && entry.mode === "scheduled" && entry.key !== "water"))
     appendRows(
       mutation,
-      rows.filter((row) => row[1] === key),
-      replaceKeys.includes(key)
+      rows.filter((row) => row[1] === category.key),
+      replaceKeys.includes(category.key)
     );
   return end;
 }
@@ -7872,7 +7899,7 @@ function roundRow(room, category, member, members, now, sequence) {
     sequence
   );
   row[2] = `round-${sequence}-${member.user_id}`;
-  row[9] = "";
+  if (!category.hardRound) row[9] = "";
   return row;
 }
 async function planRound(db, mutation, room, category, members, now, completingId = null) {
@@ -7900,6 +7927,34 @@ async function planRound(db, mutation, room, category, members, now, completingI
     ),
     true
   );
+}
+async function planCompletionTurn(db, mutation, room, category, members, now, completingTask = null) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const max = await first(db, "SELECT MAX(sequence) AS sequence FROM chore_tasks WHERE dorm_id=? AND key=? AND sequence IS NOT NULL", [room.id, category.key]);
+  const sequence = Number(max?.sequence || 0) + 1;
+  const last = completingTask ? completingTask : await first(db, "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1", [room.id, category.key]);
+  const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+  const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+  const member = members.find((entry) => entry.user_id === category.rotation_order[nextIndex]) || members[0];
+  const day = localDate(now) > category.start_date ? localDate(now) : category.start_date;
+  appendRows(mutation, [plannedRow(room, category, day, member.user_id, members, sequence)]);
+}
+async function maintainCompletionTurn(db, mutation, room, category, members, now) {
+  if (category.key === "water" || category.mode !== "completion" || !category.version2 || !category.enabled || !members.length) return;
+  const pending = await all(db, "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='pending' AND sequence IS NOT NULL ORDER BY sequence,id", [room.id, category.key]);
+  if (pending.length) {
+    const keep = pending[0];
+    for (const extra of pending.slice(1)) mutation.update("chore_tasks", { status: "cancelled" }, "id=? AND status='pending'", [extra.id]);
+    if (!members.some((member) => member.user_id === keep.assignee_id)) {
+      const last = await first(db, "SELECT * FROM chore_tasks WHERE dorm_id=? AND key=? AND status='completed' AND sequence IS NOT NULL ORDER BY sequence DESC,id DESC LIMIT 1", [room.id, category.key]);
+      const previousIndex = last ? category.rotation_order.indexOf(last.assignee_id) : -1;
+      const nextIndex = previousIndex < 0 ? 0 : (previousIndex + 1) % category.rotation_order.length;
+      const member = members.find((entry) => entry.user_id === category.rotation_order[nextIndex]) || members[0];
+      mutation.update("chore_tasks", { assignee_id: member.user_id, assignee_name_snapshot: member.nickname, marker_id_snapshot: member.marker_id }, "id=? AND status='pending'", [keep.id]);
+    }
+    return;
+  }
+  await planCompletionTurn(db, mutation, room, category, members, now);
 }
 function synchronizedOrder(order, ids) {
   return [
@@ -7939,7 +7994,7 @@ async function maintain(db, room, now) {
     const tokens = new Set(existing.map((row) => `${row.key}:${row.task_key}`));
     let missing = replacements.length > 0;
     for (const category of settings.filter(
-      (entry) => entry.mode === "scheduled"
+      (entry) => entry.enabled && entry.mode === "scheduled"
     ))
       for (let i = 0; i < 30; i++) {
         const day = addDate(today, i);
@@ -7951,7 +8006,7 @@ async function maintain(db, room, now) {
       "SELECT * FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='pending'",
       [room.id]
     );
-    if (pending && !ids.includes(pending.assignee_id)) {
+    if (pending && water && !ids.includes(pending.assignee_id)) {
       const uid = water.rotation_order[0], member = members.find((entry) => entry.user_id === uid);
       mutation.update(
         "chore_tasks",
@@ -7965,7 +8020,7 @@ async function maintain(db, room, now) {
       );
       missing = true;
     }
-    if (water.enabled && !pending) {
+    if (water?.enabled && !pending) {
       const last = await first(
         db,
         "SELECT assignee_id,sequence FROM chore_tasks WHERE dorm_id=? AND key='water' AND status='completed' ORDER BY sequence DESC LIMIT 1",
@@ -7989,6 +8044,8 @@ async function maintain(db, room, now) {
       (entry) => entry.mode === "self_round"
     ))
       await planRound(db, mutation, room, category, members, now);
+    for (const category of settings.filter((entry) => entry.mode === "completion" && entry.key !== "water"))
+      await maintainCompletionTurn(db, mutation, room, category, members, now);
     if (!missing && mutation.ops.length === 1)
       return { state, settings, members };
     await planDaily(db, mutation, room, settings, members, now, replacements);
@@ -8008,7 +8065,7 @@ async function maintain(db, room, now) {
   fail(409, "stale_version", "\u5BBF\u820D\u6B63\u5728\u66F4\u65B0\uFF0C\u8BF7\u7A0D\u540E\u5237\u65B0");
 }
 var correctionApplies = "h.id IS NOT NULL AND julianday(h.updated_at)>=julianday(t.completed_at)";
-var historySQL = `SELECT t.id,t.key,t.name,t.assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
+var historySQL = `SELECT t.id,t.key,t.name,COALESCE(t.completed_by,t.assignee_id) AS assignee_id,t.assignee_name_snapshot,t.marker_id_snapshot,
  CASE WHEN ${correctionApplies} THEN h.completed_at ELSE t.completed_at END AS completed_at,
  COALESCE(h.revision,0) AS revision,
  CASE WHEN ${correctionApplies} THEN 1 ELSE 0 END AS corrected

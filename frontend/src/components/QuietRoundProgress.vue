@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import type { ChoreBoardData } from "../api/chores";
-import MemberMark from "./MemberMark.vue";
 defineProps<{ round: ChoreBoardData["rounds"][number]; compact?: boolean }>();
 </script>
 <template>
@@ -9,7 +9,7 @@ defineProps<{ round: ChoreBoardData["rounds"][number]; compact?: boolean }>();
   >
   <section v-else class="quiet-round" aria-label="本轮完成进度">
     <p class="round-count">
-      <strong
+      <strong class="rounded-member-name"
         >{{ round.completed }}<span>/{{ round.total }}</span></strong
       ><span>第 {{ round.sequence }} 轮</span>
     </p>
@@ -20,9 +20,7 @@ defineProps<{ round: ChoreBoardData["rounds"][number]; compact?: boolean }>();
     />
     <ul>
       <li v-for="person in round.members" :key="person.user_id">
-        <MemberMark inline :id="person.marker_id" :size="28" /><span>{{
-          person.nickname
-        }}</span
+        <span>{{ person.nickname }}</span
         ><span class="member-state">{{
           person.completed ? "已完成" : "待完成"
         }}</span>

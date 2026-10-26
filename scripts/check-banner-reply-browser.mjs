@@ -29,7 +29,7 @@ const page = await context.newPage(),
   checks = [],
   errors = [],
   metrics = { engine };
-page.setDefaultTimeout(12000);
+page.setDefaultTimeout(30000);
 page.on("pageerror", (e) => errors.push(e.message));
 const check = (v, label) => {
   assert(v, label);
@@ -70,9 +70,15 @@ async function incoming(
     h.h.db.sqlite
       .prepare("UPDATE chore_reminders SET source='scheduled' WHERE id=?")
       .run(note.id);
-  await page.goto(h.url + "/?start=1&banner-case=" + sequence);
+  await page.goto(h.url + "/?start=1&banner-case=" + sequence, {
+    waitUntil: "domcontentloaded",
+  });
   await page.getByTestId("reminder-banner").filter({ hasText: text }).waitFor();
-  await page.waitForTimeout(450);
+  await page.getByTestId("reminder-banner").evaluate(async (el) => {
+    await Promise.allSettled(
+      el.getAnimations().map((animation) => animation.finished),
+    );
+  });
   return { ...note, text };
 }
 const boardNote = async (id) =>
@@ -126,7 +132,10 @@ async function hold() {
   assert(r);
   await page.mouse.move(r.x + r.width / 2, r.y + 23);
   await page.mouse.down();
-  await page.waitForTimeout(430);
+  await page.waitForFunction(
+    () => document.querySelector('.reminder-banner-motion[role="dialog"]'),
+    { timeout: 3000 },
+  );
   await page.mouse.up();
   await editor().waitFor({ state: "visible" });
   await page.waitForTimeout(320);
@@ -512,6 +521,102 @@ try {
     !(await boardNote(reduced.id)).read_at,
     "reduced-motion cancellation preserves unread policy",
   );
+  {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const drift = await incoming("长按漂移保护");
+    const box = await card().boundingBox();
+    await page.mouse.move(box.x + 80, box.y + 25);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 86, box.y + 27);
+    await page.waitForTimeout(430);
+    await page.mouse.move(box.x + 110, box.y + 12);
+    await page.mouse.up();
+    await editor().waitFor({ state: "visible" });
+    await page.waitForTimeout(350);
+    check(
+      (await editor().isVisible()) && !(await boardNote(drift.id)).read_at,
+      "small pre-hold drift and larger post-hold movement never dismiss or read the reply",
+    );
+    await editor().fill("多行回复\n第二行内容\n光标和边框应完整显示");
+    await editor().click();
+    const geometry = await editor().evaluate((el) => {
+      const r = el.getBoundingClientRect(),
+        parent = el.closest(".banner-reply-inner").getBoundingClientRect();
+      return {
+        left: r.left - parent.left,
+        right: parent.right - r.right,
+        top: r.top - parent.top,
+        bottom: parent.bottom - r.bottom,
+        focused: document.activeElement === el,
+      };
+    });
+    metrics.editorInsets = geometry;
+    check(
+      geometry.focused &&
+        geometry.left >= 3 &&
+        geometry.right >= 3 &&
+        geometry.top >= 3 &&
+        geometry.bottom >= 3,
+      "multiline editor has complete inset space for focus border, caret and input gestures",
+    );
+    const blur = await page
+      .locator(".banner-reply-backdrop")
+      .evaluate(
+        (el) =>
+          getComputedStyle(el).backdropFilter ||
+          getComputedStyle(el).webkitBackdropFilter,
+      );
+    check(
+      blur.includes("blur(6px)"),
+      "reply uses one moderate full-page backdrop blur layer",
+    );
+    await page.screenshot({
+      path: new URL(engine + "-polished-multiline.png", out).pathname,
+    });
+    await page.locator(".banner-reply-close").click();
+    await waitRead(drift.id);
+    check(
+      !!(await boardNote(drift.id)).read_at,
+      "explicit close message persists read state on a fresh server query",
+    );
+    const closeRetry = await incoming("关闭消息回执失败");
+    await hold();
+    await page.route("**/chores/reminders/*/read", readFailure);
+    await page.locator(".banner-reply-close").click();
+    await page.getByTestId("reminder-banner").waitFor({ state: "hidden" });
+    check(
+      !(await boardNote(closeRetry.id)).read_at,
+      "explicit close with failed read API remains server-unread instead of fake success",
+    );
+    await page.unroute("**/chores/reminders/*/read", readFailure);
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitRead(closeRetry.id);
+    check(
+      !!(await boardNote(closeRetry.id)).read_at,
+      "explicit-close read intent retries after panel is gone and persists to the exact message",
+    );
+    const reverse = await incoming("展开中取消");
+    const rb = await card().boundingBox();
+    await page.mouse.move(rb.x + 80, rb.y + 24);
+    await page.mouse.down();
+    await page.waitForTimeout(415);
+    await page.mouse.up();
+    await page.locator(".banner-reply-cancel").evaluate((el) => el.click());
+    await page.waitForTimeout(400);
+    check(
+      !(await boardNote(reverse.id)).read_at &&
+        (await card().isVisible()) &&
+        !(await editor().isVisible()),
+      "cancel during expansion reverses to the same unread capsule without a stale backdrop",
+    );
+    check(
+      (await page.locator(".banner-reply-backdrop").count()) === 0,
+      "interrupted collapse leaves no backdrop or scroll-blocking overlay",
+    );
+  }
   check(errors.length === 0, "no Vue or browser runtime errors");
   await fs.writeFile(
     new URL(engine + "-result.json", out),

@@ -49,11 +49,11 @@ banner.beforeEnter(outer);let entered=0;banner.enter(outer,()=>entered++);
 assert.ok(outer.animations[0].keyframes.every(frame=>frame.opacity===1),'entry must occlude immediately, without a translucent fade-in');
 assert.equal(outer.animations[0].options.easing,'linear');assert.equal(outer.animations[0].options.duration,660);
 const bannerEvent=y=>({...event(y),currentTarget:card,target:card});
-banner.down(bannerEvent(100));assert.ok(banner.hold.value<1);assert.equal(entered,1,'touch interrupts entry without waiting for animation completion');now+=20;banner.move(bannerEvent(93));assert.ok(banner.swipePose.value.opacity<1);assert.ok(banner.swipePose.value.transform.includes('scale('));
-banner.finish(bannerEvent(93));assert.deepEqual(emitted,[['dismiss',42,'swipe']]);
+banner.down(bannerEvent(100));assert.ok(banner.hold.value<1);assert.equal(entered,1,'touch interrupts entry without waiting for animation completion');now+=20;banner.move(bannerEvent(88));assert.ok(banner.swipePose.value.opacity<1);assert.ok(banner.swipePose.value.transform.includes('scale('));
+banner.finish(bannerEvent(88));assert.deepEqual(emitted,[['dismiss',42,'swipe']]);
 let left=0;banner.leave(outer,()=>left++);const exit=outer.animations.at(-1);assert.equal(exit.keyframes.at(-1).opacity,0);assert.equal(exit.options.easing,'linear');assert.equal(exit.options.duration,320);assert.ok(exit.keyframes.at(-1).transform.includes('scale(0.1200,0.1000)'));
 exit.complete();await Promise.resolve();assert.equal(left,1);props.note=null;banner.afterLeave(outer);assert.deepEqual(emitted.at(-1),['settled',42]);assert.equal(banner.offset.value,0);
-props.note={id:43};emitted.length=0;banner.beforeEnter(outer);banner.down(bannerEvent(100));advance(35);assert.ok(banner.hold.value<.95);now+=20;banner.move(bannerEvent(92));now+=300;banner.finish(bannerEvent(92));assert.equal(emitted.length,0);assert.ok(banner.offset.value<0,'return starts from held position');advance(180);assert.equal(banner.offset.value,0);assert.equal(banner.hold.value,1);assert.equal(frames.size,0,'banner hold feedback settles without leaving a RAF loop');
+props.note={id:43};emitted.length=0;banner.beforeEnter(outer);banner.down(bannerEvent(100));advance(35);assert.ok(banner.hold.value<.95);now+=20;banner.move(bannerEvent(88));now+=300;banner.finish(bannerEvent(88));assert.equal(emitted.length,0);assert.ok(banner.offset.value<0,'return starts from held position');advance(180);assert.equal(banner.offset.value,0);assert.equal(banner.hold.value,1);assert.equal(frames.size,0,'banner hold feedback settles without leaving a RAF loop');
 console.log('PASS: immediate opaque entry, entry interruption, short upward flick dismissal, shrinking/fading exit, queue settlement id and short-drag cancellation.');
 
 for(const [dx,dy] of [[90,0],[-90,0],[0,90]]){

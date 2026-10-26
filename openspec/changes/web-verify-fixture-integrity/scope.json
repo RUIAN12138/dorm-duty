@@ -1,0 +1,36 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "allowed": [
+    "scripts/check-screen-gesture-check.mjs",
+    "scripts/check-emotion-integration.mjs",
+    "scripts/check-settings-save-lifecycle.mjs",
+    "scripts/check-navigation-components.mjs",
+    "scripts/check-task-detail.mjs",
+    "scripts/check-ios-chat-motion.mjs",
+    "scripts/check-chat-motion-continuity.mjs",
+    "scripts/check-companion-browser.mjs",
+    "scripts/check-companion-chat-browser.mjs",
+    "scripts/check-focus-compact.mjs",
+    "scripts/check-conversation-preview.mjs",
+    "scripts/check-order-boundaries.mjs",
+    "scripts/check-entry-layout.mjs",
+    "site/scripts/check-scheduled-reminders.mjs",
+    "site/scripts/check-calendar-subscription.mjs",
+    "openspec/changes/web-verify-fixture-integrity/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "prAuthorization": {
+    "action": "create-for-review",
+    "userStatement": "把最近成熟的更新都推送 pr 并且更新网站",
+    "authorizedDigest": "c5a2e32710f777cdf00af08c9258761e6e75a034a35fdd3b3f5380ce363ff9a8"
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "把最近成熟的更新都推送 pr 并且更新网站",
+    "authorizedDigest": "c5a2e32710f777cdf00af08c9258761e6e75a034a35fdd3b3f5380ce363ff9a8"
+  }
+}

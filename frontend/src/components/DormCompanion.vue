@@ -42,6 +42,7 @@ const props = withDefaults(
     message?: string;
     chatEnabled?: boolean;
     continuous?: boolean;
+    liteEffects?: boolean;
   }>(),
   {
     mood: "02",
@@ -53,6 +54,7 @@ const props = withDefaults(
     tips: false,
     muted: false,
     scene: "general",
+    liteEffects: false,
   },
 );
 const emit = defineEmits<{
@@ -543,7 +545,7 @@ onMounted(() => {
     eyeScale: props.size < 80 ? 1.5 : 1,
     autostart: false,
     idle: false,
-    lite: false,
+    lite: props.liteEffects,
   });
   engine.on("change", ({ id }) => {
     actual.value = id;
@@ -606,6 +608,7 @@ onBeforeUnmount(() => {
       :type="interactive ? 'button' : undefined"
       class="dorm-companion"
       :class="{ 'is-interactive': interactive, 'is-chat-enabled': chatEnabled }"
+      :data-effects-mode="liteEffects ? 'lite' : 'full'"
       :style="{ width: `${size}px`, height: `${size}px` }"
       :aria-label="
         interactive

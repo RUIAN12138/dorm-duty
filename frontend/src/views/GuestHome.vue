@@ -1,4 +1,16 @@
 <script setup lang="ts">
+import {
+  persistSessionToken,
+  restoreSessionToken,
+} from "../interaction/persistentSession";
+import DormWizard from "../components/onboarding/DormWizard.vue";
+import {
+  configurationOf,
+  type DormDraft,
+  type DormConfiguration,
+} from "../interaction/dormDraft";
+import StartupGate from "../components/StartupGate.vue";
+import type { StartupStatus } from "../interaction/startup";
 import ScreenStage from "../components/ScreenStage.vue";
 import { provideSheetNavigation } from "../interaction/sheetNavigation";
 provideSheetNavigation();
@@ -41,6 +53,7 @@ import {
   identityUnboundEvent,
 } from "../api/email";
 import { showToast } from "vant";
+import { isLocalPreviewAvailable } from "../interaction/localPreview";
 import { ApiError } from "../api";
 import { logoutEvent, pendingLogout } from "../api/logout";
 import { useSession } from "../stores/session";
@@ -78,6 +91,8 @@ const creatingRoom = ref(false),
   createNickname = ref(""),
   createMembers = ref("");
 const createdInvite = ref("");
+const localWizardExperience = ref(false);
+const localWizardPreviewAvailable = isLocalPreviewAvailable();
 const recoveryOpen = ref(false);
 const emailOpen = ref(false);
 const migrationToken = ref(""),
@@ -91,6 +106,19 @@ function needsEmail() {
 function openRecovery() {
   if (!needsEmail()) recoveryOpen.value = true;
 }
+function openGuideFromSettings() {
+  try {
+    sessionStorage.setItem("dorm-guide-flow-v2", JSON.stringify({
+      version: 2,
+      returnTo: router.currentRoute.value.fullPath,
+      seenKey: null,
+      firstUse: false,
+      showFeatureTour: dorm.value?.configuration?.schema_version === 2,
+    }));
+  } catch { /* Direct navigation still falls back safely to the entry page. */ }
+  appearanceOpen.value = false;
+  void router.push("/guide");
+}
 async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   migrationToken.value = "";
   migrationOwnerToken.value = "";
@@ -99,7 +127,7 @@ async function acceptEmailEntry(entry: EmailEntry, quiet = false) {
   emailOpen.value = false;
   cancelSelection();
   if (entry.is_creator) {
-    sessionStorage.setItem("dorm-token", entry.access_token);
+    persistSessionToken(entry.access_token);
     localStorage.setItem("dorm-email-admin-grant", entry.access_token);
     await session.refresh().catch(() => {});
   }
@@ -261,6 +289,13 @@ function entryBack() {
   if (route.query.entry && router.options.history.state.back) router.back();
   else restoreEntry("welcome");
 }
+function cancelWizard() {
+  if (entryBackVisible.value) {
+    entryBack();
+    return;
+  }
+  cancelSelection();
+}
 watch(entryKind, (kind, previous) => {
   if (kind === "identity" && dorm.value && viewMode.value !== "entry")
     identityFrame = {
@@ -414,7 +449,7 @@ async function creatorToken(person: GuestMember, code = inviteCode.value) {
   await session.init();
   if (
     session.dorm?.invite_code !== code &&
-    sessionStorage.getItem("dorm-token")
+    restoreSessionToken()
   ) {
     try {
       await session.refresh();
@@ -425,7 +460,7 @@ async function creatorToken(person: GuestMember, code = inviteCode.value) {
   return session.dorm?.invite_code === code &&
     session.dorm.is_admin &&
     session.user?.id === person.user_id
-    ? sessionStorage.getItem("dorm-token") || ""
+    ? restoreSessionToken() || ""
     : "";
 }
 const occupiedMarks = computed(
@@ -513,7 +548,7 @@ async function submitName() {
     );
     if (!isCurrent(id, signal)) return;
     if (result.is_creator) {
-      sessionStorage.setItem("dorm-token", result.access_token);
+      persistSessionToken(result.access_token);
       localStorage.setItem("dorm-email-admin-grant", result.access_token);
       await session.refresh();
       if (!isCurrent(id, signal)) return;
@@ -592,6 +627,7 @@ function cancelSelection() {
   choosingMember.value = false;
   changingDorm.value = false;
   creatingRoom.value = false;
+  localWizardExperience.value = false;
   pendingPerson.value = null;
   pendingClaimToken.value = "";
   enteredName.value = "";
@@ -704,12 +740,34 @@ function openCreate() {
   createMembers.value = "";
   createMarker.value = "pixel-01";
 }
+function openWizardExperience() {
+  if (!localWizardPreviewAvailable) return;
+  cancelSelection();
+  localWizardExperience.value = true;
+  creatingRoom.value = true;
+  wizardConfiguration.value = undefined;
+  createdInvite.value = "";
+}
+const wizardConfiguration = ref<DormConfiguration | undefined>();
+async function submitWizard(draft: DormDraft) {
+  createName.value = draft.name;
+  createNickname.value = draft.nickname;
+  createMembers.value = "";
+  wizardConfiguration.value = configurationOf(draft);
+  await submitCreate();
+}
+function finishWizard() {
+  creatingRoom.value = false;
+  localWizardExperience.value = false;
+  wizardConfiguration.value = undefined;
+}
 async function submitCreate() {
   if (loading.value) return;
   const { id, signal } = startRequest();
   try {
     const result = await createGuestDorm(
       {
+        configuration: wizardConfiguration.value,
         name: createName.value.trim(),
         marker_id: createMarker.value,
         nickname: createNickname.value.trim(),
@@ -721,7 +779,7 @@ async function submitCreate() {
       signal,
     );
     if (!isCurrent(id, signal)) return;
-    sessionStorage.setItem("dorm-token", result.access_token);
+    persistSessionToken(result.access_token);
     try {
       localStorage.setItem("dorm-email-admin-grant", result.access_token);
     } catch {
@@ -734,7 +792,7 @@ async function submitCreate() {
     }
     await refreshEmailAccount().catch(() => {});
     if (!isCurrent(id, signal)) return;
-    creatingRoom.value = false;
+    creatingRoom.value = !!wizardConfiguration.value;
     createdInvite.value = result.invite_code;
     inviteCode.value = result.invite_code;
     viewMode.value = "dorm";
@@ -743,11 +801,10 @@ async function submitCreate() {
         (person) => person.user_id === result.member_id,
       ) || null;
     remember();
-    await router.replace({
-      path: route.path,
-      query: { ...route.query },
-    });
+    if (!wizardConfiguration.value)
+      await router.replace({ path: route.path, query: { ...route.query } });
     await loadDorm(result.invite_code, result.member_id, result.access_token);
+    if (wizardConfiguration.value) creatingRoom.value = true;
   } catch (e) {
     if (isCurrent(id, signal)) error.value = (e as Error).message;
   } finally {
@@ -768,7 +825,7 @@ async function acceptRecovered(result: GuestCreation) {
   try {
     await session.init();
     if (!isCurrent(id, signal)) return;
-    sessionStorage.setItem("dorm-token", result.access_token);
+    persistSessionToken(result.access_token);
     try {
       localStorage.setItem("dorm-email-admin-grant", result.access_token);
     } catch {
@@ -835,7 +892,7 @@ async function returnToDorm(room: JoinedDorm) {
           choreToken.value,
         );
         if (current?.id === dorm.value?.id && current.is_admin) {
-          sessionStorage.setItem("dorm-token", choreToken.value);
+          persistSessionToken(choreToken.value);
           localStorage.setItem("dorm-email-admin-grant", choreToken.value);
           await session.refresh();
         }
@@ -909,14 +966,30 @@ watch(emailOpen, (open, previous) => {
 });
 window.addEventListener(logoutEvent, emailLogout);
 window.addEventListener(identityUnboundEvent, identityUnbound);
+const startupStatus = ref<StartupStatus>("initializing");
+const startupBlocked = computed(() =>
+  ["initializing", "verifying", "recovery-failed"].includes(
+    startupStatus.value,
+  ),
+);
 let bootRunning = false;
 let bootReady = false;
 let disposed = false;
 async function boot() {
   if (bootRunning || disposed) return;
   bootRunning = true;
+  startupStatus.value = "verifying";
   try {
     await bootEntry();
+    if (!disposed)
+      startupStatus.value =
+        error.value && !member.value
+          ? "recovery-failed"
+          : member.value
+            ? "authenticated"
+            : "unauthenticated";
+  } catch {
+    if (!disposed) startupStatus.value = "recovery-failed";
   } finally {
     bootRunning = false;
   }
@@ -987,14 +1060,22 @@ async function bootEntry() {
         localStorage.getItem("dorm-email-admin-grant") || "";
     }
   } else if (code || saved.guest_mode === "demo")
-    void loadDorm(
+    await loadDorm(
       code,
       code === saved.invite_code ? saved.member_id : undefined,
     );
   else if (sharedLink) openDormChange();
 }
 onMounted(() => {
-  void boot();
+  const launchDevWizard =
+    localWizardPreviewAvailable && route.query.preview === "new-dorm";
+  void boot().then(async () => {
+    if (!launchDevWizard || disposed || startupBlocked.value) return;
+    const query = { ...route.query };
+    delete query.preview;
+    await router.replace({ path: route.path, query, hash: route.hash });
+    if (!disposed && !startupBlocked.value) openWizardExperience();
+  });
   document.addEventListener("visibilitychange", visibleRefresh);
   window.addEventListener("focus", visibleRefresh);
   window.addEventListener("online", visibleRefresh);
@@ -1014,7 +1095,9 @@ onUnmounted(() => {
 
 <template>
   <ScreenStage :signed-in="navVisible">
+    <StartupGate :status="startupStatus" @retry="boot" />
     <main
+      v-if="!startupBlocked"
       ref="entrySurface"
       class="guest-page"
       :class="{
@@ -1027,7 +1110,7 @@ onUnmounted(() => {
       }"
     >
       <EntryBack
-        v-if="entryBackVisible && !emailOpen && !recoveryOpen"
+        v-if="entryBackVisible && !creatingRoom && !emailOpen && !recoveryOpen"
         :target="entrySurface"
         :disabled="loading || !!entryEmail?.busy"
         @back="entryBack"
@@ -1043,75 +1126,17 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <section
-        v-if="creatingRoom"
-        class="guest-dorm-form"
-        data-testid="guest-create-form"
-        aria-labelledby="create-title"
-      >
-        <div class="entry-heading">
-          <h1 id="create-title">创建你的宿舍</h1>
-          <HintPopover
-            title="创建者权限"
-            :text="
-              emailAccount.loggedIn
-                ? '用当前邮箱创建，自动拥有创建者权限。换设备后用同一邮箱登录即可。'
-                : '管理权限会保存在此设备。创建后可生成管理恢复码，用于更换设备。'
-            "
-          />
-        </div>
-        <form @submit.prevent="submitCreate">
-          <label for="create-name">宿舍名称</label>
-          <input
-            id="create-name"
-            v-model="createName"
-            data-testid="guest-create-name"
-            maxlength="64"
-            placeholder="例如：6-402"
-            autocomplete="off"
-            required
-            :disabled="loading"
-          />
-          <label for="create-nickname">你的名字</label>
-          <input
-            id="create-nickname"
-            v-model="createNickname"
-            data-testid="guest-create-nickname"
-            maxlength="32"
-            placeholder="室友怎么称呼你"
-            autocomplete="nickname"
-            required
-            :disabled="loading"
-          />
-          <label for="create-members"
-            >其他室友的名字 <span class="guest-muted">（选填）</span></label
-          >
-          <textarea
-            id="create-members"
-            v-model="createMembers"
-            data-testid="guest-create-members"
-            rows="3"
-            maxlength="2000"
-            placeholder="每行一位，也可以用逗号分隔"
-            :disabled="loading"
-          ></textarea>
-          <MarkerPicker v-model="createMarker" :disabled="loading" />
-          <p v-if="error" class="guest-create-error" role="alert">
-            {{ error }}
-          </p>
-          <button
-            type="submit"
-            class="guest-primary"
-            data-testid="guest-create-submit"
-            :disabled="loading"
-          >
-            {{ loading ? "正在创建…" : "创建宿舍" }}
-          </button>
-        </form>
-        <div class="guest-form-actions">
-          <button :disabled="loading" @click="cancelSelection">返回</button>
-        </div>
-      </section>
+      <Teleport v-if="creatingRoom" to="body"><DormWizard
+        :busy="loading"
+        :experience="localWizardExperience"
+        :creator-name="member?.nickname || emailAccount.rooms?.[0]?.nickname || '创建者'"
+        :error="error"
+        :invite="createdInvite || undefined"
+        :draft-key="localWizardExperience ? 'dorm-create-experience-v2' : `dorm-create-v2:${emailAccount.email || 'local'}`"
+        @submit="submitWizard"
+        @cancel="cancelWizard"
+        @done="finishWizard"
+      /></Teleport>
       <section
         v-else-if="changingDorm"
         class="guest-dorm-form guest-switch-form"
@@ -1262,6 +1287,14 @@ onUnmounted(() => {
               恢复管理权限
             </button>
           </div>
+          <button
+            v-if="localWizardPreviewAvailable"
+            class="local-wizard-preview-link"
+            data-testid="dev-new-dorm-wizard"
+            @click="openWizardExperience"
+          >
+            体验新版创建流程
+          </button>
         </section>
         <template v-else-if="dorm && (!loading || pendingPerson)">
           <aside
@@ -1335,7 +1368,7 @@ onUnmounted(() => {
               data-testid="guest-name-form"
               @submit.prevent="submitName"
             >
-              <label for="member-name">你在宿舍名单中的名字</label>
+              <label for="member-name">{{ dorm.configuration ? '你的姓名' : '你在宿舍名单中的名字' }}</label>
               <input
                 id="member-name"
                 v-model="enteredName"
@@ -1404,11 +1437,13 @@ onUnmounted(() => {
               :member-id="member.user_id"
               :token="choreToken"
               :demo="viewMode === 'demo'"
+              @configuration="dorm && (dorm.configuration = $event)"
               @expired="identityExpired"
               @member="member = $event"
               @switch-member="changeMember"
               @join-dorm="openDormChange"
               @create-dorm="openCreate"
+              @local-wizard="openWizardExperience"
               @recover-owner="recoveryOpen = true"
               @email-account="emailOpen = true"
               @exit-demo="exitDemo"
@@ -1448,9 +1483,13 @@ onUnmounted(() => {
       />
     </main>
   </ScreenStage>
-  <ChoreBottomNav v-if="navVisible" :section="section" />
+  <ChoreBottomNav
+    v-if="navVisible"
+    :section="section"
+    :pages="dorm?.configuration?.pages"
+  />
   <button
-    v-if="!navVisible"
+    v-if="!navVisible && !startupBlocked && !creatingRoom"
     class="entry-appearance"
     aria-label="设置"
     @click="appearanceOpen = true"
@@ -1458,11 +1497,27 @@ onUnmounted(() => {
     <van-icon name="setting-o" />
   </button>
   <ElasticSheet v-model="appearanceOpen" title="设置" expandable
-    ><AppearanceSettings /><CheckForUpdates />
+    ><AppearanceSettings />
+    <button class="entry-guide-link" @click="openGuideFromSettings">使用引导</button>
+    <CheckForUpdates />
   </ElasticSheet>
 </template>
 
 <style scoped>
+.entry-guide-link {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font: inherit;
+  transition: transform 220ms var(--ui-ease-out), opacity 160ms;
+}
+.entry-guide-link:active { transform: scale(.985); }
 .join-new-title {
   margin: 0 0 18px;
   font-size: 19px;
@@ -1537,6 +1592,23 @@ onUnmounted(() => {
     padding: 6px 0;
   }
 }
+</style>
+
+<style scoped>
+.local-wizard-preview-link {
+  display: block;
+  min-height: 44px;
+  margin: 14px auto 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  transition: transform 220ms var(--ui-ease-out), opacity 160ms;
+}
+.local-wizard-preview-link:active { transform: scale(.985); }
 </style>
 
 <style scoped>

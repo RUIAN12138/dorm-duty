@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import "../interaction/memberNames.css";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { Reorder, useDragControls } from "motion-v";
 import type { ChoreMember } from "../api/chores";
-import MemberMark from "./MemberMark.vue";
 import { motionAllowed, motionTokens } from "../interaction/motion";
 const props = withDefaults(
   defineProps<{
@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
         :data-testid="`order-person-${categoryKey}-${member.user_id}`"
         @contextmenu.prevent
       >
-        <MemberMark :id="member.marker_id" :size="24" inline /><strong
+        <strong class="rounded-member-name"
           ><span>{{ member.nickname }}</span
           ><small v-if="completed !== undefined">{{
             completed ? "已完成" : "待完成"

@@ -1,3 +1,7 @@
+import {
+  flushNativeSessionCookies,
+  persistentSessionKey,
+} from "../interaction/persistentSession";
 import { reactive } from "vue";
 import { logoutAll, pendingLogout, logoutEvent } from "./logout";
 import { choreRequest, savedChoreToken, saveChoreToken } from "./chores";
@@ -37,6 +41,9 @@ export async function emailPost<T>(
     headers: { "X-Dorm-Email": "1" },
     body: JSON.stringify(values),
   });
+  // The verification response has just set the HttpOnly session cookie. Ask
+  // Android WebView to persist it before the verification flow proceeds.
+  if (path === "verify") await flushNativeSessionCookies();
   if (["verify", "bind", "preferences", "unbind"].includes(path))
     invalidateAccountRead();
   return result;
@@ -64,6 +71,7 @@ function clearUnboundIdentity(room: EmailRoom) {
   saveChoreToken(room.invite_code, room.member_id, "");
   for (const [storage, key] of [
     [localStorage, "dorm-email-admin-grant"],
+    [localStorage, persistentSessionKey],
     [sessionStorage, "dorm-token"],
   ] as const)
     if (token && storage.getItem(key) === token) storage.removeItem(key);

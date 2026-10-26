@@ -229,11 +229,35 @@ try {
   );
   await ball.click();
   await page.locator(".companion-chat").waitFor();
+  await page.waitForFunction(() => {
+    const chat = document.querySelector(".companion-chat"),
+      quickPrompts = chat?.querySelector(".chat-quick-prompts"),
+      noteAction = quickPrompts?.querySelector("button:first-child"),
+      dock = quickPrompts?.closest(".chat-dock-panel"),
+      actionRect = noteAction?.getBoundingClientRect(),
+      dockRect = dock?.getBoundingClientRect();
+    return (
+      chat?.getAttribute("data-phase") === "open" &&
+      quickPrompts &&
+      !quickPrompts.classList.contains("is-hidden") &&
+      Number(getComputedStyle(quickPrompts).opacity) > 0.99 &&
+      noteAction &&
+      !noteAction.disabled &&
+      actionRect &&
+      dockRect &&
+      actionRect.height > 0 &&
+      actionRect.top < dockRect.bottom &&
+      actionRect.bottom > dockRect.top
+    );
+  });
   check(
     (await page.locator("#companion-note-text").count()) === 0 &&
       (await page
         .getByRole("button", { name: "我要留言", exact: true })
-        .isVisible()),
+        .isVisible()) &&
+      (await page
+        .getByRole("button", { name: "我要留言", exact: true })
+        .isEnabled()),
     "single click opens unified chat with the note quick action, not a duplicate composer",
   );
   await page.getByRole("button", { name: "返回宿舍", exact: true }).click();

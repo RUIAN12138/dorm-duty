@@ -101,7 +101,7 @@ const result = await build({
           namespace: "stub",
         }));
         b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({
-          contents: "export const ref = value => ({value});",
+          contents: "export const ref = value => ({value});export const watch = () => () => {};",
         }));
       },
     },

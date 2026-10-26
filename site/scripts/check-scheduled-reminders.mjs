@@ -9,7 +9,6 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { SQLiteD1 } from "../local/sqlite-d1.mjs";
 import { openDatabase } from "../local/database.mjs";
-import { handleApi, EMAIL_GATE_CAPABILITY } from "../worker/backend.mjs";
 
 const RealDate = Date;
 let clock = new RealDate("2026-10-15T07:59:00+08:00").getTime(),
@@ -488,42 +487,72 @@ test("migration from the previous release retains tasks, sessions, reminders and
           new Date().toISOString(),
         );
     }
-    // Current auth queries require this additive column while constructing old-schema fixtures.
-      old.sqlite.exec("ALTER TABLE sessions ADD COLUMN dorm_id INTEGER REFERENCES dormitories(id)");
-      const env = { DB: old, DEFAULT_DORM_INVITE_CODE: "", EMAIL_GATE_VERIFIED: EMAIL_GATE_CAPABILITY };
-    const h = {
-      db: old,
-      env,
-      request: (route, { token, method = "GET", data } = {}) =>
-        handleApi(
-          new Request("https://migration-test.example" + route, {
-            method,
-            headers: {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              "Content-Type": "application/json",
-            },
-            ...(data ? { body: JSON.stringify(data) } : {}),
-          }),
-          env,
-          { waitUntil() {} },
-        ),
-    };
-    const r = await fixture(h);
-    // Seed old-schema records without invoking the new projection before migration.
-    const b = {today_tasks:old.sqlite.prepare("SELECT * FROM chore_tasks WHERE assignee_id=? AND key='floor' AND status='pending' ORDER BY id LIMIT 1").all(r.owner.id)};
-    await complete(h, r.owner, b.today_tasks[0]);
-    await api(
-      h,
-      "/chores/remind",
-      r.owner.token,
-      {
-        target_member_id: r.member.id,
-        task_id: old.sqlite.prepare("SELECT id FROM chore_tasks WHERE assignee_id=? AND key='floor' AND status='pending' ORDER BY id LIMIT 1").get(r.member.id).id,
-      },
-      201,
-      "POST",
-    );
-      old.sqlite.exec("ALTER TABLE sessions DROP COLUMN dorm_id");
+    // Seed legacy-schema rows directly. The current backend has evolved beyond
+    // this schema and must not be used to create data before the migration.
+    const createdAt = "2026-10-15T00:00:00.000Z";
+    old.sqlite
+      .prepare(
+        "INSERT INTO users(username,password_hash,nickname,created_at) VALUES (?,?,?,?),(?,?,?,?)",
+      )
+      .run(
+        "legacy-admin",
+        "disabled$admin",
+        "甲",
+        createdAt,
+        "legacy-member",
+        "disabled$member",
+        "乙",
+        createdAt,
+      );
+    old.sqlite
+      .prepare(
+        "INSERT INTO dormitories(name,invite_code,admin_user_id,rotation_order,rotation_start_date) VALUES (?,?,?,?,?)",
+      )
+      .run("迁移验收宿舍", "OLD12345", 1, "[1,2]", "2026-10-15");
+    old.sqlite
+      .prepare("UPDATE users SET current_dorm_id=1 WHERE id IN (1,2)")
+      .run();
+    old.sqlite
+      .prepare(
+        "INSERT INTO dorm_members(dorm_id,user_id,role,sort_order,joined_at) VALUES (1,1,'admin',0,?),(1,2,'member',1,?)",
+      )
+      .run(createdAt, createdAt);
+    old.sqlite
+      .prepare(
+        "INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind) VALUES (?,?,?,?,'account')",
+      )
+      .run("legacy-session-hash", 1, createdAt, "2026-10-22T00:00:00.000Z");
+    old.sqlite
+      .prepare(
+        "INSERT INTO member_sessions(token_hash,dorm_id,user_id,created_at,expires_at) VALUES (?,?,?,?,?)",
+      )
+      .run(
+        "legacy-member-session-hash",
+        1,
+        2,
+        createdAt,
+        "2026-10-22T00:00:00.000Z",
+      );
+    old.sqlite
+      .prepare(
+        "INSERT INTO chore_tasks(dorm_id,key,task_key,name,content,duty_date,assignee_id,assignee_name_snapshot,marker_id_snapshot,deadline_at,status,completed_at,sequence) VALUES (1,'floor','floor','地板','扫地、拖地、倒垃圾','2026-10-15',1,'甲','pixel-01','2026-10-15T14:00:00.000Z','completed','2026-10-15T10:00:00.000Z',1)",
+      )
+      .run();
+    old.sqlite
+      .prepare(
+        "INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key) VALUES (1,1,'甲',2,1,'地板','扫地、拖地、倒垃圾',?,'legacy-reminder-key')",
+      )
+      .run(createdAt);
+    old.sqlite
+      .prepare(
+        "INSERT INTO chore_push_subscriptions(dorm_id,user_id,endpoint,p256dh,auth,updated_at) VALUES (1,2,'https://push.example.test/legacy','legacy-p256dh','legacy-auth',?)",
+      )
+      .run(createdAt);
+    old.sqlite
+      .prepare(
+        "INSERT INTO chore_push_jobs(dorm_id,user_id,subscription_id,subscription_revision,reminder_id,status,attempts,next_attempt_at,accepted_at,last_status) VALUES (1,2,1,1,1,'accepted',1,? ,?,200)",
+      )
+      .run(createdAt, createdAt);
     const tables = [
       "users",
       "dormitories",
@@ -549,6 +578,11 @@ test("migration from the previous release retains tasks, sessions, reminders and
         .all()
         .map((row) => {
           if (name === "sessions") { const {dorm_id, ...legacy} = row; return legacy; }
+          if (name === "chore_tasks") {
+            eq(row.completed_by, null);
+            const { completed_by, ...legacy } = row;
+            return legacy;
+          }
           if (name === "chore_reminders") {
             eq(row.source, "member");
             eq(row.in_app_received_at, null);

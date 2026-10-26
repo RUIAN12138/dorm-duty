@@ -7,6 +7,7 @@ import ElasticSheet from "./ElasticSheet.vue";
 import ActionItem from "./ActionItem.vue";
 import MemberMark from "./MemberMark.vue";
 import type { ChoreMember } from "../api/chores";
+import { isLocalPreviewAvailable } from "../interaction/localPreview";
 export type MenuAction =
   | "order"
   | "reminder"
@@ -21,7 +22,10 @@ export type MenuAction =
   | "marker"
   | "create"
   | "recovery"
-  | "refresh";
+  | "refresh"
+  | "guide"
+  | "feature-tour"
+  | "local-wizard";
 defineProps<{
   dormName: string;
   member: ChoreMember;
@@ -34,6 +38,7 @@ const tools = defineModel<boolean>("tools", { required: true });
 const preferences = defineModel<boolean>("preferences", { required: true });
 const emit = defineEmits<{ action: [value: MenuAction]; closed: [] }>();
 const projectUrl = "https://github.com/RUIAN12138/dorm-duty";
+const localWizardPreview = isLocalPreviewAvailable();
 async function followProject(event: MouseEvent) {
   if (
     event.button !== 0 ||
@@ -76,6 +81,13 @@ async function followProject(event: MouseEvent) {
     motion="bottom"
     @closed="emit('closed')"
   >
+    <ActionItem
+      v-if="localWizardPreview"
+      label="体验新版创建流程"
+      icon="play-circle-o"
+      data-testid="dev-new-dorm-wizard"
+      @click="emit('action', 'local-wizard')"
+    />
     <div class="menu-profile">
       <MemberMark :id="member.marker_id" :size="34" />
       <div>
@@ -123,6 +135,18 @@ async function followProject(event: MouseEvent) {
         icon="setting-o"
         data-testid="open-chore-settings"
         @click="emit('action', 'settings')"
+      />
+      <ActionItem
+        label="使用引导"
+        icon="question-o"
+        data-testid="open-welcome-guide"
+        @click="emit('action', 'guide')"
+      />
+      <ActionItem
+        label="功能提示"
+        icon="info-o"
+        data-testid="open-feature-tour"
+        @click="emit('action', 'feature-tour')"
       />
       <ActionItem
         label="账号与宿舍"
