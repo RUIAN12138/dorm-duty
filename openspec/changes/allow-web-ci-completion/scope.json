@@ -1,0 +1,18 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "b19ed0f639d65c7a41558d68f9050bafbb13dc6d",
+  "allowed": [
+    ".github/workflows/checks.yml",
+    "openspec/changes/allow-web-ci-completion/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新到网站；允许，仅修这处断言并继续发布；允许，仅调整 Web CI 时限",
+    "authorizedDigest": "0613d665f9c990c9a9dfd8879a50b881bcb6bf08ee6ff00708e32dd5a2133866"
+  }
+}

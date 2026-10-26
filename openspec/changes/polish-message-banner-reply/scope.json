@@ -18,8 +18,8 @@
   },
   "publishAuthorization": {
     "action": "deploy-for-review",
-    "userStatement": "更新到网站；允许，仅修这处断言并继续发布",
-    "authorizedDigest": "34c5767fe9a52978ac0c304b0b0f98e09ffce3de7e476688aa04045d597a6dd8"
+    "userStatement": "更新到网站；允许，仅修这处断言并继续发布；允许，仅调整 Web CI 时限",
+    "authorizedDigest": "0613d665f9c990c9a9dfd8879a50b881bcb6bf08ee6ff00708e32dd5a2133866"
   },
   "prAuthorization": {
     "action": "create-for-review",
