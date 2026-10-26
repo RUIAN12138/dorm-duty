@@ -498,7 +498,7 @@ try {
     await page.waitForTimeout(100);
     check(
       await page.evaluate(() => {
-        const stage = document.querySelector(".app-stage"),
+        const stage = document.querySelector(".content-stage.is-signed-in"),
           nav = document.querySelector(".chore-bottom-nav");
         return (
           stage &&
