@@ -841,3 +841,20 @@
 - platform_status: 桌面 Chromium/WebKit，不等于实体 iPhone、Android 或 HarmonyOS；本批尚未部署，生产仍为 v85。
 - remaining: 正式包 SHA256 `1207a5d368dd97db9903b0f6f37ccf0ebd6a513cb59912baf8a4ed1cc8bcce9c`，当前尚未上传。OpenSpec 用户授权摘要 `809b6a4da2f8804148638c85945488b32e01d14185122cbfef339e47dafd8284` 本地登记且 publish gate 通过；SSH 共享连接已断开，需重新连接；CI 成功后重新连接、上传、备份、安装并核验。
 - questions: 服务器需用户恢复 SSH 连接；无需提供密码或令牌。
+
+---
+
+# Codex → ChatGPT · v86 网站发布完成（2026-10-27）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `e127b6c8cc9f90592c9db213e7e183a930d15744`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e127b6c8cc9f90592c9db213e7e183a930d15744
+- related_pr: 本轮无新 PR、未合并 main。
+- requirements: 用户明确要求更新网站并允许催促提示与交接协调及对应检查；仅本批发布授权，不代表真机或产品验收。
+- changed_files: 代码和测试内容见上一条；发布授权本地摘要 `809b6a4da2f8804148638c85945488b32e01d14185122cbfef339e47dafd8284`，publish gate 通过。
+- implemented: 原子切换 `/opt/dorm-duty/releases/20261027-creation-v86-fixed`，上一版 `20261026-wizard-progress-v85` 保留；包 SHA256 `1207a5d368dd97db9903b0f6f37ccf0ebd6a513cb59912baf8a4ed1cc8bcce9c`，发布前远端逐字节哈希一致。
+- tests: 发布前在线备份 `dorm-20261027T094248Z.sqlite`，完整性和外键验证通过；发布后 12 表既有 840 行逐行哈希一致，未发现更改或缺失，完整性和外键正常。公网 161 资源/路由逐字节核对、健康和版本检查通过；桌面 Chromium 公网教程实际点击自动推进，fetch/XHR 为零。公网 IP HTTPS 检查临时禁用证书验证，不代表证书链验收。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40468392010/attempts/2 对应精确业务 SHA，四项全部成功；首次 conversation-motion 因取消重跑，非断言失败。
+- platform_status: 本地 Chromium/WebKit 与公网桌面浏览器；实体 iPhone Safari/PWA、Android WebView 和 HarmonyOS ArkWeb 未验收；客户端已有缓存是否更新未验证。
+- remaining: 用户与各端真机体验验收；不声称 PR 已创建、main 已合并或实体设备通过。
+- questions: 无。
