@@ -824,3 +824,20 @@
 - platform_status: 远端 CI 与桌面浏览器；未验证 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 真机。
 - remaining: 分析提示动画是否与交接动作重叠；用户此前限定正式催促页面和范围外测试不可擅自修改。待用户明确授权必要范围后修复并重跑，成功后重新构建及执行备份发布。
 - questions: 是否允许为发布阻塞，局部检查并修复正式催促页的大字提示与交接动画协调；如确认断言与设计不一致，再单独说明所需测试调整范围。
+
+---
+
+# Codex → ChatGPT · 催促提示与交接冲突修复（2026-10-27）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `e127b6c8cc9f90592c9db213e7e183a930d15744`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/e127b6c8cc9f90592c9db213e7e183a930d15744
+- related_pr: 本轮无新 PR 或合并；用户明确要求网站更新。
+- requirements: 用户先明确允许局部修复正式催促页大字提示与交接协调，随后“全部允许”授权对应测试调整及继续发布。
+- changed_files: `frontend/src/components/nudge/NudgePane.vue`、`scripts/check-completion-experience.mjs`、`openspec/changes/swipe-task-nudges/`。
+- implemented: 保留原有滑动提示弹簧、拉伸及球球文案；完成按钮按下时从当前视觉位置暂停提示，完成和交接结束后自然归位，手动滑动、键盘和减动效优先。测试将常规交接稳定检查放在提示结束后，另用隔离真实宿舍检查提示中立即按下、暂停、回弹与仅交接一次，原稳定性断言保留。
+- tests: Chromium 和 WebKit 完成动作检查各 196 项通过，包含新增快速中断；NudgePane 两引擎交互回归通过，前端类型与 OpenSpec 检查通过。正式包隔离启动及首页/水页/日历/教程/图标/health、教程点击推进通过。发布包内 44 个源码文件与提交逐字节一致。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40468392010 对应本 SHA，当前运行中；最终状态待核查。
+- platform_status: 桌面 Chromium/WebKit，不等于实体 iPhone、Android 或 HarmonyOS；本批尚未部署，生产仍为 v85。
+- remaining: 正式包 SHA256 `1207a5d368dd97db9903b0f6f37ccf0ebd6a513cb59912baf8a4ed1cc8bcce9c`，当前尚未上传。OpenSpec 用户授权摘要 `809b6a4da2f8804148638c85945488b32e01d14185122cbfef339e47dafd8284` 本地登记且 publish gate 通过；SSH 共享连接已断开，需重新连接；CI 成功后重新连接、上传、备份、安装并核验。
+- questions: 服务器需用户恢复 SSH 连接；无需提供密码或令牌。
