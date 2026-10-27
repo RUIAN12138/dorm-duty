@@ -765,3 +765,28 @@
 - platform_status: 桌面Chromium/WebKit四视口/合成身份临时SQLite；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb与真实触摸帧率未验收。
 - remaining: 用户视觉/手感验收和设备验证；interactive-draft-sandbox尚仅方案，后续继续完成打卡/撤销/日历/交接闭环，本轮不宣称总目标完成。GPT最新评审仍旧1f7dee95，需核对本新SHA。
 - questions: 暂无新阻塞或发布授权请求。实际预览http://127.0.0.1:8119/water?start=1；截图/布局JSON在data/nudge-layout/{chromium,webkit}/，data/task-nudges/*/discovery-frames.json与WebKit elastic-preview.mp4为原录屏前4秒转码。业务工作树干净，只开发分支/交接推送，未改CHATGPT_REVIEW或生产数据。
+
+
+# Codex → ChatGPT · 创建预览可操作沙箱与四节教程闭环（2026-10-27）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `41b72ee815cecb1e52f3a583f732fdad7d6e1327`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/41b72ee815cecb1e52f3a583f732fdad7d6e1327
+- related_pr: 无；用户本轮“继续完善宿舍创建页和新手教程”，未授权PR、合并或发布。本轮没有上述动作，没有访问生产数据库或SSH。
+- requirements: 持续完成创建→真实组件预览→动手教程体验，保持旧宿舍规则/历史与正式页面布局；不将静态假预览或隐藏按钮当作隔离方案。用户最新直接需求覆盖旧协调基线中教程暂缓限制，仅共用组件的本地能力接入作必要微调。开始及提交前fetch协调分支，GPT review仍针对旧`1f7dee95fac6015721f1a255e12add34d290703f`，未冒充本SHA已评审。
+- changed_files: 新`frontend/src/interaction/localBoardService.ts`；新`frontend/src/components/onboarding/sandbox/{draftSandbox.mjs,draftSandbox.d.mts,createDraftPreviewService.ts,draftSandbox.test.mjs,backendParity.test.mjs,Sandbox.browser.mjs}`；局部修改`LiveDraftPreview.vue`、`ChoreBoard.vue`、`CompanionChat.vue`、`tutorialPractice.ts`；interactive-draft-sandbox OpenSpec scope/tasks/verification。没有业务后端、迁移、全局CSS、正式布局、原通知规则或限流接口差异。
+- implemented:
+  - 纯内存规范任务/历史状态，不信任UI传入assignee/can_complete。成员/任务/记录为负ID；验证当前身份及轮换名单；输入输出副本隔离。完成权限复用shared配置规则，soft/hard/执行时间保持对应语义。
+  - 正式ChoreBoard/CompletionAction/ChoreCalendar/球球聊天/导航承载预览，当前日期完成/撤销→轮次/日历同步；completion生成下一位，self_round全员完成后开新轮；撤销拒绝后续已完成轮次回退。不是复制一套预览UI。
+  - 导航拖动仍回写草稿且保留模拟操作；退出/重进保留操作，任务/规则/身份或跨日变化重建。记录不落盘；只沿用原草稿配置存储。
+  - 同一注入key支持教程和草稿，strict matches绑定模拟invite/负member/空token；正式网络分支保留。预览催促/留言明确报告未通知室友，聊天本地应答且明确不连接真实AI。教程四节仍由真实DOM操作自动推进，球球解说位于教程浮层，未增加额外下一步。
+- tests:
+  - 纯沙箱32项：伪造/真实/未知ID拒绝且状态不变、身份/名单验证、重复与越权、轮次/日历/交接/撤销、后续完成拒绝回退、scheduled不立即交接、催促/留言冷却、精确已读、读副本和导航保留。
+  - 真实临时SQLite API对照6项：合成单成员V2初态、self_round完成/撤销、completion交接/撤销和旧宿舍任务快照不变；不声称所有排班例外完全等价。shared规则2060项通过。
+  - Sandbox.browser桌面Chromium/WebKit390×844各23项通过：完成→轮次/日历→撤销、重入、真实长按导航排序、交接/催促/撤销、聊天和留言确认；随后全部四节教程实际点击/拖动自动完成。两个阶段业务请求均0、全量临时DB逐表快照相同、pageerror0。WebKit最后一轮补齐最终解说文案截图；早期Vite源码热更新重置过一次测试，冻结源码后完整重跑通过。
+  - 既有NudgePane.browser Chromium29项通过，含320/390/430、深色/减少动态效果、客户端催促单请求和水任务教程；未编辑旧检查。类型/Vite/PWA在新空输出目录构建通过；OpenSpec严格校验、范围与18项门禁夹具通过；diff检查通过。
+  - 证据本地`data/draft-sandbox/{chromium,webkit}/results.json`、completed-calendar/tutorial-*.png、原始webm；WebKit最终成功录屏转码`walkthrough.mp4`，没有改内容或倍速。均合成身份、不提交data目录。预览仍`http://127.0.0.1:8119/?preview=new-dorm`，教程`/guide?practice=1`。
+- CI: 推送后`gh run list --commit 41b72ee --limit 4`返回空数组；精确SHA暂无远端运行结果，不称全仓CI全绿、不复用旧v85结果。代码已真实推送远端业务分支。
+- platform_status: 桌面Chromium/桌面WebKit移动视口与合成临时SQLite。iPhone Safari/PWA中文英文表情软键盘、Android WebView、HarmonyOS ArkWeb、真实Haptic/帧率均未验收。没有用截图/构建代替实体设备。
+- remaining: 用户手感/视觉验收；沙箱当前日期操作闭环已实现，但跨天自动排班、抬水补偿/跳过等高级例外未完整模拟，沿既有预览保护，不宣称全业务等价。后端全面架构优化和更广泛目标仍未完成；不将本批完成当作整体完成。OpenSpec仍pending，不新增发布授权摘要。
+- questions: 无当前阻塞或发布权限请求；等针对本新SHA的独立评审。仅更新本独占交接文件，不修改CHATGPT_REVIEW，不因文档更新产生额外开发循环。
