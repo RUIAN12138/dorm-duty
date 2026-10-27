@@ -1,0 +1,14 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "41b72ee815cecb1e52f3a583f732fdad7d6e1327",
+  "allowed": [
+    "frontend/src/components/onboarding/DormWizard.vue",
+    "frontend/src/components/onboarding/creation/",
+    "openspec/changes/refine-creation-task-flow/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}
