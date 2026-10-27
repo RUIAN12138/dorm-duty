@@ -1,0 +1,17 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "0928260df2a96820202a6602dda8475d36ac4e5c",
+  "allowed": [
+    "frontend/src/interaction/localBoardService.ts",
+    "frontend/src/interaction/tutorialPractice.ts",
+    "frontend/src/components/onboarding/sandbox/",
+    "frontend/src/components/onboarding/LiveDraftPreview.vue",
+    "frontend/src/components/ChoreBoard.vue",
+    "openspec/changes/interactive-draft-sandbox/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

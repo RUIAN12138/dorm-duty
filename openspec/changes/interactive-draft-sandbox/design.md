@@ -1,0 +1,2 @@
+# Design
+纯JS沙箱持有独立规范任务/记录与版本；所有任务/成员/记录为负ID，输入/输出复制，不信任UI传入字段。复用shared配置与完成权限，只返回与正式组件相容的回执。self_round全员完成进下一轮；completion生成下一位，undo拒绝越权、重复或后续已完成，scheduled不交接。Vue适配发布响应式snapshot，公共LocalBoardService注入既支持教程也支持草稿，不把教程固定四任务逻辑硬套自定义配置。ChoreBoard只有preview+严格matches时走内存服务，正常页面保持既有网络分支。CompanionChat通过同一key取得本地客户端，预览明确不接真实AI。沙箱nudge按任务校验和一分钟冷却，不调用fetch。页面编排仅回写草稿pages，不清空演练；改任务/身份规则后重建并刷新专属预览实例。服务不落盘，退出App后不持久化模拟记录。
