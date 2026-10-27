@@ -31,7 +31,7 @@ let server,
 try {
   await fs.mkdir(evidence, { recursive: true });
   const rooms = [];
-  for (const solo of [false, true]) {
+  for (const solo of [false, true, false]) {
     const r = await h.request("/guest/create", {
       method: "POST",
       data: {
@@ -270,6 +270,14 @@ try {
             .every((animation) => animation.playState !== "running"),
         ),
       );
+    }
+    if (task.key === "water") {
+      // First-entry discovery deliberately moves the title; evaluate the separate
+      // completion invariant only after that user-facing cue has settled.
+      await page.waitForFunction(() => {
+        const strip = document.querySelector(".nudge-title-strip");
+        return !strip || strip.dataset.motion === "idle";
+      });
     }
     const trace = frames(1500);
     await button.tap();
@@ -570,6 +578,27 @@ try {
   await page.getByTestId("pane-water").waitFor();
   await page.waitForTimeout(400);
   await completeAndInspect((await board()).water_task, "water handoff");
+  // Exercise the real early press, while the entry cue is still moving.
+  await page.goto(origin + "/" + name + ".html?room=2&section=water");
+  await page.waitForFunction(() => document.querySelector('.nudge-title-strip')?.dataset.motion === 'spring');
+  const earlyWater = (await board(2)).water_task;
+  const earlyButton = page.getByTestId(`complete-water-${earlyWater.id}`);
+  await earlyButton.waitFor();
+  const earlyBox = await earlyButton.boundingBox();
+  await page.mouse.move(earlyBox.x + earlyBox.width / 2, earlyBox.y + earlyBox.height / 2);
+  await page.mouse.down();
+  const held = await page.locator('.nudge-title-strip').evaluate(el => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41);
+  await page.waitForTimeout(120);
+  const heldAfter = await page.locator('.nudge-title-strip').evaluate(el => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41);
+  check(Math.abs(heldAfter-held)<1, true, 'early completion press interrupts discovery without a position reset');
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('.completion-surface')?.classList.contains('is-round'));
+  const during = await page.locator('.nudge-title-strip').evaluate(el => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41);
+  await page.waitForTimeout(150);
+  const duringAfter = await page.locator('.nudge-title-strip').evaluate(el => new DOMMatrixReadOnly(getComputedStyle(el).transform).m41);
+  check(Math.abs(duringAfter-during)<1, true, 'discovery remains paused while completion animates');
+  await page.waitForFunction(() => document.querySelector('.nudge-title-strip')?.dataset.motion === 'idle' && Math.abs(new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.nudge-title-strip')).transform).m41)<1);
+  check((await board(2)).water_task.id !== earlyWater.id, true, 'early completion still hands off exactly once');
   // Missing small-button feedback used to fall through the component styles.
   await page.getByTestId("open-tools").tap();
   const dialog = page.getByRole("dialog").last();

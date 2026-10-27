@@ -12,11 +12,17 @@
     "site/worker/chores.mjs",
     "site/shared/nudge-task-board.test.mjs",
     "openspec/changes/swipe-task-nudges/",
-    "frontend/src/components/onboarding/GuidedPractice.vue"
+    "frontend/src/components/onboarding/GuidedPractice.vue",
+    "scripts/check-completion-experience.mjs"
   ],
   "acceptance": {
     "status": "pending",
     "userStatement": null,
     "acceptedDigest": null
+  },
+  "publishAuthorization": {
+    "action": "deploy-for-review",
+    "userStatement": "更新网站",
+    "authorizedDigest": "936fa521533e6726588f45097609096f1b74880c0225fe9a865ec964be8f1f5d"
   }
 }

@@ -24,3 +24,6 @@
 `data/task-nudges/{chromium,webkit}/` 包括 water.png、floor.png、dark-reduced.png、tutorial-swipe.png、results.json、实际操作webm；WebKit flow.mp4为原录屏转封装/编码，无伪造帧。`data/nudge-*.log`为原始结果。
 预览 `http://127.0.0.1:8119/water?start=1`（临时SQLite、合成身份，无生产转发），创建 `/?preview=new-dorm`，教程 `/guide?practice=1`。
 未执行远端CI；既有按第二页旧tabs/抬水文案编写的脚本没有擅自重写，不能宣称全仓库CI全绿。实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb、真实系统通知尚未验证。用户体验确认与正式操作仍待。
+
+## 2026-10-27 交接优先级修复（待最终发布验收）
+用户明确授权调整正式催促页和相关检查。`check-completion-experience.mjs` 将正常交接的稳定采样移到首次提示完成后，同时用独立临时宿舍真实按下操作验证提示过程中的中断、完成期间停留、回弹和只交接一次；未移除原有稳定性与反馈检查。Chromium、WebKit 各 196 项通过；NudgePane 独立浏览器回归两引擎通过；前端类型检查通过。桌面浏览器不是 iPhone、Android 或 HarmonyOS 真机。

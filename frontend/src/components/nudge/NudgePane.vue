@@ -36,7 +36,7 @@ const heroSize = computed(() => {
 });
 const currentStatus = computed(() => active.value?.task ? props.statuses[active.value.task.id] ||
   (active.value.task.status === "completed" ? "这项任务已完成" : "点一下名字，轻轻提醒") : "");
-let flight: ReturnType<typeof animate> | undefined, revision = 0, position = 0, grabbedAt = 0, discovered = false;
+let flight: ReturnType<typeof animate> | undefined, revision = 0, position = 0, grabbedAt = 0, discovered = false, discoveryMoving = false, resumeDiscovery = false;
 function paint(value: number) {
   position = value;
   const stretch = motionAllowed() ? Math.min(1, Math.abs(value) / 28) : 0;
@@ -44,16 +44,17 @@ function paint(value: number) {
   if (strip.value) strip.value.style.transform = `translate3d(${value}px,0,0) scale(${sx},${sy})`;
   if (peekWord.value) peekWord.value.style.transform = `translate3d(${value}px,-50%,0) scale(${sx},${sy})`;
 }
-function stopFlight() { revision++; flight?.stop(); flight=undefined;moving.value=false; }
-function settle(target = 0, done?: () => void) {
+function stopFlight() { revision++; flight?.stop(); flight=undefined;moving.value=false;discoveryMoving=false; }
+function settle(target = 0, done?: () => void, discovery = false) {
   stopFlight();
   if (!motionAllowed()) { paint(0); return; }
   const id = revision;
-  moving.value=true;
-  flight = animate(position, target, { type:"spring", stiffness:380, damping:23, mass:.65, restDelta:.02, restSpeed:.2,
-    onUpdate:paint, onComplete:() => { if (id!==revision) return; flight=undefined;moving.value=false;paint(target);done?.(); } });
+  moving.value=true;discoveryMoving=discovery;
+  flight = animate(position, target, { type:"spring", stiffness:380,damping:23,mass:.65,restDelta:.02,restSpeed:.2,
+    onUpdate:paint, onComplete:() => { if (id!==revision) return; flight=undefined;moving.value=false;discoveryMoving=false;paint(target);done?.(); } });
 }
 function step(delta: -1|1) {
+  resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;
   const group = groups.value[index.value+delta];
   if (group) { direction.value=delta; key.value=group.key; }
 }
@@ -67,6 +68,7 @@ function captureClick(event: MouseEvent) {
 }
 function press(event: PointerEvent) {
   if (!event.isPrimary || event.button!==0) return;
+  resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;
   stopFlight();grabbedAt=position;swipe.down(event);
 }
 watch(() => active.value?.task, task => emit('select',task),{immediate:true});
@@ -76,17 +78,33 @@ async function discover() {
   emit('hint','左右滑动大字，换个任务催促。');
   await nextTick();
   if (!motionAllowed() || !strip.value || dragging.value) return;
-  settle(-neighborSide.value*28,() => settle());
+  settle(-neighborSide.value*28,() => settle(0,undefined,true),true);
 }
+let completionObserver: MutationObserver | undefined;
+function interruptDiscovery(event: PointerEvent) {
+  const button = event.target instanceof Element ? event.target.closest('.completion-surface') : null;
+  if (!button || !discoveryMoving) return;
+  stopFlight();resumeDiscovery=true;
+  completionObserver?.disconnect();
+  completionObserver=new MutationObserver(() => { void resumeWhenIdle(); });
+  completionObserver.observe(button.closest('.nudge-pane')!,{subtree:true,childList:true,attributes:true,attributeFilter:['class','aria-busy']});
+}
+async function resumeWhenIdle() {
+  await nextTick();
+  if (!resumeDiscovery || props.busy || surface.value?.closest('.nudge-pane')?.querySelector('.completion-surface.is-round, .handoff-name[aria-busy="true"]')) return;
+  resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;settle();
+}
+function releaseCompletionPointer() { requestAnimationFrame(() => { void resumeWhenIdle(); }); }
+watch(() => props.busy, busy => { if (!busy) void resumeWhenIdle(); });
 let observer: IntersectionObserver | undefined;
 onMounted(() => { observer=new IntersectionObserver(entries => { if(entries.some(entry => entry.isIntersecting)) void discover(); });if(surface.value)observer.observe(surface.value); });
 watch(() => groups.value.length,() => { if(surface.value?.getBoundingClientRect().width) void discover(); });
-function quiet(){if(!motionAllowed()){stopFlight();paint(0);}}
+function quiet(){if(!motionAllowed()){resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;stopFlight();paint(0);}}
 window.addEventListener('ui-motion-change',quiet);
-onBeforeUnmount(() => { swipe.cancel();stopFlight();observer?.disconnect();window.removeEventListener('ui-motion-change',quiet); });
+onBeforeUnmount(() => { swipe.cancel();stopFlight();completionObserver?.disconnect();observer?.disconnect();window.removeEventListener('ui-motion-change',quiet); });
 </script>
 <template>
-  <section class="nudge-pane water-pane" data-testid="pane-water">
+  <section class="nudge-pane water-pane" data-testid="pane-water" @pointerdown.capture="interruptDiscovery" @pointerup.capture="releaseCompletionPointer" @pointercancel.capture="resumeWhenIdle">
     <h1 class="hero-caption" data-testid="page-swipe-title">{{ caption }}</h1>
     <section v-if="active?.task" class="chore-water focus-hero">
       <div ref="surface" class="nudge-title-window water-title-stage" :data-task-key="active.key" data-testid="nudge-task-swipe" role="group" aria-label="左右滑动切换催促任务，也可使用左右方向键" tabindex="0"
