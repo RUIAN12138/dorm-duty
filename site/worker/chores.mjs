@@ -1,4 +1,4 @@
-import { validateDormConfiguration } from "../shared/dorm-configuration.mjs";
+import { validateDormConfiguration, configuredTaskMode, configuredTaskPolicy, canCompleteTaskWithRules } from "../shared/dorm-configuration.mjs";
 // Three independent chores, shared by the local SQLite adapter and Cloudflare D1.
 // Member claims are intentionally incapable of authenticating any legacy admin endpoint.
 import { MARK_IDS } from "../shared/member-marks.mjs";
@@ -189,8 +189,8 @@ function categoryView(row) {
 function configuredCategory(category,configuration){
   if(!configuration)return category;
   const task=configuration.tasks.find(t=>t.key===category.key);
-  const hard=(task?.policy&&task.policy!=="inherit"?task.policy:configuration.policy)==="hard";
-  Object.defineProperties(category,{hardRound:{value:hard&&category.mode==="self_round",configurable:true},hardPolicy:{value:hard,configurable:true},executionTime:{value:task?.execution_time||"08:00",configurable:true},version2:{value:configuration?.schema_version===2,configurable:true}});
+  const {hard,executionTime}=configuredTaskPolicy(task,configuration);
+  Object.defineProperties(category,{hardRound:{value:hard&&category.mode==="self_round",configurable:true},hardPolicy:{value:hard,configurable:true},executionTime:{value:executionTime,configurable:true},version2:{value:configuration?.schema_version===2,configurable:true}});
   return category;
 }
 async function categories(db, roomId) {
@@ -262,7 +262,7 @@ async function initialize(db, room, now) {
           custom?.deadline || hhmm,
           start,
           JSON.stringify(rotation),
-          key === "water" ? "completion" : initialConfig && custom?.rotation === "rotation" ? "scheduled" : initialConfig && custom?.rotation === "completion" ? "completion" : "self_round",
+          configuredTaskMode({ key, rotation: initialConfig ? custom?.rotation : undefined }),
           initialConfig ? (custom?.enabled ? 1 : 0) : 1,
           custom?.interval || 3,
         ],
@@ -740,24 +740,9 @@ function taskView(task, now, who, settings, members) {
     sequence: task.sequence,
   };
 }
-function canDelegateTask(category) {
-  // Schema version alone is not an authorization grant. The explicit hard
-  // policy is the product rule that permits a roommate to cover a task.
-  return category?.version2 === true && category?.hardPolicy === true;
-}
 function canCompleteTask(task, category, who, now) {
-  if (
-    !task ||
-    !who ||
-    who.is_demo ||
-    !category?.enabled ||
-    task.status !== "pending" ||
-    task.duty_date > localDate(now) ||
-    (who.user_id !== task.assignee_id && !canDelegateTask(category))
-  )
-    return false;
-  return !category.hardPolicy ||
-    now.toISOString() >= deadline(task.duty_date, category.executionTime);
+  // V2 alone grants nothing: only explicit hard policy permits delegation.
+  return canCompleteTaskWithRules(task, category, who, localDate(now), now.toISOString());
 }
 function reminderView(row) {
   return {
@@ -1500,7 +1485,7 @@ async function configure(request, db, room, who, now, orderOnly = false) {
       reminder_interval_days: old?.reminder_interval_days || task.interval,
       rotation_order: old?.rotation_order || ids,
       enabled: task.enabled,
-      mode: task.key === "water" ? "completion" : task.rotation === "rotation" ? "scheduled" : task.rotation === "completion" ? "completion" : "self_round",
+      mode: configuredTaskMode(task),
     };
   });
   if (expected !== state.version)
@@ -1531,7 +1516,7 @@ async function configure(request, db, room, who, now, orderOnly = false) {
       reminder_interval_days: task?.interval || 3,
       rotation_order: ids,
       enabled: task?.enabled ?? false,
-      mode: entry.key === "water" ? "completion" : task?.rotation === "rotation" ? "scheduled" : task?.rotation === "completion" ? "completion" : "self_round",
+      mode: configuredTaskMode({ key: entry.key, rotation: task?.rotation }),
     };
     return configuredCategory(normalizeCategory(entry, fallback, ids, today, allowedKeys, !!nextConfiguration || !!currentConfiguration), nextConfiguration || currentConfiguration);
   });

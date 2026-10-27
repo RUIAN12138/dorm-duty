@@ -1,0 +1,18 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "e6ebb745cf51aa6d0f2e3e6cb9fbaca546f41cf2",
+  "allowed": [
+    "site/shared/dorm-configuration.mjs",
+    "site/shared/dorm-configuration.d.mts",
+    "site/shared/draft-preview-rules.test.mjs",
+    "site/worker/chores.mjs",
+    "frontend/src/components/onboarding/LiveDraftPreview.vue",
+    "frontend/src/components/onboarding/draftPreviewBoard.ts",
+    "openspec/changes/align-draft-preview-rules/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

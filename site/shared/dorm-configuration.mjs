@@ -75,3 +75,23 @@ export function validateDormConfiguration(value) {
   if(value.second_page_kind !== undefined && !["tasks","nudge"].includes(value.second_page_kind)) bad();
   return { schema_version: 2, pages, tasks, policy: value.policy,second_page_kind:value.second_page_kind||"tasks" };
 }
+
+// Pure rules shared with the draft preview. The server remains authoritative.
+export function configuredTaskMode(task) {
+  return task?.key === "water" ? "completion"
+    : task?.rotation === "rotation" ? "scheduled"
+    : task?.rotation === "completion" ? "completion" : "self_round";
+}
+export function configuredTaskPolicy(task, configuration) {
+  return {
+    hard: (task?.policy && task.policy !== "inherit" ? task.policy : configuration?.policy) === "hard",
+    executionTime: task?.execution_time || "08:00",
+  };
+}
+export function canCompleteTaskWithRules(task, category, who, today, nowIso) {
+  if (!task || !who || who.is_demo || !category?.enabled ||
+      task.status !== "pending" || task.duty_date > today ||
+      (who.user_id !== task.assignee_id && !(category.version2 === true && category.hardPolicy === true)))
+    return false;
+  return !category.hardPolicy || nowIso >= new Date(`${task.duty_date}T${category.executionTime}:00+08:00`).toISOString();
+}
