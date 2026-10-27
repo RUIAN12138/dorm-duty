@@ -790,3 +790,20 @@
 - platform_status: 桌面Chromium/桌面WebKit移动视口与合成临时SQLite。iPhone Safari/PWA中文英文表情软键盘、Android WebView、HarmonyOS ArkWeb、真实Haptic/帧率均未验收。没有用截图/构建代替实体设备。
 - remaining: 用户手感/视觉验收；沙箱当前日期操作闭环已实现，但跨天自动排班、抬水补偿/跳过等高级例外未完整模拟，沿既有预览保护，不宣称全业务等价。后端全面架构优化和更广泛目标仍未完成；不将本批完成当作整体完成。OpenSpec仍pending，不新增发布授权摘要。
 - questions: 无当前阻塞或发布权限请求；等针对本新SHA的独立评审。仅更新本独占交接文件，不修改CHATGPT_REVIEW，不因文档更新产生额外开发循环。
+
+---
+
+# Codex → ChatGPT · 创建向导任务选择与编辑精修（2026-10-27）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `fca8e2b9ac7746bcf255dd24e0b56eec2d1d5e78`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/fca8e2b9ac7746bcf255dd24e0b56eec2d1d5e78
+- related_pr: 本批未创建或更新正式 PR。
+- requirements: 用户要求继续重点优化新宿舍创建页；仍限制旧宿舍与正式数据，最新评审的 `reviewed_code_sha` 为 `1f7dee95fac6015721f1a255e12add34d290703f`，并非本提交，等待针对当前代码的评审。
+- changed_files: `frontend/src/components/onboarding/DormWizard.vue`、`frontend/src/components/onboarding/creation/{CreationPanel.vue,CreationTaskRail.vue,CreationFlow.browser.mjs}`、`openspec/changes/refine-creation-task-flow/`。
+- implemented: 分离模板启停与任务编辑，去掉选择页重复名称；编辑/单项规则使用一行可横滑任务条，并在切换时仅滚动条自身使当前任务可见；子面板重叠过渡、退场不可交互，保持底部操作区稳定；五步进度、草稿及旧设置工作台路径继续保留。
+- tests: Chromium 与 WebKit 本地浏览器各 44 项创建回归；含 320×650、390×844、430×932、20 任务、快速切换、中间帧、模拟视口缩小、暗色和减动效，以及工作台独立挂载。预览与四节教程沙箱回归各 23 项，两引擎均通过，业务操作无真实 API 请求、临时数据库未变；创建编辑期间无业务请求，退出后原页面读取一次 `GET /chores/board`（测试中被拦截）。前端 build、`npm run spec:check`、diff whitespace 检查通过。截图/录屏仅保存在本地 `data/creation-polish`。
+- CI: 推送后 `gh run list --commit fca8e2b --limit 5` 返回空列表；无本 SHA 远端 CI 结果，不称全仓 CI 通过。
+- platform_status: 桌面 Chromium/WebKit 移动视口，不代表 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机；模拟视口不等于真实输入法。未接触生产数据库、未合并、未部署。
+- remaining: 用户和设备验收待完成；独立预览 `http://127.0.0.1:8119/?preview=new-dorm` 使用合成身份及临时数据库。当前代码待 ChatGPT 按新 SHA 独立评审。
+- questions: 无；等待针对本 SHA 的有效评审与用户体验反馈。
