@@ -748,3 +748,20 @@
 - platform_status: 桌面Chromium/WebKit移动视口；真实iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未测，真实通知发送未测。截图与WebKit原始操作flow.mp4在data/task-nudges/，不是iPhone录屏。
 - remaining: 用户验收催促页与真实触摸/设备；旧测试契约后续需按新设计审查，不通过删除断言伪装CI。多人任务只呈现一位未完成室友，不是群体轰炸。更广泛的全功能可操作草稿预览服务与后端架构目标仍未完成，不标记总体完成。此前最新GPT review仍针对旧1f7dee95，须按本SHA复评。
 - questions: 无当前阻塞。预览 http://127.0.0.1:8119/water?start=1 ，教程 /guide?practice=1，创建 /?preview=new-dorm；临时SQLite合成身份/无生产转发。只提交推送开发分支及此文档；不PR、不合并、不部署、不接触正式数据库。
+
+
+# Codex → ChatGPT · 恢复原抬水排版、弹性大字与催促铃铛（2026-10-27）
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `6c3c2543f22fe4e64496ff9c63a2c8fc70b5c467`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/6c3c2543f22fe4e64496ff9c63a2c8fc70b5c467
+- related_pr: 无；未创建/更新PR、未合并main、未发布。用户明确持续改进后等其确认。
+- requirements: 用户最新补充“大字偏移也需要拉伸和弹性的动画，保持之前抬水页排版，催促页下方导航图标更换”。覆盖上一组新增独立任务名/姓名两排的布局；不撤回大字横滑、球球提示和现有催促逻辑。
+- changed_files: 产品仅NudgePane.vue、ChoreBoard.vue水操作插槽/status和display:contents、ChoreBottomNav.vue两条SVG路径；同目录NudgePane.browser检查、新WaterLayout.browser检查及restore-nudge-layout-elasticity OpenSpec。另有前一文档提交ef9452b，只有interactive-draft-sandbox事前方案，尚无沙箱实现，不计作已完成产品。
+- implemented: 恢复原提示语—大字负责人/本人任务—操作区，不另堆一排姓名；沿原独立锚点和104px标题区，当前别人任务的大字仍可点击催促、自己任务仍点详情。邻接大字单独clip，当前催促涟漪不误裁。单一Motion数值弹簧stiffness380/damping23/mass.65驱动位移+1.035/0.975微拉伸；28px提示移出后弹性归位，按下停旧flight保持当前position，短拖回位不切页/发信；事件捕获阻断滑动合成click，WaterNudge自身源码无变化。减动效归零，导航水滴换铃铛，其他SVG/玻璃/路由不改。
+- tests: 原版before来自50606e3正常构建data/draft-rules-dist在8122真实运行，当前开发8119；两者同一合成接口样本。Chromium/WebKit在320×740、390×844、430×932、390×650各160项布局/字体对照通过（8区域x/y/w/h误差<0.1px、字号相同）；包含身份、caption、标题/字区、操作、详情、导航。390×844标题x45/y297.5/300×104、字70.2px、操作y425.5、导航y764均原样。
+  - Chromium29项、WebKit28项交互通过；真实位移/scale中间帧最大sx1.035/sy.975，位置约-28.96px，WebKit可见返回约+0.94px的克制回弹；最终idle变换为0/1。按住形变、短拖无切页/无催促、真正切页/单请求/延迟回执隔离、纵向取消、方向键、返回、临时安排、深色/减动效、预览零写入、完整教程自动推进保留。Chromium额外CDP触摸，不等于实体手机。
+  - typecheck、Vite/PWA构建、OpenSpec/scope/18门禁夹具、diff通过；原check-water-nudge含200并发/真实回执/重试/身份隔离通过，新只读board9项通过。没有后端或限流接口差异。初次几何采样误采Motion中间态后改为等实际idle；短屏2px差异查明旧gap18高优先级后修复，没放宽0.1px断言。旧/新Title正常重叠退出通过非inert当前标题定位，不删退场动画。
+- CI: 此SHA远端完整CI未运行；不复用旧v85全绿，不称全仓通过。未改旧第二页tabs/抬水文案的范围外检查。
+- platform_status: 桌面Chromium/WebKit四视口/合成身份临时SQLite；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb与真实触摸帧率未验收。
+- remaining: 用户视觉/手感验收和设备验证；interactive-draft-sandbox尚仅方案，后续继续完成打卡/撤销/日历/交接闭环，本轮不宣称总目标完成。GPT最新评审仍旧1f7dee95，需核对本新SHA。
+- questions: 暂无新阻塞或发布授权请求。实际预览http://127.0.0.1:8119/water?start=1；截图/布局JSON在data/nudge-layout/{chromium,webkit}/，data/task-nudges/*/discovery-frames.json与WebKit elastic-preview.mp4为原录屏前4秒转码。业务工作树干净，只开发分支/交接推送，未改CHATGPT_REVIEW或生产数据。
