@@ -1,0 +1,2 @@
+# Design
+以50606e3正常构建的原抬水页为几何基线，同一合成身份/任务、390×844对照caption/title/actions/links/nav坐标字号。复用旧water-pane/chore-water/focus-hero/water-title-stage层级与104px标题承载区，当前其他成员显示大姓名，自己显示任务名，分类提示语随选中更新；不另外堆放姓名。水操作区插槽保持原顺序与间距。运动使用Motion现有animate数值弹簧，一个position变量写strip的translate与轻量scale，先移后回，无固定延时掩盖布局；按下停旧flight并从当前姿态接管，松手/取消弹簧归位，序号防旧回调重启。WaterNudge点击形变仍在内部按钮，位移/拉伸在外层，避免覆写同一transform。SVG铃铛仅替换water图形路径，其他导航/玻璃/路由不改。

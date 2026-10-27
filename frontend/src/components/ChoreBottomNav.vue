@@ -304,10 +304,8 @@ function click(event: MouseEvent) {
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <path
-            d="M12 3c-2.5 3.6-6 7.5-6 11a6 6 0 0 0 12 0c0-3.5-3.5-7.4-6-11Z"
-          />
-          <path d="M9 14a3 3 0 0 0 3 3" />
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
+          <path d="M10 21h4M12 2v1" />
         </svg>
         <svg v-else viewBox="0 0 24 24" aria-hidden="true">
           <rect x="4" y="5" width="16" height="15" rx="2" />

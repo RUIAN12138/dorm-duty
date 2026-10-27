@@ -1,0 +1,15 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "0928260df2a96820202a6602dda8475d36ac4e5c",
+  "allowed": [
+    "frontend/src/components/nudge/",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/ChoreBottomNav.vue",
+    "openspec/changes/restore-nudge-layout-elasticity/"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

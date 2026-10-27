@@ -1940,7 +1940,7 @@ onUnmounted(() => {
             </section>
             <NudgePane v-if="section === 'water'" :board="board" :scope="`${invite}:${memberId}`" :busy="!!busy || completionSyncPending" :receipt="completionReceipt" :statuses="nudgeTaskStatuses" :selected-key="selectedSecondTaskKey" :handoff-active="!chatPresent && !messagesOpen && !orderOpen && !toolsOpen && !preferencesOpen && !companionOpen && !pushOpen && !settingsOpen && !recoveryOpen && !reminderOpen && !markerOpen && !detailTask && !roundOpen && !waterExceptionOpen" :demo="demo || preview"
               @nudge="nudgeWater($event)" @details="openTask" @complete="complete" @undo="undo($event.id)" @hint="nudgeHint = $event" @select="selectedSecondTaskKey = $event?.key">
-              <template #water-actions>
+              <template #water-actions="{ status }">
                 <section v-if="water" class="nudge-water-content" data-testid="water-task">
                   <CompletionAction
                     v-if="waterActionTask"
@@ -1955,6 +1955,7 @@ onUnmounted(() => {
                     @undo="undo($event.id)"
                   />
                   <div class="water-nudge-actions">
+                    <p v-if="water.assignee_id !== memberId" class="hero-date nudge-status" role="status">{{ status }}</p>
                     <div class="water-task-links">
                       <button
                         class="water-remind water-task-text"
@@ -2243,7 +2244,8 @@ onUnmounted(() => {
   </div>
 </template>
 <style scoped>
-.nudge-water-content { display:flex;flex-direction:column;align-items:center;gap:24px;width:100%; }
+.nudge-water-content { display:contents; }
+.nudge-water-content > .completion-surface { width:min(100%,300px);height:56px; }
 .nudge-water-content .water-nudge-actions { margin:0; }
 
 .current-identity {
