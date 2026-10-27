@@ -732,3 +732,19 @@
 - platform_status: 桌面Chromium/WebKit模拟视口；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未测。
 - remaining: 预览完成按钮仍按原逻辑提示不记录，完整可操作沙箱未完成；不冒称已与真实App全部操作一致。下一组做用户新催促页，旧宿舍数据/轮序不改。当前旧评审针对1f7dee95，已读但不当作本组已审。
 - questions: 无新权限请求。只推送受控开发分支和交接，不PR、不合并、不发布、不操作生产数据库。
+
+
+# Codex → ChatGPT · 催促页大字滑动与动手教程（2026-10-27）
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `0928260df2a96820202a6602dda8475d36ac4e5c`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/0928260df2a96820202a6602dda8475d36ac4e5c
+- related_pr: 本轮无PR创建/更新，无main合并，无发布；用户最新目标明确等其确认。
+- requirements: 用户原话“给抬水页改为催促页，并且在大字区域左右滑动可以切换催促其他任务，催促逻辑保持一致，滑动切换由球球进行提示，不做明显切换按键，可以让大字微微滑动露出下一个任务一小部分”。直接授权相关正式第二页/导航显示/球球文案/教程必要接线，不扩大到其他页面或业务规则。
+- changed_files: 新NudgePane及同目录浏览器检查；ChoreBoard第二页接线与按任务ID的异步提示；ChoreBottomNav第二页标签；WaterNudge可选taskName可访问文案；companionSpeech水场景；GuidedPractice催促步骤；API可选nudge_tasks、backend board当前任务只读数据、草稿适配与同目录后端检查；swipe-task-nudges OpenSpec。
+- implemented: 第二页统一催促，内部water路径/稳定任务ID保留、旧配置不迁移。复用原TaskTitle、taskSwipe、WaterNudge点击密度涟漪和交接效果；没有tabs或切页箭头，标题48px横滑提交、纵滑交还、取消不发、方向键可达，跨页保留选择。单次最多28px轻微预示，露邻接字；球球明确解释，减动效无位移。当前任务优先一位未完成的其他室友，不群发；本人/已完成不可催促。原本人抬水、撤销/提前额度、交接、详情/临时安排保留，授权代做仍依服务规则。提示、AbortController和真实回执按身份/任务隔离，其他任务返回不串状态。
+- tests: Chromium25项、WebKit24项新浏览器检查通过：滑动无发送、无明显按钮、球球文案/真实位移帧/归位、迟到结果、8连点只有一条POST、纵向取消、方向键、选中恢复、临时安排、320/390/430、深色/减动效、预览零写入。Chromium额外CDP touch真实浏览器输入流通过，仍非实体设备。完整教程实际操作导航→详情→完成抬水/交接→催促→横滑后自动完成该课，球球上方讲解，无手动下一步。预览和教程零业务写入，真实催促用例仅临时SQLite一条通知，浏览器异常0。
+  - 新只读后端9项通过：旧workspace/config不变、全启用当前任务、排除未来日期、现有remind接口、重复429且一条记录、错目标/跨宿舍拒绝、二次board读取任务快照不变。原check-water-nudge含200并发、回执/重试/身份/相对时间通过；原check-dorm-wizard108项、共享预览纯检查2060项通过；22项状态、类型/Vite/PWA构建、OpenSpec、diff通过。原限流/权限测试未改。
+- CI: 本SHA未触发远端整套CI，不将v85全绿移用。旧第二页tabs/抬水文字断言已不符合用户新设计，本轮未擅自改范围外既有测试，不能宣称全仓库全绿。新专项脚本命令与失败修正详见OpenSpec verification。
+- platform_status: 桌面Chromium/WebKit移动视口；真实iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未测，真实通知发送未测。截图与WebKit原始操作flow.mp4在data/task-nudges/，不是iPhone录屏。
+- remaining: 用户验收催促页与真实触摸/设备；旧测试契约后续需按新设计审查，不通过删除断言伪装CI。多人任务只呈现一位未完成室友，不是群体轰炸。更广泛的全功能可操作草稿预览服务与后端架构目标仍未完成，不标记总体完成。此前最新GPT review仍针对旧1f7dee95，须按本SHA复评。
+- questions: 无当前阻塞。预览 http://127.0.0.1:8119/water?start=1 ，教程 /guide?practice=1，创建 /?preview=new-dorm；临时SQLite合成身份/无生产转发。只提交推送开发分支及此文档；不PR、不合并、不部署、不接触正式数据库。
