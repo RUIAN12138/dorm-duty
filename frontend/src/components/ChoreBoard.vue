@@ -1430,8 +1430,13 @@ async function nudgeWater(taskOverride?: ChoreTask) {
   const task = taskOverride || water.value;
   if (!task || task.assignee_id === props.memberId || busy.value) return;
   if (props.preview) {
-    if (practice.value) practice.value.events.nudge++;
-    setNudgeStatus(task, practice.value ? "练习成功 · 正式使用时会提醒这位室友" : "预览 · 未发送提醒");
+    try {
+      const status = practice.value?.nudge?.(task);
+      if (practice.value && !practice.value.nudge) practice.value.events.nudge++;
+      setNudgeStatus(task, practice.value?.kind === "draft"
+        ? status === "recent" ? "预览 · 刚刚已模拟提醒，未发送" : "预览 · 已模拟提醒，未发送通知"
+        : practice.value ? "练习成功 · 正式使用时会提醒这位室友" : "预览 · 未发送提醒");
+    } catch (error) { setNudgeStatus(task,(error as Error).message); }
     return;
   }
   if (props.demo) {
@@ -1728,7 +1733,7 @@ onUnmounted(() => {
           <span class="identity-name"
             ><span>{{ dormName }}</span
             ><span class="current-identity"
-              >{{ practice ? "操作练习 · " : preview ? "草稿预览 · " : demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
+              >{{ practice?.kind === "tutorial" ? "操作练习 · " : preview ? "草稿预览 · " : demo ? "游客 · " : "" }}{{ board.member.nickname }}</span
             ></span
           >
         </div>
@@ -1739,7 +1744,7 @@ onUnmounted(() => {
             class="preview-exit"
             data-testid="exit-live-preview"
             @click="emit('exit-preview')"
-          >{{ practice ? "退出练习" : "退出预览" }}</button>
+          >{{ practice?.kind === "tutorial" ? "退出练习" : "退出预览" }}</button>
           <button
             v-if="!preview || practice"
             class="tools-button"
@@ -1938,7 +1943,7 @@ onUnmounted(() => {
               </article>
               <div v-else class="focus-hero"><h2>休息</h2></div>
             </section>
-            <NudgePane v-if="section === 'water'" :board="board" :scope="`${invite}:${memberId}`" :busy="!!busy || completionSyncPending" :receipt="completionReceipt" :statuses="nudgeTaskStatuses" :selected-key="selectedSecondTaskKey" :handoff-active="!chatPresent && !messagesOpen && !orderOpen && !toolsOpen && !preferencesOpen && !companionOpen && !pushOpen && !settingsOpen && !recoveryOpen && !reminderOpen && !markerOpen && !detailTask && !roundOpen && !waterExceptionOpen" :demo="demo || preview"
+            <NudgePane v-if="section === 'water'" :board="board" :scope="`${invite}:${memberId}`" :busy="!!busy || completionSyncPending" :receipt="completionReceipt" :statuses="nudgeTaskStatuses" :selected-key="selectedSecondTaskKey" :handoff-active="!chatPresent && !messagesOpen && !orderOpen && !toolsOpen && !preferencesOpen && !companionOpen && !pushOpen && !settingsOpen && !recoveryOpen && !reminderOpen && !markerOpen && !detailTask && !roundOpen && !waterExceptionOpen" :demo="demo || (preview && !practice)"
               @nudge="nudgeWater($event)" @details="openTask" @complete="complete" @undo="undo($event.id)" @hint="nudgeHint = $event" @select="selectedSecondTaskKey = $event?.key">
               <template #water-actions="{ status }">
                 <section v-if="water" class="nudge-water-content" data-testid="water-task">

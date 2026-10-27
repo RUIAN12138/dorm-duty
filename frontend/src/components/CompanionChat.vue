@@ -151,7 +151,7 @@ const notes = useConversationNotes(
     items.value.push({
       id: `note:${chatRequestId()}`,
       role,
-      text,
+      text: practice?.kind === "draft" && text === "留言已发出。" ? "预览留言已模拟，未通知室友。" : text,
       fresh: true,
     });
     bottom();

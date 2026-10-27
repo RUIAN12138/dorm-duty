@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { provide, ref, watch } from "vue";
+import { localBoardServiceKey } from "../../interaction/localBoardService";
+import { createDraftPreviewService, DRAFT_PREVIEW_INVITE } from "./sandbox/createDraftPreviewService";
 import { createDraftPreviewModel } from "./draftPreviewBoard";
 import type { DormDraft } from "../../interaction/dormDraft";
 import { reorderPage } from "../../interaction/dormDraft";
@@ -12,9 +14,19 @@ const scrollRoot = ref<HTMLElement>();
 const emit = defineEmits<{ close: [] }>();
 const section = ref<"duty" | "water" | "calendar">(props.draft.pages[0]?.id || "duty");
 const buildPreview = createDraftPreviewModel();
-const previewTime = ref(new Date());
-watch(() => props.open, open => { if (open) previewTime.value = new Date(); });
-const previewData = computed(() => buildPreview(props.draft, previewTime.value));
+const previewService = createDraftPreviewService(buildPreview(props.draft));
+provide(localBoardServiceKey, previewService);
+const previewRevision = ref(0);
+watch(() => JSON.stringify({tasks:props.draft.tasks,policy:props.draft.policy,nickname:props.draft.nickname,second:props.draft.second_page_kind}), () => {
+  previewService.reset(buildPreview(props.draft));previewRevision.value++;
+});
+watch(() => JSON.stringify(props.draft.pages), () => previewService.updatePages(props.draft.pages));
+watch(() => props.open, open => {
+  if (!open) return;
+  const fresh = buildPreview(props.draft);
+  if (fresh.today !== previewService.board.today) { previewService.reset(fresh);previewRevision.value++; }
+  else previewService.refresh();
+});
 function selectPage(value: "duty" | "water" | "calendar") { section.value = value; }
 // Match the production router's scroll-to-top on page navigation, locally.
 watch(section, () => scrollRoot.value?.scrollTo({ top: 0, left: 0, behavior: "instant" }), { flush: "post" });
@@ -38,13 +50,14 @@ function reorderPageItem(id: "duty" | "water" | "calendar", toIndex: number) {
         <main class="guest-page has-chore-nav">
           <section class="guest-personal">
         <ChoreBoard
-          :invite="`draft-${draft.name || 'new-room'}`"
+          :key="previewRevision"
+          :invite="DRAFT_PREVIEW_INVITE"
           :dorm-name="draft.name || '新宿舍'"
           :member-id="-1"
           token=""
           :demo="false"
           preview
-          :preview-data="previewData"
+          :preview-data="previewService.board"
           :pages="draft.pages"
           :section="section"
           @section-change="selectPage"

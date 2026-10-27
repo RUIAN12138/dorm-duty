@@ -1,4 +1,4 @@
-import { reactive, type InjectionKey } from "vue";
+import { reactive } from "vue";
 import type { ChoreBoardData, ChoreCompletion, ChoreTask } from "../api/chores";
 import type { companionClient, ChatTurn } from "../api/companionChat";
 
@@ -103,7 +103,7 @@ export function createTutorialPractice() {
     reminder: async () => { throw Error("教程不会安排真实提醒"); },
     clear: async () => { chat.length = 0; },
   };
-  return { board, events, matches, complete, undo, sendNote, read, api, sentNotes };
+  return { kind:"tutorial" as const, board, events, matches, complete, undo, sendNote, read, api, sentNotes };
 }
 export type TutorialPractice = ReturnType<typeof createTutorialPractice>;
-export const tutorialPracticeKey: InjectionKey<TutorialPractice> = Symbol("tutorial-practice");
+export { localBoardServiceKey as tutorialPracticeKey } from "./localBoardService";
