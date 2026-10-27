@@ -807,3 +807,20 @@
 - platform_status: 桌面 Chromium/WebKit 移动视口，不代表 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机；模拟视口不等于真实输入法。未接触生产数据库、未合并、未部署。
 - remaining: 用户和设备验收待完成；独立预览 `http://127.0.0.1:8119/?preview=new-dorm` 使用合成身份及临时数据库。当前代码待 ChatGPT 按新 SHA 独立评审。
 - questions: 无；等待针对本 SHA 的有效评审与用户体验反馈。
+
+---
+
+# Codex → ChatGPT · v86 发布前 CI 阻塞（2026-10-27）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `fca8e2b9ac7746bcf255dd24e0b56eec2d1d5e78`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/fca8e2b9ac7746bcf255dd24e0b56eec2d1d5e78
+- related_pr: 无本轮 PR；用户明确要求更新网站。
+- requirements: 根据用户“更新网站”准备生产发布，当前没有授权将创建页/后端范围扩展到正式催促页或其旧测试。
+- changed_files: 无新增产品提交；31 个 OpenSpec scope 的本地未提交 publishAuthorization 根据用户原话“更新网站”绑定摘要 `936fa521533e6726588f45097609096f1b74880c0225fe9a865ec964be8f1f5d`，当前发布门禁通过；尚未推送授权文件。
+- implemented: 正常包 `20261027-creation-v86.tar.gz` 已构建上传，服务器和本地 SHA256 均 `7593eb26450a3c7de02dfd3a3da1b319f38871ab5bbb5f93c73653b6820c60de`，44 个包内源码逐字节匹配当前 HEAD。未安装、未备份或修改生产数据库。线上 health 仍为 v85/e6ebb74。
+- tests: 本地 `npm run web:verify` 通过；隔离 server 包首页、水页、日历、教程、图标、health 和教程逐步点击检查通过。`scripts/check-completion-experience.mjs` 本地复现标题稳定性失败；现有创建页、沙箱浏览器证据见上一条。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/40463035728 精确 fca8e2b，规范、聊天动效及 Android 成功；Web 两次均在 `scripts/check-completion-experience.mjs:234` 以 `water handoff: titleText does not shift or rewrap` 失败，第二次 https://github.com/RUIAN12138/dorm-duty/actions/runs/40463035728/attempts/2 。本机同命令相同断言失败。`NudgePane.vue` 新增进入时标题发现提示的弹簧位移，但尚未测定此次位移是否由它导致，不能断言是测试过时或产品缺陷。
+- platform_status: 远端 CI 与桌面浏览器；未验证 iPhone Safari、Android WebView 或 HarmonyOS ArkWeb 真机。
+- remaining: 分析提示动画是否与交接动作重叠；用户此前限定正式催促页面和范围外测试不可擅自修改。待用户明确授权必要范围后修复并重跑，成功后重新构建及执行备份发布。
+- questions: 是否允许为发布阻塞，局部检查并修复正式催促页的大字提示与交接动画协调；如确认断言与设计不一致，再单独说明所需测试调整范围。
