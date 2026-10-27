@@ -717,3 +717,18 @@
 - platform_status: Web正常构建、桌面Chromium公网及Chromium/WebKit隔离自动化已测；Android CI构建/单测/lint通过。实体iPhone Safari/PWA、vivo Android WebView、HarmonyOS ArkWeb未测；不得称各端真机验收完成。旧PWA客户端是否已激活更新仍取决于其更新操作，公网字节核验不证明每台设备缓存已刷新。
 - remaining: 用户对新建向导视觉/拖动、正式预览和多任务切换的实际验收，以及各端真实触摸/键盘验收。产品acceptance仍pending。最新GPT评审仍针对旧1f7dee95；请按本新SHA审查，不重复旧意见或声称本SHA已审。
 - questions: 暂无发布阻塞。当前业务工作树干净；原始本地收据 `data/v85-{final-ci,deployment-receipt,data-retention,public-assets,public-smoke}.json` 与 `v85-publish.log`，仅协调交接文档推送，不提交真实数据/备份/凭证，不修改CHATGPT_REVIEW。
+
+
+# Codex → ChatGPT · 草稿预览与正式规则一致性（2026-10-27）
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `50606e37cb2b0c2cf244e76f367dfbc40d353479`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/50606e37cb2b0c2cf244e76f367dfbc40d353479
+- related_pr: 无。本轮最新目标明确不PR、不更新网站，等待用户确认。
+- requirements: 用户继续完善创建/教程/真实组件预览及后端架构。本组只修预览权限、时间和完成状态矛盾，提取原后端纯判断避免规则漂移；用户随后新需求“抬水页改催促页、滑动大字切任务、球球提示、无明显切换按键”独立下一组实现，不混入本提交。
+- changed_files: site/shared/dorm-configuration.mjs与类型、同目录测试；site/worker/chores.mjs原纯规则调用；创建专属LiveDraftPreview.vue及新draftPreviewBoard.ts；align-draft-preview-rules OpenSpec。无正式UI、教程UI、迁移变化。
+- implemented: 预览不再全部can_complete=true；只有self_round生成多位当前任务、scheduled/completion一位；截止时间显示与taskView一致；轮次/任务/日历同源，身份修改实时更新，模拟ID对改名/禁用/重排稳定。后端V2 alone不授权代做、hard+启动时刻、旧宿舍/demo/未来日期规则语义不变。无网络/数据库的纯共享函数。
+- tests: 新合成纯测试2060项；既有check-dorm-wizard108项；认证边界89项；动态任务迁移7表快照一致/4项；原preview-task-navigation Chromium/WebKit各40项（真实正式/预览几何2px内一致、切换/详情、零请求零写入、旧宿舍临时数据不变）。typecheck、Vite/PWA构建、OpenSpec、diff通过。原测试未改；无真实账号邮件AI。
+- CI: 本组尚未触发远端CI，不将v85/e6ebb74全绿移用到新SHA。
+- platform_status: 桌面Chromium/WebKit模拟视口；实体iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb未测。
+- remaining: 预览完成按钮仍按原逻辑提示不记录，完整可操作沙箱未完成；不冒称已与真实App全部操作一致。下一组做用户新催促页，旧宿舍数据/轮序不改。当前旧评审针对1f7dee95，已读但不当作本组已审。
+- questions: 无新权限请求。只推送受控开发分支和交接，不PR、不合并、不发布、不操作生产数据库。
