@@ -1,0 +1,2 @@
+# Design
+独立NudgePane复用TaskTitle、createTaskSwipe、WaterNudge与WaterHandoffName；大标题一次只呈现一个任务，无tabs或箭头按钮。按稳定任务key选择，水任务优先，其余启用任务按配置/分类顺序。每类选择当前未完成的其他成员，否则显示本人或完成状态；不允许催促自己/已完成任务。指针横向锁定后接管，纵向交还原生滚动，48px提交，cancel不误发，键盘左右可达。一次性提示只动画transform，用户起手立即取消，减动效无位移。父层按task ID隔离发送状态，保留原waterNudge频控/API，不因切换任务混淆回执。旧水任务完成/撤销/异常安排保留在插槽，数据只读加nudge_tasks，不改变workspace_tasks旧含义或任务数据库。preview无请求。回退删除本组UI接线即可，无迁移。

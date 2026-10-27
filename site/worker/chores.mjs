@@ -1027,7 +1027,7 @@ async function board(request, db, env, now, url) {
     invalid("请使用 YYYY-MM 月份格式");
   const actorForTasks = who?.user_id === uid ? who : null;
   const roomConfiguration = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null");
-  const workspaceRows = roomConfiguration ? await all(db,"SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key WHERE t.dorm_id=? AND c.enabled=1 AND t.status<>'cancelled' AND ((c.mode='scheduled' AND t.duty_date=? AND t.sequence IS NULL) OR (c.mode<>'scheduled' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key,t.assignee_id",[room.id,today]) : [];
+  const workspaceRows = await all(db,"SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key WHERE t.dorm_id=? AND c.enabled=1 AND t.status<>'cancelled' AND ((c.mode='scheduled' AND t.duty_date=? AND t.sequence IS NULL) OR (c.mode<>'scheduled' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key,t.assignee_id",[room.id,today]);
   const todayRows = await all(
     db,
     `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
@@ -1177,9 +1177,10 @@ async function board(request, db, env, now, url) {
       marker_id,
     })),
     configuration: JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null"),
-    workspace_tasks: workspaceRows.map((task) =>
+    workspace_tasks: roomConfiguration ? workspaceRows.map((task) =>
       taskView(task, now, actorForTasks, settings, members),
-    ),
+    ) : [],
+    nudge_tasks: workspaceRows.map((task) => taskView(task, now, actorForTasks, settings, members)),
     categories: settings,
     rounds,
     today_tasks: todayRows.map((task) =>

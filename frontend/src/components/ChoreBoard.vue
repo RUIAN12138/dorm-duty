@@ -2,7 +2,7 @@
 import "../interaction/memberNames.css";
 import { tutorialPracticeKey } from "../interaction/tutorialPractice";
 import TaskSelector from "./TaskSelector.vue";
-import NewTaskPane from "./onboarding/NewTaskPane.vue";
+import NudgePane from "./nudge/NudgePane.vue";
 import TaskWorkspace from "./onboarding/TaskWorkspace.vue";
 import SpotlightTour from "./onboarding/SpotlightTour.vue";
 import {
@@ -868,6 +868,24 @@ const displayedWater = computed(() =>
   settlingTask.value?.key === "water" ? settlingTask.value : water.value,
 );
 const nudgeStatus = ref("");
+const nudgeTaskResults = ref<Record<number,string>>({});
+const nudgeTaskStatuses = computed(() => {
+  const result = { ...nudgeTaskResults.value };
+  if (props.preview || props.demo) return result;
+  const tasks = board.value?.nudge_tasks || board.value?.workspace_tasks || [];
+  for (const task of tasks) {
+    const status = result[task.id];
+    const receipt = lastWaterNudge(`${props.invite}:${props.memberId}:${task.id}`);
+    if (receipt && (!status || status === "已提醒" || status === "刚刚已提醒"))
+      result[task.id] = waterNudgeTime(receipt, new Date(nudgeNow.value));
+  }
+  return result;
+});
+const nudgeHint = ref("");
+function setNudgeStatus(task: ChoreTask, value: string) {
+  nudgeTaskResults.value = { ...nudgeTaskResults.value, [task.id]: value };
+  nudgeStatus.value = value;
+}
 const nudgeSentAt = ref<string | null>(null);
 const nudgeNow = ref(Date.now());
 let nudgeClock: ReturnType<typeof setInterval> | null = null;
@@ -891,20 +909,23 @@ const nudgeCaption = computed(() => {
   }
   return status || "";
 });
-let nudgeController: AbortController | null = null;
-watch(
-  [() => props.invite, () => props.memberId, () => water.value?.id],
-  () => {
-    nudgeController?.abort();
-    nudgeStatus.value = "";
-    nudgeSentAt.value =
-      !props.demo && water.value
-        ? lastWaterNudge(`${props.invite}:${props.memberId}:${water.value.id}`)
-        : null;
-  },
-  { immediate: true },
-);
-onUnmounted(() => nudgeController?.abort());
+const nudgeControllers = new Map<number, AbortController>();
+function cancelNudges() {
+  for (const controller of nudgeControllers.values()) controller.abort();
+  nudgeControllers.clear();
+}
+watch([() => props.invite, () => props.memberId], () => {
+  cancelNudges();
+  nudgeTaskResults.value = {};
+  nudgeHint.value = "";
+}, { immediate: true });
+watch(() => water.value?.id, (id, previous) => {
+  if (previous !== undefined) nudgeControllers.get(previous)?.abort();
+  nudgeStatus.value = "";
+  nudgeSentAt.value = !props.demo && water.value
+    ? lastWaterNudge(`${props.invite}:${props.memberId}:${water.value.id}`) : null;
+}, { immediate: true });
+onUnmounted(cancelNudges);
 const nextWaterPerson = computed(() => {
   const order = board.value?.water_order || [];
   const index = order.indexOf(water.value?.assignee_id || 0);
@@ -1410,44 +1431,50 @@ async function nudgeWater(taskOverride?: ChoreTask) {
   if (!task || task.assignee_id === props.memberId || busy.value) return;
   if (props.preview) {
     if (practice.value) practice.value.events.nudge++;
-    nudgeStatus.value = practice.value ? "练习成功 · 正式使用时会提醒这位室友" : "预览 · 未发送提醒";
+    setNudgeStatus(task, practice.value ? "练习成功 · 正式使用时会提醒这位室友" : "预览 · 未发送提醒");
     return;
   }
   if (props.demo) {
-    nudgeStatus.value = "游客体验 · 未发送提醒";
+    setNudgeStatus(task, "游客体验 · 未发送提醒");
     return;
   }
-  const key = `${props.invite}:${props.memberId}:${task.id}`;
+  const identity = `${props.invite}:${props.memberId}`;
+  const key = `${identity}:${task.id}`;
+  let controller: AbortController | undefined;
   try {
-    nudgeStatus.value = "正在提醒…";
+    setNudgeStatus(task, "正在提醒…");
     const status = await waterNudge(key, async () => {
-      nudgeController = new AbortController();
+      controller = new AbortController();
+      nudgeControllers.set(task.id, controller);
       return choreRequest<ChoreReminder>("/chores/remind", props.token, {
         method: "POST",
-        signal: nudgeController.signal,
+        signal: controller.signal,
         body: JSON.stringify({
           target_member_id: task.assignee_id,
           task_id: task.id,
         }),
       });
     });
+    if (identity !== `${props.invite}:${props.memberId}` || !alive || controller?.signal.aborted) return;
     if (taskOverride || water.value?.id === task.id) {
       if (!taskOverride) updateNudgeClock();
       nudgeSentAt.value = lastWaterNudge(key);
-      nudgeStatus.value =
+      setNudgeStatus(task,
         status === "sending"
           ? "正在提醒…"
           : status === "recent"
             ? "刚刚已提醒"
-            : "已提醒";
+            : "已提醒");
     }
   } catch (error) {
-    if ((!taskOverride && water.value?.id !== task.id) || nudgeController?.signal.aborted) return;
-    nudgeStatus.value =
+    if (identity !== `${props.invite}:${props.memberId}` || (!taskOverride && water.value?.id !== task.id) || !alive || controller?.signal.aborted) return;
+    setNudgeStatus(task,
       error instanceof ApiError && error.status === 429
         ? "刚刚已提醒"
-        : (error as Error).message;
+        : (error as Error).message);
     if (error instanceof ApiError && error.status === 409) void load();
+  } finally {
+    if (controller && nudgeControllers.get(task.id) === controller) nudgeControllers.delete(task.id);
   }
 }
 const reminderContext = ref<{ memberId: number; taskId: number } | null>(null);
@@ -1683,7 +1710,7 @@ onUnmounted(() => {
             :tips="true"
             :scene="section"
             :message="
-              board.overdue_categories?.length
+              section === 'water' && nudgeHint ? nudgeHint : board.overdue_categories?.length
                 ? `${board.overdue_categories.map((c) => c.name).join('、')}超过五天没做啦，记得安排一下。点我可以聊天。`
                 : ''
             "
@@ -1792,27 +1819,6 @@ onUnmounted(() => {
                 @closed="presentNewReminders"
               />
             </section>
-            <NewTaskPane
-              v-if="board.configuration && section !== 'calendar' && section !== 'duty'"
-              :board="board"
-              :scope="`${invite}:${memberId}`"
-              :section="section"
-              :selected-key="selectedSecondTaskKey"
-              @select="selectedSecondTaskKey = $event"
-              :busy="!!busy || completionSyncPending"
-              :receipt="completionReceipt"
-              :nudge-status="nudgeStatus"
-              :demo="demo || preview"
-              @nudge="nudgeWater($event)"
-              @complete="complete"
-              @undo="undo($event.id)"
-              @details="openTask"
-              @round="
-                selectedTaskId = $event.id;
-                selectedTaskKey = $event.key;
-                roundOpen = true;
-              "
-            />
             <section
               v-if="section === 'duty'"
               class="chore-personal"
@@ -1932,80 +1938,10 @@ onUnmounted(() => {
               </article>
               <div v-else class="focus-hero"><h2>休息</h2></div>
             </section>
-            <section
-              v-if="!board.configuration && section === 'water'"
-              class="water-pane"
-              data-testid="pane-water"
-            >
-              <template v-if="water">
-                <h1
-                  class="hero-caption"
-                  data-section-swipe-handle
-                  data-testid="page-swipe-title"
-                >
-                  {{
-                    water.assignee_id === memberId
-                      ? "没水时轮到你："
-                      : "抬水轮到："
-                  }}
-                </h1>
-                <section
-                  class="chore-water focus-hero"
-                  aria-labelledby="water-title"
-                  data-testid="water-task"
-                >
-                  <div class="water-title-stage">
-                    <TaskTitle
-                      value="water"
-                      :animated="false"
-                      id="water-title"
-                      :style="
-                        water.assignee_id !== memberId &&
-                        water.assignee_name.length > 8
-                          ? { fontSize: 'clamp(30px, 9vw, 40px)' }
-                          : undefined
-                      "
-                    >
-                      <WaterHandoffName
-                        :scope="`${invite}:${memberId}`"
-                        :event="board.water_handoff"
-                        :members="board.members"
-                        :target-id="water.assignee_id"
-                        :target-name="water.assignee_name"
-                        :active="
-                          !messagesOpen &&
-                          !orderOpen &&
-                          !toolsOpen &&
-                          !preferencesOpen &&
-                          !companionOpen &&
-                          !pushOpen &&
-                          !settingsOpen &&
-                          !recoveryOpen &&
-                          !reminderOpen &&
-                          !markerOpen &&
-                          !detailTask &&
-                          !roundOpen &&
-                          !waterExceptionOpen
-                        "
-                      >
-                        <WaterNudge
-                          v-if="water.assignee_id !== memberId"
-                          :key="water.id"
-                          :name="water.assignee_name"
-                          @tap="nudgeWater"
-                        />
-                        <button
-                          v-else
-                          class="task-title-button"
-                          v-tilt
-                          :aria-label="`查看${water.name}详情`"
-                          @click="openTask(water, $event)"
-                        >
-                          {{ water.name }}
-                        </button>
-                      </WaterHandoffName>
-                    </TaskTitle>
-                  </div>
+            <NudgePane v-if="section === 'water'" :board="board" :scope="`${invite}:${memberId}`" :busy="!!busy || completionSyncPending" :receipt="completionReceipt" :statuses="nudgeTaskStatuses" :selected-key="selectedSecondTaskKey" :handoff-active="!chatPresent && !messagesOpen && !orderOpen && !toolsOpen && !preferencesOpen && !companionOpen && !pushOpen && !settingsOpen && !recoveryOpen && !reminderOpen && !markerOpen && !detailTask && !roundOpen && !waterExceptionOpen" :demo="demo || preview"
+              @nudge="nudgeWater($event)" @details="openTask" @complete="complete" @undo="undo($event.id)" @hint="nudgeHint = $event" @select="selectedSecondTaskKey = $event?.key">
+              <template #water-actions>
+                <section v-if="water" class="nudge-water-content" data-testid="water-task">
                   <CompletionAction
                     v-if="waterActionTask"
                     :task="waterActionTask"
@@ -2019,13 +1955,6 @@ onUnmounted(() => {
                     @undo="undo($event.id)"
                   />
                   <div class="water-nudge-actions">
-                    <p
-                      v-if="water.assignee_id !== memberId"
-                      class="hero-date"
-                      role="status"
-                    >
-                      {{ nudgeCaption }}
-                    </p>
                     <div class="water-task-links">
                       <button
                         class="water-remind water-task-text"
@@ -2058,19 +1987,10 @@ onUnmounted(() => {
                     :demo="demo"
                     @undo="undo($event.id)"
                   />
+
                 </section>
               </template>
-              <div v-else class="water-empty" data-testid="water-empty">
-                <h1
-                  class="hero-caption"
-                  data-section-swipe-handle
-                  data-testid="page-swipe-title"
-                >
-                  抬水已暂停
-                </h1>
-                <h2>休息</h2>
-              </div>
-            </section>
+            </NudgePane>
           </div>
         </Transition>
       </div>
@@ -2323,6 +2243,9 @@ onUnmounted(() => {
   </div>
 </template>
 <style scoped>
+.nudge-water-content { display:flex;flex-direction:column;align-items:center;gap:24px;width:100%; }
+.nudge-water-content .water-nudge-actions { margin:0; }
+
 .current-identity {
   display: block;
   font-size: 13px;

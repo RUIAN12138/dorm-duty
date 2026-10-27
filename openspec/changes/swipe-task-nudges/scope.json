@@ -1,0 +1,22 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "50606e37cb2b0c2cf244e76f367dfbc40d353479",
+  "allowed": [
+    "frontend/src/components/nudge/",
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/ChoreBottomNav.vue",
+    "frontend/src/components/WaterNudge.vue",
+    "frontend/src/interaction/companionSpeech.ts",
+    "frontend/src/api/chores.ts",
+    "frontend/src/components/onboarding/draftPreviewBoard.ts",
+    "site/worker/chores.mjs",
+    "site/shared/nudge-task-board.test.mjs",
+    "openspec/changes/swipe-task-nudges/",
+    "frontend/src/components/onboarding/GuidedPractice.vue"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

@@ -76,6 +76,7 @@ export interface ChoreReminder {
 export interface ChoreBoardData {
   configuration?: DormConfiguration | null;
   workspace_tasks?: ChoreTask[];
+  nudge_tasks?: ChoreTask[];
   today: string;
   server_time: string;
   version: number;

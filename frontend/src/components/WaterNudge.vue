@@ -2,7 +2,7 @@
 import { onUnmounted, ref } from "vue";
 import { motionAllowed } from "../interaction/motion";
 import { createTapEnergy } from "../interaction/tapEnergy";
-defineProps<{ name: string }>();
+withDefaults(defineProps<{ name: string; taskName?: string }>(), { taskName: "抬水" });
 const emit = defineEmits<{ tap: [] }>();
 const button = ref<HTMLButtonElement | null>(null);
 const taps = ref<
@@ -85,7 +85,7 @@ onUnmounted(() => {
     class="nudge-name"
     data-testid="water-nudge"
     :data-intensity="strength.toFixed(3)"
-    :aria-label="`敲一敲${name}，催促抬水`"
+    :aria-label="`敲一敲${name}，催促${taskName}`"
     @click="tap"
   >
     <span>{{ name }}</span>

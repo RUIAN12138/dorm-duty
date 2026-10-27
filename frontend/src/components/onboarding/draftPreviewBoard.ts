@@ -78,7 +78,7 @@ export function createDraftPreviewModel() {
     return { configuration: JSON.parse(JSON.stringify({ schema_version: 2, pages: draft.pages, tasks: draft.tasks,
       policy: draft.policy, second_page_kind: draft.second_page_kind })),
       today, server_time: nowIso, version: 1, is_creator: true, member: members[0]!, members, categories,
-      workspace_tasks: tasks, today_tasks: personal, next_tasks: [],
+      workspace_tasks: tasks, nudge_tasks: tasks, today_tasks: personal, next_tasks: [],
       water_task: tasks.find(task => task.key === "water") || null, water_order: [...memberIds],
       rounds, undo_tasks: [], calendar, reminders: [] };
   };

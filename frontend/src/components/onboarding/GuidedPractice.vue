@@ -17,7 +17,7 @@ const section = ref<Section>("duty"), lesson = ref<Lesson | null>(null), index =
 const finished = ref(new Set<Lesson>());
 const lessons: { id: Lesson; title: string; text: string; mood: string }[] = [
   { id: "duty", title: "完成一次值日", text: "切换任务、查看详情、打卡与撤销", mood: "05" },
-  { id: "water", title: "学会抬水交接", text: "查看任务、完成交接、提醒下一位", mood: "03" },
+  { id: "water", title: "催促与任务交接", text: "滑动切换、轻敲提醒、完成交接", mood: "03" },
   { id: "calendar", title: "找到完成记录", text: "查看日期、列表和统计卡片", mood: "19" },
   { id: "messages", title: "给室友留句话", text: "选择对象、确认发送、查看已读", mood: "02" },
 ];
@@ -52,11 +52,12 @@ const chapters = computed<Record<Lesson, PracticeStep[]>>(() => ({
     step("duty-undo", '[data-testid="undo--11"]', "再点一次「已完成」撤销", "误点时可以直接撤销，不需要重新打卡。", "任务恢复待完成，练习中的进度和记录一并恢复。", () => practice.events.undo > 0 && visible('[data-testid="complete-sink--11"]')),
   ],
   water: [
-    step("water-nav", '[data-testid=nav-water]', "点底部「抬水」", "底部导航用来切换主页面。", "现在是抬水页，大字显示当前任务或负责人。", () => section.value === "water" && visible('[data-testid=pane-water]')),
+    step("water-nav", '[data-testid=nav-water]', "点底部「催促」", "底部导航用来切换主页面。", "现在是催促页，左右滑动大字可以换任务。", () => section.value === "water" && visible('[data-testid=pane-water]')),
     step("water-detail", '.water-task-text', "先点「查看任务」", "确认抬水的具体内容。", "详情中可以看到由谁负责，以及任务状态。", () => visible('[data-testid=task-detail]')),
-    step("water-detail-close", ".sheet-layer:not([inert]) .elastic-sheet", "看完后收起详情", "点关闭，回到抬水页。", "接下来模拟你已经把水送到宿舍。", () => !visible('[data-testid=task-detail]')),
+    step("water-detail-close", ".sheet-layer:not([inert]) .elastic-sheet", "看完后收起详情", "点关闭，回到催促页。", "接下来模拟你已经把水送到宿舍。", () => !visible('[data-testid=task-detail]')),
     step("water-complete", '[data-testid="complete-water--13"]', "点「我已抬水」完成交接", "只在已经完成抬水后记录。当前操作是练习。", "交接动画之后，下一位变成小林；刚才的完成记录保留。", () => practice.events.complete > 0 && practice.board.water_task?.assignee_id === -2),
     step("water-nudge", '[data-testid=water-nudge]', "轻点小林，练习提醒", "正式使用时会按原有限流规则提醒当前负责人。", "你已经学会催促。本次没有给任何真实室友发送通知。", () => practice.events.nudge > 0),
+    step("water-swipe", '[data-testid=nudge-task-swipe]', "向左滑动大字，换一个任务", "不用找切换按钮，在任务名称上滑动即可。", "已切换到其他任务，提醒仍沿用相同规则。", () => !!document.querySelector('.nudge-task-name')?.textContent?.includes("地板")),
   ],
   calendar: [
     step("calendar-nav", '[data-testid=nav-calendar]', "点底部「日历」", "已完成的任务可以在这里查找。", "日期上的标记表示当天有完成记录。", () => section.value === "calendar" && visible('[data-testid=chore-calendar]')),

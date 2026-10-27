@@ -22,14 +22,14 @@ const emit = defineEmits<{
 }>();
 const defaults = [
   { section: "duty", path: "/", label: "值日" },
-  { section: "water", path: "/water", label: "抬水" },
+  { section: "water", path: "/water", label: "催促" },
   { section: "calendar", path: "/calendar", label: "日历" },
 ] as const;
 const items = computed(
   () =>
     props.pages?.map((page) => ({
       ...defaults.find((item) => item.section === page.id)!,
-      label: page.label,
+      label: page.id === "water" ? "催促" : page.label,
     })) || [...defaults],
 );
 const dragging = ref(false);
