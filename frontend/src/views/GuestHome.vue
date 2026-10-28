@@ -92,6 +92,8 @@ const creatingRoom = ref(false),
   createNickname = ref(""),
   createMembers = ref("");
 const createdInvite = ref("");
+const creationAccountChanged = ref(false);
+const creationOwner = ref<string | null>(null);
 let confirmedCreationRequest: { account: string; requestId: string } | undefined;
 const localWizardExperience = ref(false);
 const localWizardPreviewAvailable = isLocalPreviewAvailable();
@@ -279,6 +281,8 @@ function restoreEntry(kind: string) {
     changingDorm.value = true;
   } else if (kind === "create") {
     changingDorm.value = false;
+    creationAccountChanged.value = false;
+    creationOwner.value = emailAccount.email || null;
     creatingRoom.value = true;
   }
   void nextTick().then(() => {
@@ -734,6 +738,8 @@ function openDormChange() {
 }
 function openCreate() {
   if (needsEmail()) return;
+  creationAccountChanged.value = false;
+  creationOwner.value = emailAccount.email || null;
   openDormChange();
   changingDorm.value = false;
   creatingRoom.value = true;
@@ -770,6 +776,8 @@ async function submitCreate() {
   if (loading.value) return;
   const { id, signal } = startRequest();
   try {
+    if (creationAccountChanged.value)
+      throw new Error("登录账号已切换，请重新打开创建页面。");
     const values = {
       configuration: wizardConfiguration.value,
       name: createName.value.trim(),
@@ -781,12 +789,18 @@ async function submitCreate() {
         .filter(Boolean),
     };
     const account = emailAccount.email;
+    if (values.configuration && (account || null) !== creationOwner.value) {
+      creationAccountChanged.value = true;
+      throw new Error("登录账号已切换，请重新打开创建页面。");
+    }
+    if (values.configuration && emailAccount.required && !emailAccount.loggedIn)
+      throw new Error("请先用邮箱验证码登录，再创建宿舍。");
     if (values.configuration && emailAccount.loggedIn && !account)
       throw new Error("账号信息尚未恢复，请稍后重试。");
     const request_id = values.configuration && emailAccount.loggedIn
       ? await creationRequestId(account!, values) : undefined;
     if (!isCurrent(id, signal)) return;
-    const result = await createGuestDorm({ ...values, ...(request_id ? { request_id } : {}) }, signal);
+    const result = await createGuestDorm({ ...values, ...(request_id && account ? { request_id, expected_email: account } : {}) }, signal);
     if (!isCurrent(id, signal)) return;
     if (request_id && account)
       confirmedCreationRequest = { account, requestId: request_id };
@@ -817,6 +831,10 @@ async function submitCreate() {
     await loadDorm(result.invite_code, result.member_id, result.access_token);
     if (wizardConfiguration.value) creatingRoom.value = true;
   } catch (e) {
+    if (e instanceof ApiError && e.status === 409 && e.message === "登录账号已切换，请重新打开创建页面。") {
+      creationAccountChanged.value = true;
+      await refreshEmailAccount().catch(() => {});
+    }
     if (isCurrent(id, signal)) error.value = (e as Error).message;
   } finally {
     if (isCurrent(id, signal)) loading.value = false;

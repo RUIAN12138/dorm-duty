@@ -20,7 +20,9 @@ try {
   const req=route.request(),url=new URL(req.url()),data=req.postData()?JSON.parse(req.postData()):undefined;
   const raw=req.headers();const headers={...(raw.authorization?{Authorization:raw.authorization}:{}),...(raw['x-dorm-email']?{'X-Dorm-Email':raw['x-dorm-email']}:{})};const response=await send(url.pathname+url.search,req.method(),data,headers);const body=await response.text();
   if(url.pathname==='/guest/create'&&req.method()==='POST'){
-   createCount++;requestIds.push(data.request_id);assert.equal(response.status,201,body);
+   createCount++;requestIds.push(data.request_id);
+   if(process.env.DORM_ACTIVE_SWITCH==='1') {assert.equal(response.status,409,body);return route.fulfill({status:response.status,contentType:'application/json',body});}
+   assert.equal(response.status,201,body);
    if(createCount===1)return route.abort('connectionreset');
   }
   return route.fulfill({status:response.status,contentType:'application/json',body});
@@ -30,6 +32,42 @@ try {
  await page.getByRole('button',{name:'创建宿舍',exact:true}).click();
  await page.locator('.dorm-wizard').waitFor();
  await page.getByLabel('宿舍名称',{exact:true}).fill('断线重试宿舍');
+ if(process.env.DORM_ACCOUNT_SWITCH==='1') {
+  const ownerCookie=cookie;
+  await page.waitForFunction(()=>localStorage.getItem('dorm-create-v2:owner@example.invalid')?.includes('断线重试宿舍'));
+  cookie='';
+  const other='other@example.invalid';
+  const challenge=await(await send('/email/code','POST',{email:other},{'X-Dorm-Email':'1'})).json();
+  const code=sent.at(-1).text.match(/验证码是：(\d{6})/)[1];
+  assert.equal((await send('/email/verify','POST',{email:other,code,challenge_id:challenge.challenge_id,mail_enabled:false},{'X-Dorm-Email':'1'})).status,200);
+  if(process.env.DORM_ACTIVE_SWITCH==='1') {
+   const before=h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n;
+   if(process.env.DORM_LOCAL_SWITCH==='1') await page.evaluate(async()=>{const {emailAccount}=await import('/src/api/email.ts');emailAccount.email='other@example.invalid';});
+   for(let i=0;i<4;i++) await page.getByRole('button',{name:'继续',exact:true}).click();
+   await page.getByRole('button',{name:'确认创建',exact:true}).click();
+   await page.getByText('登录账号已切换，请重新打开创建页面。',{exact:true}).waitFor();
+   assert.equal(createCount,process.env.DORM_LOCAL_SWITCH==='1'?0:1);assert.equal(h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n,before);
+   await page.getByRole('button',{name:'确认创建',exact:true}).click();
+   assert.equal(createCount,process.env.DORM_LOCAL_SWITCH==='1'?0:1,'a second click must not submit the old draft under the new account');
+   assert((await page.evaluate(()=>localStorage.getItem('dorm-create-v2:owner@example.invalid'))).includes('断线重试宿舍'));
+   await page.getByRole('button',{name:'退出配置',exact:true}).click();
+   await page.getByRole('button',{name:'创建宿舍',exact:true}).click();
+   assert.equal(await page.getByLabel('宿舍名称',{exact:true}).inputValue(),'','reopening uses the newly verified account draft');
+   console.log(`PASS ${engine}: active identity switch rejects creation and retains original draft`);
+  } else {
+  await page.goto('http://127.0.0.1:8123/?entry=rooms');
+  await page.getByRole('button',{name:'创建宿舍',exact:true}).click();
+  assert.equal(await page.getByLabel('宿舍名称',{exact:true}).inputValue(),'','another account must not see the first account draft');
+  await page.getByLabel('宿舍名称',{exact:true}).fill('另一份草稿');
+  await page.waitForFunction(()=>localStorage.getItem('dorm-create-v2:other@example.invalid')?.includes('另一份草稿'));
+  cookie=ownerCookie;
+  await page.goto('http://127.0.0.1:8123/?entry=rooms');
+  await page.getByRole('button',{name:'创建宿舍',exact:true}).click();
+  assert.equal(await page.getByLabel('宿舍名称',{exact:true}).inputValue(),'断线重试宿舍');
+  assert.equal(createCount,0);
+  console.log(`PASS ${engine}: same-device account drafts remain isolated and restore on return`);
+  }
+ } else {
  await page.getByRole('button',{name:'继续',exact:true}).click();
  await page.getByRole('button',{name:'自定义任务',exact:true}).click();
  await page.getByLabel('任务名称',{exact:true}).fill('阳台');
@@ -57,5 +95,6 @@ try {
   assert.equal(h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n,before+1);
   assert.equal((await page.locator('.invite-result>strong').innerText()).length,8);
   console.log(`PASS ${engine}: actual wizard retries lost response with same request ID and one room`);
+ }
  }
 }finally{await browser.close();await mail.close();h.close();}

@@ -49,6 +49,7 @@ export function createGuestDorm(
     marker_id?: string;
     configuration?: DormConfiguration;
     request_id?: string;
+    expected_email?: string;
   },
   signal: AbortSignal,
 ) {

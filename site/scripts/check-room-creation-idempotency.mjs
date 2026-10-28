@@ -23,6 +23,7 @@ try{
  const requestId=await creationRequestId('owner@example.invalid',input);assert.notEqual(requestId,firstId);
  assert(!JSON.stringify([...map.values()]).includes('隔离创建'));
  await login('owner@example.invalid');const before=count();
+ const switched=await call('/guest/create',{...input,request_id:requestId,expected_email:'other@example.invalid'});assert.equal(switched.status,409);assert.equal(count(),before);
  const replies=await Promise.all(Array.from({length:5},()=>call('/guest/create',{...input,request_id:requestId})));
  for(const response of replies)assert.equal(response.status,201,await response.clone().text());
  const rooms=await Promise.all(replies.map(response=>response.json()));assert.equal(count(),before+1);assert.equal(new Set(rooms.map(room=>room.dorm.id)).size,1);assert.equal(new Set(rooms.map(room=>room.access_token)).size,5);

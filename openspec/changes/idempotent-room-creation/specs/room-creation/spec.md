@@ -7,3 +7,6 @@ Authenticated schema-v2 creation SHALL bind a random request identifier to the a
 #### Scenario: Changed content or revoked identity
 - **WHEN** a request identifier is reused with different content or without a valid authorized creator identity
 - **THEN** the request is rejected without creating or exposing a room.
+#### Scenario: Identity changes while the wizard is open
+- **WHEN** the client supplies the account it displayed at creation and the verified email session belongs to another account
+- **THEN** creation is rejected with a clear error and no room is created.

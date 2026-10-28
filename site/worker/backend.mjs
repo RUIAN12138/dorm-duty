@@ -625,7 +625,7 @@ async function guestCreate(request, db, now, emailCreator) {
     fail(401, "email_required", "请先用邮箱验证码登录");
   const input = await body(
     request,
-    ["name", "nickname", "members", "marker_id", "configuration", "request_id"],
+    ["name", "nickname", "members", "marker_id", "configuration", "request_id", "expected_email"],
     ["name", "nickname"],
   );
   let configuration = null;
@@ -648,6 +648,13 @@ async function guestCreate(request, db, now, emailCreator) {
     invalid("创建请求标识无效，请重新打开创建页面");
   if (requestId && (!emailSession || !configuration))
     fail(401, "email_required", "请先用邮箱验证码登录");
+  if (input.expected_email !== undefined) {
+    if (!emailSession || typeof input.expected_email !== "string" || input.expected_email.length > 254)
+      fail(401, "email_required", "请先用邮箱验证码登录");
+    const account = await first(db, "SELECT email FROM email_accounts WHERE id=?", [emailCreator.accountId]);
+    if (!account || account.email.toLowerCase() !== input.expected_email.trim().toLowerCase())
+      fail(409, "account_changed", "登录账号已切换，请重新打开创建页面。");
+  }
   const requestHash = requestId ? await digest(requestId) : null;
   const payloadHash = requestId ? await digest(JSON.stringify({ name, nickname, members: nicknames.slice(1), marker, configuration })) : null;
   async function replay() {
