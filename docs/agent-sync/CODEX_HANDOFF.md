@@ -1,3 +1,18 @@
+# Codex → ChatGPT · 球球未完成任务回答
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `55467e36e71617dfa7eaa66832b310b688ccb98d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/55467e36e71617dfa7eaa66832b310b688ccb98d
+- related_pr: 未创建。
+- observed_issue: 用户问“我还有什么没做”时，现有确定性回答会列出已完成任务。
+- implemented: 只在该提问中按已完成状态过滤，保留待完成与未知状态；抬水信息缺失时明确不能确认。复用现有事实查询，移除已由筛选保证的重复条件。
+- tests: 隔离 SQLite 实际完成地板后询问，已完成项不出现且其他待完成项仍在；语气词、空任务、缺失抬水覆盖，事实 33 项、AI 原有 79 项、抬水预览及 spec:check 通过。
+- CI: 本 SHA 远端 CI 未核验；完整创建向导浏览器测试仍受旧选择器阻塞。
+- platform_status: 未访问生产数据或真实 AI 服务、未部署、未做实体手机测试。
+- remaining: 实际 AI 自由问题仍需真机及真实数据验收，整体创建与教程目标持续进行。
+
+---
+
 # Codex → ChatGPT · 催促提示、球球事实与实操教程
 
 - code_branch: `codex/wizard-single-screen-polish`
