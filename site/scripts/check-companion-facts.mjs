@@ -22,6 +22,7 @@ try {
  r=await chat('地板谁没做');check(r.status===200&&r.messages.join('').includes('国福')&&calls===0,'live question uses current round without the model');
  const done=await h.request(`/chores/tasks/${floor.id}/complete`,{method:'PATCH',token:tokens[0],data:{}});check(done.ok,'fixture completes a real isolated task');
  r=await chat('我的任务是什么');check(r.messages.join('').includes('地板：本轮已完成'),'next question reads the newly completed state');
+ r=await chat('我还有什么没做');check(!r.messages.join('').includes('地板：')&&r.messages.join('').includes('待完成'),'remaining-task answer excludes the completed task and keeps pending tasks');
  const undo=await h.request(`/chores/tasks/${floor.id}/undo`,{method:'PATCH',token:tokens[0],data:{}});check(undo.ok,'fixture undoes the isolated completion');
  r=await chat('我的任务有哪些');check(r.messages.join('').includes('地板：本轮待完成'),'undo is reflected without clearing chat history');
  time=new Date(time.getTime()+61000);
@@ -49,6 +50,9 @@ try {
  check(companionFactReply('抬水轮到谁',{...context,water:undefined}).messages.join('').includes('无法确认'),'missing water data is not presented as an empty schedule');
  check(companionFactReply('抬水轮到谁',{...context,water:{available:true,current_assignee:null}}).messages.join('').includes('没有待完成'),'an explicitly empty water schedule remains distinguishable from missing data');
  check(companionFactReply('我的任务是什么',{...context,personal_tasks:[{name:'地板',assignee_id:1,status:undefined}]}).messages.join('').includes('状态暂不可用'),'unknown task status is not guessed as pending');
+ check(companionFactReply('我还有什么没做',{...context,personal_tasks:[{name:'地板',assignee_id:1,status:'completed'}]}).messages.join('').includes('没有待完成'),'completed tasks are excluded from the remaining list');
+ check(!companionFactReply('我还有什么没做呢',{...context,personal_tasks:[{name:'地板',assignee_id:1,status:'completed'}]}).messages.join('').includes('地板'),'natural question particles retain the remaining-only filter');
+ check(companionFactReply('我还有什么没做',{...context,personal_tasks:[],water:undefined}).messages.join('').includes('抬水安排暂时无法确认'),'remaining list does not treat missing water data as complete');
  check(companionFactReply('你认识我吗',context).messages.join('')==='你是李豪。','natural identity question uses authenticated member');
  check(companionFactReply('提醒国福做地板',roundContext)===null,'task facts do not intercept a reminder action');
 

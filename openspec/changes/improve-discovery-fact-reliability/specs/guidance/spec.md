@@ -7,3 +7,6 @@ The companion SHALL guide available gestures without implying a notification was
 #### Scenario: Missing water or task status
 - **WHEN** water schedule data or a task status is unavailable
 - **THEN** the companion says it cannot confirm instead of inventing an empty or pending state.
+#### Scenario: Asking which duties remain
+- **WHEN** a member asks which of their tasks are unfinished
+- **THEN** the answer omits completed duties, shows pending or unknown states accurately, and does not claim missing water data is complete.

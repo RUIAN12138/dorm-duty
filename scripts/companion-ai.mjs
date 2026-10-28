@@ -84,18 +84,19 @@ export function companionFactReply(text, context) {
     messages = [`你是${me.name}。`];
   } else if (/^(?:(?:我|今天我|本轮我|这轮我|现在我)(?:今天|现在|本轮|这轮)?(?:要|该|应该|需要|可以)?(?:做什么|做啥|干什么|干嘛|做哪些任务)|(?:今天|本轮|这轮|现在)(?:要|该|应该|需要|可以)?(?:做什么|做啥|干什么|干嘛)|我的(?:任务|值日|任务安排)(?:是什么|有哪些)|我还有什么没做|我这轮做完了吗)[呀啊呢吗]*$/.test(q)) {
     if (!Array.isArray(context.personal_tasks)) return {messages: ["暂时无法确认你的任务。", "请稍后重试。"], emotion:"11", reminder:null};
-    const tasks = context.personal_tasks.filter(task => task.assignee_id === me.id);
-    messages = [`${me.name}，这是你的当前任务。`];
+    const pendingOnly = /^我还有什么没做[呀啊呢吗]*$/.test(q);
+    const tasks = context.personal_tasks.filter(task => task.assignee_id === me.id && (!pendingOnly || task.status !== "completed"));
+    messages = [pendingOnly ? `${me.name}，这是你还要做的值日。` : `${me.name}，这是你的当前任务。`];
     for (const task of tasks.slice(0, 4)) {
-      if (task.assignee_id !== me.id) continue;
       const period = task.mode === "self_round" ? "本轮" : task.mode === "scheduled" && task.assigned_date === context.today ? "今天" : "当前";
       const state = task.status === "completed" ? "已完成" : task.status === "pending" ? "待完成" : "状态暂不可用";
       messages.push(`${task.name}：${period}${state}。`);
     }
-    if (!tasks.length) messages.push("当前没有分配给你的值日任务。");
+    if (!tasks.length) messages.push(pendingOnly ? "当前没有待完成的值日任务。" : "当前没有分配给你的值日任务。");
     if (tasks.length > 4) messages.push("其余任务可在任务页查看。");
     const water = context.water?.current_assignee;
-    if (water && messages.length < 6) messages.push(water.id === me.id ? "抬水轮到你，没水时再抬。" : `抬水当前轮到${water.name}。`);
+    if (water && messages.length < 6 && (!pendingOnly || water.id === me.id)) messages.push(water.id === me.id ? "抬水轮到你，没水时再抬。" : `抬水当前轮到${water.name}。`);
+    else if (pendingOnly && context.water?.available !== true && !water && messages.length < 6) messages.push("抬水安排暂时无法确认。");
   } else if (/^(?:现在|今天|这次|目前)?(?:抬水(?:轮到|是|该)?谁|谁(?:该|要|来)?抬水|轮到谁抬水)(?:了|呀|呢|啊|吗)*$/.test(q)) {
     const water = context.water?.current_assignee;
     messages = [water ? water.id === me.id ? `现在轮到你（${me.name}）抬水。` : `现在轮到${water.name}抬水。` : context.water?.available === true ? "当前没有待完成的抬水任务。" : "暂时无法确认抬水安排。"];
