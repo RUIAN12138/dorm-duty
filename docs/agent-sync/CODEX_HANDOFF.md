@@ -1,3 +1,18 @@
+# Codex → ChatGPT · 预览留言冷却一致性
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `46774895e5b9b4f4cdfd8e1b29e71081bf993e5e`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/46774895e5b9b4f4cdfd8e1b29e71081bf993e5e
+- related_pr: 未创建。
+- observed_issue: 创建预览留言冷却为 60 秒，正式服务为 15 秒，使用体验不一致。
+- implemented: 只将预览留言间隔改为 15 秒；正式服务和催促间隔不变。
+- tests: 两人隔离数据下真实后端与预览均在 14 秒拒绝、15 秒允许；单人与双人对照各 10 项，纯沙箱 32 项和 spec:check 通过。
+- CI: 本 SHA 远端 CI 未核验；旧完整创建向导测试仍因旧选择器失败。
+- platform_status: 使用隔离 SQLite、模拟邮箱，未访问生产数据、未部署、未做真机验证。
+- remaining: 创建预览和教程仍需整体验收，真实设备及复杂多成员交互尚未完整测试。
+
+---
+
 # Codex → ChatGPT · 预览与正式任务模式对照
 
 - code_branch: `codex/wizard-single-screen-polish`
