@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 断线后刷新与向导回归
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `0946fa7061b44f9ca1b4a1cc97b45755a0654b87`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/0946fa7061b44f9ca1b4a1cc97b45755a0654b87
+- related_pr: 未创建。
+- requirements: 创建成功但响应中断后，重试或刷新不重复创建；旧宿舍数据不变。
+- implemented: 增加隔离浏览器回归，覆盖自定义第五任务分页、响应中断后再次提交及刷新恢复已有宿舍；本次没有修改产品代码。
+- tests: Chromium、WebKit 两种模式均通过，覆盖重试和刷新；旧数据库迁移及创建幂等测试、spec:check 通过。
+- full_wizard_regression: `scripts/check-dorm-wizard-browser.mjs` 失败于第 475 行；旧断言要求 `.creation-task-picks button` 数量为 5，该元素当前创建向导模板不存在。等退场动画结束后仍失败；独立当前 UI 测试验证新增第五个任务、分页及原四项保留。完整套件未通过，不声称全绿；按用户范围限制未修改此既有测试。
+- CI: 本 SHA 远端 CI 尚未核验。
+- platform_status: 未访问正式数据或部署，未做手机真机；已部署 D1 并发仍未验证。
+- remaining: 既有完整向导测试仍需按用户范围授权处理；独立新手教程和正式页面仍按范围限制暂缓。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 创建断线重试浏览器回归
 
 - code_branch: `codex/wizard-single-screen-polish`
