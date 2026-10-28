@@ -1319,7 +1319,7 @@ async function claim(request, db, env, now) {
     201,
   );
 }
-function normalizeCategory(input, current, ids, today, allowedKeys = KEYS, allowV2Completion = false) {
+function normalizeCategory(input, current, ids, today, allowedKeys = KEYS, allowV2Completion = false, allowDisabledBlank = false) {
   object(
     input,
     [
@@ -1344,8 +1344,9 @@ function normalizeCategory(input, current, ids, today, allowedKeys = KEYS, allow
   )
     invalid("请选择有效的值日方式，抬水按完成顺序轮换");
   const value = { ...current, ...input };
-  value.name = str(value.name, 1, 32);
-  value.content = str(value.content, 1, 500);
+  const minimum = allowDisabledBlank && value.enabled === false ? 0 : 1;
+  value.name = str(value.name, minimum, 32);
+  value.content = str(value.content, minimum, 500);
   value.deadline_time = time(value.deadline_time);
   value.start_date = date(value.start_date);
   if (
@@ -1519,7 +1520,7 @@ async function configure(request, db, room, who, now, orderOnly = false) {
       enabled: task?.enabled ?? false,
       mode: configuredTaskMode({ key: entry.key, rotation: task?.rotation }),
     };
-    return configuredCategory(normalizeCategory(entry, fallback, ids, today, allowedKeys, !!nextConfiguration || !!currentConfiguration), nextConfiguration || currentConfiguration);
+    return configuredCategory(normalizeCategory(entry, fallback, ids, today, allowedKeys, !!nextConfiguration || !!currentConfiguration, !!nextConfiguration), nextConfiguration || currentConfiguration);
   });
   const draft = nextConfiguration ? updated : settings.map(
       (category) =>

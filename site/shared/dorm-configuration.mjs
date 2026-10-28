@@ -45,7 +45,7 @@ export function validateDormConfiguration(value) {
     if(effective === "hard" && (t.execution_time || "08:00") >= t.deadline) bad();
     const name = String(t.name || "").trim(),
       content = String(t.content || "").trim();
-    if (!name || [...name].length > 32 || [...content].length > 500)
+    if ((t.enabled && !name) || [...name].length > 32 || [...content].length > 500)
       bad();
     if (
       t.policy !== undefined &&

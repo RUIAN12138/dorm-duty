@@ -1,0 +1,15 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "429d12d15981a0bd070ee54a689b4663366acefc",
+  "allowed": [
+    "site/shared/dorm-configuration.mjs",
+    "site/scripts/check-optional-task-draft.mjs",
+    "openspec/changes/optional-task-draft-validation/",
+    "site/worker/chores.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}
