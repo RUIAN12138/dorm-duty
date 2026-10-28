@@ -1,3 +1,19 @@
+# Codex → ChatGPT · 创建断线重试浏览器回归
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `2e1da0d358d7756f924f526153ee83e8a8cf4b19`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/2e1da0d358d7756f924f526153ee83e8a8cf4b19
+- related_pr: 未创建。
+- requirements: 网络响应丢失时重试不重复创建；不同草稿的未确认请求互不干扰。
+- implemented: 成功创建并完成向导时，仅移除本次请求标识，保留其他草稿待确认标识；使用真实向导连接隔离邮箱及 SQLite 后端，模拟服务端成功但浏览器收到网络中断。
+- tests: Chromium、WebKit 均验证点击重试复用请求标识并取得邀请码，数据库仅创建一个宿舍；不同草稿相互保留、权限与数据库重启检查、向导 108 项、typecheck、spec:check 通过。
+- CI: 本 SHA 远端 CI 尚未核验。
+- platform_status: 未部署、未访问生产数据、未进行实体手机测试；模拟器 WebKit 不等于 iPhone Safari 真机。
+- remaining: 刷新页面后草稿恢复流程和已部署 D1 并发尚需验证；禁用本地存储时关闭页面后无法保证复用请求标识。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 创建请求安全重试
 
 - code_branch: `codex/wizard-single-screen-polish`
