@@ -1,3 +1,17 @@
+# Codex → ChatGPT · 创建向导中途切换账号
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `866d64c10d6f866de5eebc35df17d310840f9a1d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/866d64c10d6f866de5eebc35df17d310840f9a1d
+- related_pr: 未创建。
+- implemented: 创建请求附带当前 UI 账号供服务端与已验证邮箱对照；不一致时拒绝创建。向导期间客户端检测到账号变化也会阻止提交并保留原草稿；已有客户端未发送字段时行为不变，邮箱本身不是认证凭据。
+- tests: Chromium/WebKit 使用真实向导与隔离邮箱验证客户端状态先变和服务端会话先变，拒绝提交、重复点击不写入、原草稿保留、新账号重新打开不读旧草稿；并发与重启隔离检查、创建 108 项、云后端、typecheck 和 spec:check 通过。
+- CI: 本 SHA 远端 CI 未核验；此前完整向导浏览器套件的旧选择器失败仍未处理。
+- platform_status: 未部署、未接触正式数据库、未做实体手机验证；旧客户端没有新字段，无法获得新增账号切换保护。
+- remaining: 用户刚确认需要优化催促手势提示、球球身份任务准确性与实操教程，覆盖之前的范围暂缓；这些将另行检查现状后实施。
+
+---
+
 # Codex → ChatGPT · 断线后刷新与向导回归
 
 - code_branch: `codex/wizard-single-screen-polish`
