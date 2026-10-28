@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 聊天键盘后导航位置验证
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `8691b4da694b33eccd270166926593e2c48b0e04`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/8691b4da694b33eccd270166926593e2c48b0e04
+- related_pr: 本轮未创建。
+- requirements: 用户确认导航偶发错位发生在退出聊天或收起键盘后；继续定位。
+- changed_files: 催促浏览器回归、OpenSpec 验证记录。
+- implemented: 隔离身份模拟聊天输入和键盘视口改变、返回后的导航坐标比较；未在缺乏复现证据时调整正式导航逻辑。
+- tests: Chromium 和 WebKit 模拟键盘关闭后导航与原位置一致；上次大字手势修复仍由相同测试覆盖。
+- CI: 本 SHA 远端 CI 未确认。
+- platform_status: 未验证实体 iOS 键盘、Android WebView 或 HarmonyOS；未发布。
+- remaining: 用户真机所见偶发错位未能在模拟环境复现，继续需要真实 iPhone 验证；此前大字下滑修复已提交尚未部署。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 催促下滑与导航定位
 
 - code_branch: `codex/wizard-single-screen-polish`
