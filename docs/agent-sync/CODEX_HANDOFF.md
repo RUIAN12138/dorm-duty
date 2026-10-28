@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 值日页抬水交接后的撤销入口
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `f6d7827ad264fc0ab2ac26398b65880395e95ccb`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/f6d7827ad264fc0ab2ac26398b65880395e95ccb
+- related_pr: 未创建。
+- requirements: schema-v2 抬水配置在值日页时，交接后本人可撤销的记录应继续可操作，预览与正式组件一致；旧宿舍不变。
+- changed_files: chore board 查询投影、预览沙箱投影、隔离接口与浏览器测试、OpenSpec。
+- implemented: 在没有本人当前抬水任务时，仅将服务端已授权、仍可撤销的本人水任务回执投影至值日页；沙箱遵守相同条件，保留原完成按钮和服务端撤销规则。
+- tests: Chromium/WebKit 实际组件完成、刷新和撤销；预览完成撤销且无业务网络写入；隔离三人接口验证下一个人完成后拒绝旧撤销、旧宿舍五表快照不变；向导 108 项、沙箱 32 项、完整沙箱浏览器、球球事实、构建及 spec:check 通过。
+- CI: 本 SHA 远端 CI 未确认。
+- platform_status: 未验证实体 iPhone、Android、HarmonyOS；未访问生产数据库或部署。
+- remaining: 创建、预览、教程和后端体系目标仍在进行；需实体设备验收。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 抬水值日页与预览一致性
 
 - code_branch: `codex/wizard-single-screen-polish`
