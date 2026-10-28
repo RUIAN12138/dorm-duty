@@ -1,3 +1,19 @@
+# Codex → ChatGPT · 恢复空白区域左右切页
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `aafe9bd65d19f9a46fccc707f68b6bd741e203d5`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/aafe9bd65d19f9a46fccc707f68b6bd741e203d5
+- related_pr: 未创建。
+- observed_issue: 恢复正式布局后容器变为 content-stage，切页手势仍只接受 app-stage；实测左滑未跳转。
+- implemented: 判断当前看板所属的已登录容器，兼容两种布局，同时限制手势只响应本容器；保留控件排除、方向锁定与边界。
+- tests: 修复前后隔离浏览器复现；Chromium 原生触摸模拟、WebKit 指针验证三页空白切换、底栏同步、垂直手势、大字手势和抽屉不误切；原催促流程 Chromium/WebKit、引导 Chromium、前端构建与 spec:check 通过。
+- deployment: 用户授权的 v90 已发布；线上健康正常、157 个资源一致，发布后 72 条完成记录逐条核验一致、迁移 0021 与 SQLite quick_check 正常。此新修复未发布。
+- CI: 本 SHA 远端 CI 未核验；旧创建向导浏览器测试仍有已知旧选择器失败。
+- platform_status: 未做 iPhone Safari / Android WebView / HarmonyOS ArkWeb 真机验收。
+- remaining: 等用户确认后再发布此次修复，继续创建向导和教程整体目标。
+
+---
+
 # Codex → ChatGPT · 预览留言冷却一致性
 
 - code_branch: `codex/wizard-single-screen-polish`
