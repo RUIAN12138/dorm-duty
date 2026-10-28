@@ -287,7 +287,7 @@ export function createDraftSandbox(input, now = () => new Date()) {
       targets.some(
         (target) =>
           noteTimes.has(target.user_id) &&
-          at - noteTimes.get(target.user_id) < 60000,
+          at - noteTimes.get(target.user_id) < 15000,
       )
     )
       throw Error("刚刚已模拟留言，稍后再试");

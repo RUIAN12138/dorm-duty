@@ -4,12 +4,13 @@ import { createDraftSandbox } from "./draftSandbox.mjs";
 import { createEmailRuntime } from "../../../../../site/local/email-runtime.mjs";
 import { handleApi } from "../../../../../site/worker/backend.mjs";
 const RealDate = Date;
+let testTime = "2026-10-27T02:00:00Z";
 globalThis.Date = class extends RealDate {
   constructor(...args) {
-    super(...(args.length ? args : ["2026-10-27T02:00:00Z"]));
+    super(...(args.length ? args : [testTime]));
   }
   static now() {
-    return new RealDate("2026-10-27T02:00:00Z").getTime();
+    return new RealDate(testTime).getTime();
   }
 };
 const h = await createHarness();
@@ -95,6 +96,7 @@ try {
       },
     })
   ).json();
+  let peerId;
   if (process.env.DORM_PARITY_MEMBERS === "2") {
     const sent = [];
     const mail = createEmailRuntime(h.db, {
@@ -148,6 +150,7 @@ try {
       nickname: "乙",
     });
     assert.equal(join.status, 201, await join.clone().text());
+    peerId = (await join.json()).member.user_id;
     await mail.close();
   }
   const get = async () => {
@@ -243,6 +246,45 @@ try {
     });
     assert(undone.ok, await undone.clone().text());
     await compare(`${key} undo matches real backend`);
+  }
+  if (peerId) {
+    const note = { target_member_id: peerId, text: "请记得值日" };
+    s.sendNote({ ...note, target_member_id: -peerId });
+    assert.equal(
+      (
+        await h.request("/chores/notes", {
+          method: "POST",
+          token: room.access_token,
+          data: note,
+        })
+      ).status,
+      201,
+    );
+    testTime = "2026-10-27T02:00:14Z";
+    assert.throws(() => s.sendNote({ ...note, target_member_id: -peerId }));
+    assert.equal(
+      (
+        await h.request("/chores/notes", {
+          method: "POST",
+          token: room.access_token,
+          data: note,
+        })
+      ).status,
+      429,
+    );
+    testTime = "2026-10-27T02:00:15Z";
+    s.sendNote({ ...note, target_member_id: -peerId });
+    assert.equal(
+      (
+        await h.request("/chores/notes", {
+          method: "POST",
+          token: room.access_token,
+          data: note,
+        })
+      ).status,
+      201,
+    );
+    checks++;
   }
   assert.equal(oldSnapshot(), oldBefore);
   checks++;

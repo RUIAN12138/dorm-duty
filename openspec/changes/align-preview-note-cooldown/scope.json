@@ -1,0 +1,1 @@
+{"base":"25056ed6c28f2c46f3cef957e8828a1226b7c667","implementationBase":"3b92f6001a80e264c5d3033179fb60d809a8d044","allowed":["frontend/src/components/onboarding/sandbox/draftSandbox.mjs","frontend/src/components/onboarding/sandbox/backendParity.test.mjs","openspec/changes/align-preview-note-cooldown/"],"acceptance":{"status":"pending","userStatement":null,"acceptedDigest":null}}
