@@ -48,6 +48,7 @@ export function createGuestDorm(
     members: string[];
     marker_id?: string;
     configuration?: DormConfiguration;
+    request_id?: string;
   },
   signal: AbortSignal,
 ) {

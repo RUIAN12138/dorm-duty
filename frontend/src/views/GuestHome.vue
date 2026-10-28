@@ -4,6 +4,7 @@ import {
   restoreSessionToken,
 } from "../interaction/persistentSession";
 import DormWizard from "../components/onboarding/DormWizard.vue";
+import { creationRequestId, clearCreationRequest } from "../interaction/creationRequest";
 import {
   configurationOf,
   type DormDraft,
@@ -757,6 +758,7 @@ async function submitWizard(draft: DormDraft) {
   await submitCreate();
 }
 function finishWizard() {
+  if (createdInvite.value && emailAccount.email) clearCreationRequest(emailAccount.email);
   creatingRoom.value = false;
   localWizardExperience.value = false;
   wizardConfiguration.value = undefined;
@@ -765,19 +767,22 @@ async function submitCreate() {
   if (loading.value) return;
   const { id, signal } = startRequest();
   try {
-    const result = await createGuestDorm(
-      {
-        configuration: wizardConfiguration.value,
-        name: createName.value.trim(),
-        marker_id: createMarker.value,
-        nickname: createNickname.value.trim(),
-        members: createMembers.value
-          .split(/[\n、，,；;]/)
-          .map((name) => name.trim())
-          .filter(Boolean),
-      },
-      signal,
-    );
+    const values = {
+      configuration: wizardConfiguration.value,
+      name: createName.value.trim(),
+      marker_id: createMarker.value,
+      nickname: createNickname.value.trim(),
+      members: createMembers.value
+        .split(/[\n、，,；;]/)
+        .map((name) => name.trim())
+        .filter(Boolean),
+    };
+    if (values.configuration && emailAccount.loggedIn && !emailAccount.email)
+      throw new Error("账号信息尚未恢复，请稍后重试。");
+    const request_id = values.configuration && emailAccount.loggedIn
+      ? await creationRequestId(emailAccount.email!, values) : undefined;
+    if (!isCurrent(id, signal)) return;
+    const result = await createGuestDorm({ ...values, ...(request_id ? { request_id } : {}) }, signal);
     if (!isCurrent(id, signal)) return;
     persistSessionToken(result.access_token);
     try {

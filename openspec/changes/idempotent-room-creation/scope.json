@@ -1,0 +1,19 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "abd8911b1ac41f3ca422c327422c3b106e1a8b63",
+  "allowed": [
+    "site/drizzle/0021_room_creation_requests.sql",
+    "site/worker/backend.mjs",
+    "frontend/src/api/guest.ts",
+    "frontend/src/views/GuestHome.vue",
+    "frontend/src/interaction/creationRequest.ts",
+    "site/scripts/check-room-creation-idempotency.mjs",
+    "openspec/changes/idempotent-room-creation/",
+    "site/scripts/check-room-creation-restart.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

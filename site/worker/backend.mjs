@@ -625,7 +625,7 @@ async function guestCreate(request, db, now, emailCreator) {
     fail(401, "email_required", "请先用邮箱验证码登录");
   const input = await body(
     request,
-    ["name", "nickname", "members", "marker_id", "configuration"],
+    ["name", "nickname", "members", "marker_id", "configuration", "request_id"],
     ["name", "nickname"],
   );
   let configuration = null;
@@ -643,6 +643,48 @@ async function guestCreate(request, db, now, emailCreator) {
   const nicknames = [nickname, ...others.map((value) => str(value, 1, 32))];
   if (new Set(nicknames).size !== nicknames.length)
     invalid("室友名字不能重复，请使用能区分彼此的名字");
+  const requestId = input.request_id;
+  if (requestId !== undefined && (typeof requestId !== "string" || !/^[a-f0-9]{32}$/.test(requestId)))
+    invalid("创建请求标识无效，请重新打开创建页面");
+  if (requestId && (!emailSession || !configuration))
+    fail(401, "email_required", "请先用邮箱验证码登录");
+  const requestHash = requestId ? await digest(requestId) : null;
+  const payloadHash = requestId ? await digest(JSON.stringify({ name, nickname, members: nicknames.slice(1), marker, configuration })) : null;
+  async function replay() {
+    if (!requestHash) return null;
+    const existing = await first(db, "SELECT payload_hash,dorm_id FROM room_creation_requests WHERE account_id=? AND request_hash=?", [emailCreator.accountId,requestHash]);
+    if (!existing) return null;
+    const authorized = await first(db, `SELECT 1 AS allowed FROM email_sessions es
+      JOIN email_members em ON em.account_id=es.account_id AND em.dorm_id=? AND em.creator_verified=1
+      JOIN dormitories d ON d.id=em.dorm_id AND d.admin_user_id=em.user_id AND d.is_demo=0
+      JOIN users u ON u.id=em.user_id AND u.current_dorm_id=d.id
+      JOIN dorm_members m ON m.dorm_id=d.id AND m.user_id=u.id AND m.role='admin' AND m.is_active=1
+      WHERE es.token_hash=? AND es.account_id=? AND es.expires_at>?`,
+      [existing.dorm_id,emailCreator.sessionHash,emailCreator.accountId,now.toISOString()]);
+    if (!authorized) fail(401, "email_required", "身份已失效，请重新验证邮箱");
+    if (existing.payload_hash !== payloadHash) fail(409, "creation_request_conflict", "创建内容已改变，请重新发起创建");
+    const token = random(), tokenHash = await digest(token), at = now.toISOString();
+    // Recheck session and verified creator membership in the same atomic batch.
+    // No raw token is persisted, and a revoked identity cannot recover a room.
+    const results = await db.batch([
+      stmt(db, `INSERT INTO sessions(token_hash,user_id,created_at,expires_at,kind,dorm_id)
+        SELECT ?,u.id,?,es.expires_at,'account',d.id FROM email_sessions es
+        JOIN email_members em ON em.account_id=es.account_id AND em.dorm_id=? AND em.creator_verified=1
+        JOIN dormitories d ON d.id=em.dorm_id AND d.admin_user_id=em.user_id AND d.is_demo=0
+        JOIN users u ON u.id=em.user_id AND u.current_dorm_id=d.id
+        JOIN dorm_members m ON m.dorm_id=d.id AND m.user_id=u.id AND m.role='admin' AND m.is_active=1
+        WHERE es.token_hash=? AND es.account_id=? AND es.expires_at>?`,
+        [tokenHash,at,existing.dorm_id,emailCreator.sessionHash,emailCreator.accountId,at]),
+      stmt(db, `INSERT INTO email_grants(token_hash,email_session_hash,full_session)
+        SELECT ?,?,1 WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=?)`,
+        [tokenHash,emailCreator.sessionHash,tokenHash]),
+    ]);
+    if (changes(results[0]) !== 1) fail(401, "email_required", "身份已失效，请重新验证邮箱");
+    const room = normalizeDorm(await first(db, "SELECT * FROM dormitories WHERE id=?", [existing.dorm_id]));
+    return json({access_token:token,invite_code:room.invite_code,member_id:room.admin_user_id,dorm:await guestView(db,room)},201);
+  }
+  const previous = await replay();
+  if (previous) return previous;
   const prefix = `guest_${random(9)}`;
   const usernames = nicknames.map(
     (_, index) => `${prefix}_${String(index).padStart(2, "0")}`,
@@ -756,7 +798,16 @@ async function guestCreate(request, db, now, emailCreator) {
       ),
     );
   }
-  await db.batch(ops);
+  if (requestHash) ops.push(stmt(db,
+    "INSERT INTO room_creation_requests(account_id,request_hash,payload_hash,dorm_id,created_at) SELECT ?,?,?,id,? FROM dormitories WHERE invite_code=?",
+    [emailCreator.accountId,requestHash,payloadHash,current,invite]));
+  try { await db.batch(ops); }
+  catch (error) {
+    // Concurrent same-key requests race on the unique key; the losing batch
+    // rolls back all room, session and membership writes before replay.
+    if (requestHash) { const result = await replay(); if (result) return result; }
+    throw error;
+  }
   const room = normalizeDorm(
     await first(db, "SELECT * FROM dormitories WHERE invite_code=?", [invite]),
   );
