@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 创建向导可选任务验证一致性
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `defde2bb90af1083419a67f274b3f0788fca4761`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/defde2bb90af1083419a67f274b3f0788fca4761
+- related_pr: 本轮未创建。
+- requirements: 创建向导可跳过可选任务；前后端规则一致，旧宿舍及正式数据保持不变。
+- changed_files: `site/shared/dorm-configuration.mjs`、`site/worker/chores.mjs`、隔离测试及对应 OpenSpec。
+- implemented: schema-v2 停用任务可保留空名称；只有 schema-v2 配置保存允许停用类别为空，启用仍必须合法命名，旧版验证不变。
+- tests: 隔离 SQLite 创建、读取、保存、拒绝空名启用、命名后启用；旧宿舍五表快照不变；创建向导 108 项、动态迁移 4 项七表、云后端检查及 spec:check 通过。
+- CI: 此 SHA 远端 CI 尚未确认。
+- platform_status: 未访问生产数据库、未部署、未创建 PR；未做实体设备测试。
+- remaining: 创建向导、预览、教程及后端目标持续进行，真实设备验收待完成。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 催促引导、事实回答与操作教程
 
 - code_branch: `codex/wizard-single-screen-polish`
