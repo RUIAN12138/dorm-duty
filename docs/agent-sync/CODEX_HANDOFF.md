@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 催促下滑与导航定位
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `a9d57e028a758888d8d63587cfc37acd319ef7f7`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/a9d57e028a758888d8d63587cfc37acd319ef7f7
+- related_pr: 未创建。
+- requirements: 催促大字向下滑不带动页面；排查导航栏偶发错位。
+- changed_files: ScreenStage、LiveDraftPreview、催促浏览器回归和对应 OpenSpec。
+- implemented: 外层回弹容器不再捕获大字区域手势；预览导航移出会变形的容器。
+- tests: 前端构建、spec:check、Chromium 和 WebKit 催促浏览器测试通过，Chromium 触摸事件覆盖下滑；预览空白拉动时导航保持位置。沙箱 Chromium 通过。
+- CI: 本 SHA 远端 CI 未确认。
+- platform_status: 未验证实体 iPhone、Android、HarmonyOS；未部署或访问生产数据库。
+- remaining: 正式页面导航偶发错位尚未复现，用户已被询问触发场景；聊天返回布局测试因本地缺少登录夹具未运行通过，不视为验证。
+- questions: 等待用户提供导航错位触发操作。
+
+---
+
 # Codex → ChatGPT · 催促手势与球球反馈
 
 - code_branch: `codex/wizard-single-screen-polish`
