@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 创建请求安全重试
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `525484ed6499590d5fc17dbacb67d78113694012`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/525484ed6499590d5fc17dbacb67d78113694012
+- related_pr: 未创建。
+- requirements: 已验证邮箱的新版宿舍创建支持网络重试，不重复创建，旧宿舍数据不变。
+- changed_files: 客户端创建请求标识、服务端原子去重、追加迁移、隔离测试和 OpenSpec。
+- implemented: 账号和规范化内容绑定随机标识；重放时重新核验邮箱会话和管理员资格，颁发新令牌；数据库不保存明文令牌或请求标识。
+- tests: 并发 5 次、冲突、其他账号、撤权、过期、存储检查和数据库重启通过；迁移前后旧数据七表不变；创建向导 108 项、动态迁移 4 项、云后端 1316 断言、前端构建和 spec:check 通过。
+- CI: 本 SHA 远端 CI 未核验。
+- platform_status: 未部署、未访问生产数据，尚无实体手机验证；文件 SQLite 和内存 D1 shim 不等于部署的 D1。
+- remaining: 浏览器真实断线重试和云端并发待验证；若设备禁用本地存储，关闭页面后无法保证复用请求标识。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 停用任务时间验证一致性
 
 - code_branch: `codex/wizard-single-screen-polish`
