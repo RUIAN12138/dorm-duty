@@ -1,0 +1,1 @@
+{"base":"25056ed6c28f2c46f3cef957e8828a1226b7c667","implementationBase":"55467e36e71617dfa7eaa66832b310b688ccb98d","allowed":["frontend/src/components/onboarding/sandbox/backendParity.test.mjs","openspec/changes/preview-multimode-parity/"],"acceptance":{"status":"pending","userStatement":null,"acceptedDigest":null}}

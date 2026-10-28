@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHarness } from "../../../../../site/scripts/check-cloud-backend.mjs";
 import { createDraftSandbox } from "./draftSandbox.mjs";
+import { createEmailRuntime } from "../../../../../site/local/email-runtime.mjs";
+import { handleApi } from "../../../../../site/worker/backend.mjs";
 const RealDate = Date;
 globalThis.Date = class extends RealDate {
   constructor(...args) {
@@ -57,7 +59,12 @@ const config = {
     { id: "water", label: "催促" },
     { id: "calendar", label: "日历" },
   ],
-  tasks: [task("floor", "round"), task("water", "completion")],
+  tasks: [
+    task("floor", "round"),
+    task("sink", "rotation"),
+    task("toilet", "completion"),
+    task("water", "completion"),
+  ],
 };
 try {
   const legacy = await (
@@ -88,6 +95,61 @@ try {
       },
     })
   ).json();
+  if (process.env.DORM_PARITY_MEMBERS === "2") {
+    const sent = [];
+    const mail = createEmailRuntime(h.db, {
+      config: {
+        host: "smtp.invalid",
+        port: 465,
+        user: "test@example.invalid",
+        password: "fixture",
+        from: "test@example.invalid",
+        publicOrigin: "https://backend-test.example",
+        otpSecret: "b".repeat(64),
+      },
+      autoStart: false,
+      send: async (m) => sent.push(m),
+    });
+    let cookie = "";
+    async function call(path, data) {
+      const req = new Request("https://backend-test.example" + path, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Dorm-Email": "1",
+          Origin: "https://backend-test.example",
+          Cookie: cookie,
+        },
+        body: JSON.stringify(data),
+      });
+      const r = await mail.wrap(req, (request, emailCreator) =>
+        handleApi(request, { ...h.env, EMAIL_CREATOR: emailCreator }),
+      );
+      if (r.headers.get("set-cookie"))
+        cookie = r.headers.get("set-cookie").split(";")[0];
+      return r;
+    }
+    const email = "peer@example.invalid",
+      challenge = await (await call("/email/code", { email })).json();
+    const code = sent.at(-1).text.match(/验证码是：(\d{6})/)[1];
+    assert.equal(
+      (
+        await call("/email/verify", {
+          email,
+          code,
+          challenge_id: challenge.challenge_id,
+          mail_enabled: false,
+        })
+      ).status,
+      200,
+    );
+    const join = await call("/chores/claim", {
+      invite_code: room.invite_code,
+      nickname: "乙",
+    });
+    assert.equal(join.status, 201, await join.clone().text());
+    await mail.close();
+  }
   const get = async () => {
     const response = await h.request(
       `/chores/board?invite_code=${room.invite_code}&member_id=${room.member_id}`,
@@ -139,7 +201,7 @@ try {
     checks++;
   }
   await compare("initial synthetic snapshot matches actual service shape");
-  for (const key of ["floor", "water"]) {
+  for (const key of ["floor", "sink", "toilet", "water"]) {
     const remote = (await get()).workspace_tasks.find(
         (t) => t.key === key && t.assignee_id === room.member_id,
       ),
@@ -148,6 +210,23 @@ try {
         .workspace_tasks.find(
           (t) => t.key === key && t.assignee_id === -room.member_id,
         );
+    if (!remote) {
+      const peer = (await get()).workspace_tasks.find(
+        (t) => t.key === key && t.status === "pending",
+      );
+      const syntheticPeer = s
+        .snapshot()
+        .workspace_tasks.find((t) => t.id === -peer.id);
+      assert.throws(() => s.complete(syntheticPeer));
+      const denied = await h.request(`/chores/tasks/${peer.id}/complete`, {
+        token: room.access_token,
+        method: "PATCH",
+        data: {},
+      });
+      assert.equal(denied.status, 403);
+      await compare(`${key} rejects completing another member's task`);
+      continue;
+    }
     s.complete(sim);
     const completed = await h.request(`/chores/tasks/${remote.id}/complete`, {
       token: room.access_token,
