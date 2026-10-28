@@ -16,6 +16,7 @@ let holdFloor=false,releaseFloor;
 await p.addInitScript(({invite,id})=>localStorage.setItem(`dorm-welcome-guide-v2:${encodeURIComponent(invite)}:${id}`,'1'),{invite:room.invite_code,id:peer.member.user_id});
 await p.route(/\/(email|chores|auth|dorms|guest)\//,async route=>{
  const req=route.request(),url=new URL(req.url());
+ if(url.pathname==='/chores/companion/state')return route.fulfill({json:{available:true,voice_available:false,messages:[],reminders:[]}});
  if(url.pathname.startsWith('/email/'))return route.fulfill({json:url.pathname==='/email/config'?{available:true,registration_required:true}:url.pathname==='/email/me'?{logged_in:true,email:'nudge@example.invalid',rooms:[identity]}:url.pathname==='/email/enter'?{...identity,access_token:peer.access_token}:{}});
  if(url.pathname==='/chores/push/config')return route.fulfill({json:{available:false}});
  if(req.method()!=='GET')writes.push({path:url.pathname,body:req.postDataJSON()});
@@ -105,7 +106,18 @@ await settled();check(await p.locator('.nudge-title').evaluate(el=>el.getBoundin
  await p.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await p.reload();await p.locator('.nudge-pane').waitFor();await settled();
  check(await p.locator('.nudge-title-strip').evaluate(el=>{const m=new DOMMatrixReadOnly(getComputedStyle(el).transform);return el.dataset.motion==='idle'&&Math.abs(m.m41)<.01&&m.m11===1&&m.m22===1;}),'reduced motion suppresses displacement and stretch');
  await p.screenshot({path:out+'/dark-reduced.png'});
- await p.emulateMedia({reducedMotion:'no-preference'});await p.goto(base+'/?preview=new-dorm');await p.locator('.dorm-wizard').waitFor();await p.getByRole('button',{name:'预览',exact:true}).click();const preview=p.getByTestId('live-draft-preview');await preview.getByTestId('pane-duty').waitFor();
+ await p.emulateMedia({reducedMotion:'no-preference'});
+ const navBeforeChat=await p.getByTestId('chore-bottom-nav').boundingBox();
+ await p.locator('.companion-identity .companion-frame').click();await p.locator('.companion-chat').waitFor();
+ const chatInput=p.getByRole('textbox',{name:'和球球说句话'});await chatInput.click();await chatInput.click();await p.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='和球球说句话');
+ await p.evaluate(()=>{const vv=visualViewport;Object.defineProperty(vv,'height',{configurable:true,get:()=>500});Object.defineProperty(vv,'offsetTop',{configurable:true,get:()=>80});vv.dispatchEvent(new Event('resize'));vv.dispatchEvent(new Event('scroll'));});
+ await p.waitForFunction(()=>document.querySelector('.companion-chat')?.classList.contains('is-keyboard'));
+ await p.keyboard.press('Escape');
+ await p.evaluate(()=>{for(const key of ['height','offsetTop'])delete visualViewport[key];visualViewport.dispatchEvent(new Event('resize'));visualViewport.dispatchEvent(new Event('scroll'));});
+ await p.locator('.companion-chat').waitFor({state:'hidden'});
+ const navAfterChat=await p.getByTestId('chore-bottom-nav').boundingBox();
+ check(Math.abs(navAfterChat.y-navBeforeChat.y)<1 && Math.abs(navAfterChat.height-navBeforeChat.height)<1,'navigation remains near viewport bottom after chat and simulated keyboard restore');
+ await p.goto(base+'/?preview=new-dorm');await p.locator('.dorm-wizard').waitFor();await p.getByRole('button',{name:'预览',exact:true}).click();const preview=p.getByTestId('live-draft-preview');await preview.getByTestId('pane-duty').waitFor();
  const navBefore=await preview.getByTestId('chore-bottom-nav').boundingBox();
  const surfaceBox=await preview.locator('.screen-surface').boundingBox();
  await p.mouse.move(surfaceBox.x+8,surfaceBox.y+surfaceBox.height*.5);await p.mouse.down();await p.mouse.move(surfaceBox.x+8,surfaceBox.y+surfaceBox.height*.5+90,{steps:8});
