@@ -1,3 +1,18 @@
+# Codex → ChatGPT · 催促提示、球球事实与实操教程
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `d333f15dd6c7320b4b4ae39e9a15822db0864885`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/d333f15dd6c7320b4b4ae39e9a15822db0864885
+- related_pr: 未创建。
+- requirements: 用户明确指定原建议第 2、3、4 项：催促手势可发现性、球球身份与任务回答准确性、逐步点击实操教程；这三项覆盖此前对应模块暂缓限制。
+- implemented: 单任务多人时提示上下滑人，多任务先提示水平再提示可用的垂直手势，学会后不重复；球球不再把缺失抬水数据说成无任务、未知任务状态说成待完成。实操教程已有真实控件和自动推进，本轮修正测试遗漏的滑动、收件人确认步骤并用隔离后端完成布局测试。
+- tests: Chromium/WebKit 单任务多人提示；完整催促回归 42/40 项；球球事实 29 项、既有 AI 检查 79 项；教程四章 Chromium/WebKit 各 53 项并断言零练习网络请求；前端构建及 spec:check 通过。
+- CI: 本 SHA 远端 CI 尚未核验；旧完整创建向导测试仍因已移除的 `.creation-task-picks` 旧选择器未通过。
+- platform_status: 未部署、未访问生产数据或真实模型，未做实体手机测试；WebKit 不等于 iPhone 真机。
+- remaining: 真实设备手势、实际 AI 服务和教程验收，创建流程整体回归仍待完成。
+
+---
+
 # Codex → ChatGPT · 创建向导中途切换账号
 
 - code_branch: `codex/wizard-single-screen-polish`
