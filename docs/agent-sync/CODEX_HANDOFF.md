@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 催促手势与球球反馈
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `18366b037af2d3283aba06583e3b0a87fdf48cf0`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/18366b037af2d3283aba06583e3b0a87fdf48cf0
+- related_pr: 本轮未创建。
+- requirements: 大字区上下滑动不带动页面，单人和失败由球球气泡解释，保留其他区域滚动；隐藏页面滚动条；少量 emoji 及球球说话表情。
+- changed_files: ChoreBoard、NudgePane、CompanionBubble、DormCompanion、companionSpeech、催促浏览器测试与对应 OpenSpec。
+- implemented: 大字区独立 touch-action；无可切换对象及提醒失败反馈；提示语匹配表情并恢复；非手势区滚动规则未更改。
+- tests: 前端构建、OpenSpec 检查、Chromium 与 WebKit 催促浏览器回归通过，包含单人提示及方向切换。未做实体设备测试。
+- CI: 未确认本 SHA 远端 CI。
+- platform_status: iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机未验收；未部署。
+- remaining: 需实体设备验证滚动回弹与触摸手感；未模拟全部网络失败及屏幕阅读器情形。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 多人留言与催促交互
 
 - code_branch: `codex/wizard-single-screen-polish`
