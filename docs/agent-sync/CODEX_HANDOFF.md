@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 停用任务时间验证一致性
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `abd8911b1ac41f3ca422c327422c3b106e1a8b63`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/abd8911b1ac41f3ca422c327422c3b106e1a8b63
+- related_pr: 未创建。
+- requirements: 新宿舍可跳过可选任务，草稿和服务端验证一致；不修改旧宿舍与生产数据。
+- changed_files: schema-v2 配置验证、隔离回归与相关 OpenSpec。
+- implemented: 停用任务时间格式仍严格校验，先后顺序仅在启用时生效；重新启用时先后不合法仍拒绝。
+- tests: 隔离 SQLite 对继承/独立硬性模式覆盖前端验证、创建、错误启用和已存配置不变；向导 108 项、水任务预览、动态任务迁移及 spec:check 通过。
+- CI: 本 SHA 远端 CI 未确认。
+- platform_status: 未访问生产数据或部署，未做实体设备验收。
+- remaining: 隔离环境两次完全相同的创建请求产生两个宿舍，断线重试存在重复创建风险；需设计绑定邮箱、请求内容与安全凭据恢复的服务端幂等方案，不能仅依靠前端防双击。整体目标继续进行。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 值日页抬水交接后的撤销入口
 
 - code_branch: `codex/wizard-single-screen-polish`
