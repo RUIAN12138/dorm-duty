@@ -1028,12 +1028,13 @@ async function board(request, db, env, now, url) {
   const actorForTasks = who?.user_id === uid ? who : null;
   const roomConfiguration = JSON.parse((await first(db,"SELECT configuration FROM dorm_configurations WHERE dorm_id=?",[room.id]))?.configuration || "null");
   const workspaceRows = await all(db,"SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key WHERE t.dorm_id=? AND c.enabled=1 AND t.status<>'cancelled' AND ((c.mode='scheduled' AND t.duty_date=? AND t.sequence IS NULL) OR (c.mode<>'scheduled' AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key,t.assignee_id",[room.id,today]);
+  const waterOnDuty = roomConfiguration?.schema_version === 2 && roomConfiguration.tasks.some(task => task.key === "water" && task.enabled && task.page === "duty");
   const todayRows = await all(
     db,
     `SELECT t.* FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-    WHERE t.dorm_id=? AND t.key<>'water' AND t.assignee_id=? AND t.status<>'cancelled' AND c.enabled=1
+    WHERE t.dorm_id=? AND (t.key<>'water' OR ?=1) AND t.assignee_id=? AND t.status<>'cancelled' AND c.enabled=1
     AND ((c.mode='scheduled' AND t.sequence IS NULL AND t.duty_date=?) OR (c.mode IN ('self_round','completion') AND t.sequence=(SELECT MAX(x.sequence) FROM chore_tasks x WHERE x.dorm_id=t.dorm_id AND x.key=t.key AND x.status<>'cancelled'))) ORDER BY t.key`,
-    [room.id, uid, today],
+    [room.id, waterOnDuty ? 1 : 0, uid, today],
   );
   const nextRows = await all(
     db,

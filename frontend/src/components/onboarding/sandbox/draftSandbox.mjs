@@ -351,7 +351,8 @@ export function createDraftSandbox(input, now = () => new Date()) {
       water_handoff: handoff,
       workspace_tasks: rows,
       nudge_tasks: rows,
-      today_tasks: rows.filter((task) => task.assignee_id === actor),
+      today_tasks: rows.filter((task) => task.assignee_id === actor &&
+        (task.key !== "water" || initial.configuration.tasks.some(item => item.key === "water" && item.enabled && item.page === "duty"))),
       water_task:
         rows.find(
           (task) => task.key === "water" && task.status === "pending",

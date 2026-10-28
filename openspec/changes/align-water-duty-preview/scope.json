@@ -1,0 +1,18 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "defde2bb90af1083419a67f274b3f0788fca4761",
+  "allowed": [
+    "site/worker/chores.mjs",
+    "frontend/src/components/onboarding/draftPreviewBoard.ts",
+    "frontend/src/components/onboarding/sandbox/draftSandbox.mjs",
+    "site/scripts/check-water-duty-preview.mjs",
+    "openspec/changes/align-water-duty-preview/",
+    "scripts/companion-ai.mjs",
+    "site/scripts/check-water-duty-browser.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

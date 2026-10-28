@@ -175,7 +175,7 @@ export function companionContext(board, activity, time) {
       mode: c.mode,
       reminder_interval_days: c.reminder_interval_days,
     })),
-    personal_tasks: board.today_tasks.map(task),
+    personal_tasks: board.today_tasks.filter(item => item.key !== "water").map(task),
     current_tasks: Array.isArray(board.nudge_tasks) ? board.nudge_tasks.map(task) : null,
     upcoming_personal_tasks: board.next_tasks.map(task),
     rounds: board.rounds.map((r) => ({

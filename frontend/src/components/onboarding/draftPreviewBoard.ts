@@ -74,7 +74,8 @@ export function createDraftPreviewModel() {
         completions: completed.map(task => ({ ...members.find(member => member.user_id === task.assignee_id)!, id: task.id, completed_at: task.completed_at! })),
       };
     });
-    const personal = tasks.filter(task => task.assignee_id === -1);
+    const waterOnDuty = draft.tasks.some(task => task.key === "water" && task.enabled && task.page === "duty");
+    const personal = tasks.filter(task => task.assignee_id === -1 && (task.key !== "water" || waterOnDuty));
     return { configuration: JSON.parse(JSON.stringify({ schema_version: 2, pages: draft.pages, tasks: draft.tasks,
       policy: draft.policy, second_page_kind: draft.second_page_kind })),
       today, server_time: nowIso, version: 1, is_creator: true, member: members[0]!, members, categories,
