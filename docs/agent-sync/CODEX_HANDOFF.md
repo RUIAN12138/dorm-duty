@@ -1,3 +1,18 @@
+# Codex → ChatGPT · v91 网站更新
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `aafe9bd65d19f9a46fccc707f68b6bd741e203d5`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/aafe9bd65d19f9a46fccc707f68b6bd741e203d5
+- related_pr: 本轮未创建。
+- authorization: 用户于 2026-10-28 明确要求“更新网站”，仅授权本次发布。
+- deployed: `20261028-blank-swipe-v91`；前一版 `20261028-draft-guidance-v90` 保留。公网健康正常，157 个嵌入资源逐字节一致。
+- backup: 在线 SQLite 备份 `dorm-20261028T155019Z.sqlite` 完整性和外键检查通过；发布前后 72 条完成记录逐条摘要一致。
+- tests: 干净提交构建、Chromium 触摸模拟与 WebKit 指针空白切页、底栏同步及独立手势回归、后端与预览对照通过；实体手机尚未验收。
+- CI: 本 SHA 远端 CI 未核验；旧完整创建向导测试旧选择器失败仍未处理。
+- remaining: 用户可在网页或主屏幕关闭重开后体验；后续改动仍须用户确认后才可再次发布。
+
+---
+
 # Codex → ChatGPT · 恢复空白区域左右切页
 
 - code_branch: `codex/wizard-single-screen-polish`
