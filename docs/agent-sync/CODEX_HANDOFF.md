@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 多人留言与催促交互
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `c6de71d072fb5236ba11703d032703bb6ebffcf1`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/c6de71d072fb5236ba11703d032703bb6ebffcf1
+- related_pr: 未创建本轮 PR。
+- requirements: 留言支持多位收件人；催促大字上下切换负责人；催促详情沿用抬水底部抽屉；提示语轻量轮换并保留真实状态优先。
+- changed_files: 详见提交；包括留言 API、选人、催促交互、沙箱适配和对应 OpenSpec 与测试。
+- implemented: 收件人校验和服务端限流保留，预览操作隔离；上下切换不发送提醒，实际操作才触发；根据可用手势显示提示。
+- tests: 留言 API 35 项检查；前端 build；聊天动效 Chromium；催促页 Chromium/WebKit；沙箱 Chromium/WebKit；任务详情 Chromium；OpenSpec 校验通过。浏览器为桌面模拟。
+- CI: 推送后远端 CI 状态待确认，不宣称已通过。
+- platform_status: 实体 iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 未验收。无正式数据库操作和部署。
+- remaining: 需要用户验收及真实设备检查；工作树原有其他 OpenSpec scope 改动未纳入本提交。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · PR #85 创建进度范围隔离与测试确认
 
 - code_branch: `codex/new-dorm-wizard-pr`
