@@ -89,7 +89,8 @@ export function companionFactReply(text, context) {
     for (const task of tasks.slice(0, 4)) {
       if (task.assignee_id !== me.id) continue;
       const period = task.mode === "self_round" ? "本轮" : task.mode === "scheduled" && task.assigned_date === context.today ? "今天" : "当前";
-      messages.push(`${task.name}：${period}${task.status === "completed" ? "已完成" : "待完成"}。`);
+      const state = task.status === "completed" ? "已完成" : task.status === "pending" ? "待完成" : "状态暂不可用";
+      messages.push(`${task.name}：${period}${state}。`);
     }
     if (!tasks.length) messages.push("当前没有分配给你的值日任务。");
     if (tasks.length > 4) messages.push("其余任务可在任务页查看。");
@@ -97,7 +98,7 @@ export function companionFactReply(text, context) {
     if (water && messages.length < 6) messages.push(water.id === me.id ? "抬水轮到你，没水时再抬。" : `抬水当前轮到${water.name}。`);
   } else if (/^(?:现在|今天|这次|目前)?(?:抬水(?:轮到|是|该)?谁|谁(?:该|要|来)?抬水|轮到谁抬水)(?:了|呀|呢|啊|吗)*$/.test(q)) {
     const water = context.water?.current_assignee;
-    messages = [water ? water.id === me.id ? `现在轮到你（${me.name}）抬水。` : `现在轮到${water.name}抬水。` : "当前没有待完成的抬水任务。"];
+    messages = [water ? water.id === me.id ? `现在轮到你（${me.name}）抬水。` : `现在轮到${water.name}抬水。` : context.water?.available === true ? "当前没有待完成的抬水任务。" : "暂时无法确认抬水安排。"];
   } else {
     // Only exact, read-only questions about a known category are answered here.
     // A missing round/assignment is unknown, never inferred from past chat.
@@ -190,6 +191,7 @@ export function companionContext(board, activity, time) {
       })),
     })),
     water: {
+      available: Object.hasOwn(board, "water_task"),
       current_assignee: board.water_task
         ? {
             id: board.water_task.assignee_id,

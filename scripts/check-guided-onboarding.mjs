@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium, webkit } from "../frontend/node_modules/@playwright/test/index.mjs";
+import { createHarness } from "../site/scripts/check-cloud-backend.mjs";
 const origin = process.env.DORM_GUIDE_ORIGIN || "http://127.0.0.1:8098";
 const engine = process.env.DORM_BROWSER === "webkit" ? "webkit" : "chromium";
 const evidence = path.resolve(`data/auto-tutorial/${engine}`);
@@ -15,6 +16,7 @@ const context = await browser.newContext({ viewport: { width: 390, height: 844 }
 const page = await context.newPage();
 page.setDefaultTimeout(12000);
 const errors = [], requests = [], checks = [];
+let liveHarness;
 page.on("pageerror", (error) => errors.push(error.message));
 page.on("request", (req) => {
   if (["fetch", "xhr"].includes(req.resourceType())) requests.push(req.url());
@@ -41,6 +43,13 @@ async function act(id, operation) {
     return !coach || coach.getAttribute("data-step") !== id;
   }, id);
   check(true, `${id}: actual operation automatically advances exactly once`);
+}
+async function swipeTitle(dx, dy) {
+  const rect = await page.getByTestId('nudge-task-swipe').boundingBox();
+  assert.ok(rect, 'the real nudge title is present');
+  const x=rect.x+rect.width/2, y=rect.y+rect.height/2;
+  await page.mouse.move(x,y); await page.mouse.down();
+  await page.mouse.move(x+dx,y+dy,{steps:8}); await page.mouse.up();
 }
 
 try {
@@ -89,6 +98,8 @@ try {
   await act("water-detail-close", () => page.getByRole("button", { name: "关闭详情", exact: true }).click());
   await act("water-complete", () => page.getByTestId("complete-water--13").click());
   await act("water-nudge", () => page.getByTestId("water-nudge").click());
+  await act("water-swipe", () => swipeTitle(-110,0));
+  await act("water-person", () => swipeTitle(0,-110));
   await page.getByTestId("lesson-calendar").click();
   await act("calendar-nav", () => page.getByTestId("nav-calendar").click());
   await act("calendar-date", () => page.locator(".chore-calendar-grid:not([inert]) button.is-today").click());
@@ -99,6 +110,7 @@ try {
   await act("message-ball", () => page.locator(".companion-identity .companion-frame").click());
   await act("message-start", () => page.getByTestId("chat-quick-prompts").getByRole("button", { name: "我要留言", exact: true }).click());
   await act("message-recipient", () => page.locator(".conversation-recipients").getByRole("button", { name: "小林", exact: true }).click());
+  await act("message-recipient-confirm", () => page.locator('.conversation-note-actions .chat-primary').click());
   await act("message-content", async () => {
     await page.getByRole("textbox", { name: "和球球说句话" }).click();
     await page.getByRole("textbox", { name: "和球球说句话" }).fill("晚点回来，我会记得值日。");
@@ -143,10 +155,22 @@ try {
   await page.keyboard.press("Escape");
   await page.getByTestId("lesson-duty").waitFor();
   check(await page.locator(".practice-coach").count() === 0, "Escape returns to the chapter directory without a remaining overlay");
+  liveHarness = await createHarness();
+  const fixture = await (await liveHarness.request('/guest/create',{method:'POST',data:{name:'引导布局隔离',nickname:'测试成员'}})).json();
+  const identity = {id:fixture.dorm.id,name:fixture.dorm.name,invite_code:fixture.invite_code,member_id:fixture.member_id,nickname:'测试成员',is_creator:true};
   const live = await context.newPage();
+  await live.addInitScript(({invite,id})=>localStorage.setItem(`dorm-welcome-guide-v2:${encodeURIComponent(invite)}:${id}`,'1'),{invite:fixture.invite_code,id:fixture.member_id});
+  await live.route(/\/(email|chores|auth|dorms|guest)\//,async route=>{
+    const req=route.request(), url=new URL(req.url());
+    if(url.pathname.startsWith('/email/')) return route.fulfill({json:url.pathname==='/email/config'?{available:true,registration_required:true}:url.pathname==='/email/me'?{logged_in:true,email:'guide@example.invalid',rooms:[identity]}:url.pathname==='/email/enter'?{...identity,access_token:fixture.access_token}:{}});
+    if(url.pathname==='/chores/companion/state') return route.fulfill({json:{available:true,voice_available:false,messages:[],reminders:[]}});
+    if(url.pathname==='/chores/push/config') return route.fulfill({json:{available:false}});
+    const response=await liveHarness.request(url.pathname+url.search,{method:req.method(),token:req.headers().authorization?.replace(/^Bearer /,''),...(req.postData()?{data:req.postDataJSON()}:{})});
+    return route.fulfill({status:response.status,contentType:'application/json',body:await response.text()});
+  });
   for (const [width, height] of [[320,568],[390,844],[430,932]]) {
     await live.setViewportSize({width,height});
-    await live.goto(origin);
+    await live.goto(`${origin}/?start=1`);
     await live.getByTestId("pane-duty").waitFor();
     for (const section of ["duty","water","calendar"]) {
       if(section!=="duty") await live.getByTestId(`nav-${section}`).click();
@@ -169,4 +193,4 @@ try {
   await page.screenshot({ path: path.join(evidence, "failure.png") }).catch(() => {});
   console.error(JSON.stringify({ error: error.message, step: await page.locator(".practice-coach").getAttribute("data-step").catch(() => null), errors, requests, checks }, null, 2));
   throw error;
-} finally { await context.close(); await fs.copyFile(await page.video().path(),path.join(evidence,"practice.webm")); await browser.close(); }
+} finally { await context.close(); await fs.copyFile(await page.video().path(),path.join(evidence,"practice.webm")); await browser.close(); liveHarness?.close(); }

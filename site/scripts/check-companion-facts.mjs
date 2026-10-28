@@ -46,6 +46,9 @@ try {
  check(!companionFactReply('地板谁没做？',roundContext).messages.join('').includes('李豪'),'completed member is not reported as pending');
  check(companionFactReply('谁负责地板', {...roundContext,rounds:[]}).messages.join('').includes('查不到'),'missing round is not presented as empty');
  check(companionFactReply('我的任务是什么',{...context,personal_tasks:undefined}).messages.join('').includes('无法确认'),'missing personal tasks are not presented as none');
+ check(companionFactReply('抬水轮到谁',{...context,water:undefined}).messages.join('').includes('无法确认'),'missing water data is not presented as an empty schedule');
+ check(companionFactReply('抬水轮到谁',{...context,water:{available:true,current_assignee:null}}).messages.join('').includes('没有待完成'),'an explicitly empty water schedule remains distinguishable from missing data');
+ check(companionFactReply('我的任务是什么',{...context,personal_tasks:[{name:'地板',assignee_id:1,status:undefined}]}).messages.join('').includes('状态暂不可用'),'unknown task status is not guessed as pending');
  check(companionFactReply('你认识我吗',context).messages.join('')==='你是李豪。','natural identity question uses authenticated member');
  check(companionFactReply('提醒国福做地板',roundContext)===null,'task facts do not intercept a reminder action');
 

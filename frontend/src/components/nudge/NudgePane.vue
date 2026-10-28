@@ -55,6 +55,9 @@ const hintIndex = ref(0);
 const currentStatus = computed(() => active.value?.task ? props.statuses[active.value.task.id] ||
   (active.value.task.status === "completed" ? "这项任务已完成" : hints.value[hintIndex.value % hints.value.length]) : "");
 let hintTimer: ReturnType<typeof setInterval> | undefined;
+let personGuideTimer: ReturnType<typeof setTimeout> | undefined;
+let personGuided = false;
+watch(guidanceKey, () => { clearTimeout(personGuideTimer); personGuided=false; discovered=false; void nextTick(discover); });
 let flight: ReturnType<typeof animate> | undefined, revision = 0, position = 0, grabbedAt = 0, discovered = false, discoveryMoving = false, resumeDiscovery = false;
 let gestureAxis: "horizontal" | "vertical" = "horizontal";
 function paint(value: number) {
@@ -79,6 +82,7 @@ function step(delta: -1|1) {
   if (group) { markLearned("task"); direction.value=delta; key.value=group.key; }
 }
 function stepPerson(delta: -1 | 1) {
+  clearTimeout(personGuideTimer);
   const group = active.value;
   if (!group) { emit('hint', '暂时无法切换，请稍后再试。'); return; }
   if (group.candidates.length < 2) {
@@ -105,13 +109,25 @@ function press(event: PointerEvent) {
 }
 watch(() => active.value?.task, task => emit('select',task),{immediate:true});
 watch(() => [active.value?.key, active.value?.candidates.length] as const, ([key, count], previous) => {
-  if (key && (count || 0) > 1 && !learned.value.person && previous?.[0] !== undefined && (key !== previous[0] || (previous[1] || 0) < 2)) emit('hint', '上下滑动大字，换个人提醒。');
+  if (key && (count || 0) > 1 && !learned.value.person && previous?.[0] !== undefined && (key !== previous[0] || (previous[1] || 0) < 2)) {
+    clearTimeout(personGuideTimer); personGuided=true;
+    emit('hint', '上下滑动大字，换个人提醒。');
+  }
 });
 async function discover() {
-  if (discovered || groups.value.length<2 || !surface.value) return;
+  if (discovered || !groups.value.length || !surface.value) return;
+  const guidePerson = () => {
+    if (personGuided || learned.value.person || dragging.value || (active.value?.candidates.length || 0) < 2) return;
+    personGuided=true;
+    emit('hint', '上下滑动大字，换个人提醒。');
+  };
+  if (groups.value.length < 2) { guidePerson(); return; }
   discovered=true;
   gestureAxis="horizontal";
-  if (!learned.value.task) emit('hint', '左右滑动大字，换个任务催促。');
+  if (!learned.value.task) {
+    emit('hint', '左右滑动大字，换个任务催促。');
+    personGuideTimer=setTimeout(guidePerson,4000);
+  } else guidePerson();
   await nextTick();
   if (!motionAllowed() || !strip.value || dragging.value) return;
   settle(-neighborSide.value*28,() => settle(0,undefined,true),true);
@@ -137,7 +153,7 @@ onMounted(() => { hintTimer=setInterval(() => { if (!document.hidden && !props.s
 watch(() => groups.value.length,() => { if(surface.value?.getBoundingClientRect().width) void discover(); });
 function quiet(){if(!motionAllowed()){resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;stopFlight();paint(0);}}
 window.addEventListener('ui-motion-change',quiet);
-onBeforeUnmount(() => { if (hintTimer) clearInterval(hintTimer); swipe.cancel();stopFlight();completionObserver?.disconnect();observer?.disconnect();window.removeEventListener('ui-motion-change',quiet); });
+onBeforeUnmount(() => { if (hintTimer) clearInterval(hintTimer);clearTimeout(personGuideTimer);swipe.cancel();stopFlight();completionObserver?.disconnect();observer?.disconnect();window.removeEventListener('ui-motion-change',quiet); });
 </script>
 <template>
   <section class="nudge-pane water-pane" data-testid="pane-water" @pointerdown.capture="interruptDiscovery" @pointerup.capture="releaseCompletionPointer" @pointercancel.capture="resumeWhenIdle">

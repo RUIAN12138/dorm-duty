@@ -1,0 +1,17 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "866d64c10d6f866de5eebc35df17d310840f9a1d",
+  "allowed": [
+    "frontend/src/components/nudge/NudgePane.vue",
+    "frontend/src/components/nudge/NudgePane.browser.mjs",
+    "scripts/companion-ai.mjs",
+    "site/scripts/check-companion-facts.mjs",
+    "openspec/changes/improve-discovery-fact-reliability/",
+    "scripts/check-guided-onboarding.mjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

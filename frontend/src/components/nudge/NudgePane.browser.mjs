@@ -23,13 +23,30 @@ await p.route(/\/(email|chores|auth|dorms|guest)\//,async route=>{
  if(failReminder && url.pathname==='/chores/remind')return route.fulfill({status:503,json:{error:'服务暂不可用'}});
  const response=await h.request(url.pathname+url.search,{method:req.method(),token:req.headers().authorization?.replace(/^Bearer /,''),...(req.postData()?{data:req.postDataJSON()}: {})});
  if(holdFloor&&url.pathname==='/chores/remind')await new Promise(resolve=>{releaseFloor=resolve;});
- await route.fulfill({status:response.status,contentType:'application/json',body:await response.text()});
+ let body=await response.text();
+ if(process.env.DORM_SINGLE_TASK==='1' && url.pathname==='/chores/board' && response.ok){
+  const board=JSON.parse(body);
+  board.categories=board.categories.filter(c=>c.key==='floor');
+  if(board.configuration) board.configuration.tasks=board.configuration.tasks.filter(c=>c.key==='floor');
+  board.nudge_tasks=(board.nudge_tasks||board.workspace_tasks||board.today_tasks).filter(t=>t.key==='floor');
+  board.water_task=null;body=JSON.stringify(board);
+ }
+ await route.fulfill({status:response.status,contentType:'application/json',body});
 });
 p.on('pageerror',e=>errors.push(e.message));
 async function settled(){await p.waitForFunction(()=>!document.querySelector('.board-focus')?.getAnimations({subtree:true}).some(a=>a.playState==='running'&&a.effect?.getTiming().iterations!==Infinity) && (!document.querySelector('.nudge-title-strip') || document.querySelector('.nudge-title-strip').dataset.motion==='idle'));}
 async function swipe(dx,dy=0){const r=await p.getByTestId('nudge-task-swipe').boundingBox();const x=r.x+r.width/2,y=r.y+r.height/2;await p.mouse.move(x,y);await p.mouse.down();await p.mouse.move(x+dx,y+dy,{steps:8});await p.mouse.up();}
 try{
  await p.goto(base+'/water?start=1');await p.locator('.nudge-pane').waitFor();
+ if(process.env.DORM_SINGLE_TASK==='1') {
+  await p.getByText('上下滑动大字，换个人提醒。',{exact:true}).waitFor();
+  check(true,'one task with multiple pending members introduces vertical switching');
+  const before=await p.locator('.nudge-title:not([inert]) .nudge-task-name').innerText();
+  await swipe(0,-110);await settled();
+  check((await p.locator('.nudge-title:not([inert]) .nudge-task-name').innerText())!==before && writes.length===0,'vertical selection changes person without a notification');
+  await p.reload();await p.locator('.nudge-pane').waitFor();
+  check(await p.getByText('上下滑动大字，换个人提醒。',{exact:true}).count()===0,'learned person guidance is not repeated on reload');
+ } else {
  check(await p.locator('.chore-bottom-nav [data-section=water]').innerText().then(t=>t.includes('催促')),'navigation shows 催促 while route remains water');
 check(await p.getByTestId('nav-water').locator('svg path').first().getAttribute('d').then(d=>d.startsWith('M18 8a6')),'nudge navigation uses the new bell instead of the water drop');
  check(await p.locator('.nudge-pane .task-selector,.nudge-pane [role=tab],.nudge-pane [aria-label*=下一]').count()===0,'no visible task switch buttons');
@@ -143,4 +160,5 @@ await settled();check(await p.locator('.nudge-title').evaluate(el=>el.getBoundin
  check(writes.length===writeCount,'tutorial completion and nudge remain fully isolated');
  check(errors.length===0,'no uncaught browser errors');
  console.log(JSON.stringify({status:'passed',engine,checks,writes,errors}));await fs.writeFile(out+'/results.json',JSON.stringify({status:'passed',engine,checks,writes,errors},null,2));
+ }
 }catch(error){await p.screenshot({path:out+'/failure.png'});throw error;}finally{await context.close();await b.close();h.close();}
