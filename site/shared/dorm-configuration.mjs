@@ -42,7 +42,7 @@ export function validateDormConfiguration(value) {
       bad();
     if(t.execution_time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(t.execution_time)) bad();
     const effective = t.policy && t.policy !== "inherit" ? t.policy : value.policy;
-    if(effective === "hard" && (t.execution_time || "08:00") >= t.deadline) bad();
+    if(t.enabled && effective === "hard" && (t.execution_time || "08:00") >= t.deadline) bad();
     const name = String(t.name || "").trim(),
       content = String(t.content || "").trim();
     if ((t.enabled && !name) || [...name].length > 32 || [...content].length > 500)

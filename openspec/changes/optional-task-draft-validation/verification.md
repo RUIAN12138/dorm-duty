@@ -5,3 +5,5 @@
 - `node site/scripts/check-dynamic-task-migration.mjs`：4 项检查、7 表保留通过。
 - `node site/scripts/check-cloud-backend.mjs`：通过；`npm run spec:check`：通过。
 - 尚未执行实体设备或真实宿舍验收；未访问或修改生产数据库、未部署。
+
+- 停用任务的继承/独立硬性时间：格式有效但顺序暂不满足时，前端和创建接口均允许保存；直接启用被前后端拒绝，已保存配置保持不变；无效时间格式仍被拒绝。

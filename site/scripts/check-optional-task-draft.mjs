@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHarness } from './check-cloud-backend.mjs';
 import { validateDormConfiguration } from '../shared/dorm-configuration.mjs';
+import { draftErrors } from '../../frontend/src/interaction/dormDraft.ts';
 const h = await createHarness();
 const pages = [{id:'duty',label:'值日'},{id:'water',label:'抬水'},{id:'calendar',label:'日历'}];
 const base = {name:'地板',content:'扫地',enabled:true,page:'duty',rotation:'round',display:'title',deadline:'22:00',interval:3};
@@ -15,6 +16,25 @@ try {
   const snapshot = () => Object.fromEntries(['dormitories','chore_settings','chore_categories','chore_tasks','chore_reminders'].map(table => [table,h.db.sqlite.prepare(`SELECT * FROM ${table} WHERE ${table === 'dormitories' ? 'id' : 'dorm_id'}=? ORDER BY rowid`).all(old.dorm.id)]));
   const oldBefore = JSON.stringify(snapshot());
   assert.equal(validateDormConfiguration(config).tasks[1].name,'');
+  // A disabled task can keep a temporarily invalid time order in the draft;
+  // its format is still validated and enabling it must require correction.
+  for (const policy of ['inherit','hard']) {
+    const timed={...config,policy:'hard',tasks:[config.tasks[0],{...config.tasks[1],policy,execution_time:'18:00',deadline:'08:00'}]};
+    assert.equal(validateDormConfiguration(timed).tasks[1].execution_time,'18:00');
+    assert.deepEqual(draftErrors({...timed,name:'测试',nickname:'创建者',members:[]}),[]);
+    const enabledInvalid={...timed,tasks:[timed.tasks[0],{...timed.tasks[1],name:'阳台',enabled:true}]};
+    assert.throws(()=>validateDormConfiguration(enabledInvalid));
+    assert(draftErrors({...enabledInvalid,name:'测试',nickname:'创建者',members:[]}).includes('执行时间需早于截止时间'));
+    assert.throws(()=>validateDormConfiguration({...timed,tasks:[timed.tasks[0],{...timed.tasks[1],deadline:'25:00'}]}));
+    const timedRoom=await create(`停用时间${policy}`,timed);assert.equal(timedRoom.status,201,await timedRoom.clone().text());
+    const timedData=await timedRoom.json();
+    const timedBoard=await (await h.request(`/chores/board?invite_code=${timedData.invite_code}&member_id=${timedData.member_id}`,{token:timedData.access_token})).json();
+    const save=await h.request('/chores/settings',{token:timedData.access_token,method:'PATCH',data:{version:timedBoard.version,categories:timedBoard.categories,configuration:enabledInvalid}});
+    assert.equal(save.status,422);
+    const stored=JSON.parse(h.db.sqlite.prepare('SELECT configuration FROM dorm_configurations WHERE dorm_id=?').get(timedData.dorm.id).configuration);
+    assert.equal(stored.tasks[1].enabled,false);assert.equal(stored.tasks[1].execution_time,'18:00');
+    const invalidRoom=await create(`启用错误时间${policy}`,enabledInvalid);assert.equal(invalidRoom.status,422);
+  }
   const response = await create('新版宿舍',config); assert.equal(response.status,201,await response.clone().text());
   const room = await response.json();
   const stored = JSON.parse(h.db.sqlite.prepare('SELECT configuration FROM dorm_configurations WHERE dorm_id=?').get(room.dorm.id).configuration);
