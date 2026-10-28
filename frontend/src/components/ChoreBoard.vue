@@ -478,12 +478,10 @@ function resetSectionSwipe() {
 }
 function sectionSwipeDown(event: PointerEvent) {
   if (!event.isPrimary || event.button !== 0 || sectionPointer) return;
-  if (
-    !boardRoot.value ||
-    !(event.target instanceof Element) ||
-    !event.target.closest(".app-stage.is-signed-in")
-  )
-    return;
+  const root = boardRoot.value;
+  if (!root || !(event.target instanceof Element)) return;
+  const stage = root.closest(".app-stage.is-signed-in, .content-stage.is-signed-in");
+  if (!stage?.contains(event.target)) return;
   if (
     event.clientX < 24 ||
     event.clientX > window.innerWidth - 24 ||
@@ -518,7 +516,7 @@ function sectionSwipeDown(event: PointerEvent) {
     x: event.clientX,
     y: event.clientY,
     horizontal: false,
-    surface: boardRoot.value,
+    surface: root,
     velocity: createVelocityTracker(event.clientX, performance.now()),
   };
 }

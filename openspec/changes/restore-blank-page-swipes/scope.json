@@ -1,0 +1,1 @@
+{"base":"25056ed6c28f2c46f3cef957e8828a1226b7c667","implementationBase":"46774895e5b9b4f4cdfd8e1b29e71081bf993e5e","allowed":["frontend/src/components/ChoreBoard.vue","frontend/src/components/nudge/BlankSwipe.browser.mjs","openspec/changes/restore-blank-page-swipes/"],"acceptance":{"status":"pending","userStatement":null,"acceptedDigest":null}}
