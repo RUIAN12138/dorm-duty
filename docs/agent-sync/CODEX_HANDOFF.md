@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 催促失败反馈回归
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `32ab54671c5c428e8d79ee17cd448e0868b5b98d`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/32ab54671c5c428e8d79ee17cd448e0868b5b98d
+- related_pr: 未创建。
+- requirements: 继续验证催促交互和失败后的球球提醒；用户暂不进行 iPhone 真机检查。
+- changed_files: 催促浏览器测试与 OpenSpec 验证记录。
+- implemented: 注入 503 验证球球非弹窗提示、随后成功重试；保留已有大字滑动和预览隔离测试。
+- tests: Chromium 与 WebKit 催促浏览器回归通过；服务器响应为隔离模拟。
+- CI: 本 SHA 未确认远端 CI。
+- platform_status: iPhone、Android、HarmonyOS 实体设备尚未验证；未部署。
+- remaining: 退出聊天后导航位置偶发异常尚未真机复现；大字下滑修复尚未上线。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 聊天键盘后导航位置验证
 
 - code_branch: `codex/wizard-single-screen-polish`
