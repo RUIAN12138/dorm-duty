@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { motion } from "motion-v";
 import { motionAllowed } from "../interaction/motion";
 import { chatTransition } from "../interaction/chatMotion";
@@ -21,6 +21,16 @@ const others = computed(() =>
   props.members.filter((m) => m.user_id !== props.memberId),
 );
 const sending = computed(() => props.state.phase === "sending");
+const selected = ref<number[]>([]);
+watch(() => props.state.phase, phase => {
+  if (phase !== "recipient") return;
+  const target = props.state.target;
+  selected.value = target === "all" ? others.value.map(m => m.user_id) : Array.isArray(target) ? [...target] : typeof target === "number" ? [target] : [];
+}, { immediate: true });
+const allSelected = computed(() => others.value.length > 0 && others.value.every(m => selected.value.includes(m.user_id)));
+function toggle(id: number) { selected.value = selected.value.includes(id) ? selected.value.filter(item => item !== id) : [...selected.value, id]; }
+function toggleAll() { selected.value = allSelected.value ? [] : others.value.map(m => m.user_id); }
+function proceed() { if (selected.value.length) emit("choose", [...selected.value]); }
 </script>
 <template>
   <section
@@ -42,27 +52,14 @@ const sending = computed(() => props.state.phase === "sending");
       :animate="{ opacity: 1, y: 0 }"
       :transition="chatTransition('layout')"
     >
-      <div
-        v-if="state.phase === 'recipient'"
-        class="conversation-recipients"
-        role="group"
-        aria-label="留言给谁"
-      >
-        <button
-          v-if="others.length"
-          type="button"
-          @click="emit('choose', 'all')"
-        >
-          所有人
-        </button>
-        <button
-          v-for="member in others"
-          :key="member.user_id"
-          type="button"
-          @click="emit('choose', member.user_id)"
-        >
-          {{ member.nickname }}
-        </button>
+      <div v-if="state.phase === 'recipient'" class="conversation-recipients" role="group" aria-label="留言给谁">
+        <div class="recipient-heading"><span>选择室友</span><button v-if="others.length" type="button" class="recipient-all" :aria-pressed="allSelected" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</button></div>
+        <div class="recipient-list">
+          <button v-for="member in others" :key="member.user_id" type="button" class="recipient-option" :aria-pressed="selected.includes(member.user_id)" @click="toggle(member.user_id)">
+            <span>{{ member.nickname }}</span><span class="recipient-check" aria-hidden="true">{{ selected.includes(member.user_id) ? '✓' : '' }}</span>
+          </button>
+        </div>
+        <p v-if="!others.length" class="note-label">室友加入后就能留言。</p>
       </div>
       <template v-else>
         <span class="note-label">{{
@@ -82,8 +79,9 @@ const sending = computed(() => props.state.phase === "sending");
       {{ state.error }}
     </p>
     <div class="conversation-note-actions">
+      <button v-if="state.phase === 'recipient'" type="button" class="chat-primary" :disabled="!selected.length" @click="proceed">继续<span v-if="selected.length"> · {{ selected.length }} 人</span></button>
       <button
-        v-if="state.target !== null"
+        v-if="state.target !== null && state.phase !== 'recipient'"
         type="button"
         :disabled="sending"
         @click="emit('edit', 'target')"
@@ -158,15 +156,21 @@ const sending = computed(() => props.state.phase === "sending");
   line-height: 1.6;
   margin: 0 0 16px;
 }
-.conversation-recipients,
 .conversation-note-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.conversation-note-actions {
-  margin-top: 14px;
-}
+.conversation-note-actions { margin-top: 14px; }
+.conversation-recipients { display:grid; gap:8px; }
+.recipient-heading { display:flex; align-items:center; justify-content:space-between; color:var(--ui-muted); font-size:14px; }
+.recipient-heading .recipient-all { border:0; background:transparent; min-height:44px; padding:8px 12px; }
+.recipient-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; max-height:190px; overflow-y:auto; overscroll-behavior:contain; }
+.recipient-option { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; text-align:left; }
+.recipient-option > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.recipient-option[aria-pressed="true"] { background:var(--ui-ink); color:var(--ui-surface); }
+.recipient-check { flex:none; width:16px; text-align:center; }
+
 button {
   border: 1px solid var(--ui-border);
   border-radius: 20px;

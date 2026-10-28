@@ -68,8 +68,9 @@ const chapters = computed<Record<Lesson, PracticeStep[]>>(() => ({
   ],
   messages: [
     step("message-ball", '.companion-identity .companion-frame', "单击球球，打开聊天", "单击进入聊天；双击仍是表情互动。", "聊天已展开。留言不需要先向AI提问。", () => visible('.companion-chat')),
-    step("message-start", '[data-testid=chat-quick-prompts] button:first-child', "点「我要留言」", "它会进入留言流程，而不是发送普通聊天。", "现在选择收件人。支持单个室友，也支持所有人。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'recipient'),
-    step("message-recipient", '.conversation-recipients button:nth-child(2)', "选择小林", "先练习给一位室友留言。选「所有人」则会发给其他室友。", "收件人已确定。接下来写留言内容。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'content'),
+    step("message-start", '[data-testid=chat-quick-prompts] button:first-child', "点「我要留言」", "它会进入留言流程，而不是发送普通聊天。", "选择一个或多个室友，再点继续。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'recipient'),
+    step("message-recipient", '.recipient-list .recipient-option:first-child', "选择小林", "可以选择一位或多位室友。", "小林已选中，再点继续。", () => document.querySelector('.recipient-list .recipient-option:first-child')?.getAttribute('aria-pressed') === 'true'),
+    step("message-recipient-confirm", '.conversation-note-actions .chat-primary', "点「继续」", "选好收件人后继续写留言。", "收件人已确定。接下来写留言内容。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'content'),
     step("message-content", '[data-testid=chat-composer]', "写一句留言，再点发送箭头", "例如：晚点回来，我会记得值日。这里只会生成确认卡片。", "确认卡片已出现。请检查收件人和内容，也可以修改或取消。", () => document.querySelector('[data-testid=conversation-note]')?.getAttribute('data-phase') === 'confirm'),
     step("message-confirm", '[data-testid=conversation-note]', "检查后，点「确认发送」", "只有这一步才提交留言。发送失败时保留内容，可重试。", "练习留言已经确认，真实宿舍没有收到这条消息。", () => practice.events.note > 0),
     step("message-back", '.companion-chat button[aria-label="返回宿舍"]', "点返回，回到任务页", "聊天历史与未发送草稿沿用原有保留规则。", "回到任务页后，可以从设置查看收到的消息。", () => !visible('.companion-chat')),

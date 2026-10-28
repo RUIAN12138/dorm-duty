@@ -1945,10 +1945,10 @@ onUnmounted(() => {
             </section>
             <NudgePane v-if="section === 'water'" :board="board" :scope="`${invite}:${memberId}`" :busy="!!busy || completionSyncPending" :receipt="completionReceipt" :statuses="nudgeTaskStatuses" :selected-key="selectedSecondTaskKey" :handoff-active="!chatPresent && !messagesOpen && !orderOpen && !toolsOpen && !preferencesOpen && !companionOpen && !pushOpen && !settingsOpen && !recoveryOpen && !reminderOpen && !markerOpen && !detailTask && !roundOpen && !waterExceptionOpen" :demo="demo || (preview && !practice)"
               @nudge="nudgeWater($event)" @details="openTask" @complete="complete" @undo="undo($event.id)" @hint="nudgeHint = $event" @select="selectedSecondTaskKey = $event?.key">
-              <template #water-actions="{ status }">
+              <template #water-actions="{ status, task }">
                 <section v-if="water" class="nudge-water-content" data-testid="water-task">
                   <CompletionAction
-                    v-if="waterActionTask"
+                    v-if="waterActionTask && (waterReceipt || task.id === waterActionTask.id)"
                     :task="waterActionTask"
                     :receipt="completionReceipt"
                     @settled="settleCompletion"
@@ -1960,12 +1960,12 @@ onUnmounted(() => {
                     @undo="undo($event.id)"
                   />
                   <div class="water-nudge-actions">
-                    <p v-if="water.assignee_id !== memberId" class="hero-date nudge-status" role="status">{{ status }}</p>
+                    <Transition name="nudge-hint" mode="out-in"><p v-if="task.assignee_id !== memberId" :key="status" class="hero-date nudge-status" role="status">{{ status }}</p></Transition>
                     <div class="water-task-links">
                       <button
                         class="water-remind water-task-text"
                         data-card-feedback
-                        @click="openTask(water, $event)"
+                        @click="openTask(task, $event)"
                       >
                         查看任务
                       </button>
@@ -1979,10 +1979,10 @@ onUnmounted(() => {
                     </div>
                   </div>
                   <p
-                    v-if="water.assignee_id === memberId && !waterActionTask"
+                    v-if="task.assignee_id === memberId && !waterActionTask"
                     class="hero-date"
                   >
-                    {{ dateText(water.duty_date) }} 开始
+                    {{ dateText(task.duty_date) }} 开始
                   </p>
                   <CompletionAction
                     v-if="recentUndo && recentUndo.id !== waterActionTask?.id"
@@ -2075,8 +2075,8 @@ onUnmounted(() => {
         :title="detailTask?.name || '任务详情'"
         :origin="detailOrigin"
         :motion="detailMotion"
-        :modal="detailTask?.key === 'water' || detailMotion !== 'bottom'"
-        :edge-to-edge="detailTask?.key === 'water'"
+        :modal="section === 'water' || detailTask?.key === 'water' || detailMotion !== 'bottom'"
+        :edge-to-edge="section === 'water' || detailTask?.key === 'water'"
         @closed="
           detailTask = null;
           runQueuedTool();
@@ -3510,4 +3510,9 @@ onUnmounted(() => {
 /* Independent anchors: give the identity row air, lift only the task group. */
 .chore-personal,.water-pane { --task-content-lift: clamp(24px,5svh,42px); }
 @media (max-height:650px) { .chore-personal,.water-pane { --task-content-lift: 12px; } }
+</style>
+
+<style scoped>
+.nudge-hint-enter-active,.nudge-hint-leave-active{transition:opacity .18s,transform .18s}.nudge-hint-enter-from{opacity:0;transform:translateY(5px)}.nudge-hint-leave-to{opacity:0;transform:translateY(-5px)}
+@media(prefers-reduced-motion:reduce){.nudge-hint-enter-active,.nudge-hint-leave-active{transition:none}}
 </style>

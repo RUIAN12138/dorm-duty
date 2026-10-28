@@ -13,7 +13,7 @@ export function createDraftPreviewService(
   const board = reactive<ChoreBoardData>(sandbox.snapshot());
   const events = reactive({ ...sandbox.events });
   const sentNotes = reactive<
-    { target_member_id: number | "all"; text: string }[]
+    { target_member_id: number | number[] | "all"; text: string }[]
   >([]);
   const welcome: ChatTurn = {
     role: "assistant",

@@ -44,6 +44,19 @@ try{
 
  await swipe(-110);await p.locator('.nudge-title-window[data-task-key="floor"]').waitFor();await settled();
  check(writes.length===0,'swipe selects another category without sending notification');
+ await p.locator('.nudge-detail').click();await p.locator('.sheet-layer.is-edge-sheet [data-testid=task-detail]').waitFor();
+ check((await p.locator('.sheet-layer.is-edge-sheet .elastic-sheet').innerText()).includes('地板'),'nudge task detail uses the water bottom sheet');
+ await p.locator('.sheet-layer.is-edge-sheet button[aria-label=关闭详情]').click();await p.locator('.sheet-layer.is-edge-sheet').waitFor({state:'hidden'});
+ const firstHint=await p.locator('.nudge-status').innerText();
+ await p.waitForFunction(old=>{const el=document.querySelector('.nudge-status');return el && el.textContent && el.textContent!==old},firstHint,{timeout:10000});
+ check(true,'idle guidance rotates without requiring an action');
+
+ const beforePerson=await p.locator('.nudge-title:not([inert]) .nudge-task-name').innerText();
+ await swipe(0,-110);await settled();
+ const afterPerson=await p.locator('.nudge-title:not([inert]) .nudge-task-name').innerText();
+ check(beforePerson!==afterPerson && writes.length===0,'upward swipe switches eligible assignee without sending');
+ await swipe(0,110);await settled();
+ check(await p.locator('.nudge-title:not([inert]) .nudge-task-name').innerText()===beforePerson,'downward swipe returns to previous eligible assignee');
  const name=await p.locator('.nudge-pane [data-testid=water-nudge]').getAttribute('aria-label');check(name.includes('催促地板'),'nudge is labeled with the selected task');
  holdFloor=true;await p.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').click();await p.waitForFunction(()=>document.querySelector('.nudge-status')?.textContent?.includes('正在提醒'));
  await swipe(-110);await p.locator('.nudge-title-window[data-task-key="toilet"]').waitFor();releaseFloor();holdFloor=false;await settled();
@@ -75,9 +88,9 @@ try{
  check(await p.locator('.nudge-title-strip').evaluate(el=>{const m=new DOMMatrixReadOnly(getComputedStyle(el).transform);return el.dataset.motion==='idle'&&Math.abs(m.m41)<.01&&m.m11===1&&m.m22===1;}),'reduced motion suppresses displacement and stretch');
  await p.screenshot({path:out+'/dark-reduced.png'});
  await p.goto(base+'/?preview=new-dorm');await p.locator('.dorm-wizard').waitFor();await p.getByRole('button',{name:'预览',exact:true}).click();const preview=p.getByTestId('live-draft-preview');await preview.getByTestId('pane-duty').waitFor();
- const writeCount=writes.length;await preview.locator('.chore-bottom-nav [data-section=water]').click();await preview.locator('.nudge-pane').waitFor();await preview.getByTestId('nudge-task-swipe').focus();await p.keyboard.press('ArrowRight');await preview.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').waitFor();await preview.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').click();
+ const writeCount=writes.length;await preview.locator('.chore-bottom-nav [data-section=water]').click();await preview.locator('.nudge-pane').waitFor();await preview.locator('[data-testid^=complete-water-]').click();await preview.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').waitFor();await preview.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').click();
  check(writes.length===writeCount,'real-component draft nudge preview sends no API writes');
- check((await preview.locator('.nudge-status').innerText()).includes('未发送'),'preview truthfully reports no real notification');
+ await preview.locator('.nudge-status').filter({hasText:'未发送'}).waitFor();check(true,'preview truthfully reports no real notification');
  await p.goto(base+'/guide?practice=1');await p.getByTestId('lesson-water').click();
  const at=async id=>p.waitForFunction(id=>document.querySelector('[data-testid=practice-coach]')?.dataset.step===id,id);
  await at('water-nav');await p.getByTestId('nav-water').click();await at('water-detail');await p.locator('.water-task-text').click();await at('water-detail-close');await p.getByRole('button',{name:'关闭详情',exact:true}).click();await at('water-complete');

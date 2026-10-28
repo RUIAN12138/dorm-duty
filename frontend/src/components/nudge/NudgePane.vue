@@ -12,14 +12,17 @@ const props = defineProps<{ board: ChoreBoardData; scope: string; busy: boolean;
 const emit = defineEmits<{ nudge:[ChoreTask]; details:[ChoreTask,MouseEvent]; complete:[ChoreTask]; undo:[ChoreTask]; hint:[string]; select:[ChoreTask | undefined] }>();
 const key = ref(props.selectedKey || "water"), direction = ref(1), dragging = ref(false), moving = ref(false);
 const strip = ref<HTMLElement>(), peekWord = ref<HTMLElement>(), surface = ref<HTMLElement>();
+const selectedPeople = ref<Record<string,number>>({});
 const groups = computed(() => {
   const source = props.board.nudge_tasks || props.board.workspace_tasks || [...props.board.today_tasks, ...(props.board.water_task ? [props.board.water_task] : [])];
   const ordered = props.board.configuration?.tasks || props.board.categories;
   return ordered.filter(category => category.enabled).map(category => {
     const list = source.filter(task => task.key === category.key);
-    const task = list.find(task => task.status === "pending" && task.assignee_id !== props.board.member.user_id)
-      || list.find(task => task.status === "pending") || list[0];
-    return { key:category.key, name:category.name, task };
+    const candidates = list.filter(task => task.status === "pending")
+      .filter((task, i, all) => all.findIndex(item => item.assignee_id === task.assignee_id) === i);
+    const task = candidates.find(item => item.assignee_id === selectedPeople.value[category.key])
+      || list.find(item => item.status === "pending") || list[0];
+    return { key:category.key, name:category.name, task, candidates };
   }).filter(group => group.task).sort((a,b) => Number(b.key === 'water') - Number(a.key === 'water'));
 });
 const index = computed(() => Math.max(0,groups.value.findIndex(group => group.key === key.value)));
@@ -34,15 +37,19 @@ const heroSize = computed(() => {
   const text = task?.assignee_id === props.board.member.user_id ? active.value?.name || "" : task?.assignee_name || "";
   return Array.from(text).length>16 ? "clamp(20px,5.2vw,24px)" : Array.from(text).length>8 ? "clamp(30px,9vw,40px)" : undefined;
 });
+const hints = computed(() => ["点一下名字，轻轻提醒", ...((active.value?.candidates.length || 0) > 1 ? ["上滑大字，换个人提醒"] : []), ...(groups.value.length > 1 ? ["左右滑动，看看其他任务"] : []), "轻轻敲一下，让室友知道"]);
+const hintIndex = ref(0);
 const currentStatus = computed(() => active.value?.task ? props.statuses[active.value.task.id] ||
-  (active.value.task.status === "completed" ? "这项任务已完成" : "点一下名字，轻轻提醒") : "");
+  (active.value.task.status === "completed" ? "这项任务已完成" : hints.value[hintIndex.value % hints.value.length]) : "");
+let hintTimer: ReturnType<typeof setInterval> | undefined;
 let flight: ReturnType<typeof animate> | undefined, revision = 0, position = 0, grabbedAt = 0, discovered = false, discoveryMoving = false, resumeDiscovery = false;
+let gestureAxis: "horizontal" | "vertical" = "horizontal";
 function paint(value: number) {
   position = value;
   const stretch = motionAllowed() ? Math.min(1, Math.abs(value) / 28) : 0;
   const sx = 1 + stretch * .035, sy = 1 - stretch * .025;
-  if (strip.value) strip.value.style.transform = `translate3d(${value}px,0,0) scale(${sx},${sy})`;
-  if (peekWord.value) peekWord.value.style.transform = `translate3d(${value}px,-50%,0) scale(${sx},${sy})`;
+  if (strip.value) strip.value.style.transform = gestureAxis === "vertical" ? `translate3d(0,${value}px,0) scale(${sy},${sx})` : `translate3d(${value}px,0,0) scale(${sx},${sy})`;
+  if (peekWord.value) peekWord.value.style.transform = gestureAxis === "vertical" ? `translate3d(0,-50%,0)` : `translate3d(${value}px,-50%,0) scale(${sx},${sy})`;
 }
 function stopFlight() { revision++; flight?.stop(); flight=undefined;moving.value=false;discoveryMoving=false; }
 function settle(target = 0, done?: () => void, discovery = false) {
@@ -58,11 +65,18 @@ function step(delta: -1|1) {
   const group = groups.value[index.value+delta];
   if (group) { direction.value=delta; key.value=group.key; }
 }
-const swipe = createTaskSwipe((value,isDragging) => {
+function stepPerson(delta: -1 | 1) {
+  const group = active.value;
+  if (!group || group.candidates.length < 2) return;
+  const current = group.candidates.findIndex(task => task.id === group.task?.id);
+  const next = group.candidates[(current + delta + group.candidates.length) % group.candidates.length];
+  if (next) selectedPeople.value = { ...selectedPeople.value, [group.key]: next.assignee_id };
+}
+const swipe = createTaskSwipe((value,isDragging,axis) => {
   dragging.value=isDragging;
-  if (isDragging) { stopFlight();paint(motionAllowed() ? grabbedAt + value : 0); }
+  if (isDragging) { gestureAxis=axis || "horizontal";stopFlight();paint(motionAllowed() ? grabbedAt + value : 0); }
   else settle();
-},step);
+},step,{enabled:()=> (active.value?.candidates.length || 0) > 1,step:stepPerson});
 function captureClick(event: MouseEvent) {
   if (swipe.suppressesClick(event)) { event.preventDefault();event.stopImmediatePropagation(); }
 }
@@ -75,7 +89,8 @@ watch(() => active.value?.task, task => emit('select',task),{immediate:true});
 async function discover() {
   if (discovered || groups.value.length<2 || !surface.value) return;
   discovered=true;
-  emit('hint','左右滑动大字，换个任务催促。');
+  gestureAxis="horizontal";
+  emit('hint',(active.value?.candidates.length || 0) > 1 ? '左右换任务，上下换负责人。' : '左右滑动大字，换个任务催促。');
   await nextTick();
   if (!motionAllowed() || !strip.value || dragging.value) return;
   settle(-neighborSide.value*28,() => settle(0,undefined,true),true);
@@ -97,19 +112,19 @@ async function resumeWhenIdle() {
 function releaseCompletionPointer() { requestAnimationFrame(() => { void resumeWhenIdle(); }); }
 watch(() => props.busy, busy => { if (!busy) void resumeWhenIdle(); });
 let observer: IntersectionObserver | undefined;
-onMounted(() => { observer=new IntersectionObserver(entries => { if(entries.some(entry => entry.isIntersecting)) void discover(); });if(surface.value)observer.observe(surface.value); });
+onMounted(() => { hintTimer=setInterval(() => { if (!document.hidden && !props.statuses[active.value?.task?.id || 0]) hintIndex.value=(hintIndex.value+1)%hints.value.length; }, 6500); observer=new IntersectionObserver(entries => { if(entries.some(entry => entry.isIntersecting)) void discover(); });if(surface.value)observer.observe(surface.value); });
 watch(() => groups.value.length,() => { if(surface.value?.getBoundingClientRect().width) void discover(); });
 function quiet(){if(!motionAllowed()){resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;stopFlight();paint(0);}}
 window.addEventListener('ui-motion-change',quiet);
-onBeforeUnmount(() => { swipe.cancel();stopFlight();completionObserver?.disconnect();observer?.disconnect();window.removeEventListener('ui-motion-change',quiet); });
+onBeforeUnmount(() => { if (hintTimer) clearInterval(hintTimer); swipe.cancel();stopFlight();completionObserver?.disconnect();observer?.disconnect();window.removeEventListener('ui-motion-change',quiet); });
 </script>
 <template>
   <section class="nudge-pane water-pane" data-testid="pane-water" @pointerdown.capture="interruptDiscovery" @pointerup.capture="releaseCompletionPointer" @pointercancel.capture="resumeWhenIdle">
     <h1 class="hero-caption" data-testid="page-swipe-title">{{ caption }}</h1>
     <section v-if="active?.task" class="chore-water focus-hero">
-      <div ref="surface" class="nudge-title-window water-title-stage" :data-task-key="active.key" data-testid="nudge-task-swipe" role="group" aria-label="左右滑动切换催促任务，也可使用左右方向键" tabindex="0"
+      <div ref="surface" class="nudge-title-window water-title-stage" :data-task-key="active.key" data-testid="nudge-task-swipe" role="group" :aria-label="active.candidates.length > 1 ? '左右滑动切换任务，上下滑动切换负责人' : '左右滑动切换催促任务'" :style="{touchAction:active.candidates.length > 1 ? 'none' : 'pan-y'}" tabindex="0"
         @pointerdown="press" @pointermove="swipe.move" @pointerup="swipe.up" @pointercancel="swipe.cancel" @lostpointercapture="swipe.cancel"
-        @click.capture="captureClick" @keydown.left.prevent="step(-1)" @keydown.right.prevent="step(1)" @keydown.esc="swipe.cancel">
+        @click.capture="captureClick" @keydown.left.prevent="step(-1)" @keydown.right.prevent="step(1)" @keydown.up.prevent="stepPerson(1)" @keydown.down.prevent="stepPerson(-1)" @keydown.esc="swipe.cancel">
         <div ref="strip" :data-motion="dragging ? 'dragging' : moving ? 'spring' : 'idle'" class="nudge-title-strip" :class="{'is-dragging':dragging}">
           <TaskTitle :value="active.key" :direction="direction" class="nudge-title" aria-live="polite"
             :style="heroSize ? {fontSize:heroSize} : undefined">
@@ -123,11 +138,11 @@ onBeforeUnmount(() => { swipe.cancel();stopFlight();completionObserver?.disconne
         </div>
         <div v-if="neighbor" class="nudge-peek" aria-hidden="true"><span ref="peekWord" class="nudge-next-title" :class="{'on-left':neighborSide<0}">{{neighbor.name}}</span></div>
       </div>
-      <slot v-if="active.key==='water'" name="water-actions" :status="currentStatus" />
+      <slot v-if="active.key==='water'" name="water-actions" :status="currentStatus" :task="active.task" />
       <template v-else>
         <CompletionAction v-if="active.task.assignee_id===board.member.user_id || active.task.can_complete || active.task.completed_by===board.member.user_id" :task="active.task" :receipt="receipt" :busy="busy" :disabled="busy || (active.task.status==='pending'&&!active.task.can_complete)" :demo="demo || false" @complete="emit('complete',$event)" @undo="emit('undo',$event)" />
         <div class="water-nudge-actions">
-          <p v-if="active.task.assignee_id!==board.member.user_id" class="hero-date nudge-status" role="status">{{currentStatus}}</p>
+          <Transition name="nudge-hint" mode="out-in"><p v-if="active.task.assignee_id!==board.member.user_id" :key="currentStatus" class="hero-date nudge-status" role="status">{{currentStatus}}</p></Transition>
           <button class="nudge-detail" @click="emit('details',active.task!,$event)">查看任务</button>
         </div>
       </template>
@@ -151,5 +166,6 @@ button.nudge-task-name:not(.nudge-name){transition:opacity 120ms,transform 180ms
 .focus-hero > .completion-surface{width:min(100%,300px);height:56px}.nudge-empty{color:var(--muted);text-align:center}
 @media(max-height:650px){.nudge-pane{min-height:calc(100svh - 155px);--task-content-lift:12px}.chore-water{gap:16px}}
 @media(max-height:730px){.chore-water{gap:18px}}
-@media(prefers-reduced-motion:reduce){.nudge-task-name,.nudge-detail{transition:none!important}}
+.nudge-hint-enter-active,.nudge-hint-leave-active{transition:opacity .18s,transform .18s}.nudge-hint-enter-from{opacity:0;transform:translateY(5px)}.nudge-hint-leave-to{opacity:0;transform:translateY(-5px)}
+@media(prefers-reduced-motion:reduce){.nudge-hint-enter-active,.nudge-hint-leave-active{transition:none}.nudge-task-name,.nudge-detail{transition:none!important}}
 </style>

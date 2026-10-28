@@ -2105,7 +2105,11 @@ async function leaveNote(request, db, room, who, now, env) {
     ["target_member_id", "text"],
   );
   const broadcast = input.target_member_id === "all";
-  const target = broadcast ? null : integer(input.target_member_id);
+  const multiple = Array.isArray(input.target_member_id);
+  const selected = multiple ? input.target_member_id.map(value => integer(value)) : [];
+  if (multiple && (!selected.length || selected.length > 50 || new Set(selected).size !== selected.length))
+    invalid("请选择不重复的室友");
+  const target = broadcast || multiple ? null : integer(input.target_member_id);
   if (typeof input.text !== "string") invalid("请写一句留言");
   const text = input.text.trim();
   if (
@@ -2115,14 +2119,15 @@ async function leaveNote(request, db, room, who, now, env) {
   )
     invalid("留言请控制在 1–120 字");
   const { state, members } = await maintain(db, room, now);
-  if (target === who.user_id) fail(422, "self_note", "请选择一位室友");
-  if (!broadcast && !members.some((member) => member.user_id === target))
+  if (target === who.user_id || selected.includes(who.user_id)) fail(422, "self_note", "请选择室友");
+  if ((!broadcast && !multiple && !members.some((member) => member.user_id === target)) ||
+      (multiple && selected.some((id) => !members.some((member) => member.user_id === id))))
     fail(403, "wrong_dorm", "只能给本宿舍的室友留言");
   const targets = broadcast
     ? members
         .filter((member) => member.user_id !== who.user_id)
         .map((member) => member.user_id)
-    : [target];
+    : multiple ? selected : [target];
   if (!targets.length) fail(422, "no_recipients", "室友加入后再留言吧");
   const cutoff = new Date(now.getTime() - 15_000).toISOString();
   const placeholders = targets.map(() => "?").join(",");
@@ -2143,7 +2148,7 @@ async function leaveNote(request, db, room, who, now, env) {
   );
   const keys = [];
   for (const recipient of targets) {
-    const key = broadcast ? `${mutation.token}:${recipient}` : mutation.token;
+    const key = broadcast || multiple ? `${mutation.token}:${recipient}` : mutation.token;
     keys.push(key);
     mutation.raw(
       `INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source) SELECT ?,?,?,?,NULL,'室友留言',?,?,?,'note' WHERE ${mutation.guard}`,
@@ -2174,7 +2179,7 @@ async function leaveNote(request, db, room, who, now, env) {
     keys,
   );
   return json(
-    broadcast
+    broadcast || multiple
       ? { recipients: notes.length, reminders: notes.map(reminderView) }
       : reminderView(notes[0]),
     201,

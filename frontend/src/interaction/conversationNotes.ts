@@ -1,6 +1,6 @@
 import type { ChoreMember } from "../api/chores";
 
-export type NoteTarget = number | "all";
+export type NoteTarget = number | number[] | "all";
 export type NotePhase =
   | "idle"
   | "recipient"
@@ -59,9 +59,9 @@ export function noteTargetName(
   target: NoteTarget | null,
   members: ChoreMember[],
 ) {
-  return target === "all"
-    ? "所有舍友"
-    : members.find((m) => m.user_id === target)?.nickname || "";
+  if (target === "all") return "所有舍友";
+  if (Array.isArray(target)) return target.map(id => members.find(m => m.user_id === id)?.nickname || "").filter(Boolean).join("、");
+  return members.find((m) => m.user_id === target)?.nickname || "";
 }
 export function transitionNote(
   state: NoteState,
@@ -73,7 +73,9 @@ export function transitionNote(
   const valid = (target: NoteTarget | null) =>
     target === "all"
       ? others.length > 0
-      : others.some((m) => m.user_id === target);
+      : Array.isArray(target)
+        ? target.length > 0 && new Set(target).size === target.length && target.every(id => others.some(m => m.user_id === id))
+        : others.some((m) => m.user_id === target);
   const resolve = (name: string): NoteTarget | null => {
     if (allNames.has(name)) return "all";
     const matches = others.filter((m) => m.nickname === name);
@@ -87,11 +89,11 @@ export function transitionNote(
   const toDraft = (target: NoteTarget | null, text: string) => {
     if (!valid(target))
       return reply({ phase: "recipient", target: null, text, error: "" }, [
-        others.length ? "想留给谁？选一位室友吧。" : "室友加入后，就能留言啦。",
+        others.length ? "想留给谁？选一位或多位室友吧。" : "室友加入后，就能留言啦。",
       ]);
     if (!text)
       return reply({ phase: "content", target, text: "", error: "" }, [
-        "想对他说什么？",
+        "想对他们说什么？",
         "写好后，我会请你确认。",
       ]);
     if (

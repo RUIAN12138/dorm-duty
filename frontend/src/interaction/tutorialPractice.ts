@@ -50,7 +50,7 @@ export function createTutorialPractice() {
   });
   const events = reactive({ complete: 0, undo: 0, nudge: 0, note: 0, read: 0 });
   const chat: ChatTurn[] = [];
-  const sentNotes: { target_member_id: number | "all"; text: string }[] = [];
+  const sentNotes: { target_member_id: number | number[] | "all"; text: string }[] = [];
   const matches = (invite: string, memberId: number, token: string) =>
     invite === PRACTICE_INVITE && memberId === -1 && token === "";
   function ownTask(id: number) {
@@ -79,8 +79,10 @@ export function createTutorialPractice() {
     events.undo++;
     return { task, version: board.version + 1 };
   }
-  async function sendNote(note: { target_member_id: number | "all"; text: string }) {
-    if (!(note.target_member_id === "all" || members.some((m) => m.user_id !== -1 && m.user_id === note.target_member_id)) ||
+  async function sendNote(note: { target_member_id: number | number[] | "all"; text: string }) {
+    const target = note.target_member_id;
+    const valid = target === "all" || (Array.isArray(target) ? target.length > 0 && new Set(target).size === target.length && target.every(id => members.some(m => m.user_id !== -1 && m.user_id === id)) : members.some(m => m.user_id !== -1 && m.user_id === target));
+    if (!valid ||
         !note.text.trim() || Array.from(note.text).length > 120) throw Error("请确认练习对象和内容");
     sentNotes.push({ ...note });
     events.note++;

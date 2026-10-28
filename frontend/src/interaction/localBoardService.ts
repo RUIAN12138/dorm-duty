@@ -18,12 +18,12 @@ export interface LocalBoardService {
   undo(id: number): { task: ChoreTask; version: number };
   nudge?(task: ChoreTask): "sent" | "recent";
   sendNote(note: {
-    target_member_id: number | "all";
+    target_member_id: number | number[] | "all";
     text: string;
   }): Promise<void>;
   read(id: number): boolean;
   api: ReturnType<typeof companionClient>;
-  sentNotes: { target_member_id: number | "all"; text: string }[];
+  sentNotes: { target_member_id: number | number[] | "all"; text: string }[];
 }
 export const localBoardServiceKey: InjectionKey<LocalBoardService> = Symbol(
   "local-board-service",

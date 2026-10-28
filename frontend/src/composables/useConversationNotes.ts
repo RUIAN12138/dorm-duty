@@ -15,7 +15,7 @@ export function useConversationNotes(
   },
   message: (role: "user" | "assistant", text: string) => void,
   sent: () => void,
-  practiceSend?: (note: { target_member_id: number | "all"; text: string }) => Promise<void>,
+  practiceSend?: (note: { target_member_id: number | number[] | "all"; text: string }) => Promise<void>,
 ) {
   const state = ref(emptyNote());
   const scope = () => {

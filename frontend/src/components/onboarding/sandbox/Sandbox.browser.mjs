@@ -284,10 +284,8 @@ try {
   await preview
     .getByRole("button", { name: "敲一敲室友二，催促抬水", exact: true })
     .click();
-  check(
-    (await preview.locator(".nudge-status").innerText()).includes("未发送"),
-    "nudge is simulated and explicitly labeled",
-  );
+  await preview.locator(".nudge-status").filter({ hasText: "未发送" }).waitFor();
+  check(true, "nudge is simulated and explicitly labeled");
   await preview.getByTestId(`undo-${waterId}`).click();
   await preview.locator("[data-testid^=complete-water-]").waitFor();
   check(true, "water undo restores original turn through the real UI");
@@ -303,6 +301,12 @@ try {
     .locator(".conversation-recipients")
     .getByRole("button", { name: "室友二", exact: true })
     .click();
+  const third = p.locator(".conversation-recipients").getByRole("button", { name: "室友三", exact: true });
+  await third.click();
+  check(await third.getAttribute("aria-pressed") === "true", "multiple recipients can be selected");
+  await p.screenshot({ path: out + "/multi-recipients.png" });
+  await p.locator(".conversation-note-actions").getByRole("button", {name:/^继续 · 2 人/}).click();
+  await p.locator(".conversation-note").getByText(/室友二.*室友三/).waitFor();
   const input = p.getByRole("textbox", { name: "和球球说句话", exact: true });
   await input.click();
   await input.fill("预览留言测试");
@@ -426,6 +430,8 @@ try {
     .locator(".conversation-recipients")
     .getByRole("button", { name: "小林", exact: true })
     .click();
+  await at("message-recipient-confirm");
+  await p.locator(".conversation-note-actions").getByRole("button", {name:/^继续/}).click();
   await at("message-content");
   const tutorialInput = p.getByRole("textbox", {
     name: "和球球说句话",

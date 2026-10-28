@@ -9,6 +9,21 @@ async function call(route, options = {}, status = 200) {
   return r.json();
 }
 try {
+  const multiRoom = await call("/guest/create", {method:"POST",data:{name:"多人留言验收",nickname:"发送者",members:["甲","乙","丙"]}},201);
+  const multiOthers = multiRoom.dorm.members.filter(m => m.user_id !== multiRoom.member_id);
+  const multiOptions = {method:"POST",token:multiRoom.access_token,data:{target_member_id:multiOthers.slice(0,2).map(m=>m.user_id),text:"一起打扫"}};
+  const foreignRoom = await call("/guest/create",{method:"POST",data:{name:"外宿舍",nickname:"外人",members:[]}},201);
+  const countBefore = h.db.sqlite.prepare("SELECT COUNT(*) n FROM chore_reminders WHERE dorm_id=?").get(multiRoom.dorm.id).n;
+  await call("/chores/notes",{...multiOptions,data:{...multiOptions.data,target_member_id:[multiOthers[0].user_id,foreignRoom.member_id]}},403);
+  await call("/chores/notes",{...multiOptions,data:{...multiOptions.data,target_member_id:[multiOthers[0].user_id,multiRoom.member_id]}},422);
+  await call("/chores/notes",{...multiOptions,data:{...multiOptions.data,target_member_id:[multiOthers[0].user_id,multiOthers[0].user_id]}},422);
+  assert.equal(h.db.sqlite.prepare("SELECT COUNT(*) n FROM chore_reminders WHERE dorm_id=?").get(multiRoom.dorm.id).n,countBefore,"invalid multi-target writes nothing");
+  const selectedNotes = await call("/chores/notes",multiOptions,201);
+  assert.equal(selectedNotes.recipients,2);
+  assert.deepEqual(selectedNotes.reminders.map(n=>n.target_member_id).sort((x,y)=>x-y),multiOptions.data.target_member_id.slice().sort((x,y)=>x-y));
+  await call("/chores/notes",multiOptions,429);
+  await call("/chores/notes",{...multiOptions,data:{...multiOptions.data,target_member_id:[multiOthers[1].user_id,multiOthers[2].user_id]}},429);
+  assert.equal(h.db.sqlite.prepare("SELECT COUNT(*) n FROM chore_reminders WHERE dorm_id=?").get(multiRoom.dorm.id).n,2,"cooldown conflict never partially writes");
   const room = await call(
     "/guest/create",
     {

@@ -265,13 +265,15 @@ export function createDraftSandbox(input, now = () => new Date()) {
     return "sent";
   }
   function sendNote(note) {
+    const selected = Array.isArray(note?.target_member_id) ? note.target_member_id : null;
+    if (selected && (!selected.length || new Set(selected).size !== selected.length || selected.some(id => !members.some(member => member.user_id === id && id !== actor)))) throw Error("请确认模拟留言对象和内容");
     const targets =
       note?.target_member_id === "all"
         ? members.filter((member) => member.user_id !== actor)
         : members.filter(
             (member) =>
               member.user_id !== actor &&
-              member.user_id === note?.target_member_id,
+              (selected ? selected.includes(member.user_id) : member.user_id === note?.target_member_id),
           );
     if (
       !targets.length ||

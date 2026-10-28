@@ -165,6 +165,7 @@ try {
     .getByRole("group", { name: "留言给谁" })
     .getByRole("button", { name: "张三", exact: true })
     .click();
+  await note.getByRole("button", {name:/^继续/}).click();
   await page.waitForTimeout(360);
   check(
     await note.evaluate((el) => el === window.noteShell),

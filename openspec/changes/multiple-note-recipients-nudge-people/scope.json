@@ -1,0 +1,26 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "e127b6c8cc9f90592c9db213e7e183a930d15744",
+  "allowed": [
+    "frontend/src/components/ConversationNoteFlow.vue",
+    "frontend/src/components/CompanionChat.vue",
+    "frontend/src/components/nudge/",
+    "frontend/src/composables/useConversationNotes.ts",
+    "frontend/src/interaction/conversationNotes.ts",
+    "frontend/src/interaction/taskSwipe.ts",
+    "frontend/src/interaction/localBoardService.ts",
+    "frontend/src/interaction/tutorialPractice.ts",
+    "frontend/src/components/onboarding/sandbox/",
+    "site/worker/chores.mjs",
+    "site/scripts/check-roommate-notes.mjs",
+    "openspec/changes/multiple-note-recipients-nudge-people/",
+    "frontend/src/components/onboarding/GuidedPractice.vue",
+    "scripts/check-chat-motion-continuity.mjs",
+    "frontend/src/components/ChoreBoard.vue"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

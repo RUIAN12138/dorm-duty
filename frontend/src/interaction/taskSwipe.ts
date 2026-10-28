@@ -1,13 +1,14 @@
 import { horizontalIntent } from "./gestures";
 // Horizontal intent keeps vertical scrolling and ordinary taps available.
 export function createTaskSwipe(
-  offset: (value: number, dragging: boolean) => void,
+  offset: (value: number, dragging: boolean, axis?: "horizontal" | "vertical") => void,
   step: (direction: -1 | 1) => void,
+  vertical?: { enabled: () => boolean; step: (direction: -1 | 1) => void },
 ) {
   let pointer: number | null = null;
   let startX = 0,
     startY = 0,
-    horizontal = false;
+    direction: "horizontal" | "vertical" | null = null;
   let target: HTMLElement | null = null;
   let suppressUntil = 0;
   function cancel(event?: Event) {
@@ -25,8 +26,9 @@ export function createTaskSwipe(
     if (id !== null && target?.hasPointerCapture(id))
       target.releasePointerCapture(id);
     target = null;
-    horizontal = false;
-    offset(0, false);
+    const previous = direction;
+    direction = null;
+    offset(0, false, previous || "horizontal");
   }
   return {
     down(event: PointerEvent) {
@@ -40,27 +42,27 @@ export function createTaskSwipe(
       if (event.pointerId !== pointer) return;
       const x = event.clientX - startX,
         y = event.clientY - startY;
-      if (!horizontal) {
+      if (!direction) {
         const intent = horizontalIntent(x, y);
-        if (intent === "vertical") {
-          cancel();
-          return;
-        }
-        if (intent !== "horizontal") return;
-        horizontal = true;
+        if (intent === "vertical" && !vertical?.enabled()) { cancel(); return; }
+        if (intent === "pending") return;
+        direction = intent;
         target?.setPointerCapture(event.pointerId);
       }
       event.preventDefault();
       suppressUntil = Date.now() + 350;
-      offset(Math.max(-20, Math.min(20, x * 0.18)), true);
+      const delta = direction === "vertical" ? y : x;
+      offset(Math.max(-20, Math.min(20, delta * 0.18)), true, direction);
     },
     up(event: PointerEvent) {
       if (event.pointerId !== pointer) return;
-      const x = event.clientX - startX;
-      const commit = horizontal && Math.abs(x) >= 48;
-      if (horizontal) suppressUntil = Date.now() + 350;
+      const axis = direction;
+      const delta = axis === "vertical" ? event.clientY - startY : event.clientX - startX;
+      const commit = axis && Math.abs(delta) >= 48;
+      if (axis) suppressUntil = Date.now() + 350;
       cancel();
-      if (commit) step(x < 0 ? 1 : -1);
+      if (commit && axis === "vertical") vertical?.step(delta < 0 ? 1 : -1);
+      else if (commit) step(delta < 0 ? 1 : -1);
     },
     cancel,
     suppressesClick(event: MouseEvent) {
