@@ -40,11 +40,11 @@ const EMOTIONS = new Set([
 // This is usage guidance, never permission to perform an application action.
 export const companionUsageGuide = `轮到使用手册（以当前界面和权限为准）：
 【进入和身份】正式宿舍先验证邮箱，首次验证创建账号，再用邀请码和名单里的完整姓名加入；已绑定其他邮箱的身份不能认领。游客体验的数据独立，不能当正式宿舍。新版入口用最多五页向导设置宿舍名、任务、页面编排、完成节奏和预览；舍友用邀请码完成邮箱验证后自行填写姓名，不必预填名单。旧宿舍按现有名单加入；邮箱创建者自动关联管理身份。切换已加入宿舍可从账号入口选择；不要要求用户清空数据、重新创建宿舍来找回记录。
-【导航】底栏值日、抬水、日历；可点按或左右滑页面、按住底栏移动。左上是宿舍与当前身份，设置图标打开设置。设置子页左箭头回上级，×收起设置；抽屉可下拉关闭。仅进入宿舍前的流程页有回退。
+【导航】底栏值日、催促、日历；可点按或左右滑页面、按住底栏移动。左上是宿舍与当前身份，设置图标打开设置。设置子页左箭头回上级，×收起设置；抽屉可下拉关闭。仅进入宿舍前的流程页有回退。
 【值日】任务名称、模式和负责人以当前宿舍配置为准。旧宿舍的地板、厕所、洗手池分别计算轮次，点击标签或左右滑任务名称切换；点任务名称从底部查看内容和负责人；本人点“我已完成”保存真实完成时间，再点已完成撤销；自主轮次允许自由做，同一项目全员完成才开启下一轮，不能把它说成每日固定排班。圆环显示已完成人数/总人数，点圆环看本轮名单，可切换已完成/未完成，向下滚动时圆环缩小；名单详情不是调整轮序入口。
 【轮序与设置】设置→任务轮序，选任务，长按成员整行上下拖动，再点保存轮序；正式成员可调整轮序。抬水保存后按最近实际完成人在新顺序中找下一位。创建者在设置→任务设置选择任务，修改内容、模式、人员顺序、提醒间隔或排班时间并保存；普通成员没有任务设置入口。不要教用户随意改当前第几轮。
 【抬水】没水才由当前轮到者抬，点我已抬水自动记时间并推进下一位；再次点自己的已完成可撤销允许撤销的记录。查看任务旁问号：轮到本人可暂时跳过，原因可不填，跳过移队尾、本轮仍需补；未轮到本人可记录提前抬水，抵扣下一次、不重复计历史。有效轮换首次进入时播放名字滚动动画，重复进入不重播。
-【催促和留言】抬水页敲名字催促当前人；设置→提醒室友可选成员和任务。单击普通页面球球打开聊天，点“我要留言”或说“给某位室友留言”，可选一人或所有人，填写后查看确认卡片，再点确认发送；可修改或取消，聊天文本本身不会直接发送。消息弹窗会暂时自动收起，手动收起视为已读，长按可回复；设置→室友消息可再看历史。发起者名字会出现在提醒中。已在应用里接收的提醒不会再用邮件重复催。
+【催促和留言】催促页点名字提醒负责人，左右滑大字切换任务；同项有多人待完成时上下滑大字切换负责人。设置→提醒室友可选成员和任务。单击普通页面球球打开聊天，点“我要留言”或说“给某位室友留言”，可选一位、多位或所有室友，填写后查看确认卡片，再点确认发送；可修改或取消，聊天文本本身不会直接发送。消息弹窗会暂时自动收起，手动收起视为已读，长按可回复；设置→室友消息可再看历史。发起者名字会出现在提醒中。已在应用里接收的提醒不会再用邮件重复催。
 【日历和历史】日历页在日历/列表/统计之间切换；左右滑月份，热力颜色表示完成记录，点日期底部展开具体人员和时间。列表按日期折叠，左右滑记录行展开撤销/修正；本人只能改自己的，创建者可修正全宿舍，保留审计；补记只补历史和统计，不推进当前轮次/抬水人。查看旧记录应先核对宿舍、月份、任务和是否游客，不能直接断言数据丢失。
 【统计】统计卡片左右滑动，显示每项全宿舍最近实际完成距今多久；颜色随间隔加深，不是某个人的评分。可选配色；各任务提醒间隔由创建者在任务设置分别设置。自动切换遇到手动操作会暂停。
 【通知】设置→账号与宿舍→通知偏好，开启当前设备系统通知并发测试；定时提醒可开每天提醒我、选时间后保存，日历订阅另行生成地址再订阅。iPhone网页系统通知需要iOS16.4以上、添加到主屏幕、从图标打开并允许；其他浏览器需实际支持Web Push，安装版基础推送也受系统后台限制，不保证杀进程可达。邮箱账号中的邮件提醒开关与当前设备系统通知不同。
@@ -80,10 +80,11 @@ export function companionFactReply(text, context) {
   const me = context.current_member;
   if (!me || !Number.isSafeInteger(me.id) || typeof me.name !== "string") return null;
   let messages;
-  if (/^(?:我是谁|你(?:知道|记得|还记得)我是谁|我叫什么(?:名字)?|我的名字是什么|我现在是哪个身份)[呀啊呢吗]*$/.test(q)) {
+  if (/^(?:我是谁|你(?:知道|记得|还记得)我是谁|你认识我吗|你知道我叫什么(?:名字)?吗|我叫什么(?:名字)?|我的名字是什么|我现在是哪个身份)[呀啊呢吗]*$/.test(q)) {
     messages = [`你是${me.name}。`];
   } else if (/^(?:(?:我|今天我|本轮我|这轮我|现在我)(?:今天|现在|本轮|这轮)?(?:要|该|应该|需要|可以)?(?:做什么|做啥|干什么|干嘛|做哪些任务)|(?:今天|本轮|这轮|现在)(?:要|该|应该|需要|可以)?(?:做什么|做啥|干什么|干嘛)|我的(?:任务|值日|任务安排)(?:是什么|有哪些)|我还有什么没做|我这轮做完了吗)[呀啊呢吗]*$/.test(q)) {
-    const tasks = context.personal_tasks || [];
+    if (!Array.isArray(context.personal_tasks)) return {messages: ["暂时无法确认你的任务。", "请稍后重试。"], emotion:"11", reminder:null};
+    const tasks = context.personal_tasks.filter(task => task.assignee_id === me.id);
     messages = [`${me.name}，这是你的当前任务。`];
     for (const task of tasks.slice(0, 4)) {
       if (task.assignee_id !== me.id) continue;
@@ -97,7 +98,27 @@ export function companionFactReply(text, context) {
   } else if (/^(?:现在|今天|这次|目前)?(?:抬水(?:轮到|是|该)?谁|谁(?:该|要|来)?抬水|轮到谁抬水)(?:了|呀|呢|啊|吗)*$/.test(q)) {
     const water = context.water?.current_assignee;
     messages = [water ? water.id === me.id ? `现在轮到你（${me.name}）抬水。` : `现在轮到${water.name}抬水。` : "当前没有待完成的抬水任务。"];
-  } else return null;
+  } else {
+    // Only exact, read-only questions about a known category are answered here.
+    // A missing round/assignment is unknown, never inferred from past chat.
+    const categories = Array.isArray(context.categories) ? context.categories.filter(c => c.enabled && c.name) : [];
+    const category = categories.find(c => [
+      `${c.name}谁做`, `${c.name}谁负责`, `${c.name}轮到谁`, `谁做${c.name}`, `谁负责${c.name}`,
+      `这轮${c.name}谁没做`, `本轮${c.name}谁没做`, `${c.name}谁没做`,
+    ].includes(q.replace(/[呀啊呢吗了]+$/u, "")));
+    if (!category || /提醒|通知|留言/u.test(q)) return null;
+    if (category.mode === "self_round") {
+      const round = Array.isArray(context.rounds) ? context.rounds.find(r => r.key === category.key) : null;
+      if (!round || !Array.isArray(round.members)) messages = [`暂时查不到${category.name}的本轮安排。`];
+      else {
+        const pending = round.members.filter(m => !m.completed);
+        messages = pending.length ? [`本轮${category.name}还没完成：`, ...pending.slice(0, 3).map(m => `${m.name}。`), ...(pending.length > 3 ? ["其他成员可查看轮次。"] : [])] : [`本轮${category.name}已全部完成。`];
+      }
+    } else {
+      const task = Array.isArray(context.current_tasks) ? context.current_tasks.find(t => t.key === category.key && t.status === "pending") : null;
+      messages = [task?.assignee_name ? `${category.name}当前轮到${task.assignee_name}。` : `暂时查不到${category.name}的当前负责人。`];
+    }
+  }
   return {messages: shortMessages(messages), emotion:"02", reminder:null};
 }
 export function companionMisaddresses(messages, context) {
@@ -155,6 +176,7 @@ export function companionContext(board, activity, time) {
       reminder_interval_days: c.reminder_interval_days,
     })),
     personal_tasks: board.today_tasks.map(task),
+    current_tasks: Array.isArray(board.nudge_tasks) ? board.nudge_tasks.map(task) : null,
     upcoming_personal_tasks: board.next_tasks.map(task),
     rounds: board.rounds.map((r) => ({
       key: r.key,

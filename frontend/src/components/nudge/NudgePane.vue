@@ -13,6 +13,19 @@ const emit = defineEmits<{ nudge:[ChoreTask]; details:[ChoreTask,MouseEvent]; co
 const key = ref(props.selectedKey || "water"), direction = ref(1), dragging = ref(false), moving = ref(false);
 const strip = ref<HTMLElement>(), peekWord = ref<HTMLElement>(), surface = ref<HTMLElement>();
 const selectedPeople = ref<Record<string,number>>({});
+const learned = ref({ task: false, person: false });
+const guidanceKey = computed(() => `dorm-nudge-guidance:${props.scope}`);
+function readGuidance() {
+  try { const saved = JSON.parse(localStorage.getItem(guidanceKey.value) || "{}"); learned.value = {task: saved.task === true, person: saved.person === true}; }
+  catch { learned.value = {task:false,person:false}; }
+}
+function markLearned(kind: "task" | "person") {
+  if (learned.value[kind]) return;
+  learned.value = {...learned.value, [kind]:true};
+  try { localStorage.setItem(guidanceKey.value, JSON.stringify(learned.value)); } catch {}
+}
+watch(guidanceKey, readGuidance, {immediate:true});
+
 const groups = computed(() => {
   const source = props.board.nudge_tasks || props.board.workspace_tasks || [...props.board.today_tasks, ...(props.board.water_task ? [props.board.water_task] : [])];
   const ordered = props.board.configuration?.tasks || props.board.categories;
@@ -63,7 +76,7 @@ function settle(target = 0, done?: () => void, discovery = false) {
 function step(delta: -1|1) {
   resumeDiscovery=false;completionObserver?.disconnect();completionObserver=undefined;
   const group = groups.value[index.value+delta];
-  if (group) { direction.value=delta; key.value=group.key; }
+  if (group) { markLearned("task"); direction.value=delta; key.value=group.key; }
 }
 function stepPerson(delta: -1 | 1) {
   const group = active.value;
@@ -74,7 +87,7 @@ function stepPerson(delta: -1 | 1) {
   }
   const current = group.candidates.findIndex(task => task.id === group.task?.id);
   const next = group.candidates[(current + delta + group.candidates.length) % group.candidates.length];
-  if (next) selectedPeople.value = { ...selectedPeople.value, [group.key]: next.assignee_id };
+  if (next) { markLearned("person"); selectedPeople.value = { ...selectedPeople.value, [group.key]: next.assignee_id }; }
   else emit('hint', '暂时无法切换，请稍后再试。');
 }
 const swipe = createTaskSwipe((value,isDragging,axis) => {
@@ -91,11 +104,14 @@ function press(event: PointerEvent) {
   stopFlight();grabbedAt=position;swipe.down(event);
 }
 watch(() => active.value?.task, task => emit('select',task),{immediate:true});
+watch(() => [active.value?.key, active.value?.candidates.length] as const, ([key, count], previous) => {
+  if (key && (count || 0) > 1 && !learned.value.person && previous?.[0] !== undefined && (key !== previous[0] || (previous[1] || 0) < 2)) emit('hint', '上下滑动大字，换个人提醒。');
+});
 async function discover() {
   if (discovered || groups.value.length<2 || !surface.value) return;
   discovered=true;
   gestureAxis="horizontal";
-  emit('hint',(active.value?.candidates.length || 0) > 1 ? '左右换任务，上下换负责人。' : '左右滑动大字，换个任务催促。');
+  if (!learned.value.task) emit('hint', '左右滑动大字，换个任务催促。');
   await nextTick();
   if (!motionAllowed() || !strip.value || dragging.value) return;
   settle(-neighborSide.value*28,() => settle(0,undefined,true),true);

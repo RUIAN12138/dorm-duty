@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, provide, ref } from "vue";
+import { computed, provide, ref, watch } from "vue";
 import ChoreBoard from "../ChoreBoard.vue";
 import ChoreBottomNav from "../ChoreBottomNav.vue";
 import DormCompanion from "../DormCompanion.vue";
@@ -58,6 +58,7 @@ const chapters = computed<Record<Lesson, PracticeStep[]>>(() => ({
     step("water-complete", '[data-testid="complete-water--13"]', "点「我已抬水」完成交接", "只在已经完成抬水后记录。当前操作是练习。", "交接动画之后，下一位变成小林；刚才的完成记录保留。", () => practice.events.complete > 0 && practice.board.water_task?.assignee_id === -2),
     step("water-nudge", '[data-testid=water-nudge]', "轻点小林，练习提醒", "正式使用时会按原有限流规则提醒当前负责人。", "你已经学会催促。本次没有给任何真实室友发送通知。", () => practice.events.nudge > 0),
     step("water-swipe", '[data-testid=nudge-task-swipe]', "向左滑动大字，换一个任务", "不用找切换按钮，在任务名称上滑动即可。", "已切换到其他任务，提醒仍沿用相同规则。", () => !!document.querySelector('.nudge-task-name')?.textContent?.includes("地板")),
+    step("water-person", '[data-testid=nudge-task-swipe]', "向上滑动大字，换个人", "同一任务有多人未完成时，可以上下切换。", "已选中另一位练习室友；滑动本身不会发送提醒。", () => !!document.querySelector('.nudge-title:not([inert]) .nudge-task-name')?.textContent?.includes("小林")),
   ],
   calendar: [
     step("calendar-nav", '[data-testid=nav-calendar]', "点底部「日历」", "已完成的任务可以在这里查找。", "日期上的标记表示当天有完成记录。", () => section.value === "calendar" && visible('[data-testid=chore-calendar]')),
@@ -80,7 +81,15 @@ const chapters = computed<Record<Lesson, PracticeStep[]>>(() => ({
   ],
 }));
 const current = computed(() => lesson.value ? chapters.value[lesson.value][index.value] : undefined);
+watch(() => current.value?.id, id => {
+  if (id !== "water-swipe") return;
+  const floor = practice.board.today_tasks.find(task => task.key === "floor");
+  if (!floor) return;
+  practice.board.nudge_tasks = [...practice.board.today_tasks, ...(practice.board.water_task ? [practice.board.water_task] : []),
+    {...floor, id:-31, assignee_id:-2, assignee_name:"小林", can_complete:false}];
+});
 function start(id: Lesson) {
+  delete practice.board.nudge_tasks;
   Object.assign(practice.board, JSON.parse(initial));
   Object.keys(practice.events).forEach((key) => { practice.events[key as keyof typeof practice.events] = 0; });
   practice.sentNotes.length = 0;

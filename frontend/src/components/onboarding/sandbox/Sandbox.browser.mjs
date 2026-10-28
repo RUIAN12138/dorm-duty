@@ -395,6 +395,12 @@ try {
     { steps: 10 },
   );
   await p.mouse.up();
+  await at("water-person");
+  const personSwipe = await p.getByTestId("nudge-task-swipe").boundingBox();
+  await p.mouse.move(personSwipe.x + personSwipe.width / 2, personSwipe.y + personSwipe.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(personSwipe.x + personSwipe.width / 2, personSwipe.y + personSwipe.height / 2 - 110, { steps: 10 });
+  await p.mouse.up();
   await p.getByTestId("lesson-water").waitFor();
   check(
     (await p.getByTestId("lesson-water").innerText()).includes("已练习"),
