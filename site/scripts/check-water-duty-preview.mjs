@@ -21,7 +21,7 @@ try{
  const old=JSON.stringify(snapshot());
  for(const page of ['duty','water']){
   const config=configuration(page),room=await create(`新版${page}`,config);
-  for(const [i,nickname] of ['室友二','室友三'].entries()) { const joined=await join(room,nickname,`${page}-${i}@example.invalid`);assert.equal(joined.status,201,await joined.clone().text()); }
+  const peers=[];for(const [i,nickname] of ['室友二','室友三'].entries()) { const joined=await join(room,nickname,`${page}-${i}@example.invalid`);assert.equal(joined.status,201,await joined.clone().text());peers.push(await joined.json()); }
   const live=await board(room);
   const draft={...config,name:'预览',nickname:'甲',members:[]};const input=createDraftPreviewModel()(draft);const sandbox=createDraftSandbox(input);const local=sandbox.snapshot();
   assert.equal(hasWater(live),page==='duty',`live ${page}`);
@@ -40,6 +40,11 @@ try{
   const undone=await h.request(`/chores/tasks/${live.water_task.id}/undo`,{method:'PATCH',token:room.access_token,data:{}});assert.equal(undone.status,200,await undone.clone().text());
   sandbox.undo(local.water_task.id);
   assert.equal(hasWater(await board(room)),hasWater(sandbox.snapshot()));
+  const again=await h.request(`/chores/tasks/${live.water_task.id}/complete`,{method:'PATCH',token:room.access_token,data:{}});assert.equal(again.status,200,await again.clone().text());
+  const current=await board(room);assert.equal(current.water_task.assignee_id,peers[0].member.user_id);
+  const peerDone=await h.request(`/chores/tasks/${current.water_task.id}/complete`,{method:'PATCH',token:peers[0].access_token,data:{}});assert.equal(peerDone.status,200,await peerDone.clone().text());
+  assert.equal(hasWater(await board(room)),false,'later completion removes old undo receipt');
+  const staleUndo=await h.request(`/chores/tasks/${live.water_task.id}/undo`,{method:'PATCH',token:room.access_token,data:{}});assert.equal(staleUndo.status,409);
  }
  assert.equal(JSON.stringify(snapshot()),old);
  console.log('PASS: live, preview and sandbox agree on water placement; legacy five-table snapshot preserved');

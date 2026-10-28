@@ -1121,6 +1121,13 @@ async function board(request, db, env, now, url) {
           [room.id, uid, new Date(now.getTime() - DAY).toISOString(), uid],
         )
       : [];
+  // A water handoff advances to another member. Preserve the current user's
+  // confirmed undo receipt on the configured duty page without changing the
+  // live queue; undoRows already enforces ownership, recency and successors.
+  if (waterOnDuty && !todayRows.some(task => task.key === "water")) {
+    const receipt = undoRows.find(task => task.key === "water" && task.sequence != null);
+    if (receipt) todayRows.push(receipt);
+  }
   const rounds = [];
   for (const category of settings.filter(
     (entry) => entry.mode === "self_round" && entry.enabled,

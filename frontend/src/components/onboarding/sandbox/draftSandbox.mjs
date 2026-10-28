@@ -343,6 +343,13 @@ export function createDraftSandbox(input, now = () => new Date()) {
           })),
         };
       });
+    const waterOnDuty = initial.configuration.tasks.some(item => item.key === "water" && item.enabled && item.page === "duty");
+    const personal = rows.filter(task => task.assignee_id === actor && (task.key !== "water" || waterOnDuty));
+    if (waterOnDuty && !personal.some(task => task.key === "water")) {
+      const receipt = [...tasks.values()].filter(task => task.key === "water" && task.sequence != null && task.status === "completed" && (task.completed_by || task.assignee_id) === actor && at.getTime() - Date.parse(task.completed_at) <= 86400000 && ![...tasks.values()].some(later => later.key === "water" && later.sequence > task.sequence && later.status === "completed"))
+        .sort((a,b) => b.sequence-a.sequence)[0];
+      if (receipt) personal.push(view(receipt,at));
+    }
     return copy({
       ...initial,
       version,
@@ -351,8 +358,7 @@ export function createDraftSandbox(input, now = () => new Date()) {
       water_handoff: handoff,
       workspace_tasks: rows,
       nudge_tasks: rows,
-      today_tasks: rows.filter((task) => task.assignee_id === actor &&
-        (task.key !== "water" || initial.configuration.tasks.some(item => item.key === "water" && item.enabled && item.page === "duty"))),
+      today_tasks: personal,
       water_task:
         rows.find(
           (task) => task.key === "water" && task.status === "pending",
