@@ -30,15 +30,32 @@ try {
  await page.getByRole('button',{name:'创建宿舍',exact:true}).click();
  await page.locator('.dorm-wizard').waitFor();
  await page.getByLabel('宿舍名称',{exact:true}).fill('断线重试宿舍');
- for(let i=0;i<4;i++) await page.getByRole('button',{name:'继续',exact:true}).click();
+ await page.getByRole('button',{name:'继续',exact:true}).click();
+ await page.getByRole('button',{name:'自定义任务',exact:true}).click();
+ await page.getByLabel('任务名称',{exact:true}).fill('阳台');
+ await page.getByRole('button',{name:'‹ 返回任务',exact:true}).click();
+ await page.getByRole('button',{name:'下一组',exact:true}).click();
+ await page.locator('.template-card').getByText('阳台',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'上一组',exact:true}).click();
+ assert.equal(await page.locator('.creation-task-select .template-card[aria-pressed="true"]').count(),4);
+ for(let i=0;i<3;i++) await page.getByRole('button',{name:'继续',exact:true}).click();
  const before=h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n;
  await page.getByRole('button',{name:'确认创建',exact:true}).click();
  await page.getByText('连接服务失败，请稍后重试',{exact:true}).waitFor();
  assert.equal(createCount,1);assert.equal(h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n,before+1);
- await page.getByRole('button',{name:'确认创建',exact:true}).click();
- await page.locator('.invite-result>strong').waitFor();
- assert.equal(createCount,2);assert.match(requestIds[0],/^[a-f0-9]{32}$/);assert.equal(requestIds[1],requestIds[0]);
- assert.equal(h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n,before+1);
- assert.equal((await page.locator('.invite-result>strong').innerText()).length,8);
- console.log(`PASS ${engine}: actual wizard retries lost response with same request ID and one room`);
+ if(process.env.DORM_RELOAD==='1') {
+  await page.reload();
+  await page.getByRole('button',{name:'跳过',exact:true}).click();
+  await page.getByText('断线重试宿舍',{exact:true}).waitFor();
+  assert.equal(createCount,1,'reload must not silently create another room');
+  assert.equal(h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n,before+1);
+  console.log(`PASS ${engine}: reload restores the created room after a lost response`);
+ } else {
+  await page.getByRole('button',{name:'确认创建',exact:true}).click();
+  await page.locator('.invite-result>strong').waitFor();
+  assert.equal(createCount,2);assert.match(requestIds[0],/^[a-f0-9]{32}$/);assert.equal(requestIds[1],requestIds[0]);
+  assert.equal(h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().n,before+1);
+  assert.equal((await page.locator('.invite-result>strong').innerText()).length,8);
+  console.log(`PASS ${engine}: actual wizard retries lost response with same request ID and one room`);
+ }
 }finally{await browser.close();await mail.close();h.close();}
