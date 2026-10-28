@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 催促引导、事实回答与操作教程
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `429d12d15981a0bd070ee54a689b4663366acefc`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/429d12d15981a0bd070ee54a689b4663366acefc
+- related_pr: 未创建。
+- requirements: 用户选择优化催促手势可发现性、球球身份及任务回答、新手教程实际操作。
+- changed_files: NudgePane、GuidedPractice、两套浏览器回归、companion-ai、事实测试及 OpenSpec。
+- implemented: 根据可选任务和待完成成员提示手势并记录已学会；认证实时数据回答更多身份与任务问题并区分缺失数据；隔离教程增加上下滑动选择室友步骤。更新过时的球球功能手册。
+- tests: build、spec:check、事实 26 项和 AI 隔离检查 79 项通过；Chromium/WebKit 催促及沙箱教程操作回归通过。模型为模拟；不存在真实通知和正式数据写入。
+- CI: 本 SHA 无已返回的远端检查，未确认 CI。
+- platform_status: 未做实体 iPhone、Android WebView、HarmonyOS 验收；未部署。
+- remaining: 泛化自然语言及真实模型表现尚需评估；iOS 聊天退出后的导航偶发错位尚待真机复现。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 催促失败反馈回归
 
 - code_branch: `codex/wizard-single-screen-polish`
