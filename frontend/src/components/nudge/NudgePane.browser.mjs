@@ -12,7 +12,7 @@ const check=(v,label)=>{assert.ok(v,label);checks.push(label);console.log('PASS'
 const room=await(await h.request('/guest/create',{method:'POST',data:{name:'催促界面隔离',nickname:'甲',members:['乙','丙']}})).json();
 const peer=await(await h.request('/chores/claim',{method:'POST',data:{invite_code:room.invite_code,nickname:'乙'}})).json();
 const identity={id:room.dorm.id,name:room.dorm.name,invite_code:room.invite_code,member_id:peer.member.user_id,nickname:'乙',is_creator:false};
-let holdFloor=false,releaseFloor;
+let holdFloor=false,releaseFloor, failReminder=false;
 await p.addInitScript(({invite,id})=>localStorage.setItem(`dorm-welcome-guide-v2:${encodeURIComponent(invite)}:${id}`,'1'),{invite:room.invite_code,id:peer.member.user_id});
 await p.route(/\/(email|chores|auth|dorms|guest)\//,async route=>{
  const req=route.request(),url=new URL(req.url());
@@ -20,6 +20,7 @@ await p.route(/\/(email|chores|auth|dorms|guest)\//,async route=>{
  if(url.pathname.startsWith('/email/'))return route.fulfill({json:url.pathname==='/email/config'?{available:true,registration_required:true}:url.pathname==='/email/me'?{logged_in:true,email:'nudge@example.invalid',rooms:[identity]}:url.pathname==='/email/enter'?{...identity,access_token:peer.access_token}:{}});
  if(url.pathname==='/chores/push/config')return route.fulfill({json:{available:false}});
  if(req.method()!=='GET')writes.push({path:url.pathname,body:req.postDataJSON()});
+ if(failReminder && url.pathname==='/chores/remind')return route.fulfill({status:503,json:{error:'服务暂不可用'}});
  const response=await h.request(url.pathname+url.search,{method:req.method(),token:req.headers().authorization?.replace(/^Bearer /,''),...(req.postData()?{data:req.postDataJSON()}: {})});
  if(holdFloor&&url.pathname==='/chores/remind')await new Promise(resolve=>{releaseFloor=resolve;});
  await route.fulfill({status:response.status,contentType:'application/json',body:await response.text()});
@@ -66,6 +67,11 @@ await settled();check(await p.locator('.nudge-title').evaluate(el=>el.getBoundin
  await swipe(0,110);await settled();
  check(await p.locator('.nudge-title:not([inert]) .nudge-task-name').innerText()===beforePerson,'downward swipe returns to previous eligible assignee');
  const name=await p.locator('.nudge-pane [data-testid=water-nudge]').getAttribute('aria-label');check(name.includes('催促地板'),'nudge is labeled with the selected task');
+ failReminder=true;await p.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').click();
+ await p.locator('.companion-bubble').filter({hasText:'提醒没有成功'}).waitFor();
+ check(await p.locator('.companion-bubble').getAttribute('role')==='status','failed reminder uses the non-modal companion bubble');
+ failReminder=false;writes.length=0;
+
  holdFloor=true;await p.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').click();await p.waitForFunction(()=>document.querySelector('.nudge-status')?.textContent?.includes('正在提醒'));
  await swipe(-110);await p.locator('.nudge-title-window[data-task-key="toilet"]').waitFor();releaseFloor();holdFloor=false;await settled();
  check(!(await p.locator('.nudge-status').innerText()).includes('已提醒'),'late previous task response does not overwrite selected task feedback');
