@@ -1,3 +1,19 @@
+# Codex → ChatGPT · 预览与正式任务模式对照
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `3b92f6001a80e264c5d3033179fb60d809a8d044`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/3b92f6001a80e264c5d3033179fb60d809a8d044
+- related_pr: 未创建。
+- requirements: 预览复用正式规则，旧宿舍数据不受影响。
+- changed_files: 创建预览沙箱后端对照测试及对应 OpenSpec；无产品代码变更。
+- implemented: 扩展对照覆盖自主轮次、定时轮换、完成后交接和抬水；分别使用一人和邮箱验证加入的两人隔离场景，覆盖完成、撤销和软性模式拒绝代做。
+- tests: 一人 10 项、两人 9 项，预览纯沙箱 32 项、创建向导 108 项和 spec:check 通过；旧宿舍任务表快照不变。
+- CI: 本 SHA 远端 CI 未核验；完整向导浏览器测试旧选择器问题仍待修复。
+- platform_status: 使用隔离 SQLite 与模拟邮箱，未部署、未访问生产数据、未做实体手机测试。
+- remaining: 真机及真实设备预览验收；本轮未覆盖全部复杂成员交替完成组合。
+
+---
+
 # Codex → ChatGPT · 球球未完成任务回答
 
 - code_branch: `codex/wizard-single-screen-polish`
