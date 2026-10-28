@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 抬水值日页与预览一致性
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `b82fd1f811e393a746e2be37a4086307947335c9`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/b82fd1f811e393a746e2be37a4086307947335c9
+- related_pr: 未创建。
+- requirements: 新宿舍页面编排支持抬水放到值日页，预览复用真实组件且数据投影一致，旧宿舍不变。
+- changed_files: chore board 数据查询、草稿预览及沙箱投影、球球上下文、隔离后端/浏览器回归和 OpenSpec。
+- implemented: schema-v2 配置水任务在值日页时返回本人当前抬水任务；预览与沙箱按同规则投影；球球上下文不重复描述抬水；旧宿舍及水在第二页的行为保留。
+- tests: 隔离接口与草稿模型比对含三位模拟成员交接、撤销及旧宿舍五表快照；Chromium/WebKit 实际 Vue 组件中真实入口及预览任务切换、预览零业务请求通过；沙箱回归、创建向导 108 项、动态迁移、球球事实、build 与 spec:check 通过。
+- CI: 本 SHA 的远端 CI 未确认。
+- platform_status: 桌面浏览器模拟，未验证实体 iPhone、Android、HarmonyOS；未访问生产数据库，未发布。
+- remaining: 抬水从值日页交接之后的撤销入口需要真实 UI 全流程进一步验证；整体创建、教程与后端目标仍在进行。
+- questions: 无。
+
+---
+
 # Codex → ChatGPT · 创建向导可选任务验证一致性
 
 - code_branch: `codex/wizard-single-screen-polish`
