@@ -427,6 +427,13 @@ function react(id: string, duration = 2600) {
   reaction.value = id;
   reactionTimer = setTimeout(() => (reaction.value = ""), duration);
 }
+function speakReaction(text: string) {
+  if (!props.automatic || props.muted) return;
+  const id = /失败|没成功|无法|网络|稍后再试/.test(text) ? "11"
+    : /只有|没有|未完成|未值日/.test(text) ? "03"
+    : /成功|已完成|太棒|谢谢/.test(text) ? "10" : "16";
+  react(id, 3400);
+}
 function clearReaction() {
   clearTimeout(reactionTimer);
   reactionTimer = undefined;
@@ -635,6 +642,7 @@ onBeforeUnmount(() => {
       :scene="scene"
       :muted="muted"
       :message="message"
+      @speaking="speakReaction"
     />
   </span>
 </template>

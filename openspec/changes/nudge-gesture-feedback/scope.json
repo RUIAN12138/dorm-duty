@@ -1,0 +1,18 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "c6de71d072fb5236ba11703d032703bb6ebffcf1",
+  "allowed": [
+    "frontend/src/components/ChoreBoard.vue",
+    "frontend/src/components/nudge/NudgePane.vue",
+    "frontend/src/components/nudge/NudgePane.browser.mjs",
+    "frontend/src/interaction/companionSpeech.ts",
+    "openspec/changes/nudge-gesture-feedback/",
+    "frontend/src/components/CompanionBubble.vue",
+    "frontend/src/components/DormCompanion.vue"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

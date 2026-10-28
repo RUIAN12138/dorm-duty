@@ -9,6 +9,7 @@ const props = withDefaults(
   defineProps<{ scene?: CompanionScene; muted?: boolean; message?: string }>(),
   { scene: "general", muted: false, message: "" },
 );
+const emit = defineEmits<{ speaking: [value: string] }>();
 const text = ref("");
 let pageTimer: ReturnType<typeof setTimeout> | undefined,
   tipTimer: ReturnType<typeof setTimeout> | undefined;
@@ -25,6 +26,7 @@ function cancel() {
 function say(value: string) {
   cancel();
   if (quiet.value) return;
+  emit("speaking", value);
   const pages = speechPages(value);
   const id = generation;
   let page = 0;

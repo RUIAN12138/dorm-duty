@@ -882,6 +882,16 @@ const nudgeTaskStatuses = computed(() => {
   return result;
 });
 const nudgeHint = ref("");
+let hintRevision = 0;
+function showNudgeHint(message: string) {
+  const revision = ++hintRevision;
+  nudgeHint.value = "";
+  void nextTick(() => { if (revision === hintRevision) nudgeHint.value = message; });
+}
+watch(() => props.section, section => {
+  document.documentElement.classList.toggle("nudge-page-scroll", section === "water");
+}, { immediate: true });
+onUnmounted(() => document.documentElement.classList.remove("nudge-page-scroll"));
 function setNudgeStatus(task: ChoreTask, value: string) {
   nudgeTaskResults.value = { ...nudgeTaskResults.value, [task.id]: value };
   nudgeStatus.value = value;
@@ -1436,7 +1446,7 @@ async function nudgeWater(taskOverride?: ChoreTask) {
       setNudgeStatus(task, practice.value?.kind === "draft"
         ? status === "recent" ? "预览 · 刚刚已模拟提醒，未发送" : "预览 · 已模拟提醒，未发送通知"
         : practice.value ? "练习成功 · 正式使用时会提醒这位室友" : "预览 · 未发送提醒");
-    } catch (error) { setNudgeStatus(task,(error as Error).message); }
+    } catch (error) { setNudgeStatus(task,(error as Error).message); showNudgeHint("提醒没有成功，请稍后再试。"); }
     return;
   }
   if (props.demo) {
@@ -1477,6 +1487,7 @@ async function nudgeWater(taskOverride?: ChoreTask) {
       error instanceof ApiError && error.status === 429
         ? "刚刚已提醒"
         : (error as Error).message);
+    if (!(error instanceof ApiError && error.status === 429)) showNudgeHint("提醒没有成功，请检查网络后再试。");
     if (error instanceof ApiError && error.status === 409) void load();
   } finally {
     if (controller && nudgeControllers.get(task.id) === controller) nudgeControllers.delete(task.id);
@@ -1944,7 +1955,7 @@ onUnmounted(() => {
               <div v-else class="focus-hero"><h2>休息</h2></div>
             </section>
             <NudgePane v-if="section === 'water'" :board="board" :scope="`${invite}:${memberId}`" :busy="!!busy || completionSyncPending" :receipt="completionReceipt" :statuses="nudgeTaskStatuses" :selected-key="selectedSecondTaskKey" :handoff-active="!chatPresent && !messagesOpen && !orderOpen && !toolsOpen && !preferencesOpen && !companionOpen && !pushOpen && !settingsOpen && !recoveryOpen && !reminderOpen && !markerOpen && !detailTask && !roundOpen && !waterExceptionOpen" :demo="demo || (preview && !practice)"
-              @nudge="nudgeWater($event)" @details="openTask" @complete="complete" @undo="undo($event.id)" @hint="nudgeHint = $event" @select="selectedSecondTaskKey = $event?.key">
+              @nudge="nudgeWater($event)" @details="openTask" @complete="complete" @undo="undo($event.id)" @hint="showNudgeHint" @select="selectedSecondTaskKey = $event?.key">
               <template #water-actions="{ status, task }">
                 <section v-if="water" class="nudge-water-content" data-testid="water-task">
                   <CompletionAction
@@ -3515,4 +3526,9 @@ onUnmounted(() => {
 <style scoped>
 .nudge-hint-enter-active,.nudge-hint-leave-active{transition:opacity .18s,transform .18s}.nudge-hint-enter-from{opacity:0;transform:translateY(5px)}.nudge-hint-leave-to{opacity:0;transform:translateY(-5px)}
 @media(prefers-reduced-motion:reduce){.nudge-hint-enter-active,.nudge-hint-leave-active{transition:none}}
+</style>
+
+<style>
+html.nudge-page-scroll, html.nudge-page-scroll body { scrollbar-width: none; }
+html.nudge-page-scroll::-webkit-scrollbar, html.nudge-page-scroll body::-webkit-scrollbar { display: none; }
 </style>

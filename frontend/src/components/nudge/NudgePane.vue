@@ -67,16 +67,21 @@ function step(delta: -1|1) {
 }
 function stepPerson(delta: -1 | 1) {
   const group = active.value;
-  if (!group || group.candidates.length < 2) return;
+  if (!group) { emit('hint', '暂时无法切换，请稍后再试。'); return; }
+  if (group.candidates.length < 2) {
+    emit('hint', group.candidates.length === 1 ? '只有这位同学还未值日哦' : '目前没有待提醒的同学。');
+    return;
+  }
   const current = group.candidates.findIndex(task => task.id === group.task?.id);
   const next = group.candidates[(current + delta + group.candidates.length) % group.candidates.length];
   if (next) selectedPeople.value = { ...selectedPeople.value, [group.key]: next.assignee_id };
+  else emit('hint', '暂时无法切换，请稍后再试。');
 }
 const swipe = createTaskSwipe((value,isDragging,axis) => {
   dragging.value=isDragging;
   if (isDragging) { gestureAxis=axis || "horizontal";stopFlight();paint(motionAllowed() ? grabbedAt + value : 0); }
   else settle();
-},step,{enabled:()=> (active.value?.candidates.length || 0) > 1,step:stepPerson});
+},step,{enabled:()=> true,step:stepPerson});
 function captureClick(event: MouseEvent) {
   if (swipe.suppressesClick(event)) { event.preventDefault();event.stopImmediatePropagation(); }
 }
@@ -122,7 +127,7 @@ onBeforeUnmount(() => { if (hintTimer) clearInterval(hintTimer); swipe.cancel();
   <section class="nudge-pane water-pane" data-testid="pane-water" @pointerdown.capture="interruptDiscovery" @pointerup.capture="releaseCompletionPointer" @pointercancel.capture="resumeWhenIdle">
     <h1 class="hero-caption" data-testid="page-swipe-title">{{ caption }}</h1>
     <section v-if="active?.task" class="chore-water focus-hero">
-      <div ref="surface" class="nudge-title-window water-title-stage" :data-task-key="active.key" data-testid="nudge-task-swipe" role="group" :aria-label="active.candidates.length > 1 ? '左右滑动切换任务，上下滑动切换负责人' : '左右滑动切换催促任务'" :style="{touchAction:active.candidates.length > 1 ? 'none' : 'pan-y'}" tabindex="0"
+      <div ref="surface" class="nudge-title-window water-title-stage" :data-task-key="active.key" data-testid="nudge-task-swipe" role="group" :aria-label="active.candidates.length > 1 ? '左右滑动切换任务，上下滑动切换负责人' : '左右滑动切换催促任务'" :style="{touchAction:'none'}" tabindex="0"
         @pointerdown="press" @pointermove="swipe.move" @pointerup="swipe.up" @pointercancel="swipe.cancel" @lostpointercapture="swipe.cancel"
         @click.capture="captureClick" @keydown.left.prevent="step(-1)" @keydown.right.prevent="step(1)" @keydown.up.prevent="stepPerson(1)" @keydown.down.prevent="stepPerson(-1)" @keydown.esc="swipe.cancel">
         <div ref="strip" :data-motion="dragging ? 'dragging' : moving ? 'spring' : 'idle'" class="nudge-title-strip" :class="{'is-dragging':dragging}">
@@ -154,7 +159,7 @@ onBeforeUnmount(() => { if (hintTimer) clearInterval(hintTimer); swipe.cancel();
 .nudge-pane{position:relative;min-width:0;min-height:calc(100svh - 170px - env(safe-area-inset-bottom));padding:0 0 24px;--task-content-lift:clamp(24px,5svh,42px)}
 .hero-caption{position:absolute;top:calc(50% - 136px - var(--task-content-lift));left:0;width:100%;margin:0;font-size:clamp(19px,5.8vw,24px);line-height:1.4;font-weight:450;text-align:center}
 .chore-water{position:absolute;top:calc(50% - 90px - var(--task-content-lift));left:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:var(--ui-space-md)}
-.nudge-title-window{position:relative;width:min(100%,300px);height:104px;min-height:104px;display:grid;align-items:center;touch-action:pan-y;outline-offset:4px}
+.nudge-title-window{position:relative;width:min(100%,300px);height:104px;min-height:104px;display:grid;align-items:center;touch-action:none;outline-offset:4px}
 .nudge-title-strip{display:grid;place-items:center;transform-origin:50% 50%}
 .nudge-title{grid-area:1/1;margin:0;width:100%;max-width:100%;font-size:clamp(60px,18vw,84px);line-height:1.15;font-weight:650;letter-spacing:-2px;text-align:center;overflow-wrap:anywhere}
 .nudge-task-name:not(.nudge-name){font:inherit;color:var(--app-tone-h111,#111);border:0;background:none;padding:0;max-width:100%;letter-spacing:inherit;text-align:center;cursor:pointer}

@@ -71,6 +71,11 @@ try{
  await p.locator('.chore-bottom-nav [data-section=duty]').click();await p.getByTestId('pane-duty').waitFor();await p.locator('.chore-bottom-nav [data-section=water]').click();await p.locator('.nudge-title-window[data-task-key="toilet"]').waitFor();check(true,'selected task survives page navigation');
  await p.getByTestId('nudge-task-swipe').focus();await p.keyboard.press('ArrowLeft');await p.keyboard.press('ArrowLeft');await p.locator('.nudge-title-window[data-task-key="water"]').waitFor();
  check(await p.getByRole('button',{name:'抬水临时安排',exact:true}).count()===1,'water exception entry is preserved');
+ check(await p.getByTestId('nudge-task-swipe').evaluate(el=>getComputedStyle(el).touchAction==='none'),'title surface owns vertical touch without disabling page scroll');
+ check(await p.evaluate(()=>document.documentElement.classList.contains('nudge-page-scroll')),'nudge page hides root scrollbar');
+ await swipe(0,-110);await p.getByRole('status').filter({hasText:'只有这位同学还未值日哦'}).waitFor();
+ check(true,'single pending assignee explains why switching is unavailable in companion bubble');
+
  if(engine==='chromium'){
    const cdp=await context.newCDPSession(p),r=await p.getByTestId('nudge-task-swipe').boundingBox();
    const x=r.x+r.width/2,y=r.y+r.height/2;
