@@ -28,14 +28,21 @@ async function settled(){await p.waitForFunction(()=>!document.querySelector('.b
 async function swipe(dx,dy=0){const r=await p.getByTestId('nudge-task-swipe').boundingBox();const x=r.x+r.width/2,y=r.y+r.height/2;await p.mouse.move(x,y);await p.mouse.down();await p.mouse.move(x+dx,y+dy,{steps:8});await p.mouse.up();}
 try{
  await p.goto(base+'/water?start=1');await p.locator('.nudge-pane').waitFor();
- check(await p.locator('.chore-bottom-nav [data-section=water]').innerText().then(t=>t.includes('催促')),'navigation shows 催促 while route remains water');check(await p.getByTestId('nav-water').locator('svg path').first().getAttribute('d').then(d=>d.startsWith('M18 8a6')),'nudge navigation uses the new bell instead of the water drop');
+ check(await p.locator('.chore-bottom-nav [data-section=water]').innerText().then(t=>t.includes('催促')),'navigation shows 催促 while route remains water');
+check(await p.getByTestId('nav-water').locator('svg path').first().getAttribute('d').then(d=>d.startsWith('M18 8a6')),'nudge navigation uses the new bell instead of the water drop');
  check(await p.locator('.nudge-pane .task-selector,.nudge-pane [role=tab],.nudge-pane [aria-label*=下一]').count()===0,'no visible task switch buttons');
  await p.getByText('左右滑动大字，换个任务催促。',{exact:true}).waitFor();
  check(true,'companion explicitly introduces task swiping');
  const frames=await p.locator('.nudge-title-strip').evaluate(async el=>{const values=[];for(let i=0;i<70;i++){await new Promise(requestAnimationFrame);const m=new DOMMatrixReadOnly(getComputedStyle(el).transform);values.push({x:m.m41,sx:m.m11,sy:m.m22});}return values;});
  await fs.writeFile(out+'/discovery-frames.json',JSON.stringify(frames,null,2));check(frames.some(f=>Math.abs(f.x)>5&&Math.abs(f.x)<31),'subtle discovery reveals an adjacent title through real transform frames');
  await settled();check(await p.locator('.nudge-title-strip').evaluate(el=>Math.abs(new DOMMatrixReadOnly(getComputedStyle(el).transform).m41)<1),'discovery returns to the original title position');
- check(frames.some(f=>f.sx>1.01&&f.sx<1.04&&f.sy<.995&&f.sy>.97),'discovery includes restrained horizontal stretch and vertical compression');await settled();check(await p.locator('.nudge-title').evaluate(el=>el.getBoundingClientRect().width>200),'hero retains original full-width name layout');await p.screenshot({path:out+'/water.png'});writes.length=0;
+ check(frames.some(f=>f.sx>1.01&&f.sx<1.04&&f.sy<.995&&f.sy>.97),'discovery includes restrained horizontal stretch and vertical compression');
+ const stageBefore=await p.locator('.screen-surface').evaluate(el=>({transform:getComputedStyle(el).transform,scroll:scrollY}));
+ const titleBox=await p.getByTestId('nudge-task-swipe').boundingBox();
+ await p.mouse.move(titleBox.x+titleBox.width/2,titleBox.y+titleBox.height/2);await p.mouse.down();await p.mouse.move(titleBox.x+titleBox.width/2,titleBox.y+titleBox.height/2+70,{steps:8});
+ const stageHeld=await p.locator('.screen-surface').evaluate(el=>({transform:getComputedStyle(el).transform,scroll:scrollY}));
+ check(stageHeld.transform===stageBefore.transform&&stageHeld.scroll===stageBefore.scroll,'downward title drag does not pull or scroll page');await p.mouse.up();
+await settled();check(await p.locator('.nudge-title').evaluate(el=>el.getBoundingClientRect().width>200),'hero retains original full-width name layout');await p.screenshot({path:out+'/water.png'});writes.length=0;
  const dragBox=await p.getByTestId('nudge-task-swipe').boundingBox(),dragX=dragBox.x+dragBox.width/2,dragY=dragBox.y+dragBox.height/2;
  await p.mouse.move(dragX,dragY);await p.mouse.down();await p.mouse.move(dragX-32,dragY,{steps:6});
  const held=await p.locator('.nudge-title-strip').evaluate(el=>{const m=new DOMMatrixReadOnly(getComputedStyle(el).transform);return{x:m.m41,sx:m.m11,sy:m.m22,mode:el.dataset.motion};});
@@ -79,6 +86,12 @@ try{
  if(engine==='chromium'){
    const cdp=await context.newCDPSession(p),r=await p.getByTestId('nudge-task-swipe').boundingBox();
    const x=r.x+r.width/2,y=r.y+r.height/2;
+   const beforeTouch=await p.locator('.screen-surface').evaluate(el=>({transform:getComputedStyle(el).transform,scroll:scrollY}));
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+   for(let n=1;n<=8;n++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y+n*10}]});
+   const duringTouch=await p.locator('.screen-surface').evaluate(el=>({transform:getComputedStyle(el).transform,scroll:scrollY}));
+   check(beforeTouch.transform===duringTouch.transform&&beforeTouch.scroll===duringTouch.scroll,'real touch downward title gesture leaves page stationary');
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await settled();
    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
    for(let n=1;n<=8;n++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x-n*14,y}]});
    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
@@ -92,7 +105,13 @@ try{
  await p.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await p.reload();await p.locator('.nudge-pane').waitFor();await settled();
  check(await p.locator('.nudge-title-strip').evaluate(el=>{const m=new DOMMatrixReadOnly(getComputedStyle(el).transform);return el.dataset.motion==='idle'&&Math.abs(m.m41)<.01&&m.m11===1&&m.m22===1;}),'reduced motion suppresses displacement and stretch');
  await p.screenshot({path:out+'/dark-reduced.png'});
- await p.goto(base+'/?preview=new-dorm');await p.locator('.dorm-wizard').waitFor();await p.getByRole('button',{name:'预览',exact:true}).click();const preview=p.getByTestId('live-draft-preview');await preview.getByTestId('pane-duty').waitFor();
+ await p.emulateMedia({reducedMotion:'no-preference'});await p.goto(base+'/?preview=new-dorm');await p.locator('.dorm-wizard').waitFor();await p.getByRole('button',{name:'预览',exact:true}).click();const preview=p.getByTestId('live-draft-preview');await preview.getByTestId('pane-duty').waitFor();
+ const navBefore=await preview.getByTestId('chore-bottom-nav').boundingBox();
+ const surfaceBox=await preview.locator('.screen-surface').boundingBox();
+ await p.mouse.move(surfaceBox.x+8,surfaceBox.y+surfaceBox.height*.5);await p.mouse.down();await p.mouse.move(surfaceBox.x+8,surfaceBox.y+surfaceBox.height*.5+90,{steps:8});
+ const surfacePull=await preview.locator('.screen-surface').evaluate(el=>getComputedStyle(el).transform);
+ const navHeld=await preview.getByTestId('chore-bottom-nav').boundingBox();
+ check(surfacePull!=='none' && Math.abs(navHeld.y-navBefore.y)<1,'preview elastic page pull preserves fixed navigation position');await p.mouse.up();
  const writeCount=writes.length;await preview.locator('.chore-bottom-nav [data-section=water]').click();await preview.locator('.nudge-pane').waitFor();await preview.locator('[data-testid^=complete-water-]').click();await preview.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').waitFor();await preview.locator('.nudge-title:not([inert]) [data-testid=water-nudge]').click();
  check(writes.length===writeCount,'real-component draft nudge preview sends no API writes');
  await preview.locator('.nudge-status').filter({hasText:'未发送'}).waitFor();check(true,'preview truthfully reports no real notification');

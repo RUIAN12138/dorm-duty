@@ -66,14 +66,14 @@ function reorderPageItem(id: "duty" | "water" | "calendar", toIndex: number) {
         />
           </section>
         </main>
-        <ChoreBottomNav
-          preview
-          :section="section"
-          :pages="draft.pages"
-          @select="selectPage"
-          @reorder="reorderPageItem"
-        />
       </ScreenStage>
+      <ChoreBottomNav
+        preview
+        :section="section"
+        :pages="draft.pages"
+        @select="selectPage"
+        @reorder="reorderPageItem"
+      />
     </div>
   </Teleport>
 </template>

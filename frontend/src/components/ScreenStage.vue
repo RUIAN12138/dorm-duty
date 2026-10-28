@@ -53,7 +53,7 @@ function down(event: PointerEvent) {
     return;
   if (
     event.target.closest(
-      "input,textarea,select,[contenteditable=true],.dorm-companion,[data-native-scroll]",
+      "input,textarea,select,[contenteditable=true],.dorm-companion,[data-native-scroll],[data-testid=nudge-task-swipe]",
     )
   )
     return;
