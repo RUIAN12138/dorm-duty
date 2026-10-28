@@ -92,6 +92,7 @@ const creatingRoom = ref(false),
   createNickname = ref(""),
   createMembers = ref("");
 const createdInvite = ref("");
+let confirmedCreationRequest: { account: string; requestId: string } | undefined;
 const localWizardExperience = ref(false);
 const localWizardPreviewAvailable = isLocalPreviewAvailable();
 const recoveryOpen = ref(false);
@@ -758,7 +759,9 @@ async function submitWizard(draft: DormDraft) {
   await submitCreate();
 }
 function finishWizard() {
-  if (createdInvite.value && emailAccount.email) clearCreationRequest(emailAccount.email);
+  if (createdInvite.value && confirmedCreationRequest)
+    clearCreationRequest(confirmedCreationRequest.account, confirmedCreationRequest.requestId);
+  confirmedCreationRequest = undefined;
   creatingRoom.value = false;
   localWizardExperience.value = false;
   wizardConfiguration.value = undefined;
@@ -777,13 +780,16 @@ async function submitCreate() {
         .map((name) => name.trim())
         .filter(Boolean),
     };
-    if (values.configuration && emailAccount.loggedIn && !emailAccount.email)
+    const account = emailAccount.email;
+    if (values.configuration && emailAccount.loggedIn && !account)
       throw new Error("账号信息尚未恢复，请稍后重试。");
     const request_id = values.configuration && emailAccount.loggedIn
-      ? await creationRequestId(emailAccount.email!, values) : undefined;
+      ? await creationRequestId(account!, values) : undefined;
     if (!isCurrent(id, signal)) return;
     const result = await createGuestDorm({ ...values, ...(request_id ? { request_id } : {}) }, signal);
     if (!isCurrent(id, signal)) return;
+    if (request_id && account)
+      confirmedCreationRequest = { account, requestId: request_id };
     persistSessionToken(result.access_token);
     try {
       localStorage.setItem("dorm-email-admin-grant", result.access_token);

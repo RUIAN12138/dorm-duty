@@ -15,9 +15,11 @@ const count=()=>h.db.sqlite.prepare('SELECT COUNT(*) n FROM dormitories').get().
 try{
  const firstId=await creationRequestId('owner@example.invalid',input);
  assert.equal(await creationRequestId('OWNER@example.invalid',input),firstId);
- assert.notEqual(await creationRequestId('owner@example.invalid',{...input,name:'另一个'}),firstId);
+ const otherDraftId=await creationRequestId('owner@example.invalid',{...input,name:'另一个'});assert.notEqual(otherDraftId,firstId);
  assert.equal(await creationRequestId('owner@example.invalid',input),firstId,'returning to the same draft retains its pending ID');
- clearCreationRequest('owner@example.invalid');
+ clearCreationRequest('owner@example.invalid',otherDraftId);
+ assert.equal(await creationRequestId('owner@example.invalid',input),firstId,'confirming a different draft retains the unresolved request');
+ clearCreationRequest('owner@example.invalid',firstId);
  const requestId=await creationRequestId('owner@example.invalid',input);assert.notEqual(requestId,firstId);
  assert(!JSON.stringify([...map.values()]).includes('隔离创建'));
  await login('owner@example.invalid');const before=count();
@@ -37,4 +39,4 @@ try{
  const expiredCookie=cookie;h.db.sqlite.prepare('UPDATE email_sessions SET expires_at=? WHERE account_id=(SELECT id FROM email_accounts WHERE email=?)').run('2000-01-01T00:00:00.000Z','owner@example.invalid');
  cookie=expiredCookie;const expired=await call('/guest/create',{...input,request_id:requestId});assert.equal(expired.status,401);assert.equal(count(),before+2);
  console.log('PASS: five concurrent retries create one room; replay issues distinct grants; conflict and revoked creator rejected; no plaintext secrets stored');
-}finally{clearCreationRequest('owner@example.invalid');delete globalThis.localStorage;await mail.close();h.close()}
+}finally{delete globalThis.localStorage;await mail.close();h.close()}

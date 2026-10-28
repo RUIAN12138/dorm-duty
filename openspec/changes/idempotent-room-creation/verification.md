@@ -4,5 +4,7 @@
 - `node site/scripts/check-room-creation-restart.mjs`：隔离文件数据库执行正式迁移，旧宿舍七表快照不变；进程数据库重开后同一请求恢复到同一宿舍。
 - `node scripts/check-dorm-wizard.mjs`：108 项通过；`node site/scripts/check-dynamic-task-migration.mjs`：4 项检查、7 表保留；云后端测试 1316 项断言通过。
 - `npm run build`（frontend）通过；构建提示向导代码块超过 500 kB。
-- 浏览器端真实断线重试、Cloudflare D1 实际并发以及实体设备仍未验收；未访问正式数据库、未发布。
+- `scripts/check-creation-retry-browser.mjs`：Chromium 和 WebKit 中以实际向导提交，模拟服务端已创建但网络响应丢失；用户重试使用同一请求标识并取得邀请码，隔离数据库中仅生成一个宿舍。
+- 多份草稿交错时确认其中一份不会清除其他待确认请求。
+- 浏览器刷新后恢复草稿、Cloudflare D1 实际并发以及实体设备仍未验收；未访问正式数据库、未发布。
 - 若设备禁止本地存储，请求标识只能在当前页面内复用，页面关闭后不能保证避免重复创建。

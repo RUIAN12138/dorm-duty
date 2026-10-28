@@ -30,9 +30,16 @@ export async function creationRequestId(account: string, payload: unknown): Prom
   try { localStorage.setItem(key,JSON.stringify({entries:[...records]})); } catch {}
   return requestId;
 }
-export function clearCreationRequest(account: string) {
-  if (!account.trim()) return;
+export function clearCreationRequest(account: string, requestId: string) {
+  if (!account.trim() || !/^[a-f0-9]{32}$/.test(requestId)) return;
   const key = keyFor(account);
-  memory.delete(key);
-  try { localStorage.removeItem(key); } catch {}
+  const records = memory.get(key);
+  if (!records) return;
+  for (const [fingerprint, id] of records) {
+    if (id === requestId) records.delete(fingerprint);
+  }
+  try {
+    if (records.size) localStorage.setItem(key, JSON.stringify({entries:[...records]}));
+    else localStorage.removeItem(key);
+  } catch {}
 }

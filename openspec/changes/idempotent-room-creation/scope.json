@@ -9,7 +9,8 @@
     "frontend/src/interaction/creationRequest.ts",
     "site/scripts/check-room-creation-idempotency.mjs",
     "openspec/changes/idempotent-room-creation/",
-    "site/scripts/check-room-creation-restart.mjs"
+    "site/scripts/check-room-creation-restart.mjs",
+    "scripts/check-creation-retry-browser.mjs"
   ],
   "acceptance": {
     "status": "pending",
