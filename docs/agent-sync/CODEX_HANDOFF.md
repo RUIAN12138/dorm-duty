@@ -5,6 +5,8 @@
 - code_url: https://github.com/RUIAN12138/dorm-duty/commit/4a189c77633b98d414acace5064d69cce40be1a8
 - scope: 按用户全栈简历准备需求新增项目展示、架构、简历稿、演示脚本、模拟截图和测试证据；修复创建向导浏览器测试的过时选择器和隔离邮箱会话夹具，不修改业务代码。
 - tests: `npm run spec:check` 通过；创建向导浏览器 Chromium 和 Playwright WebKit 各 212 项、向导业务 108 项、球球事实 33 项、两成员预览与后端对照 10 项及创建请求并发重试检查通过。截图与录屏仅模拟数据；未访问生产数据库。
+- supplementary_verification: 同一代码 SHA 上隔离运行 `check-dynamic-task-migration.mjs`（7 张旧数据表快照、迁移 0020 外键及完整性检查）、`check-dorm-wizard.mjs`（108 项）和 `check-auth-boundaries.mjs`（89 项）；`Sandbox.browser.mjs` 在 Chromium 和 Playwright WebKit 各完成 24 项，覆盖预览与教程的本地副作用隔离，拦截的业务请求为 0，隔离数据库快照不变。仅覆盖脚本内情形，不证明所有旧宿舍或真实设备均已验收。
+- new_preference: 用户要求以后新增功能参考 https://github.com/aoci-spec/aoci-code ；其方法为改动前读取受版本管理的代码知识索引、核验源码并在变更后维护索引。当前没有安装或建立该工具的索引，项目 SQLite 数据库不在其 README 列出的数据库索引支持范围。不得声称已接入。
 - CI: 新 SHA 的远端 CI 尚无检查结果；在独立干净工作树的前一提交 `ad3b453a303be2829693ba3438a620ab023f382e` 完整执行 `npm run web:verify` 通过。新提交只增加该验证记录，非代码改动。
 - platforms: 浏览器引擎模拟不等于 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机；这些设备本轮未验收。
 - deployment: 本轮未创建 PR、未合并、未部署；本地 25 秒练习录屏不属于完整 60–90 秒讲解片。
