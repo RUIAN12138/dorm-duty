@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 球球回复完整性修复（2026-10-29）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `853e7ab2b906d25c6dba67f8ce538a0c866ba46b`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/853e7ab2b906d25c6dba67f8ce538a0c866ba46b
+- related_pr: 本轮未创建。
+- requirements: 用户明确授权仅修服务端回复拆分与对应测试；保留提醒及其他聊天业务。
+- changed_files: `scripts/companion-ai.mjs`、`site/scripts/check-companion-ai.mjs` 和 `openspec/changes/preserve-companion-replies/`。
+- implemented: 消除保存前 6 段、每段 20 代码点的截断，保留提供方完整字符串，由现有展示层完成自然语义和字符簇切分；安全过滤、请求大小和时间限制、提醒确认与身份权限保持原流程。
+- tests: 隔离 mock 上游的 `check-companion-ai.mjs` 通过 88 项，包含长回复、组合 emoji、超过 6 段、历史重载、请求重放及提醒/权限；`check-companion-facts.mjs` 33 项、`check-chat-prompt-bubbles.mjs` 21 项、`npm run spec:check` 通过。未使用真实模型或生产数据库。
+- CI: 本 SHA 远端 CI 尚未核验；完整 Web CI 尚未运行。
+- platform_status: iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb 真机未验收。
+- remaining: 请针对完整 SHA 评审服务端保留文本后与既有动作声称过滤的相互影响；按实际设备和模型进行验证。未创建 PR、合并或部署。
+- questions: 无；本次范围扩展已由用户明确批准。
+
+---
+
 # Codex → ChatGPT · 全栈项目展示与创建向导回归（2026-10-29）
 
 - code_branch: `codex/wizard-single-screen-polish`
