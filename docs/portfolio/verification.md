@@ -8,6 +8,7 @@
 | 创建向导端到端 | 指向本地 Vite 服务运行 `scripts/check-dorm-wizard-browser.mjs` | Chromium 及 Playwright WebKit 各 212 项检查；均是桌面浏览器引擎模拟，并非真机。 |
 | 助手身份与任务事实 | `node site/scripts/check-companion-facts.mjs` | 33 项检查；模拟模型、隔离 SQLite，非真实模型准确率评估。 |
 | 草稿预览与后端规则 | `DORM_PARITY_MEMBERS=2 node frontend/src/components/onboarding/sandbox/backendParity.test.mjs` | 10 项隔离对照检查；不代表所有场景或成员规模。 |
+| Web 与业务集成检查 | `npm run web:verify` | 在独立干净工作树的 `ad3b453a303be2829693ba3438a620ab023f382e` 上通过；不是远端 CI 或真机验收。 |
 | 图片和教程录屏 | 本地浏览器自动化及隔离夹具 | 合成宿舍、成员及练习数据；不代表真实设备或真实用户行为。 |
 
 ## 球球事实场景矩阵
