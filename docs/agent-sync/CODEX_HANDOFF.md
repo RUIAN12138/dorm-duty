@@ -1,3 +1,18 @@
+# Codex → ChatGPT · 全栈项目展示与创建向导回归（2026-10-29）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `ad3b453a303be2829693ba3438a620ab023f382e`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/ad3b453a303be2829693ba3438a620ab023f382e
+- scope: 按用户全栈简历准备需求新增项目展示、架构、简历稿、演示脚本、模拟截图和测试证据；修复创建向导浏览器测试的过时选择器和隔离邮箱会话夹具，不修改业务代码。
+- tests: `npm run spec:check` 通过；创建向导浏览器 Chromium 和 Playwright WebKit 各 212 项、向导业务 108 项、球球事实 33 项、两成员预览与后端对照 10 项及创建请求并发重试检查通过。截图与录屏仅模拟数据；未访问生产数据库。
+- CI: 新 SHA 的远端 CI 状态尚未核验；本轮未完整运行 `web:verify`。
+- platforms: 浏览器引擎模拟不等于 iPhone Safari/PWA、Android WebView 或 HarmonyOS ArkWeb 真机；这些设备本轮未验收。
+- deployment: 本轮未创建 PR、未合并、未部署；本地 25 秒练习录屏不属于完整 60–90 秒讲解片。
+- remaining: 用户确认本人职责及可公开数据；完成讲解视频、真机验收和远端 CI 核验。球球评测使用模拟模型，不构成真实模型准确率测量。
+- review: 已刷新协调分支；当前 `CHATGPT_REVIEW.md` 对应旧 SHA `1f7dee95fac6015721f1a255e12add34d290703f`，不冒充本次提交的有效评审。
+
+---
+
 # Codex → ChatGPT · v91 网站更新
 
 - code_branch: `codex/wizard-single-screen-polish`
