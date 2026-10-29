@@ -194,8 +194,8 @@ async function call(path, body, member = 0, method = "POST") {
 }
 try {
   check(
-    shortMessages(["球".repeat(47)]).every((x) => Array.from(x).length <= 20),
-    "output length enforced by server",
+    shortMessages(["球".repeat(140), "👨‍👩‍👧‍👦"]).join("") === "球".repeat(140) + "👨‍👩‍👧‍👦",
+    "provider text and grapheme sequences remain intact before display splitting",
   );
   const id = randomUUID();
   let r = await call("chat", { text: "你好", request_id: id });
@@ -206,6 +206,19 @@ try {
   const before = calls;
   await call("chat", { text: "你好", request_id: id });
   check(calls === before, "same request id does not charge model twice");
+  const longText = "这是一段完整回复，".repeat(18) + "👨‍👩‍👧‍👦";
+  result = { messages: [longText, ...Array.from({ length: 7 }, (_, i) => `补充${i}。`)], emotion: "02", reminder: null };
+  const longId = randomUUID();
+  const longReply = await call("chat", { text: "请详细解释一下", request_id: longId });
+  check(longReply.status === 200 && JSON.stringify(longReply.messages) === JSON.stringify(result.messages), "long reply retains every original message and grapheme");
+  const saved = await call("state", {}, 0, "GET");
+  const savedReply = saved.messages.filter((m) => m.request_id === longId && m.role === "assistant");
+  check(savedReply.length === 1 && JSON.stringify(savedReply[0].messages) === JSON.stringify(result.messages), "history reload preserves one complete assistant message");
+  const callsBeforeReplay = calls;
+  const replay = await call("chat", { text: "请详细解释一下", request_id: longId });
+  check(calls === callsBeforeReplay && JSON.stringify(replay.messages) === JSON.stringify(result.messages), "retry returns the same complete reply without a second provider call");
+  result = { messages: ["你好呀，我是球球。"], emotion: "10", reminder: null };
+  time = new Date(time.getTime() + 61000);
   check(
     (await call("state", {}, 1, "GET")).messages.length === 0,
     "another member cannot read chat",

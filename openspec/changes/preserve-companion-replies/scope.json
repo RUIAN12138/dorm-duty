@@ -1,0 +1,1 @@
+{"base":"25056ed6c28f2c46f3cef957e8828a1226b7c667","implementationBase":"4a189c77633b98d414acace5064d69cce40be1a8","allowed":["scripts/companion-ai.mjs","site/scripts/check-companion-ai.mjs","openspec/changes/preserve-companion-replies/"],"acceptance":{"status":"pending","userStatement":null,"acceptedDigest":null}}
