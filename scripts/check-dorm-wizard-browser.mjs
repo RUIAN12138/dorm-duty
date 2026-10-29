@@ -1,4 +1,6 @@
 import { createHarness } from "../site/scripts/check-cloud-backend.mjs";
+import { createEmailRuntime } from "../site/local/email-runtime.mjs";
+import { handleApi } from "../site/worker/backend.mjs";
 import {
   chromium,
   webkit,
@@ -75,6 +77,27 @@ await p.addInitScript(() => {
     });
 });
 const h = await createHarness();
+const sent = [];
+const mail = createEmailRuntime(h.db, {
+  config: { host: "smtp.invalid", port: 465, user: "test@example.invalid", password: "fixture-only", from: "test@example.invalid", publicOrigin: "https://backend-test.example", otpSecret: "b".repeat(64) },
+  autoStart: false,
+  send: async (message) => sent.push(message),
+});
+let cookie = "";
+async function emailFixture(path, data) {
+  const request = new Request("https://backend-test.example" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Dorm-Email": "1", Origin: "https://backend-test.example", Cookie: cookie },
+    body: JSON.stringify(data),
+  });
+  const response = await mail.wrap(request, (req, creator) => handleApi(req, { ...h.env, EMAIL_CREATOR: creator }));
+  if (response.headers.get("set-cookie")) cookie = response.headers.get("set-cookie").split(";")[0];
+  return response;
+}
+const fixtureEmail = "isolated@example.invalid";
+const challenge = await (await emailFixture("/email/code", { email: fixtureEmail })).json();
+const code = sent.at(-1).text.match(/验证码是：(\d{6})/)[1];
+assert.equal((await emailFixture("/email/verify", { email: fixtureEmail, code, challenge_id: challenge.challenge_id, mail_enabled: false })).status, 200);
 const initial = await (
   await h.request("/guest/create", {
     method: "POST",
@@ -112,7 +135,9 @@ await p.route(/\/(email|chores|auth|dorms|guest)\//, async (route) => {
     return route.fulfill({
       json: { available: true, public_key: "test-public-key" },
     });
-  const response = await h.request(url.pathname + url.search, {
+  const response = url.pathname === '/guest/create' && req.method() === 'POST'
+    ? await emailFixture('/guest/create', req.postDataJSON())
+    : await h.request(url.pathname + url.search, {
     method: req.method(),
     token: req.headers().authorization?.replace(/^Bearer /, ""),
     ...(req.postData() ? { data: JSON.parse(req.postData()) } : {}),
@@ -472,14 +497,15 @@ try {
   await p.locator('.creation-task-edit .task-editor').waitFor();
   await p.getByLabel('任务名称',{exact:true}).fill('阳台');
   await p.locator('.creation-task-edit button').first().click();
-  check(await creationSlots.count()===4&&await creationSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true'))&&await p.locator('.creation-task-picks button').count()===5,'adding a custom task preserves all four builtin draft tasks and pages the fifth');
+  await p.waitForFunction(()=>!document.querySelector('.creation-panel-leave-active'));
+  check(await creationSlots.count()===4&&await creationSlots.evaluateAll(nodes=>nodes.every(node=>node.getAttribute('aria-pressed')==='true'))&&await p.getByRole('button',{name:'下一组',exact:true}).isVisible(),'adding a custom task preserves all four builtin draft tasks and pages the fifth');
   await p.getByRole('button',{name:'下一组',exact:true}).click();
   check(await creationSlots.count()===1&&await creationSlots.first().locator('strong').textContent()==='阳台','new custom task is reachable on its own template group');
   await p.getByRole('button',{name:'上一组',exact:true}).click();
   await p.waitForFunction(()=>Object.keys(localStorage).some(key=>{try{return JSON.parse(localStorage.getItem(key)||'null')?.draft?.tasks?.some(task=>/^task_[0-9a-f]{32}$/.test(task.key)&&task.name==='阳台'&&task.page==='water')}catch{return false}}));
   const previewCustomKey=await p.evaluate(()=>Object.keys(localStorage).flatMap(key=>{try{return JSON.parse(localStorage.getItem(key)||'null')?.draft?.tasks||[]}catch{return []}}).find(task=>task.name==='阳台')?.key);
   check(true,'custom task receives a stable ID and defaults to the second page');
-  check(await p.locator('.creation-task-picks button').first().evaluate(async (element) => {
+  check(await p.getByRole('button',{name:'编辑任务',exact:true}).evaluate(async (element) => {
     let stableFrames = 0;
     let previous = element.getBoundingClientRect();
     for (let frame = 0; frame < 120 && stableFrames < 3; frame++) {
@@ -505,7 +531,7 @@ try {
   });
   await p.evaluate(() => new Promise(requestAnimationFrame));
   await p.screenshot({path:`data/startup-review/${engine}-progress-pointerup-settled.png`});
-  await p.locator('.creation-task-picks button').first().click();
+  await p.getByRole('button',{name:'编辑任务',exact:true}).click();
   await p.getByLabel('任务名称',{exact:true}).fill('地面清洁');
   check(await p.locator('.wizard-step:not([aria-hidden=true]) input,.wizard-step:not([aria-hidden=true]) textarea,.wizard-step:not([aria-hidden=true]) select').count()===2,'task screen contains name and optional description only');
   await p.getByRole('button',{name:'前往宿舍名称',exact:true}).click();
@@ -602,7 +628,7 @@ try {
   if(rulesViewport)await p.setViewportSize(rulesViewport);
   await p.waitForTimeout(80);
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 default rules and all pacing choices fit without vertical scrolling');
-  check(await p.locator('.rule-primary .rule-task-picks').count()===0,'non-scheduled unified pacing hides the task selector used only for scheduled times');
+  check(await p.locator('.rule-primary .creation-task-rail').count()===0,'non-scheduled unified pacing hides the task selector used only for scheduled times');
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-default.png`});
   check(
     JSON.stringify(await p.locator('.rule-mode-picks .wizard-choice span').allTextContents()) === JSON.stringify([
@@ -615,7 +641,7 @@ try {
   if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
-  check(await p.locator('.rule-task-picks button').count()===4&&await p.locator('.rule-time-panel .time-segment').count()===2&&await p.locator('.rule-time-panel .van-picker').count()===0,'the unified scheduled choice exposes its tasks and one direct HH:MM control without a second wheel');
+  check(await p.locator('.creation-task-rail button').count()===4&&await p.locator('.rule-time-panel .time-segment').count()===2&&await p.locator('.rule-time-panel .van-picker').count()===0,'the unified scheduled choice exposes its tasks and one direct HH:MM control without a second wheel');
   const scheduledFit=await p.locator('.wizard-body').evaluate(el=>({scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,children:[...el.querySelector('.rule-primary').children].map(child=>({className:child.className,height:child.getBoundingClientRect().height}))}));
   check(scheduledFit.scrollHeight<=scheduledFit.clientHeight+1,`390x844 unified scheduled rules fit without vertical scrolling ${JSON.stringify(scheduledFit)}`);
   await p.screenshot({path:`data/startup-review/${engine}-wizard-rules-scheduled.png`});
@@ -665,20 +691,21 @@ try {
   const retainedDeadline=await p.locator('.rule-time-panel .time-wheel-setting').getAttribute('data-time-value');
   if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
-  await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
-  check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'switching back to round mode smoothly removes irrelevant task and time controls');
+  await p.locator('.rule-primary .creation-task-rail').waitFor({state:'detached'});
+  check(await p.locator('.rule-primary .creation-task-rail').count()===0&&await p.locator('.rule-time-panel').count()===0,'switching back to round mode smoothly removes irrelevant task and time controls');
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'non-scheduled rule choice remains compact without vertical scrolling');
   if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/做完交给下一位/}).click();
-  await p.locator('.rule-primary .rule-task-picks').waitFor({state:'detached'});
-  check(await p.locator('.rule-primary .rule-task-picks').count()===0&&await p.locator('.rule-time-panel').count()===0,'completion handoff also hides the scheduled-only task selector');
+  await p.locator('.rule-primary .creation-task-rail').waitFor({state:'detached'});
+  check(await p.locator('.rule-primary .creation-task-rail').count()===0&&await p.locator('.rule-time-panel').count()===0,'completion handoff also hides the scheduled-only task selector');
   if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/按时间安排/}).click();
   await p.evaluate(async()=>{const running=document.getAnimations({subtree:true}).filter(a=>a.playState==='running');await Promise.all(running.map(a=>a.finished.catch(()=>{})));});
-  check(await p.locator('.rule-task-picks button[aria-pressed="true"]').count()===1,'scheduled task selection is restored after changing the pacing mode');
+  check(await p.locator('.creation-task-rail button[aria-pressed="true"]').count()===1,'scheduled task selection is restored after changing the pacing mode');
   check(await p.locator('.rule-time-panel .time-wheel-setting').getAttribute('data-time-value')===retainedDeadline,'scheduled deadline remains unchanged when switching between pacing modes');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
-  check(await p.locator('.rule-task-picks button').count()===5&&await p.locator('.rule-detail').count()===1,'per-task rule editing includes the custom task in a separate compact card state');
+  await p.waitForFunction(()=>!document.querySelector('.creation-panel-leave-active'));
+  check(await p.locator('.creation-task-rail button').count()===5&&await p.locator('.rule-detail').count()===1,'per-task rule editing includes the custom task in a separate compact card state');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice').count()===3&&await p.locator('.rule-detail .rule-time-panel .van-picker').count()===0,'per-task rotation tab exposes all three runtime rhythms without stacking unrelated controls');
   check(await p.locator('.rule-detail .rule-rotation .wizard-choice span').count()===3,'per-task pacing choices use the same concise explanations');
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 per-task pacing choices fit without vertical scrolling');
@@ -688,21 +715,22 @@ try {
   check(await p.locator('.wizard-body').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'390x844 task rule and single HH:MM control fit in one screen');
   check(await p.getByRole('button',{name:'继续',exact:true}).isVisible()&&await p.locator('.wizard-footer').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1;}),'task rule screen keeps the primary action visible in the viewport');
   await p.screenshot({path:`data/startup-review/${engine}-advanced-rule-single-screen.png`});
-  await p.locator('.rule-task-picks button').filter({hasText:'地面清洁'}).click();
+  await p.locator('.creation-task-rail button').filter({hasText:'地面清洁'}).click();
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   await p.locator('.rule-override').getByRole('button',{name:'按时间完成',exact:true}).click();
-  await p.locator('.rule-task-picks button').filter({hasText:'厕所'}).click();
+  await p.locator('.creation-task-rail button').filter({hasText:'厕所'}).click();
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   await p.locator('.rule-override').getByRole('button',{name:'只作提示',exact:true}).click();
   await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
   if(await p.getByRole('button',{name:'‹ 完成方式',exact:true}).count())await p.getByRole('button',{name:'‹ 完成方式',exact:true}).click();
   await p.locator('.rule-mode-picks').getByRole('button',{name:/大家做完再开始下一轮/}).click();
+  await p.waitForFunction(()=>!document.querySelector('.creation-panel-leave-active'));
   check(await p.locator('.rule-time-panel').count()===0,'round mode keeps time-only controls out of the compact default state');
   await p.getByRole('button',{name:'为单项任务调整',exact:true}).click();
-  await p.locator('.rule-task-picks button').filter({hasText:'地面清洁'}).click();
+  await p.locator('.creation-task-rail button').filter({hasText:'地面清洁'}).click();
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   check(await p.locator('.rule-override').getByRole('button',{name:'按时间完成',exact:true}).getAttribute('aria-pressed')==='true','changing the global rhythm preserves the explicit hard override on another task');
-  await p.locator('.rule-task-picks button').filter({hasText:'厕所'}).click();
+  await p.locator('.creation-task-rail button').filter({hasText:'厕所'}).click();
   await p.getByRole('tab',{name:'时间',exact:true}).click();
   check(await p.locator('.rule-override').getByRole('button',{name:'只作提示',exact:true}).getAttribute('aria-pressed')==='true','changing the global rhythm preserves the explicit soft override on another task');
   await p.getByRole('button',{name:'‹ 使用统一方式',exact:true}).click();
@@ -1077,5 +1105,6 @@ try {
   throw e;
 } finally {
   await b.close();
+  await mail.close();
   await h.close?.();
 }
