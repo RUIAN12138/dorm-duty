@@ -8,7 +8,7 @@
 - changed_files: `README.md`、`docs/media/product/README.md` 与五个图片/视频文件。
 - implemented: README 增加介绍站、10 秒短片、三张真实组件截图；隔离示例数据与验证边界明确标注。Sites 介绍站增加短片入口、横向封面和共用播放器，保留原约 31 秒演示。网站源 SHA `c2d92c1ff1cbcbe6d076aea8dec3a32cc488ecae`，原生 Sites 发布状态 succeeded，地址 https://lundao-app-introduction.violet-hero-5670.chatgpt.site/ ，访问权限保持原状。
 - tests: README 六个本地媒体引用存在，diff 检查通过；短片 FFmpeg 全片解码及 Chromium 播放/暂停/尾部跳转通过；介绍站 Chromium/WebKit 共 30 项测试通过，包含双视频切换、关闭与焦点恢复、六档宽度、减动效、无运行错误及无业务写入请求。
-- CI: PR 必需检查运行 https://github.com/RUIAN12138/dorm-duty/actions/runs/41186918781 ：web-and-business 在 `site/scripts/check-round-order.mjs:207` 失败，实际 undefined 与期望记录数组不一致；当前未定位根因，未擅自修改业务或测试。Android 最后查询仍在运行。main 保护拒绝直接文档推送；仓库不允许自动合并。PR 保持 OPEN，首页默认分支尚未更新。
+- CI: PR 必需检查运行 https://github.com/RUIAN12138/dorm-duty/actions/runs/41186918781 ：web-and-business 在 `site/scripts/check-round-order.mjs:207` 失败，实际 undefined 与期望记录数组不一致；当前未定位根因，未擅自修改业务或测试。Android 检查已成功。main 保护拒绝直接文档推送；仓库不允许自动合并。PR 保持 OPEN，首页默认分支尚未更新。
 - platform_status: 桌面 Chromium/WebKit 与移动视口验证；iPhone Safari/PWA、Android WebView、HarmonyOS 真机未验证。
 - remaining: 处理仓库既有业务检查失败后才能通过保护规则合并展示文档；本次未绕过保护、未修改工作流或生产数据库。产品网站已发布成功，不等同于业务 App 发布。
 - questions: 无新增业务范围授权；失败根因留待单独处理。CHATGPT_REVIEW.md 未修改。
