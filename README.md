@@ -6,6 +6,20 @@
 
 **新的账号路线：** 邮箱验证码注册 / 登录、现有身份绑定、跨设备找回和 SMTP 邮件提醒已实现；正式 SMTP 测试邮件及验证码绑定已由用户确认成功。新版正式入口要求先验证邮箱，新建宿舍自动关联创建者；旧成员重新验证后恢复原身份。极光基础通知作为 App 在线补充，iOS 原有 Web Push 保留，详见 [邮箱账号与邮件提醒](docs/EMAIL_ACCOUNTS.md)。
 
+## 看看轮到
+
+[产品介绍网站](https://lundao-app-introduction.violet-hero-5670.chatgpt.site/) · [10 秒产品短片](docs/media/product/promo.mp4) · [打开 App](https://8.148.190.114/dorm-duty/)
+
+小事有序，相处轻松。查看任务、完成打卡、轻轻提醒，再用日历回顾每一份付出。
+
+[![轮到产品短片：把小事，轻松做好](docs/media/product/promo-poster.jpg)](https://lundao-app-introduction.violet-hero-5670.chatgpt.site/#start)
+
+| 今天轮到谁 | 温柔提醒 | 回顾记录 |
+| :---: | :---: | :---: |
+| <img src="docs/media/product/duty.png" width="220" alt="真实值日页面：任务切换、完成按钮和轮次进度"> | <img src="docs/media/product/nudge.png" width="220" alt="真实催促页面：待完成任务与舍友提醒"> | <img src="docs/media/product/calendar.png" width="220" alt="真实日历页面：月份和完成记录"> |
+
+以上截图与短片使用真实 App 组件、隔离的示例数据，不包含正式宿舍记录。短片为 10 秒、1080p、30fps、无声；介绍网站另保留约 31 秒操作演示。网站沿用现有访问权限，可能需要登录。素材与验证边界见 [展示资料说明](docs/media/product/README.md)。
+
 ## 唯一正式部署路线
 
 正式服务使用 `scripts/local-server.mjs` + `site/` Node/SQLite 邮箱准入包装层，发布入口是 `deploy/prepare-release.py` / `deploy/install-release.py`。
