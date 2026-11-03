@@ -11,7 +11,8 @@
     "frontend/src/api/waterNudge.ts",
     "site/scripts/check-water-nudge.mjs",
     "site/scripts/check-recency.mjs",
-    "scripts/check-ios-chat-motion.mjs"
+    "scripts/check-ios-chat-motion.mjs",
+    "scripts/check-live-calendar-notes.mjs"
   ],
   "acceptance": {
     "status": "pending",

@@ -275,7 +275,8 @@ try {
   await page.locator(".dorm-companion").click();
   await page.getByRole("button", { name: "我要留言", exact: true }).click();
   const note = page.getByTestId("conversation-note");
-  await note.getByRole("button", { name: "所有人", exact: true }).click();
+  await note.getByRole("button", { name: "全选", exact: true }).click();
+  await note.getByRole("button", { name: "继续 · 2 人", exact: true }).click();
   await page.getByLabel("和球球说句话", { exact: true }).click();
   await page.getByLabel("和球球说句话", { exact: true }).fill("今晚一起打扫。");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();

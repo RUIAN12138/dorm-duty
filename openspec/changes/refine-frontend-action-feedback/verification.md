@@ -23,3 +23,5 @@
 
 ## 2026-11-03 发布检查修复
 用户明确授权仅修两项测试。check-recency 查询补录所属月份，跨月记录负ID、修正与撤回42项通过。check-ios-chat-motion 保留实例与动效断言，补齐多选后的继续操作，并用单次Playwright真实鼠标点击移动目标，避免先读坐标再跨协议点击的陈旧坐标。Chromium全部通过；WebKit结果后补。npm run spec:check通过。产品代码无变化，真机未测。
+
+追加验证：check-ios-chat-motion Chromium/WebKit全项通过；check-live-calendar-notes 的唯一业务操作改为全选→继续后，Chromium/WebKit各17项通过，保持数据库断言。check-companion-tap-arbitration未改代码，本地原样通过，CI额外请求失败未定性，继续观察重跑。
