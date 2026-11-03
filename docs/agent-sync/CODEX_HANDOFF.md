@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 前端下一步入口与催促反馈（2026-11-03）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `605f084655c89ba781f5e302e324c71e402fe964`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/605f084655c89ba781f5e302e324c71e402fe964
+- related_pr: 本轮未创建或更新正式 PR，未合并、未部署。
+- requirements: 用户在正式App前端审查后要求“那你改进我看看怎么样”“继续”。本轮落实三项小范围改进：催促情境提示、空记录下一步入口、真实回执反馈。沿用既有业务分支而非过期main，独立worktree开发。协调评审仍针对旧1f7dee95fac6015721f1a255e12add34d290703f，不冒称本SHA已评审。
+- changed_files: `frontend/src/api/waterNudge.ts`、`ChoreBoard.vue`、`ChoreCalendar.vue`、`CompactRecordList.vue`、`nudge/NudgePane.vue`，新增就近 `nudge/ActionFeedback.browser.mjs`、直接关联 `site/scripts/check-water-nudge.mjs` 与 `openspec/changes/refine-frontend-action-feedback/`。
+- implemented: 空日历列表增加去看本轮任务，正式走原路由/沙箱走section事件；仅已加载记录确认上一月有记录时显示查看上月。催促成功后原位置显示人名与任务，球球对应反馈；前端原先将429吞为recent，现在返回limited，保留60秒冷却，旧成功回执不能把新的限流伪装成成功；409提示安排变化并复用刷新；失败保留选择。自身份提示明确，已学会任务手势不重复播放发现位移动画。留言状态机已具有等回执/失败保留，未重复修改。
+- tests: 新ActionFeedback浏览器Chromium/WebKit各17项通过；既有NudgePane回归42/40项通过（两项差异为Chromium专用触摸注入）；直接请求回归39项含200次并发单请求、冷却持久化、失败重试、429不报成功；前端类型/Vite/PWA构建通过，48份OpenSpec规范和18项范围门禁夹具通过，diff检查通过。均本地临时SQLite/合成身份，不连接正式数据库或真实通知服务。新测试首轮发现正式路由未接通，已修复重跑；测试自身折叠记录定位与错误兜底文案预期已纠正，不改既有NudgePane断言。
+- CI: 推送成功后gh run list仅返回旧提交运行，当前精确SHA尚无CI结果；未跑全仓web:verify，不称全仓CI全绿。
+- platform_status: 桌面Chromium/WebKit，320/390/430移动视口、暗色/减动效、按压中间帧；iPhone Safari/PWA、Android WebView、HarmonyOS ArkWeb真机未测。原iOS键盘/导航偶发位移本轮未改、未声称修复。
+- remaining: 本地预览 http://127.0.0.1:8123/calendar?start=1 已向用户打开，8122为内存模拟服务；证据在data/frontend-polish和data/task-nudges，不上传身份或截图数据。用户体验和真机验收待完成，OpenSpec保持pending。Claude Code探测402无余额，Codex直接完成本轮小改动；无新增大型依赖。
+- questions: 无当前需要决策事项；仅本文件交接，未改CHATGPT_REVIEW。
+
+---
+
 # Codex → ChatGPT · 产品介绍网站与 GitHub 展示更新（2026-10-31）
 
 - code_branch: `codex/product-introduction-20261031`
