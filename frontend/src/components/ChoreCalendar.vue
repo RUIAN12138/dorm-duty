@@ -64,6 +64,7 @@ const emit = defineEmits<{
   closed: [];
   undo: [id: number];
   refresh: [];
+  tasks: [];
   settings: [key: ChoreCategory["key"]];
 }>();
 const memory = props.memory || reactive(createCalendarViewMemory());
@@ -326,6 +327,10 @@ const listRecords = computed(() =>
     record.completed_date.startsWith(`${props.month}-`),
   ),
 );
+const previousMonthWithRecords = computed(() => {
+  const previous = shiftMonth(props.month, -1);
+  return allRecords.value.some(record => record.completed_date.startsWith(`${previous}-`)) ? previous : "";
+});
 const groups = computed(() => {
   const map = new Map<string, ChoreRecord[]>();
   for (const record of listRecords.value) {
@@ -593,7 +598,14 @@ watch(
               @undo="emit('undo', $event)"
               @edit="editHistory"
               @select="showDay"
-            /></div
+            >
+              <template #empty-actions>
+                <div v-if="!loading" class="calendar-empty-actions">
+                  <button @click="emit('tasks')">去看本轮任务</button>
+                  <button v-if="previousMonthWithRecords" @click="emit('change', previousMonthWithRecords)">查看上月</button>
+                </div>
+              </template>
+            </CompactRecordList></div
         ></TabsContent>
         <TabsContent
           v-if="visited.has('stats')"
@@ -1457,4 +1469,10 @@ h1 small {
     height: min(32px, calc(100cqw - 4px), calc(100cqh - 4px));
   }
 }
+
+.calendar-empty-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:4px 16px; margin-top:8px; }
+.calendar-empty-actions button { min-height:44px; padding:8px 12px; background:none; border:0; border-radius:12px; color:var(--app-tone-h111,#111); font:inherit; font-size:15px; font-weight:550; cursor:pointer; transition:transform 160ms cubic-bezier(.23,1,.32,1),opacity 160ms; }
+.calendar-empty-actions button:active { transform:scale(.97); opacity:.65; }
+.calendar-empty-actions button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+@media(prefers-reduced-motion:reduce) { .calendar-empty-actions button { transition:none; } .calendar-empty-actions button:active { transform:none; } }
 </style>

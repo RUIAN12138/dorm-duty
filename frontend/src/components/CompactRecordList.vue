@@ -255,6 +255,7 @@ watch(capacity, () => {
     <div v-if="!records.length" class="compact-record-empty">
       <h2>这个月还没有记录</h2>
       <p>完成值日后，会留在这里。</p>
+      <slot name="empty-actions" />
     </div>
     <div
       v-else

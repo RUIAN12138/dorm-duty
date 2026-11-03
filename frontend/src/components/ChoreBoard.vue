@@ -875,7 +875,7 @@ const nudgeTaskStatuses = computed(() => {
     const status = result[task.id];
     const receipt = lastWaterNudge(`${props.invite}:${props.memberId}:${task.id}`);
     if (receipt && (!status || status === "已提醒" || status === "刚刚已提醒"))
-      result[task.id] = waterNudgeTime(receipt, new Date(nudgeNow.value));
+      result[task.id] = `${waterNudgeTime(receipt, new Date(nudgeNow.value))} · ${task.assignee_name} · ${task.name}`;
   }
   return result;
 });
@@ -1477,15 +1477,24 @@ async function nudgeWater(taskOverride?: ChoreTask) {
           ? "正在提醒…"
           : status === "recent"
             ? "刚刚已提醒"
-            : "已提醒");
+            : status === "limited" ? "操作太频繁，请稍后再试" : "已提醒");
+      if (status === "sent") showNudgeHint(`已提醒${task.assignee_name}完成${task.name}。`);
+      else if (status === "recent") showNudgeHint(`刚刚提醒过${task.assignee_name}，给对方一点时间吧。`);
+      else if (status === "limited") showNudgeHint("操作太频繁啦，稍后再试哦。");
     }
   } catch (error) {
     if (identity !== `${props.invite}:${props.memberId}` || (!taskOverride && water.value?.id !== task.id) || !alive || controller?.signal.aborted) return;
     setNudgeStatus(task,
       error instanceof ApiError && error.status === 429
-        ? "刚刚已提醒"
-        : (error as Error).message);
-    if (!(error instanceof ApiError && error.status === 429)) showNudgeHint("提醒没有成功，请检查网络后再试。");
+        ? "操作太频繁，请稍后再试"
+        : error instanceof ApiError && error.status === 409
+          ? "任务安排已变化，请重新确认"
+          : (error as Error).message);
+    showNudgeHint(error instanceof ApiError && error.status === 409
+      ? "任务安排变了，请重新确认后再提醒。"
+      : error instanceof ApiError && error.status === 429
+        ? "操作太频繁啦，稍后再试哦。"
+        : `提醒没有成功，没能通知${task.assignee_name}，请稍后重试。`);
     if (error instanceof ApiError && error.status === 409) void load();
   } finally {
     if (controller && nudgeControllers.get(task.id) === controller) nudgeControllers.delete(task.id);
@@ -1820,6 +1829,7 @@ onUnmounted(() => {
                 :creator="board.is_creator && !preview"
                 :undo-ids="board.undo_tasks.map((task) => task.id)"
                 @refresh="load"
+                @tasks="preview ? emit('section-change', 'duty') : router.push(sectionPaths.duty)"
                 :today="board.today"
                 :records="board.calendar"
                 :neighbors="board.calendar_neighbors"

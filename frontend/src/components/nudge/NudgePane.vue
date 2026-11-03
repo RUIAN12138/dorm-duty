@@ -43,14 +43,19 @@ const active = computed(() => groups.value[index.value]);
 const neighbor = computed(() => groups.value[index.value+1] || groups.value[index.value-1]);
 const neighborSide = computed(() => index.value+1 < groups.value.length ? 1 : -1);
 const caption = computed(() => active.value?.task?.assignee_id === props.board.member.user_id
-  ? active.value.key === "water" ? "没水时轮到你：" : "这项任务轮到你："
+  ? active.value.key === "water" ? "没水时由你抬水：" : "这项任务由你完成："
   : `${active.value?.name || "任务"}轮到：`);
 const heroSize = computed(() => {
   const task = active.value?.task;
   const text = task?.assignee_id === props.board.member.user_id ? active.value?.name || "" : task?.assignee_name || "";
   return Array.from(text).length>16 ? "clamp(20px,5.2vw,24px)" : Array.from(text).length>8 ? "clamp(30px,9vw,40px)" : undefined;
 });
-const hints = computed(() => ["点一下名字，轻轻提醒", ...((active.value?.candidates.length || 0) > 1 ? ["上滑大字，换个人提醒"] : []), ...(groups.value.length > 1 ? ["左右滑动，看看其他任务"] : []), "轻轻敲一下，让室友知道"]);
+const hints = computed(() => {
+  const task = active.value?.task;
+  const own = task?.assignee_id === props.board.member.user_id;
+  const action = task?.status === "completed" ? "这项任务已完成" : own ? "完成后，点一下完成按钮" : "点一下名字，轻轻提醒";
+  return [action, ...((active.value?.candidates.length || 0) > 1 ? ["上下滑动，换个人看看"] : []), ...(groups.value.length > 1 ? ["左右滑动，看看其他任务"] : [])];
+});
 const hintIndex = ref(0);
 const currentStatus = computed(() => active.value?.task ? props.statuses[active.value.task.id] ||
   (active.value.task.status === "completed" ? "这项任务已完成" : hints.value[hintIndex.value % hints.value.length]) : "");
@@ -127,7 +132,7 @@ async function discover() {
   if (!learned.value.task) {
     emit('hint', '左右滑动大字，换个任务催促。');
     personGuideTimer=setTimeout(guidePerson,4000);
-  } else guidePerson();
+  } else { guidePerson(); return; }
   await nextTick();
   if (!motionAllowed() || !strip.value || dragging.value) return;
   settle(-neighborSide.value*28,() => settle(0,undefined,true),true);

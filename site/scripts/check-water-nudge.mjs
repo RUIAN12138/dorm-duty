@@ -98,7 +98,7 @@ try {
       },
       () => time,
     ),
-    "recent",
+    "limited",
   );
   eq(
     await waterNudge(
@@ -108,7 +108,7 @@ try {
       },
       () => time,
     ),
-    "recent",
+    "limited",
   );
   eq(limitedCalls, 1);
   eq(
@@ -125,9 +125,11 @@ try {
       },
       () => time,
     ),
-    "recent",
+    "limited",
   );
   eq(lastWaterNudge("burst"), new Date(time - 60000 - 1000).toISOString());
+  eq(await waterNudge("burst", async () => { throw new Error("must remain cooled down"); }, () => time), "limited");
+  eq(await restored.waterNudge("limited", async () => { throw new restored.ApiError(429, "cooldown"); }, () => time), "limited");
   storage.set("dorm-water-nudge-receipt-v1:corrupt", "invalid date");
   eq(lastWaterNudge("corrupt"), null);
   eq(lastWaterNudge("another-member"), null);

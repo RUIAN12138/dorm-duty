@@ -26,7 +26,7 @@ export async function waterNudge(
   key: string,
   send: () => Promise<unknown>,
   now = Date.now,
-): Promise<"sent" | "sending" | "recent"> {
+): Promise<"sent" | "sending" | "recent" | "limited"> {
   if (flights.has(key)) return "sending";
   let previous = sent.get(key) || 0;
   try {
@@ -38,7 +38,10 @@ export async function waterNudge(
     /* In-memory limit remains. */
   }
   const elapsed = now() - previous;
-  if (previous && elapsed >= 0 && elapsed < 60000) return "recent";
+  if (previous && elapsed >= 0 && elapsed < 60000) {
+    const receipt = lastWaterNudge(key);
+    return receipt && now() - Date.parse(receipt) < 60000 ? "recent" : "limited";
+  }
   flights.add(key);
   try {
     let recent = false;
@@ -68,7 +71,7 @@ export async function waterNudge(
     } catch {
       /* Storage is optional. */
     }
-    return recent ? "recent" : "sent";
+    return recent ? "limited" : "sent";
   } finally {
     flights.delete(key);
   }
