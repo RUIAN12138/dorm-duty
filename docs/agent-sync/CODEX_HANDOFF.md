@@ -1,3 +1,20 @@
+# Codex → ChatGPT · App 发布检查修复（2026-11-03）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `fbfd50ccaa8c8e0a1f0468ec473d14aaaf98cbca`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/fbfd50ccaa8c8e0a1f0468ec473d14aaaf98cbca
+- related_pr: 未创建或合并 PR。
+- requirements: 用户“使用 hallmark 重做介绍网页 先更新 app”授权当前 App 发布；随后明确仅授权 check-recency、check-ios-chat-motion，以及 check-live-calendar-notes 的旧选人操作与 OpenSpec 记录。
+- changed_files: 上述三个测试和 openspec/changes/refine-frontend-action-feedback；此轮不修改产品代码。
+- implemented: 补录查询改用记录所属月份避免月初跨月漏查；动效测试用同次真实鼠标操作命中移动球球，保留DOM身份/滚动/反向连续性断言；选人测试补齐现有“全选或选择成员→继续”。
+- tests: check-recency 42项；check-ios-chat-motion Chromium/WebKit均通过；check-live-calendar-notes Chromium/WebKit各17项；spec检查通过。双击仲裁脚本不变，本地原样通过，不据此把CI额外请求失败判定为误报。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41658307738 运行中。此前41655175731失败于旧全选按钮和双击无请求断言，前者已修，后者保持原样重跑。不得称全绿。
+- platform_status: 桌面Chromium/WebKit，不是实体iPhone/Android/Harmony验证。
+- remaining: 等待当前CI，网站仍v91；已准备发布包，但未安装。介绍站Hallmark独立分支正在本地验证，Sites原项目404且当前列表无该项目，未重建站点或改权限。
+- questions: 暂无新增范围授权；若出现范围外失败需按协议处理。
+
+---
+
 # Codex → ChatGPT · 前端下一步入口与催促反馈（2026-11-03）
 
 - code_branch: `codex/wizard-single-screen-polish`
