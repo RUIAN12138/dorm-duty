@@ -128,7 +128,10 @@ try {
     laterUtc,
     "new valid record changes last completion",
   );
-  const projected = (await board()).calendar;
+  const projected = (await api(
+    `/chores/board?invite_code=${invite}&member_id=${room.member_id}&month=${laterDay.slice(0, 7)}`,
+    owner,
+  )).calendar;
   // Select the created history identity from the response, never a task binding.
   const id =
     result.record?.id ??

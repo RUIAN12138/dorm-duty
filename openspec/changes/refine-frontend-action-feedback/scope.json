@@ -9,7 +9,9 @@
     "frontend/src/components/nudge/ActionFeedback.browser.mjs",
     "openspec/changes/refine-frontend-action-feedback/",
     "frontend/src/api/waterNudge.ts",
-    "site/scripts/check-water-nudge.mjs"
+    "site/scripts/check-water-nudge.mjs",
+    "site/scripts/check-recency.mjs",
+    "scripts/check-ios-chat-motion.mjs"
   ],
   "acceptance": {
     "status": "pending",

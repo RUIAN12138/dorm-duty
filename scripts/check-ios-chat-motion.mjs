@@ -162,7 +162,9 @@ try {
     "closing keeps the shared ball and chat surface mounted",
   );
   await page.evaluate(() => (window.qaMotion.mark.reopen = performance.now()));
-  await hit(page.getByTestId("chat-ball"));
+  // Keep the moving target lookup and mouse dispatch in one Playwright action.
+  // A separate boundingBox round trip can leave the click behind the ball.
+  await page.getByTestId("chat-ball").click({ force: true });
   await page.waitForTimeout(750);
   check(
     (await chat.count()) === 1 &&
@@ -264,7 +266,10 @@ try {
     .getByRole("group", { name: "留言给谁" })
     .getByRole("button", { name: "张三", exact: true })
     .click();
-  await page.waitForTimeout(360);
+  await note.getByRole("button", { name: "继续 · 1 人", exact: true }).click();
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="conversation-note"]')?.dataset.phase === "content",
+  );
   await editor.fill("今天晚点回来");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await page.waitForTimeout(400);
