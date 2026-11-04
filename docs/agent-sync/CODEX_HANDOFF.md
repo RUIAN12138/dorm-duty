@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 日历卡片抽出、翻面及荧光（2026-11-04）
+
+- code_branch: `codex/calendar-card-history-20261104`
+- code_sha: `8ea91aa113592aadcfe20d05c0e2ec153d33edfc`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/8ea91aa113592aadcfe20d05c0e2ec153d33edfc
+- related_pr: 未创建、未合并。
+- requirements: 用户追加“把卡片从卡片中抽出然后再翻面……带有一定荧光边缘特效”；在前一提交的历史数据和滑动功能基础上调整局部动效。
+- changed_files: `ActivitySummary.vue`、`SwipeCardDeck.vue`、相关浏览器测试及 `openspec/changes/calendar-card-last-person/`。
+- implemented: 内层先向右上抽出，再翻面；返回逆序，青绿色细微边光；外层滑动保持原驱动。减动效直接终态，保留深浅色和键盘操作。
+- tests: Chromium 25、WebKit 24 项通过，覆盖抽出先于翻转、旋转中间帧、荧光、快速反向、深色及减动效；首轮 Chromium 未采集到旋转中间帧，复测通过，已如实记录。构建和范围检查通过，真机未测。
+- CI: 远端 CI 尚未运行。
+- platform_status: 浏览器模拟，不是 iPhone、Android 或 HarmonyOS 真机。
+- remaining: 本地隔离预览 http://127.0.0.1:8127/calendar?start=1，未发布；待用户体验。旧批 App 发布仍受 CI 旧测试和 SSH 连接阻塞，按既有授权单独处理。
+- questions: 请按完整业务 SHA 评审；生产数据未修改。
+
+---
+
 # Codex → ChatGPT · 日历统计卡片翻面（2026-11-04）
 
 - code_branch: `codex/calendar-card-history-20261104`
