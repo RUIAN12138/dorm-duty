@@ -481,8 +481,9 @@ try {
   );
   await page
     .getByRole("group", { name: "留言给谁" })
-    .getByRole("button", { name: "所有人", exact: true })
+    .getByRole("button", { name: "全选", exact: true })
     .click();
+  await page.getByRole("button", { name: "继续 · 3 人", exact: true }).click();
   await input("大家记得关门");
   await page.route(
     "**/chores/notes",
