@@ -4,6 +4,9 @@ The card SHALL display the last valid completion person and time without crossin
 #### Scenario: Flip a task card
 - **WHEN** a user activates a task card
 - **THEN** its back displays the latest valid completion person and time, or an honest unavailable state.
+#### Scenario: Extract and flip
+- **WHEN** a user activates the front card
+- **THEN** the card first moves out from the stack, then turns over, showing a restrained luminous edge; reversing the action continues from its current position.
 #### Scenario: Drag the task card
 - **WHEN** a short horizontal drag is released
 - **THEN** the card returns elastically without switching or flipping.

@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
   height: 100%;
   border: var(--ui-card-border);
   border-radius: inherit;
-  overflow: hidden;
+  overflow: visible;
   background: var(--ui-surface);
   transform: translateZ(0);
   backface-visibility: hidden;

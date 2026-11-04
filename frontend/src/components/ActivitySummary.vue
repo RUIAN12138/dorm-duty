@@ -220,6 +220,7 @@ const cards = computed(() =>
           :aria-pressed="flipped && index === current"
           @click="flipped = !flipped"
         >
+        <span class="stat-pull" :class="{ 'is-pulled': flipped && index === current }">
         <span class="stat-flip-inner" :class="{ 'is-flipped': flipped && index === current }">
         <span
           class="stat-card"
@@ -247,6 +248,7 @@ const cards = computed(() =>
           <header><TaskCategoryIcon :kind="cards[index]!.key" /><h2>{{ cards[index]!.name }}</h2></header>
           <span class="last-person">{{ cards[index]!.at ? cards[index]!.person || "姓名暂不可用" : "暂无完成记录" }}</span>
           <footer><span>上次完成</span><time v-if="cards[index]!.at" :datetime="cards[index]!.at">{{ cards[index]!.date }}</time><span v-else>完成后会显示在这里</span></footer>
+        </span>
         </span>
         </span>
         </button>
@@ -351,12 +353,16 @@ const cards = computed(() =>
 }
 .stat-flip { display: block; width: 100%; height: 100%; padding: 0; border: 0; color: inherit; text-align: left; background: transparent; font: inherit; perspective: 1000px; cursor: pointer; }
 .stat-flip:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
-.stat-flip-inner { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 300ms cubic-bezier(.2,.8,.2,1); }
-.stat-flip-inner.is-flipped { transform: rotateY(180deg); }
-.stat-flip-inner > .stat-card { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.stat-pull { display: block; position: relative; width: 100%; height: 100%; border-radius: 24px; transform-style: preserve-3d; transition: transform 220ms cubic-bezier(.22,1,.36,1) 140ms; }
+.stat-pull.is-pulled { transform: translate3d(12px,-18px,18px); transition-delay: 0ms; }
+.stat-pull::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; border: 1px solid rgba(121, 235, 211, .8); box-shadow: 0 0 12px rgba(101, 225, 201, .34), inset 0 0 5px rgba(174, 255, 238, .34); opacity: 0; pointer-events: none; transition: opacity 200ms ease; transform: translateZ(2px); }
+.stat-pull.is-pulled::after { opacity: 1; }
+.stat-flip-inner { display: block; position: relative; width: 100%; height: 100%; border-radius: inherit; transform-style: preserve-3d; transition: transform 260ms cubic-bezier(.2,.8,.2,1); }
+.stat-flip-inner.is-flipped { transform: rotateY(180deg); transition-delay: 100ms; }
+.stat-flip-inner > .stat-card { position: absolute; inset: 0; border-radius: inherit; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .stat-back { transform: rotateY(180deg); }
 .last-person { font-size: clamp(32px, 7svh, 56px); font-weight: 650; overflow-wrap: anywhere; }
-@media (prefers-reduced-motion: reduce) { .stat-flip-inner { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .stat-pull, .stat-pull::after, .stat-flip-inner { transition: none; } .stat-pull.is-pulled { transform: none; } }
 .stat-card[data-tone="empty"] {
   background: var(--app-tone-hf5f5f5, #f5f5f5);
   color: var(--app-tone-h777, #777);

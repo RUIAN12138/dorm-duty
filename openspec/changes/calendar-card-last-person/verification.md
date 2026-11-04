@@ -6,3 +6,8 @@
 - 前端 `npm --prefix frontend run build` 通过。OpenSpec 严格验证 49 项通过；移除工作区临时依赖软链接后单独运行范围检查。`git diff --check` 通过。
 
 未经用户验收，未发布、未合并；iPhone Safari、Android WebView 和 HarmonyOS ArkWeb 未实机测试。浏览器测试产生的记录均为隔离模拟。
+
+## 抽出翻面与荧光边缘（2026-11-04）
+
+- `node scripts/check-calendar-card-flip.mjs`、`DORM_BROWSER=webkit node scripts/check-calendar-card-flip.mjs` 分别 25、24 项通过，新增检查抽出先于翻转、真实中间旋转帧、边缘光淡入、快速反向位置连续、暗色边缘和减动效无抽出位移；保留先前姓名时间、键盘和拖动断言。Chromium 一次采样因帧间隔过长未取到中间旋转帧而失败，后续重新运行取得完整中间帧并通过，不能据此宣称所有设备均流畅。
+- 浅色、深色浏览器截图位于隔离工作区 `data/calendar-card-motion/`。不是实机图片；真实 iPhone Safari、Android WebView、HarmonyOS ArkWeb 暂未验证。
