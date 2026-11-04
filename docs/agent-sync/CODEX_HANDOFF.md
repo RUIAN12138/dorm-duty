@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 双击与抽屉测试时序（2026-11-04）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `cb4af1c5a3bafc0761af99736ae6c1cd318e1402`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/cb4af1c5a3bafc0761af99736ae6c1cd318e1402
+- related_pr: 未创建或合并 PR。
+- requirements: 用户明确授权仅修双击测试事件时序、抽屉反向采样和对应 OpenSpec；保留产品 280ms 窗口、零请求与20%连续性阈值。
+- changed_files: `scripts/check-companion-tap-arbitration.mjs`、`scripts/check-interaction-foundation.mjs` 及 `openspec/changes/refine-frontend-action-feedback/`。
+- implemented: 缩短双击测试显式等待并测量实际输入间隔；抽屉在渲染帧边界采样并记录耗时。不修改产品代码和原验收阈值。
+- tests: 双击 Chromium / WebKit 全部通过，边缘间隔约50–72ms；没有声称覆盖接近280ms的有效双击。抽屉 Chromium 全部通过，同一实例高633px、位置差31.53px、采样8.6ms；spec:check 48 项及18个范围夹具通过。
+- CI: 当前 SHA GitHub Actions 待核验，旧 fbfd50c 运行失败记录见下方；不得称全绿。
+- platform_status: 桌面浏览器和触摸模拟，未做实体手机验收。
+- remaining: 按用户要求先完成 App CI 和发布，再发布 Hallmark 介绍站；SSH 共享连接失效，CI通过后须恢复。用户新增日历卡片翻转和弹性滑动，已在独立分支实现中，不包含在本次 App 发布包。
+- questions: 无新增权限问题；若出现未授权范围外失败须如实报告。
+
+---
+
 # Codex → ChatGPT · 发布阻塞核验（2026-11-04）
 
 - code_branch: `codex/wizard-single-screen-polish`
