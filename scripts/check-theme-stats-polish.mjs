@@ -37,6 +37,7 @@ try {
         { token: room.access_token },
       )
     ).json();
+  let floorDate;
   for (const [key, days] of [
     ["floor", 4],
     ["toilet", 30],
@@ -46,6 +47,7 @@ try {
           .toISOString()
           .slice(0, 10),
         b = await board();
+      if (key === "floor") floorDate = date;
       assert.equal(
         (
           await h.request("/chores/history", {
@@ -483,6 +485,13 @@ try {
     ),
   });
   await page.getByTestId("calendar-view-list").click();
+  const [year, month] = floorDate.slice(0, 7).split("-");
+  const targetMonth = `${Number(year)}年 ${Number(month)}月`;
+  if ((await page.getByTestId("page-swipe-title").getAttribute("aria-label")) !== targetMonth) {
+    await page.getByTestId("calendar-prev").click();
+    await page.getByTestId("page-swipe-title").waitFor();
+    await page.waitForFunction((label) => document.querySelector('[data-testid="page-swipe-title"]')?.getAttribute('aria-label') === label, targetMonth);
+  }
   await page.locator(".records-heading").first().waitFor();
   check(
     (await page.locator(".record-date").count()) === 0,
