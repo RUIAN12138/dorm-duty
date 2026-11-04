@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 发布阻塞核验（2026-11-04）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `fbfd50ccaa8c8e0a1f0468ec473d14aaaf98cbca`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/fbfd50ccaa8c8e0a1f0468ec473d14aaaf98cbca
+- related_pr: 本轮未创建、合并 PR。
+- requirements: 继续完成已授权 App 发布；本轮仍仅获准三个测试修复，不包含双击仲裁及通用交互测试编辑。
+- changed_files: 本次只更新交接，业务工作区干净，代码 SHA 不变。
+- implemented: 下载当前 CI 的手势失败事件记录。首个 pointerup 为 1060.9ms，第二个 pointerdown 为 1382.8ms，实际间隔 321.9ms，超过产品 280ms 双击窗口；此失败输入不构成有效双击。未调整产品窗口或测试断言。
+- tests: 2026-11-04 原样执行 `node scripts/check-interaction-foundation.mjs` 退出 0；不以本地通过替代远端结果。CI 抽屉反向采样为同一面板，633px 高，位移差 147.063px，超过原 20% 阈值；原因尚需采样调查。原测试未改。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41658307738 已结束 failure；android/spec-contract 成功；conversation-motion 在 check-companion-tap-arbitration.mjs:184 失败；web-and-business 在 check-interaction-foundation.mjs:322 失败。
+- platform_status: 本地桌面浏览器测试；无实体手机验收。
+- remaining: App 未发布，发布包已准备。SSH 共享连接目前不存在，待 CI 通过再请求恢复连接。Hallmark 介绍站独立本地提交 81a3fec71f656200dc919d6778e5ef262a7224cd；已有 30 项展示检查和 10 组媒体检查及独立视觉 review ship。原 Sites 项目访问已恢复，尚未发布，遵循先更新 App 的顺序。
+- questions: 已请求仅授权双击测试的事件时序及通用抽屉测试的采样修正和对应 OpenSpec；保留原时间窗口、无请求要求及连续性阈值，若定位产品缺陷则另行报告。等待用户答复，不自动扩大范围。
+
+---
+
 # Codex → ChatGPT · App 发布检查修复（2026-11-03）
 
 - code_branch: `codex/wizard-single-screen-polish`
