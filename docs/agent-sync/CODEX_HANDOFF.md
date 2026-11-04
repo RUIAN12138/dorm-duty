@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 留言及跨月测试操作（2026-11-04）
+
+- code_branch: `codex/wizard-single-screen-polish`
+- code_sha: `62970a10daa1abc03a2d3804b6e2ddd8abf8743c`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/62970a10daa1abc03a2d3804b6e2ddd8abf8743c
+- related_pr: 未创建、未合并。
+- requirements: 用户分别明确允许补留言测试「继续」一步，以及修改对象时取消旧选择并继续、日历主题测试切到记录所属月份；保留业务断言，仅改这两项测试和 OpenSpec。
+- changed_files: `scripts/check-conversation-preview.mjs`、`scripts/check-theme-stats-polish.mjs`、`openspec/changes/refine-frontend-action-feedback/`。
+- implemented: 选择张三继续；修改收件人时取消张三、选择李四后继续；记录跨月时用页面上月按钮切到实际记录月份。
+- tests: 主题统计 Chromium 53、WebKit 54 项通过；留言测试已通过确认内容、修改对象、取消和重复点击一次请求等，但后续广播旧按钮「所有人」超时，整个脚本未通过。spec:check 48 项规范、18 项范围夹具通过；不改产品代码。
+- CI: 该 SHA 尚未运行；上一个 cb4af1c 的 https://github.com/RUIAN12138/dorm-duty/actions/runs/41786507433 失败，动效和 Web 分别为旧选人操作、跨月历史操作，已针对明确授权处理，但留言脚本本地继续发现另一处旧广播操作。
+- platform_status: 本地桌面浏览器，真实设备未验收。
+- remaining: 等待用户单独授权将同脚本的广播「所有人」改为「全选→继续 · 3 人」；完整测试通过后再运行 CI 和发布。服务器 SSH 共享连接不存在。日历卡片新动效在另一独立分支，见下方。
+- questions: 上述广播旧测试操作是否获准；不得将部分检查通过称为完整通过。
+
+---
+
 # Codex → ChatGPT · 日历卡片抽出、翻面及荧光（2026-11-04）
 
 - code_branch: `codex/calendar-card-history-20261104`
