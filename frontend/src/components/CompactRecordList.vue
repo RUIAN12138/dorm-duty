@@ -326,7 +326,12 @@ watch(capacity, () => {
   overflow-anchor: none;
   overscroll-behavior: contain;
   padding: 0 1px 14px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+.folded-record-page::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .folded-record-page :deep(.record-stack) {
   margin: 8px 0 24px;

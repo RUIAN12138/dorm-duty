@@ -18,3 +18,6 @@
 - 实际 Tabbit 390×844 操作：打开卡片、翻回、短拖30px、长拖165px、再次翻面；检查截图，并暂停一次反转的中间帧后恢复播放。截图 data/calendar-card-motion/whole-card-back.png 和 whole-card-intermediate.png 为浏览器实际画面，不是真机或录屏。
 - 前端构建通过；OpenSpec严格校验49项、范围校验和18项门禁测试通过。最初缺少独立worktree根依赖，临时复用已安装依赖执行校验后移除链接；没有增加依赖。
 - 实体 iPhone Safari、Android WebView、HarmonyOS ArkWeb未测试；本轮不部署、不创建PR、不修改正式数据。
+
+## 列表展开细条修正
+CompactRecordList 的原生滚动条从 thin 改为隐藏，并提供 WebKit 伪元素规则。保留 auto 滚动、尺寸、锚点与原回弹。既有 check-list-collapse-sync 原样运行：Chromium 14项、WebKit 14项通过。用户尚未确认所指细条是否该滚动条；未将这项推断写为用户验收。
