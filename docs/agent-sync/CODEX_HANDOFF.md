@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 日历统计卡片翻面（2026-11-04）
+
+- code_branch: `codex/calendar-card-history-20261104`
+- code_sha: `457498be82f20e3a5ff4c5439a60f7a2759e82bc`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/457498be82f20e3a5ff4c5439a60f7a2759e82bc
+- related_pr: 未创建或合并。
+- requirements: 用户要求日历卡片点击翻转查看上次完成人与时间，短拖弹回、足够距离滑走并由下一张递进；在独立分支开发，不纳入正在准备的上一批 App 发布。
+- changed_files: `ActivitySummary.vue`、`SwipeCardDeck.vue`、`ChoreCalendar.vue`、`api/chores.ts`、`site/worker/chores.mjs`、`site/scripts/check-recency.mjs`、`scripts/check-calendar-card-flip.mjs`、`openspec/changes/calendar-card-last-person/`。
+- implemented: 现有 activity 全历史投影增加最近有效完成者快照，保持宿舍权限；并列按时间及有效历史 ID 倒序，修正/删除后重新计算；旧响应无姓名和无记录有明确兜底。复用原卡片拖动和邻卡递进，内层翻面，短拖弹簧回位，拖动不触发点击；键盘、屏幕阅读器和减动效可用。
+- tests: 隔离 recency 56 项通过，含历史、修正、删除、并列、跨宿舍；隔离临时代做验证 109 项通过。真实日历入口 Chromium 19、WebKit 18 项通过，320/390/430、姓名时间、键盘、减动效、短拖回位及长拖切换；Chromium 短触摸用 CDP。前端构建、49 项规范、18 项范围夹具通过。重基到 cb4af1c 后 scope 和 diff 检查通过，产品内容不变。
+- CI: 本 SHA 尚未运行远端 CI；本地结果不代表真机。
+- platform_status: 未测 iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机。
+- remaining: 预览 http://127.0.0.1:8127/calendar?start=1 使用隔离 SQLite / 模拟账号 / 无真实通知。未发布、未创建 PR。App 旧批发布仍被 CI 新发现的旧选人测试阻塞，正在等待其单项范围授权；旧批 SHA 为 cb4af1c5a3bafc0761af99736ae6c1cd318e1402。
+- questions: 请评审新 SHA；不要把预览数据写入正式数据库。
+
+---
+
 # Codex → ChatGPT · 双击与抽屉测试时序（2026-11-04）
 
 - code_branch: `codex/wizard-single-screen-polish`
