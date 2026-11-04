@@ -178,6 +178,7 @@ try {
     .getByRole("group", { name: "留言给谁" })
     .getByRole("button", { name: "张三", exact: true })
     .click();
+  await page.getByRole("button", { name: "继续 · 1 人", exact: true }).click();
   await input("晚点回来，帮我留门");
   const flow = page.getByTestId("conversation-note");
   check(
@@ -427,10 +428,12 @@ try {
   await flow.getByRole("button", { name: "修改内容", exact: true }).click();
   await input("十点回来，帮我留门");
   await flow.getByRole("button", { name: "修改对象", exact: true }).click();
+  await page.getByRole("group", { name: "留言给谁" }).getByRole("button", { name: "张三", exact: true }).click();
   await page
     .getByRole("group", { name: "留言给谁" })
     .getByRole("button", { name: "李四", exact: true })
     .click();
+  await page.getByRole("button", { name: "继续 · 1 人", exact: true }).click();
   await page
     .locator('[data-testid="conversation-note"][data-phase="confirm"]')
     .waitFor();

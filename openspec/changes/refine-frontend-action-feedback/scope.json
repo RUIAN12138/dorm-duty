@@ -14,7 +14,9 @@
     "scripts/check-ios-chat-motion.mjs",
     "scripts/check-live-calendar-notes.mjs",
     "scripts/check-companion-tap-arbitration.mjs",
-    "scripts/check-interaction-foundation.mjs"
+    "scripts/check-interaction-foundation.mjs",
+    "scripts/check-conversation-preview.mjs",
+    "scripts/check-theme-stats-polish.mjs"
   ],
   "acceptance": {
     "status": "pending",
