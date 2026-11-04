@@ -87,7 +87,7 @@ try {
     1,
     "unrelated save preserves interval",
   );
-  async function backfill(at) {
+  async function backfill(at, memberId = room.member_id) {
     const before = await board();
     return api(
       "/chores/history",
@@ -95,7 +95,7 @@ try {
       "POST",
       {
         version: before.version,
-        member_id: room.member_id,
+        member_id: memberId,
         key: "floor",
         completed_at: at,
         reason: "隔离回归",
@@ -106,6 +106,7 @@ try {
   await backfill("2026-01-01T12:00:00+08:00");
   const activity = () => api("/chores/activity?invite_code=" + invite, owner);
   let a = await activity();
+  eq(a.last_completed.find((r) => r.key === "floor").assignee_name, "甲", "all-time record includes its actual member");
   eq(
     a.last_completed.find((r) => r.key === "floor").completed_at,
     "2026-01-01T04:00:00.000Z",
@@ -121,8 +122,9 @@ try {
     .slice(0, 10);
   const later = laterDay + "T12:00:00+08:00";
   const laterUtc = new Date(later).toISOString();
-  const result = await backfill(later);
+  const result = await backfill(later, room.dorm.members.find((m) => m.nickname === "乙").user_id);
   a = await activity();
+  eq(a.last_completed.find((r) => r.key === "floor").assignee_name, "乙", "latest member follows latest effective history");
   eq(
     a.last_completed.find((r) => r.key === "floor").completed_at,
     laterUtc,
@@ -152,6 +154,7 @@ try {
     "2026-01-02T04:00:00.000Z",
     "correction updates recency projection",
   );
+  eq((await activity()).last_completed.find((r) => r.key === "floor").assignee_name, "乙", "correction preserves member identity");
   b = await board();
   await api("/chores/history", owner, "DELETE", {
     id,
@@ -165,6 +168,17 @@ try {
     "2026-01-01T04:00:00.000Z",
     "deletion restores previous effective completion",
   );
+  eq((await activity()).last_completed.find((r) => r.key === "floor").assignee_name, "甲", "deleting latest returns previous member");
+  // A tie is resolved by the same descending effective history ID used by
+  // the calendar, including negative IDs for backfilled entries.
+  const sameTime = "2026-01-03T12:00:00+08:00";
+  await backfill(sameTime, room.member_id);
+  await backfill(sameTime, room.dorm.members.find((m) => m.nickname === "乙").user_id);
+  const tied = (await api(`/chores/board?invite_code=${invite}&member_id=${room.member_id}&month=2026-01`, owner)).calendar
+    .filter((r) => r.key === "floor" && r.completed_at === "2026-01-03T04:00:00.000Z")
+    .sort((a, b) => b.id - a.id);
+  eq(tied.length, 2, "both same-time records are present");
+  eq((await activity()).last_completed.find((r) => r.key === "floor").assignee_name, tied[0].assignee_name, "equal-time projection uses descending history ID");
   b = await board();
   eq(b.water_task.id, water);
   eq(JSON.stringify(b.rounds), rounds);

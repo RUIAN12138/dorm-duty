@@ -1,0 +1,6 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "fbfd50ccaa8c8e0a1f0468ec473d14aaaf98cbca",
+  "allowed": ["frontend/src/components/ActivitySummary.vue", "frontend/src/components/SwipeCardDeck.vue", "frontend/src/components/ChoreCalendar.vue", "frontend/src/api/chores.ts", "site/worker/chores.mjs", "site/scripts/check-recency.mjs", "scripts/check-calendar-card-flip.mjs", "openspec/changes/calendar-card-last-person/"],
+  "acceptance": {"status": "pending", "userStatement": null, "acceptedDigest": null}
+}

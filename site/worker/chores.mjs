@@ -816,7 +816,10 @@ async function activity(request, db, env, now, url) {
   );
   const lastCompleted = await all(
     db,
-    `SELECT key,MAX(completed_at) AS completed_at FROM (${historySQL}) WHERE completed_at<=? GROUP BY key`,
+    `SELECT key,completed_at,assignee_name_snapshot AS assignee_name FROM (
+      SELECT *,ROW_NUMBER() OVER (PARTITION BY key ORDER BY completed_at DESC,id DESC) AS position
+      FROM (${historySQL}) WHERE completed_at<=?
+    ) WHERE position=1`,
     [room.id, room.id, new Date(now).toISOString()],
   );
   return json({

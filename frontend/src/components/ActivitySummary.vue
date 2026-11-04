@@ -95,8 +95,10 @@ const props = defineProps<{
 const emit = defineEmits<{ settings: [key: ChoreCategory["key"]] }>();
 const current = ref(props.memory?.current || 0),
   now = ref(Date.now());
+const flipped = ref(false);
 watch(current, (value) => {
   if (props.memory) props.memory.current = value;
+  flipped.value = false;
 });
 const timer = setInterval(() => (now.value = Date.now()), 60000);
 onBeforeUnmount(() => clearInterval(timer));
@@ -113,9 +115,10 @@ const names = computed<[string, string][]>(() =>
 );
 const cards = computed(() =>
   names.value.map(([key, name]) => {
-    const at = props.activity.last_completed?.find(
+    const last = props.activity.last_completed?.find(
       (r) => r.key === key,
-    )?.completed_at;
+    );
+    const at = last?.completed_at;
     const validAt = at && Number.isFinite(Date.parse(at)) ? at : undefined;
     const minutes = validAt
       ? Math.max(0, Math.floor((now.value - Date.parse(validAt)) / 60000))
@@ -147,6 +150,7 @@ const cards = computed(() =>
       key: key!,
       name: props.categories?.find((c) => c.key === key)?.name || name!,
       at: validAt,
+      person: last?.assignee_name || "",
       number,
       unit,
       shade: days === null ? null : statsElapsedShade(days),
@@ -206,11 +210,20 @@ const cards = computed(() =>
       v-model="current"
       :labels="cards.map((c) => c.name)"
       label="分类统计卡片"
-      :autoplay="active !== false && !colorsOpen"
+      :autoplay="active !== false && !colorsOpen && !flipped"
       :autoplay-memory="memory"
       ><template #default="{ index }">
-        <div
+        <button
+          type="button"
+          class="stat-flip"
+          :aria-label="`${cards[index]!.name}，${flipped && index === current ? (cards[index]!.at ? `上次由${cards[index]!.person || '姓名暂不可用'}完成，${cards[index]!.date}；点击返回统计` : '暂无完成记录；点击返回统计') : '查看上次完成的人和时间'}`"
+          :aria-pressed="flipped && index === current"
+          @click="flipped = !flipped"
+        >
+        <span class="stat-flip-inner" :class="{ 'is-flipped': flipped && index === current }">
+        <span
           class="stat-card"
+          :aria-hidden="flipped && index === current"
           :data-testid="`stats-${cards[index]!.key}`"
           :data-tone="cards[index]!.tone"
           :style="warningStyle(cards[index]!.key, cards[index]!.shade)"
@@ -224,12 +237,19 @@ const cards = computed(() =>
             ><span>{{ cards[index]!.unit }}</span>
           </div>
           <footer>
-            <span>{{ cards[index]!.at ? "上次完成" : "还没有打卡记录" }}</span
+            <span>{{ cards[index]!.at ? "上次完成 · 点击查看" : "还没有打卡记录 · 点击查看" }}</span
             ><time v-if="cards[index]!.at" :datetime="cards[index]!.at">{{
               cards[index]!.date
             }}</time>
           </footer>
-        </div>
+        </span>
+        <span class="stat-card stat-back" :style="warningStyle(cards[index]!.key, cards[index]!.shade)" :aria-hidden="!flipped || index !== current">
+          <header><TaskCategoryIcon :kind="cards[index]!.key" /><h2>{{ cards[index]!.name }}</h2></header>
+          <span class="last-person">{{ cards[index]!.at ? cards[index]!.person || "姓名暂不可用" : "暂无完成记录" }}</span>
+          <footer><span>上次完成</span><time v-if="cards[index]!.at" :datetime="cards[index]!.at">{{ cards[index]!.date }}</time><span v-else>完成后会显示在这里</span></footer>
+        </span>
+        </span>
+        </button>
       </template></SwipeCardDeck
     >
     <ElasticSheet v-model="colorsOpen" title="提醒颜色" motion="bottom">
@@ -329,6 +349,14 @@ const cards = computed(() =>
   background: var(--app-tone-hf7f7f5, #f7f7f5);
   color: var(--app-tone-h191919, #191919);
 }
+.stat-flip { display: block; width: 100%; height: 100%; padding: 0; border: 0; color: inherit; text-align: left; background: transparent; font: inherit; perspective: 1000px; cursor: pointer; }
+.stat-flip:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+.stat-flip-inner { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 300ms cubic-bezier(.2,.8,.2,1); }
+.stat-flip-inner.is-flipped { transform: rotateY(180deg); }
+.stat-flip-inner > .stat-card { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.stat-back { transform: rotateY(180deg); }
+.last-person { font-size: clamp(32px, 7svh, 56px); font-weight: 650; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .stat-flip-inner { transition: none; } }
 .stat-card[data-tone="empty"] {
   background: var(--app-tone-hf5f5f5, #f5f5f5);
   color: var(--app-tone-h777, #777);

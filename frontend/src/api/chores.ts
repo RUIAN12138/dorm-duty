@@ -176,7 +176,7 @@ export interface ChoreActivity {
   start: string;
   today: string;
   daily: { date: string; key: string; count: number }[];
-  last_completed?: { key: string; completed_at: string }[];
+  last_completed?: { key: string; completed_at: string; assignee_name?: string }[];
   recent_records: ChoreRecord[];
   recent_truncated: boolean;
 }

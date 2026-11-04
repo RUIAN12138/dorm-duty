@@ -33,6 +33,7 @@ let gesture: {
   velocity: ReturnType<typeof createVelocityTracker>;
 } | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let suppressClick = false;
 const width = () => stage.value?.clientWidth || 300;
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 let pausedUntil = props.autoplayMemory?.pausedUntil || 0;
@@ -154,6 +155,7 @@ function choose(requested: number) {
 function down(e: PointerEvent) {
   e.stopPropagation();
   if (!e.isPrimary || e.button !== 0 || gesture || settling.value) return;
+  suppressClick = false;
   pauseAuto();
   gesture = {
     id: e.pointerId,
@@ -177,11 +179,19 @@ function move(e: PointerEvent) {
     }
     if (intent !== "horizontal") return;
     gesture.horizontal = true;
+    suppressClick = true;
     dragging.value = true;
     gesture.target.setPointerCapture(e.pointerId);
   }
   e.preventDefault();
   offset.value = x;
+}
+function clickCapture(e: MouseEvent) {
+  if (suppressClick && e.detail !== 0) {
+    e.preventDefault();
+    e.stopPropagation();
+    suppressClick = false;
+  }
 }
 function up(e: PointerEvent, cancel = false) {
   if (!gesture || gesture.id !== e.pointerId) return;
@@ -202,7 +212,7 @@ function up(e: PointerEvent, cancel = false) {
     !cancel &&
     old.horizontal &&
     (Math.abs(x) > width() * 0.22 ||
-      (Math.abs(x) > 24 && Math.abs(projected) > 90))
+      (Math.abs(x) > width() * 0.16 && Math.abs(projected) > 90))
   ) {
     const next = props.modelValue + (x < 0 ? 1 : -1);
     choose(next);
@@ -243,6 +253,7 @@ onBeforeUnmount(() => {
       @keydown.left.prevent="manualChoose(modelValue - 1)"
       @keydown.right.prevent="manualChoose(modelValue + 1)"
       @pointerdown="down"
+      @click.capture="clickCapture"
       @pointermove="move"
       @pointerup="up($event)"
       @pointercancel="up($event, true)"
@@ -323,7 +334,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 10px 16px #1111110b;
   transform-origin: center bottom;
   transition:
-    transform 280ms var(--ui-ease-out),
+    transform 280ms cubic-bezier(.2, 1.18, .4, 1),
     opacity 180ms var(--ui-ease-out);
 }
 .deck-card::before,

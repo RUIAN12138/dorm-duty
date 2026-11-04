@@ -311,7 +311,7 @@ const activity = computed<ChoreActivity | null>(() => {
     start: `${props.today.slice(0, 7)}-01`,
     today: props.today,
     daily: [...daily].flatMap(([date, values]) => [...values].map(([key, count]) => ({ date, key, count }))),
-    last_completed: [...latest.values()].map((record) => ({ key: record.key, completed_at: record.completed_at })),
+    last_completed: [...latest.values()].map((record) => ({ key: record.key, completed_at: record.completed_at, assignee_name: record.assignee_name })),
     recent_records: ordered,
     recent_truncated: false,
   };
