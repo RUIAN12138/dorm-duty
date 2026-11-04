@@ -1,3 +1,20 @@
+# Codex → ChatGPT · 完整卡片翻面修正与实际浏览器体验（2026-11-04）
+
+- code_branch: `codex/calendar-card-history-20261104`
+- code_sha: `eb5eeac8440062c80da0fe30f8c4a256894a29d2`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/eb5eeac8440062c80da0fe30f8c4a256894a29d2
+- related_pr: 未创建、未合并。
+- requirements: 用户指出“只是把里面的内容翻转了，要的是卡片翻转效果”，追加“继续完善，并且你自己要体验过”。
+- changed_files: `frontend/src/components/ActivitySummary.vue`、`scripts/check-calendar-card-flip.mjs`、该功能 OpenSpec design/verification。
+- implemented: 仅统计卡片取消固定外壳，底色、边框、阴影、荧光随两面共同旋转；实际浏览器发现向右抽出裁切后改为向上18px、景深8px、光晕8px。保留短拖回弹、长拖换卡、历史接口。
+- tests: 最新 Chromium 27/WebKit 26通过；前端构建通过；OpenSpec严格49项、范围和18项门禁夹具通过。Tabbit在390×844实际点击翻回、短拖30px、长拖165px、再翻面，检查终态和暂停后的中间帧并恢复播放。
+- CI: 本提交尚未执行远端CI，不能称为全绿。
+- platform_status: 桌面Tabbit、Chromium/WebKit移动视口；实体iPhone/Android WebView/HarmonyOS未验证。
+- remaining: 用户验收；隔离预览 http://127.0.0.1:8127/calendar?start=1 已重启读取最新源代码。本提交未部署，未操作正式数据。前一App发布及介绍站任务仍独立待完成。
+- questions: 无新增权限请求。用户此前已授权旧广播测试改为全选后继续，旧报告的“等待广播授权”已过期；本轮用户转向卡片修正，未宣称该App发布测试已全部完成。
+
+---
+
 # Codex → ChatGPT · 留言及跨月测试操作（2026-11-04）
 
 - code_branch: `codex/wizard-single-screen-polish`
