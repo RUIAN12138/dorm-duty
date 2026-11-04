@@ -22,7 +22,7 @@ try {
    const start=performance.now();
    const capture=()=>{const pull=el.querySelector('.stat-pull'), flip=el.querySelector('.stat-flip-inner');
      const p=new DOMMatrixReadOnly(getComputedStyle(pull).transform),f=new DOMMatrixReadOnly(getComputedStyle(flip).transform);
-     window.cardMotion.push({t:performance.now()-start,x:p.m41,y:p.m42,rotation:f.m11,glow:Number(getComputedStyle(pull,'::after').opacity)});
+     window.cardMotion.push({t:performance.now()-start,x:p.m41,y:p.m42,rotation:f.m11,glow:Number(getComputedStyle(el.querySelector('.stat-card'),'::after').opacity),faceWidth:el.querySelector('.stat-card').getBoundingClientRect().width,cardWidth:el.clientWidth});
      if(performance.now()-start<420) requestAnimationFrame(capture);
    };requestAnimationFrame(capture);
  },{once:true}));
@@ -33,13 +33,15 @@ try {
  console.log('FRAMES',JSON.stringify(frames));
  check(frames.some(f=>f.t<100&&Math.abs(f.y)>1&&f.rotation>.98),'card moves out before it begins to turn');
  check(frames.some(f=>f.t>100&&f.rotation<.9&&f.rotation>-.9),'flip has an intermediate visible rotation');
+ check(frames.some(f=>f.faceWidth<f.cardWidth*.65),'whole card surface narrows during the turn');
+ check(await front().locator('.deck-card-face').evaluate(e=>getComputedStyle(e).backgroundColor==='rgba(0, 0, 0, 0)'&&getComputedStyle(e).borderTopWidth==='0px'),'no stationary opaque shell behind the flip');
  check(frames.some(f=>f.glow>.2),'fluorescent edge fades in during extraction');
  check(await front().locator('.stat-back').innerText().then(s=>s.includes('甲')&&s.includes('2026')&&s.includes('12:00')),'back displays the all-history person and full time');
  check((await button.getAttribute('aria-label')).includes('甲')&&(await button.getAttribute('aria-label')).includes('12:00'),'screen reader label includes person and time');
  if(process.env.DORM_CARD_EVIDENCE)await page.screenshot({path:'/tmp/dorm-card-motion-light.png'});
  await page.emulateMedia({colorScheme:'dark'});
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
- check(await button.locator('.stat-pull').evaluate(e=>Number(getComputedStyle(e,'::after').opacity)>.9),'luminous edge remains visible in dark mode');
+ check(await button.locator('.stat-back').evaluate(e=>Number(getComputedStyle(e,'::after').opacity)>.9),'luminous edge remains visible in dark mode');
  if(process.env.DORM_CARD_EVIDENCE)await page.screenshot({path:'/tmp/dorm-card-motion-dark.png'});
  await page.emulateMedia({colorScheme:'light'});
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');

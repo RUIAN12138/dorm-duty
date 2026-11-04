@@ -11,3 +11,10 @@
 
 - `node scripts/check-calendar-card-flip.mjs`、`DORM_BROWSER=webkit node scripts/check-calendar-card-flip.mjs` 分别 25、24 项通过，新增检查抽出先于翻转、真实中间旋转帧、边缘光淡入、快速反向位置连续、暗色边缘和减动效无抽出位移；保留先前姓名时间、键盘和拖动断言。Chromium 一次采样因帧间隔过长未取到中间旋转帧而失败，后续重新运行取得完整中间帧并通过，不能据此宣称所有设备均流畅。
 - 浅色、深色浏览器截图位于隔离工作区 `data/calendar-card-motion/`。不是实机图片；真实 iPhone Safari、Android WebView、HarmonyOS ArkWeb 暂未验证。
+
+## 2026-11-04 整卡材质翻面修正
+用户指出原效果仅像内容翻转。去除 ActivitySummary 专属卡堆静态外壳，把边框、阴影及荧光轮廓归入正反面。Tabbit 实际点按和拖动发现右抽出裁切，改为向上18px/景深8px抽出、8px弱光晕。
+- Chromium 27 / WebKit 26项通过，包含完整卡面投影宽度中间帧、静态壳透明、快速反向、短拖恢复、长拖换卡、320/390/430宽、深浅色与减少动态效果。
+- 实际 Tabbit 390×844 操作：打开卡片、翻回、短拖30px、长拖165px、再次翻面；检查截图，并暂停一次反转的中间帧后恢复播放。截图 data/calendar-card-motion/whole-card-back.png 和 whole-card-intermediate.png 为浏览器实际画面，不是真机或录屏。
+- 前端构建通过；OpenSpec严格校验49项、范围校验和18项门禁测试通过。最初缺少独立worktree根依赖，临时复用已安装依赖执行校验后移除链接；没有增加依赖。
+- 实体 iPhone Safari、Android WebView、HarmonyOS ArkWeb未测试；本轮不部署、不创建PR、不修改正式数据。

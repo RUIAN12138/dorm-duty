@@ -208,6 +208,7 @@ const cards = computed(() =>
     </div>
     <SwipeCardDeck
       v-model="current"
+      class="history-card-deck"
       :labels="cards.map((c) => c.name)"
       label="分类统计卡片"
       :autoplay="active !== false && !colorsOpen && !flipped"
@@ -351,18 +352,28 @@ const cards = computed(() =>
   background: var(--app-tone-hf7f7f5, #f7f7f5);
   color: var(--app-tone-h191919, #191919);
 }
+/* The slot owns the physical card; an opaque deck shell would stay still
+   behind the rotating faces and make only the content appear to turn. */
+.history-card-deck :deep(.deck-card) { box-shadow: none; }
+.history-card-deck :deep(.deck-card::before),
+.history-card-deck :deep(.deck-card::after) { content: none; }
+.history-card-deck :deep(.deck-card-face) {
+  border: 0;
+  background: transparent;
+  transform-style: preserve-3d;
+}
 .stat-flip { display: block; width: 100%; height: 100%; padding: 0; border: 0; color: inherit; text-align: left; background: transparent; font: inherit; perspective: 1000px; cursor: pointer; }
 .stat-flip:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
 .stat-pull { display: block; position: relative; width: 100%; height: 100%; border-radius: 24px; transform-style: preserve-3d; transition: transform 220ms cubic-bezier(.22,1,.36,1) 140ms; }
-.stat-pull.is-pulled { transform: translate3d(12px,-18px,18px); transition-delay: 0ms; }
-.stat-pull::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; border: 1px solid rgba(121, 235, 211, .8); box-shadow: 0 0 12px rgba(101, 225, 201, .34), inset 0 0 5px rgba(174, 255, 238, .34); opacity: 0; pointer-events: none; transition: opacity 200ms ease; transform: translateZ(2px); }
-.stat-pull.is-pulled::after { opacity: 1; }
+.stat-pull.is-pulled { transform: translate3d(0,-18px,8px); transition-delay: 0ms; }
+.stat-card::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; border: 1px solid rgba(121, 235, 211, .8); box-shadow: 0 0 8px rgba(101, 225, 201, .28), inset 0 0 5px rgba(174, 255, 238, .34); opacity: 0; pointer-events: none; transition: opacity 200ms ease; transform: translateZ(2px); }
+.is-pulled .stat-card::after { opacity: 1; }
 .stat-flip-inner { display: block; position: relative; width: 100%; height: 100%; border-radius: inherit; transform-style: preserve-3d; transition: transform 260ms cubic-bezier(.2,.8,.2,1); }
 .stat-flip-inner.is-flipped { transform: rotateY(180deg); transition-delay: 100ms; }
-.stat-flip-inner > .stat-card { position: absolute; inset: 0; border-radius: inherit; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.stat-flip-inner > .stat-card { position: absolute; inset: 0; border: var(--ui-card-border); border-radius: inherit; box-shadow: 0 10px 16px #1111110b; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .stat-back { transform: rotateY(180deg); }
 .last-person { font-size: clamp(32px, 7svh, 56px); font-weight: 650; overflow-wrap: anywhere; }
-@media (prefers-reduced-motion: reduce) { .stat-pull, .stat-pull::after, .stat-flip-inner { transition: none; } .stat-pull.is-pulled { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .stat-pull, .stat-card::after, .stat-flip-inner { transition: none; } .stat-pull.is-pulled { transform: none; } }
 .stat-card[data-tone="empty"] {
   background: var(--app-tone-hf5f5f5, #f5f5f5);
   color: var(--app-tone-h777, #777);
