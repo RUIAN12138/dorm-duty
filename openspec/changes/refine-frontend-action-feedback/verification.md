@@ -25,3 +25,9 @@
 用户明确授权仅修两项测试。check-recency 查询补录所属月份，跨月记录负ID、修正与撤回42项通过。check-ios-chat-motion 保留实例与动效断言，补齐多选后的继续操作，并用单次Playwright真实鼠标点击移动目标，避免先读坐标再跨协议点击的陈旧坐标。Chromium全部通过；WebKit结果后补。npm run spec:check通过。产品代码无变化，真机未测。
 
 追加验证：check-ios-chat-motion Chromium/WebKit全项通过；check-live-calendar-notes 的唯一业务操作改为全选→继续后，Chromium/WebKit各17项通过，保持数据库断言。check-companion-tap-arbitration未改代码，本地原样通过，CI额外请求失败未定性，继续观察重跑。
+
+## 2026-11-04 授权的两个测试
+
+- check-companion-tap-arbitration Chromium 与 WebKit 完整通过：保留真实触摸/鼠标、280ms窗口检查、聊天不打开、零请求和表情断言；边缘双击实测约 50–72ms，未覆盖接近窗口上限的有效双击。初次 Chromium 并发运行出现约 500–750ms 的无效输入，缩短中心等待并单独运行后通过，原失败保留在本地日志。
+- check-interaction-foundation Chromium 完整通过；帧边界反向采样同一面板，高 633px，差 31.53px、采样 8.6ms，保留原 20% 阈值和输入连续性断言。未改产品代码。
+- spec:check 的48项规范和18项范围检查通过；执行时应避免并行测试产生的临时夹具进入范围扫描。远端 CI 与实体设备仍需分别核验。

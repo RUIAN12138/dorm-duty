@@ -104,7 +104,7 @@ try {
       // Leave room for real touch dispatch and the explicit 65ms moving-target
       // latency below. CI transport adds time too; an expired >280ms pair is
       // not a valid double-tap test and must not force a wider product window.
-      await f.page.waitForTimeout(target === "moving" ? 25 : 85);
+      await f.page.waitForTimeout(25);
       const second =
         target === "moving"
           ? await f.pos(f.page.locator(".chat-ball .dorm-companion"))
@@ -125,7 +125,7 @@ try {
         kind +
           " double at " +
           target +
-          " is delivered within the real tap window",
+          " is delivered within the real tap window: " + gap,
       );
       await f.page.locator(".companion-chat").waitFor({ state: "detached" });
       await f.page.waitForTimeout(350);
@@ -176,10 +176,24 @@ try {
         { x: start.x + edge.first.x, y: start.y + edge.first.y },
         kind,
       );
-      await f.page.waitForTimeout(130);
+      // Reserve time for real event dispatch on CI, as in the moving-ball
+      // case above. Validate the delivered interval rather than assuming the
+      // requested sleep is the complete interval between touches.
+      await f.page.waitForTimeout(25);
       await f.tap(
         { x: start.x + edge.second.x, y: start.y + edge.second.y },
         kind,
+      );
+      const gap = await f.page.evaluate(() => {
+        const firstUp = window.tapTrace.find((e) => e.type === "pointerup");
+        const secondDown = window.tapTrace.filter(
+          (e) => e.type === "pointerdown",
+        )[1];
+        return secondDown.at - firstUp.at;
+      });
+      check(
+        gap <= 280,
+        kind + " " + edge.name + " source-ball edges arrive within 280ms: " + gap,
       );
       await f.page.locator(".companion-chat").waitFor({ state: "detached" });
       await f.page.waitForTimeout(350);
@@ -198,6 +212,7 @@ try {
       results.push({
         kind,
         target: "source-edges:" + edge.name,
+        gap,
         initial,
         after: await f.ball.getAttribute("title"),
         calls: f.calls,

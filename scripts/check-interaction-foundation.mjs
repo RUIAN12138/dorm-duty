@@ -301,18 +301,21 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
   await page.waitForTimeout(70);
   await page.evaluate(() => window.qa.close());
   await page.waitForTimeout(50);
-  // Separate protocol round trips include real animation travel on a busy CI
-  // runner. Reuse must be exact; allow a compositor frame of travel when Motion
-  // synchronises its in-flight value, while rejecting a full hidden/open reset.
+  // Sample at a rendering boundary so the main thread and native animation
+  // share the same frame. Reverse and read back in this browser task, without
+  // including a protocol round trip's animation travel in the position delta.
   const reversal = await page.evaluate(async () => {
+    await new Promise(requestAnimationFrame);
     const el = document.querySelector(".elastic-sheet");
     const height = el.offsetHeight;
+    const sampledAt = performance.now();
     const before = new DOMMatrixReadOnly(getComputedStyle(el).transform).m42;
     window.qa.open();
     await window.qa.tick();
     await window.qa.tick();
     return {
       height,
+      sampleMs: performance.now() - sampledAt,
       samePanel: el === document.querySelector(".elastic-sheet"),
       delta: Math.abs(
         before - new DOMMatrixReadOnly(getComputedStyle(el).transform).m42,
@@ -323,6 +326,7 @@ async function confirm(){try{await confirmInSheet({title:'确认操作',message:
     reversal.samePanel && reversal.delta < reversal.height * 0.2,
     JSON.stringify(reversal),
   );
+  console.log("REVERSAL", JSON.stringify(reversal));
   checks.push("opening/closing reversal continues from current position");
   await waitOpen();
   eq(

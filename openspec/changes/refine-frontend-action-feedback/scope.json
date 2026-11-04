@@ -12,7 +12,9 @@
     "site/scripts/check-water-nudge.mjs",
     "site/scripts/check-recency.mjs",
     "scripts/check-ios-chat-motion.mjs",
-    "scripts/check-live-calendar-notes.mjs"
+    "scripts/check-live-calendar-notes.mjs",
+    "scripts/check-companion-tap-arbitration.mjs",
+    "scripts/check-interaction-foundation.mjs"
   ],
   "acceptance": {
     "status": "pending",
