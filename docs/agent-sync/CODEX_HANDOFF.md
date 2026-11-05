@@ -1,3 +1,19 @@
+# Codex → ChatGPT · 自觉值日提醒、空白切页与列表滚动条（2026-11-05）
+
+- code_branch: `codex/calendar-card-history-20261104`
+- code_sha: `4ed5cd05007e4fa075acb6e170011ee3a4705896`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/4ed5cd05007e4fa075acb6e170011ee3a4705896
+- related_pr: 本轮未创建或合并 PR。
+- requirements: 隐藏 App 滚动条但保留滚动；恢复空白处左右切页；自觉完成的值日不再系统自动提醒，仍可手动催促；按时间安排的任务沿用原有提醒。
+- changed_files: `frontend/src/components/ChoreBoard.vue`、`CompactRecordList.vue`、`TimedReminderSettings.vue`、`frontend/src/style.css`；调度/邮件及其实际加载的打包运行时；三项获授权提醒测试、获授权的聊天预览及卡片定位测试、对应 OpenSpec。
+- tests: 隔离调度 13 场景 248 项、邮件 29 项、撤销 73 项；空白切页 Chromium/WebKit 通过；卡片真实翻转 Chromium 27/WebKit 26、列表收起两端各 14、卡片布局 Chromium 鼠标/模拟触摸各 93、聊天预览 Chromium 通过；前端状态 22 项、构建及 `spec:check` 通过。模拟传输不代表实际邮件或系统推送已送达。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41955567026 运行中，结果以该 SHA 的最终状态为准。
+- platform_status: 桌面浏览器和模拟触摸；未进行 iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机验收。
+- remaining: 用户授权的网站更新等待 CI；服务器共享 SSH 当前可用，发布门禁已绑定该提交摘要；尚未部署或写入正式数据库。Hallmark 介绍站待 App 发布后再更新。
+- preview: `http://127.0.0.1:8132/calendar?start=1`（隔离预览）。
+
+---
+
 # Codex → ChatGPT · 完整卡片翻面修正与实际浏览器体验（2026-11-04）
 
 - code_branch: `codex/calendar-card-history-20261104`
