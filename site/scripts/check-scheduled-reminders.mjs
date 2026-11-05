@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHarness } from "./check-cloud-backend.mjs";
 import { createReminderScheduler } from "../../scripts/reminder-scheduler.mjs";
 import { createPushDelivery } from "../../scripts/push-runtime.mjs";
+import bundledPush from "../runtime/push-runtime.cjs";
 import { createNativeSender } from "../../scripts/native-push-provider.mjs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -44,7 +45,7 @@ async function api(
   eq(r.status, status, path.split("?")[0]);
   return r.json();
 }
-async function fixture(h, deviceCount = 1) {
+async function fixture(h, deviceCount = 1, mode = "scheduled") {
   const room = await api(
     h,
     "/guest/create",
@@ -67,6 +68,17 @@ async function fixture(h, deviceCount = 1) {
     owner: { id: room.member_id, token: room.access_token },
     member: { id: member.user_id, token: claim.access_token },
   };
+  if (mode === "scheduled") {
+    const current = await board(h, result);
+    const day = new Date(clock + 8 * 3600000).toISOString().slice(0, 10);
+    await api(h, "/chores/settings", result.owner.token, {
+      version: current.version,
+      categories: current.categories.map(category => category.key === "water" ? category : {
+        ...category, mode: "scheduled", start_date: day,
+        rotation_order: [result.owner.id, result.member.id],
+      }),
+    });
+  }
   h.env.NATIVE_PUSH_CONFIG = { android: true, harmony: true };
   for (let i = 0; i < deviceCount; i++)
     await api(
@@ -221,34 +233,66 @@ test("scheduled mode considers the due day only and can notify without a registe
   );
 });
 
-test("delivery rechecks completion and does not transfer an old reminder into the next voluntary round", async (h) => {
-  const r = await fixture(h);
+test("voluntary rounds create no automatic reminders; legacy pending jobs cancel and manual nudges still work", async (h) => {
+  const r = await fixture(h, 1, "voluntary");
   await plan(h, r.owner);
+  await plan(h, r.member);
   at("2026-10-15T08:00:00+08:00");
   const engine = scheduler(h);
   await engine.drain();
-  await engine.close();
+  eq(records(h).length, 0, "voluntary first round is not scheduled");
+  const oldTasks = (await board(h, r)).today_tasks;
+  const db = h.db.sqlite, now = new Date().toISOString();
+  const legacyReminder = Number(db.prepare(`INSERT INTO chore_reminders(dorm_id,sender_id,sender_name_snapshot,target_member_id,task_id,task_name_snapshot,task_content_snapshot,created_at,mutation_key,source)
+    VALUES (?,?,'轮到',?,NULL,'值日','旧版提醒',?,'legacy-voluntary','scheduled')`).run(r.dorm.id,r.owner.id,r.owner.id,now).lastInsertRowid);
+  const preference = db.prepare("SELECT id,version FROM chore_reminder_preferences WHERE dorm_id=? AND user_id=?").get(r.dorm.id,r.owner.id);
+  db.prepare(`INSERT INTO chore_scheduled_reminders(preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids)
+    VALUES (?,?,?,'2026-10-15','08:00',?,?)`).run(preference.id,preference.version,legacyReminder,now,JSON.stringify(oldTasks.map(task=>task.id)));
+  const device = db.prepare("SELECT id,revision FROM chore_push_subscriptions WHERE dorm_id=? AND user_id=?").get(r.dorm.id,r.owner.id);
+  db.prepare(`INSERT INTO chore_push_jobs(dorm_id,user_id,subscription_id,subscription_revision,reminder_id,next_attempt_at,created_at)
+    VALUES (?,?,?,?,?,?,?)`).run(r.dorm.id,r.owner.id,device.id,device.revision,legacyReminder,now,now);
   for (const person of [r.owner, r.member])
     for (const task of (await board(h, r, person)).today_tasks)
       await complete(h, person, task);
   const next = await board(h, r);
-  ok(next.today_tasks.every((task) => task.status === "pending"));
-  eq(
-    next.rounds.map((round) => round.sequence),
-    [2, 2, 2],
-  );
+  eq(next.rounds.map(round => round.sequence), [2, 2, 2]);
+  at("2026-10-15T19:00:00+08:00");
+  await engine.drain();
+  await engine.close();
+  eq(records(h).length, 1, "second voluntary round adds no automatic reminder");
   let sends = 0;
-  const delivery = createPushDelivery(
-    h.db,
-    async () => {
-      sends++;
-    },
-    { now: () => new Date() },
-  );
-  await delivery.drain();
-  await delivery.close();
+  const delivery = bundledPush.createPushDelivery(h.db, async () => { sends++; }, { now: () => new Date() });
+  await delivery.drain(); await delivery.close();
   eq(sends, 0);
   eq(jobs(h)[0].status, "cancelled");
+  const peerTask = (await board(h, r, r.member)).today_tasks.find(task => task.key === "floor");
+  await api(h, "/chores/remind", r.owner.token, {target_member_id:r.member.id,task_id:peerTask.id}, 201, "POST");
+  eq(db.prepare("SELECT count(*) n FROM chore_reminders WHERE source='member' AND target_member_id=?").get(r.member.id).n, 1, "manual reminder remains available");
+});
+
+test("the actual bundled server runtime also skips voluntary tasks", async (h) => {
+  const voluntary = await fixture(h, 0, "voluntary");
+  const timed = await fixture(h, 0, "scheduled");
+  await plan(h, voluntary.owner); await plan(h, timed.owner);
+  at("2026-10-15T08:00:00+08:00");
+  const engine = bundledPush.createReminderScheduler(h.db,{env:h.env,autoStart:false});
+  await engine.drain(); await engine.close();
+  eq(records(h).filter(row => row.dorm_id === voluntary.dorm.id).length, 0);
+  eq(records(h).filter(row => row.dorm_id === timed.dorm.id).length, 1);
+});
+
+test("mixed modes only schedule the assigned timed task", async (h) => {
+  const r = await fixture(h, 1, "voluntary");
+  const before = await board(h, r);
+  const floor = before.categories.find(category => category.key === "floor");
+  await api(h, "/chores/settings", r.owner.token, {version:before.version,categories:[{...floor,mode:"scheduled",start_date:"2026-10-15",rotation_order:[r.owner.id,r.member.id]}]});
+  await plan(h, r.owner);
+  at("2026-10-15T08:00:00+08:00");
+  const engine=scheduler(h); await engine.drain(); await engine.close();
+  eq(records(h).length, 1);
+  ok(records(h)[0].task_content_snapshot.includes("地板"));
+  ok(!records(h)[0].task_content_snapshot.includes("厕所"));
+  ok(!records(h)[0].task_content_snapshot.includes("洗手池"));
 });
 
 test("partial completion updates push content and native TTL matches the remaining catch-up window", async (h) => {

@@ -87,7 +87,6 @@ export function createReminderScheduler(
           preference.dorm_id,
           preference.user_id,
           slot.day,
-          slot.day,
         ];
         const guard = `EXISTS(SELECT 1 FROM chore_reminder_preferences p
           JOIN dorm_members m ON m.dorm_id=p.dorm_id AND m.user_id=p.user_id AND m.is_active=1

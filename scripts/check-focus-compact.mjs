@@ -265,7 +265,7 @@ try {
     "heatmap is no longer a separate tall section",
   );
   check(
-    await page.locator(".stat-card").count(),
+    await page.locator(".stat-card:not(.stat-back)").count(),
     4,
     "four statistics cards retained in the deck",
   );
@@ -399,25 +399,25 @@ try {
   }
   await swipeCard(1);
   check(
-    await page.locator(".deck-card.is-front h2").innerText(),
+    await page.locator(".deck-card.is-front .stat-card:not(.stat-back) h2").innerText(),
     "抬水",
     "rightward gesture wraps from the first card",
   );
   await swipeCard(-1);
   check(
-    await page.locator(".deck-card.is-front h2").innerText(),
+    await page.locator(".deck-card.is-front .stat-card:not(.stat-back) h2").innerText(),
     "地板",
     "leftward gesture wraps back to the first card",
   );
   await swipeCard();
   check(
-    await page.locator(".deck-card.is-front h2").innerText(),
+    await page.locator(".deck-card.is-front .stat-card:not(.stat-back) h2").innerText(),
     "厕所",
     "swipe changes the focused card",
   );
   await swipeCard();
   check(
-    await page.locator(".deck-card.is-front h2").innerText(),
+    await page.locator(".deck-card.is-front .stat-card:not(.stat-back) h2").innerText(),
     "洗手池",
     "successive swipe changes the focused card",
   );
@@ -550,7 +550,7 @@ try {
       if (label === "stats")
         check(
           await page
-            .locator(".deck-card.is-front .stat-card")
+            .locator(".deck-card.is-front .stat-card:not(.stat-back)")
             .evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
           true,
           `all statistics metrics fit ${width}x${height}`,
@@ -558,7 +558,7 @@ try {
       if (label === "stats")
         check(
           await page
-            .locator(".deck-card.is-front footer")
+            .locator(".deck-card.is-front .stat-card:not(.stat-back) footer")
             .evaluate(
               (el) =>
                 el.getBoundingClientRect().bottom <=

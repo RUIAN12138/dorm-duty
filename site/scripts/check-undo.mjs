@@ -95,11 +95,11 @@ try {
     .slice(0, 10);
   const reminderTasks = h.db.sqlite
     .prepare(dailyReminderTasksSql)
-    .all(r.dorm.id, r.b.user_id, today, today);
+    .all(r.dorm.id, r.b.user_id, today);
   eq(
     reminderTasks.some((t) => t.id === bf.id),
-    true,
-    "daily reminders select the restored unfinished turn",
+    false,
+    "restored voluntary tasks remain outside automatic reminders",
   );
   await act(h, r.b, bf, "complete");
   b = await board(h, r);

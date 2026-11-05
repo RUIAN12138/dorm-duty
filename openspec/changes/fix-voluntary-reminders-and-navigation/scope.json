@@ -1,0 +1,26 @@
+{
+  "base": "25056ed6c28f2c46f3cef957e8828a1226b7c667",
+  "implementationBase": "3da0d2617bae74ae505b28df10c50bea64c15034",
+  "allowed": [
+    "frontend/src/style.css",
+    "frontend/src/components/ChoreBoard.vue",
+    "site/shared/notifications.mjs",
+    "scripts/reminder-scheduler.mjs",
+    "scripts/push-runtime.mjs",
+    "site/local/email-runtime.mjs",
+    "site/runtime/email-runtime.cjs",
+    "site/scripts/check-scheduled-reminders.mjs",
+    "site/scripts/check-undo.mjs",
+    "site/scripts/check-email-delivery.mjs",
+    "openspec/changes/fix-voluntary-reminders-and-navigation/",
+    "frontend/src/components/TimedReminderSettings.vue",
+    "frontend/src/components/CompactRecordList.vue",
+    "frontend/src/components/nudge/BlankSwipe.browser.mjs",
+    "site/runtime/push-runtime.cjs"
+  ],
+  "acceptance": {
+    "status": "pending",
+    "userStatement": null,
+    "acceptedDigest": null
+  }
+}

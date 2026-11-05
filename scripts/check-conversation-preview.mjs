@@ -605,6 +605,22 @@ try {
     await page.getByTestId("pane-water").isVisible(),
     "dragging on the water name never becomes global page navigation",
   );
+  // The swipe above may switch to a different task. Return to water before
+  // checking its existing ripple and rate-limit behavior.
+  const taskSwipe = page.getByTestId("nudge-task-swipe");
+  if ((await taskSwipe.getAttribute("data-task-key")) !== "water") {
+    await taskSwipe.press("ArrowLeft");
+    await page.waitForFunction(() =>
+      document.querySelector('[data-testid="nudge-task-swipe"]')?.getAttribute("data-task-key") === "water",
+    );
+  }
+  // Keyboard navigation intentionally disables decorative motion. A real
+  // pointer action on empty space restores pointer mode before sampling it.
+  await page.getByTestId("pane-water").click({ position: { x: 10, y: 10 } });
+  await page.waitForFunction(() => {
+    const target = document.querySelector('[data-testid="nudge-task-swipe"][data-task-key="water"] h2:not([inert]) [data-testid="water-nudge"]');
+    return target && !target.closest('h2').getAnimations().some((animation) => animation.playState === 'running');
+  });
   // Real repeated clicks retain the existing 60s device limiter and server guard.
   const ringFrames = await name.evaluate(async (el) => {
     const samples = [];

@@ -97,7 +97,6 @@ export function createPushDelivery(
               job.dorm_id,
               job.user_id,
               job.schedule_day || "",
-              job.schedule_day || "",
             )
             .filter((task) => taskIds.includes(task.id))
         : [];

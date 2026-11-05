@@ -46,6 +46,7 @@ try {
     )
     .then((r) => r.json());
   const task = board.today_tasks[0],
+    voluntaryTask = board.today_tasks.find(entry => entry.id !== task.id),
     db = h.db.sqlite,
     at = () => new Date(time).toISOString();
   const account = Number(
@@ -120,7 +121,7 @@ try {
     at(),
     departed,
   );
-  const scheduled = reminder({ scheduled: true });
+  const voluntary = reminder({ scheduled: true });
   const pref = Number(
     db
       .prepare(
@@ -128,6 +129,14 @@ try {
       )
       .run(room.dorm.id, room.member_id, at()).lastInsertRowid,
   );
+  db.prepare(
+    "INSERT INTO chore_scheduled_reminders(preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids) VALUES (?,1,?,'2026-10-16','07:00',?,?)",
+  ).run(pref, voluntary, at(), JSON.stringify([task.id]));
+  await delivery.drain();
+  eq(status(voluntary), "cancelled"); // queued by a pre-update version
+  eq(sent, 0);
+  db.prepare("UPDATE chore_categories SET mode='scheduled' WHERE dorm_id=? AND key=?").run(room.dorm.id, task.key);
+  const scheduled = reminder({ scheduled: true });
   db.prepare(
     "INSERT INTO chore_scheduled_reminders(preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids) VALUES (?,1,?,'2026-10-16','08:00',?,?)",
   ).run(pref, scheduled, at(), JSON.stringify([task.id]));
@@ -194,11 +203,19 @@ try {
   const currentPlan = reminder({ scheduled: true });
   db.prepare(
     "INSERT INTO chore_scheduled_reminders(preference_id,preference_version,reminder_id,day,time,scheduled_at,task_ids) VALUES (?,2,?,'2026-10-17','08:00',?,?)",
-  ).run(pref, currentPlan, at(), JSON.stringify([task.id]));
+  ).run(pref, currentPlan, at(), JSON.stringify([task.id, voluntaryTask.id]));
   await delivery.drain();
   eq(status(currentPlan), "accepted");
   eq(lastMessage.subject.includes("系统"), true);
   eq(lastMessage.text.includes("发起人：系统自动提醒"), true);
+  eq(lastMessage.text.includes(task.name), true);
+  eq(lastMessage.text.includes(voluntaryTask.name), false);
+  db.prepare("UPDATE chore_categories SET mode='self_round' WHERE dorm_id=? AND key=?").run(room.dorm.id, task.key);
+  time += 61000;
+  const manualVoluntary = reminder();
+  await delivery.drain();
+  eq(status(manualVoluntary), "accepted");
+  eq(lastMessage.subject.includes("催促"), true);
   console.log(
     `邮件投递取消、重试、过期与重启检查通过 ${checks} 项（隔离传输）`,
   );

@@ -504,11 +504,14 @@ function sectionSwipeDown(event: PointerEvent) {
     !event.target.matches("div,section,header,main,article,.identity-name")
   )
     return;
+  const blankList = event.target.matches(
+    ".folded-record-page,.compact-records,.compact-record-empty",
+  );
   if (
-    !(event.target instanceof Element) ||
     event.target.closest(
-      "button,a,input,textarea,select,[role=tablist],[role=slider],[contenteditable=true],.calendar-surface,.task-title-stage,.water-title-stage,.task-selector,.completion-surface,.round-progress,.companion-frame,.stats-mode,.deck-stage,[role=button],[draggable=true],[data-sheet-scroll],[data-page-gesture],[data-native-scroll]",
-    )
+      "button,a,input,textarea,select,[role=tablist],[role=slider],[contenteditable=true],.calendar-surface,.task-title-stage,.water-title-stage,.task-selector,.completion-surface,.round-progress,.companion-frame,.stats-mode,.deck-stage,[role=button],[draggable=true],[data-sheet-scroll]",
+    ) ||
+    (!blankList && event.target.closest("[data-page-gesture],[data-native-scroll]"))
   )
     return;
   sectionPointer = {

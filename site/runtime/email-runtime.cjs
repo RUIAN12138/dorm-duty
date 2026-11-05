@@ -13244,7 +13244,7 @@ function createEmailRuntime(db, {
     if (r.source === "scheduled") {
       const pending = sql.prepare(
         `SELECT t.name FROM chore_tasks t JOIN chore_categories c ON c.dorm_id=t.dorm_id AND c.key=t.key
-        WHERE t.id IN (SELECT value FROM json_each(?)) AND t.dorm_id=? AND t.assignee_id=? AND t.status='pending' AND c.enabled=1 ORDER BY t.key`
+        WHERE t.id IN (SELECT value FROM json_each(?)) AND t.dorm_id=? AND t.assignee_id=? AND t.status='pending' AND c.enabled=1 AND c.mode='scheduled' ORDER BY t.key`
       ).all(r.task_ids || "[]", r.dorm_id, r.target_member_id);
       if (!pending.length) return null;
       r.task_content_snapshot = pending.map((t) => t.name).join("\u3001") + "\u8FD8\u6CA1\u5B8C\u6210\uFF0C\u505A\u5B8C\u8BB0\u5F97\u6253\u5361\u3002";

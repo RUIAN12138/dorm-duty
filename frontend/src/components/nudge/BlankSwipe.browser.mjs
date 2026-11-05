@@ -37,6 +37,16 @@ const peer = await (
     data: { invite_code: room.invite_code, nickname: "乙" },
   })
 ).json();
+// Keep one disposable record so the calendar list has both a real row and
+// empty space in the same scroll container.
+const peerBoard = await (await h.request(
+  `/chores/board?invite_code=${room.invite_code}&member_id=${peer.member.user_id}`,
+  { token: peer.access_token },
+)).json();
+const peerTask = peerBoard.today_tasks.find(task => task.key === "floor" && task.status === "pending");
+assert.equal((await h.request(`/chores/tasks/${peerTask.id}/complete`, {
+  method: "PATCH", token: peer.access_token, data: {},
+})).status, 200);
 const identity = {
   id: room.dorm.id,
   name: room.dorm.name,
@@ -101,7 +111,7 @@ p.on("pageerror", (e) => errors.push(e.message));
 async function blankPoint() {
   return p.evaluate(() => {
     const stage = document.querySelector(".content-stage.is-signed-in");
-    for (let y = 220; y < Math.min(innerHeight - 140, 720); y += 30)
+    for (let y = 100; y < Math.min(innerHeight - 140, 720); y += 30)
       for (const x of [200, 150, 240]) {
         const el = document.elementFromPoint(x, y);
         if (
@@ -173,6 +183,41 @@ try {
       .getByTestId("nav-calendar")
       .evaluate((el) => el.classList.contains("active")),
   );
+  await p.getByTestId("calendar-view-list").click();
+  await p.locator(".folded-record-page").waitFor();
+  await p.waitForFunction(() => {
+    const panel = document.querySelector('[data-calendar-panel="calendar"]');
+    return !panel || getComputedStyle(panel).visibility === "hidden";
+  });
+  const listBlank = await p.evaluate(() => {
+    for (let y = 400; y < innerHeight - 150; y += 15) {
+      const x = 60, el = document.elementFromPoint(x, y);
+      if (el?.matches(".folded-record-page")) return { x, y };
+    }
+  });
+  assert.ok(listBlank, "empty space within the actual calendar list");
+  if (engine === "chromium") {
+    const cdp = await context.newCDPSession(p);
+    await cdp.send("Input.dispatchTouchEvent", {type:"touchStart",touchPoints:[listBlank]});
+    for (let i = 1; i <= 8; i++)
+      await cdp.send("Input.dispatchTouchEvent", {type:"touchMove",touchPoints:[{x:listBlank.x + i * 15,y:listBlank.y}]});
+    await cdp.send("Input.dispatchTouchEvent", {type:"touchEnd",touchPoints:[]});
+    await cdp.detach();
+  } else {
+    await p.mouse.move(listBlank.x, listBlank.y);
+    await p.mouse.down();
+    await p.mouse.move(listBlank.x + 120, listBlank.y, {steps:8});
+    await p.mouse.up();
+  }
+  await p.waitForURL("**/water");
+  await p.getByTestId("nav-calendar").click();
+  await p.getByTestId("pane-calendar").waitFor();
+  await p.getByTestId("calendar-view-grid").click();
+  await p.waitForFunction(() => {
+    const panel = document.querySelector('[data-calendar-panel="calendar"]');
+    return panel && panel.dataset.state === "active" && getComputedStyle(panel).visibility === "visible" &&
+      !panel.getAnimations({subtree:true}).some(animation => animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity);
+  });
   await drag(110);
   await p.waitForURL("**/water");
   await drag(0, 110);
