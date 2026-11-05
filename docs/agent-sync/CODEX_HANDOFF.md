@@ -7,9 +7,9 @@
 - requirements: 隐藏 App 滚动条但保留滚动；恢复空白处左右切页；自觉完成的值日不再系统自动提醒，仍可手动催促；按时间安排的任务沿用原有提醒。
 - changed_files: `frontend/src/components/ChoreBoard.vue`、`CompactRecordList.vue`、`TimedReminderSettings.vue`、`frontend/src/style.css`；调度/邮件及其实际加载的打包运行时；三项获授权提醒测试、获授权的聊天预览及卡片定位测试、对应 OpenSpec。
 - tests: 隔离调度 13 场景 248 项、邮件 29 项、撤销 73 项；空白切页 Chromium/WebKit 通过；卡片真实翻转 Chromium 27/WebKit 26、列表收起两端各 14、卡片布局 Chromium 鼠标/模拟触摸各 93、聊天预览 Chromium 通过；前端状态 22 项、构建及 `spec:check` 通过。模拟传输不代表实际邮件或系统推送已送达。
-- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41955567026 运行中，结果以该 SHA 的最终状态为准。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41955567026 完成 failure；spec-contract、android、conversation-motion 成功，web-and-business 在 `site/scripts/check-reminder-runtime.mjs:142` 失败。本地同样复现：旧夹具使用自觉任务却要求系统自动提醒，与新规则冲突。
 - platform_status: 桌面浏览器和模拟触摸；未进行 iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机验收。
-- remaining: 用户授权的网站更新等待 CI；服务器共享 SSH 当前可用，发布门禁已绑定该提交摘要；尚未部署或写入正式数据库。Hallmark 介绍站待 App 发布后再更新。
+- remaining: 用户授权的网站更新等待 CI；已向用户请求单独授权，仅将 `check-reminder-runtime.mjs` 的隔离夹具改为按时间安排任务并保留后台计时及重启断言。服务器共享 SSH 当前可用，尚未部署或写入正式数据库。Hallmark 介绍站待 App 发布后再更新。
 - preview: `http://127.0.0.1:8132/calendar?start=1`（隔离预览）。
 
 ---
