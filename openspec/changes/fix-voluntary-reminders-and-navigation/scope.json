@@ -12,6 +12,7 @@
     "site/scripts/check-scheduled-reminders.mjs",
     "site/scripts/check-undo.mjs",
     "site/scripts/check-email-delivery.mjs",
+    "site/scripts/check-reminder-runtime.mjs",
     "openspec/changes/fix-voluntary-reminders-and-navigation/",
     "frontend/src/components/TimedReminderSettings.vue",
     "frontend/src/components/CompactRecordList.vue",

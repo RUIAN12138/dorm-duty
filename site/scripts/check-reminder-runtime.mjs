@@ -130,6 +130,20 @@ try {
     status: 201,
   });
   const token = room.access_token;
+  const route = `/chores/board?invite_code=${room.invite_code}&member_id=${room.member_id}`;
+  const board = await api(origin, route, { token });
+  await api(origin, "/chores/settings", {
+    token,
+    method: "PATCH",
+    data: {
+      version: board.version,
+      categories: board.categories.map((category) =>
+        category.key === "water"
+          ? category
+          : { ...category, mode: "scheduled", start_date: "2026-10-15", rotation_days: 2 },
+      ),
+    },
+  });
   await api(origin, "/chores/reminder-plan", {
     token,
     method: "PATCH",
@@ -144,7 +158,6 @@ try {
     1,
     "Node background timer generated a reminder without a page visit",
   );
-  const route = `/chores/board?invite_code=${room.invite_code}&member_id=${room.member_id}`;
   eq((await api(origin, route, { token })).reminders[0].source, "scheduled");
   eq(
     (await api(origin, "/chores/reminder-plan", { token })).last_reminder
