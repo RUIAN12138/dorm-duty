@@ -11,7 +11,8 @@
 - CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41956857339 全部通过（spec-contract、web-and-business、conversation-motion、android），SHA 与本记录一致。
 - platform_status: 桌面浏览器与模拟触摸；iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机未测。
 - deployment: 用户授权后 App 已发布 `20261105-calendar-nav-reminders-v94`，公网健康检查与首页 HTTP 200；在线 SQLite 备份已验证，发布前的 79 条完成记录发布后全部逐条核对一致。未创建 PR 或合并 main。
-- remaining: Hallmark 介绍站按用户要求在 App 后处理；真实 iPhone、Android WebView、HarmonyOS ArkWeb 验收仍未完成。
+- introduction_site: Hallmark 介绍站按用户要求在 App 后发布，Sites 版本 8，源码 `196fa1b6f8c1e43cebf9115176af59f404e8c792`，网址 https://lundao-app-introduction.violet-hero-5670.chatgpt.site/ ；原 custom 访问范围保持不变。`check-showcase.mjs` 和 `check-media-details.mjs` 通过，覆盖 Chromium/WebKit。
+- remaining: 真实 iPhone、Android WebView、HarmonyOS ArkWeb 验收仍未完成。
 
 ---
 
