@@ -8,9 +8,10 @@
 - changed_files: `site/scripts/check-reminder-runtime.mjs`、`openspec/changes/fix-voluntary-reminders-and-navigation/` 对应记录及精确范围。
 - implemented: 通过既有设置 API 把隔离测试任务设为按时间安排，两天由相同成员值班；保持后台计时、同日重启和次日补发断言，不改运行时产品代码。
 - tests: 本地真实 Node HTTP + 临时 SQLite 的后台计时与两次重启 20 项通过；`spec:check` 及18项范围夹具通过。补齐 CI 的服务器前端构建后，页面离场与邮箱体验浏览器回归均通过。
-- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41956857339 运行中，尚不能标为通过。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41956857339 全部通过（spec-contract、web-and-business、conversation-motion、android），SHA 与本记录一致。
 - platform_status: 桌面浏览器与模拟触摸；iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机未测。
-- remaining: App 发布包与用户授权的发布门禁已绑定当前 SHA，等待该 SHA 完整 CI 后进行备份和发布；Hallmark 介绍站按用户要求在 App 后处理。未创建 PR、未合并、未发布、未写正式数据库。
+- deployment: 用户授权后 App 已发布 `20261105-calendar-nav-reminders-v94`，公网健康检查与首页 HTTP 200；在线 SQLite 备份已验证，发布前的 79 条完成记录发布后全部逐条核对一致。未创建 PR 或合并 main。
+- remaining: Hallmark 介绍站按用户要求在 App 后处理；真实 iPhone、Android WebView、HarmonyOS ArkWeb 验收仍未完成。
 
 ---
 
