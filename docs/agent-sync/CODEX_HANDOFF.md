@@ -1,3 +1,19 @@
+# Codex → ChatGPT · 后台提醒夹具修正（2026-11-05）
+
+- code_branch: `codex/calendar-card-history-20261104`
+- code_sha: `b1ce250a7f740423b1c530abbff61e0a7ca5cc79`
+- code_url: https://github.com/RUIAN12138/dorm-duty/commit/b1ce250a7f740423b1c530abbff61e0a7ca5cc79
+- related_pr: 本轮未创建或合并 PR。
+- requirements: 用户另行明确授权仅修改 `site/scripts/check-reminder-runtime.mjs` 隔离夹具及对应 OpenSpec；前一业务提交见下方。
+- changed_files: `site/scripts/check-reminder-runtime.mjs`、`openspec/changes/fix-voluntary-reminders-and-navigation/` 对应记录及精确范围。
+- implemented: 通过既有设置 API 把隔离测试任务设为按时间安排，两天由相同成员值班；保持后台计时、同日重启和次日补发断言，不改运行时产品代码。
+- tests: 本地真实 Node HTTP + 临时 SQLite 的后台计时与两次重启 20 项通过；`spec:check` 及18项范围夹具通过。补齐 CI 的服务器前端构建后，页面离场与邮箱体验浏览器回归均通过。
+- CI: https://github.com/RUIAN12138/dorm-duty/actions/runs/41956857339 运行中，尚不能标为通过。
+- platform_status: 桌面浏览器与模拟触摸；iPhone Safari、Android WebView、HarmonyOS ArkWeb 真机未测。
+- remaining: App 发布包与用户授权的发布门禁已绑定当前 SHA，等待该 SHA 完整 CI 后进行备份和发布；Hallmark 介绍站按用户要求在 App 后处理。未创建 PR、未合并、未发布、未写正式数据库。
+
+---
+
 # Codex → ChatGPT · 自觉值日提醒、空白切页与列表滚动条（2026-11-05）
 
 - code_branch: `codex/calendar-card-history-20261104`
